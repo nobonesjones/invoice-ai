@@ -15,13 +15,13 @@ export default function WelcomeScreen() {
 		<SafeAreaView className="flex flex-1 bg-background p-4">
 			<View className="flex flex-1 items-center justify-center gap-y-4 web:m-4">
 				<Image
-					source={require("@/assets/icon.png")}
-					className="w-16 h-16 rounded-xl"
+					source={require("@/assets/summiticon.png")}
+					className="w-24 h-24 rounded-3xl"
+					resizeMode="contain"
 				/>
-				<H1 className="text-center">Welcome to Expo Supabase Starter</H1>
+				<H1 className="text-center">Welcome To Majlis</H1>
 				<Muted className="text-center">
-					A comprehensive starter project for developing React Native and Expo
-					applications with Supabase as the backend.
+					Saving the world from admin, one meeting at a time
 				</Muted>
 			</View>
 			<View className="flex flex-col gap-y-4 web:m-4">

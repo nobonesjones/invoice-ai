@@ -10,6 +10,7 @@ npm-debug.*
 *.orig.*
 web-build/
 
+# Ignore environment variables
 .env
 
 .cursorrules
@@ -21,3 +22,35 @@ web-build/
 
 expo-env.d.ts
 # @end expo-cli
+
+# OSX
+.DS_Store
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Ruby
+.direnv
+
+# Environment variables
+.env
+.env.*
+
+# typescript
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Cursor
+.cursor/
