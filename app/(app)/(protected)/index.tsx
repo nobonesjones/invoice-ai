@@ -1,8 +1,8 @@
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '@/config/supabase';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Meeting } from '@/types/meetings';
 import { Button } from '@/components/ui/button';
 import { colors } from '@/constants/colors';
@@ -12,6 +12,7 @@ import { SafeAreaView } from "@/components/safe-area-view";
 import { H1, H2, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
 import MeetingObjectivesModal from "./meeting-objectives-modal";
+import { Swipeable } from 'react-native-gesture-handler';
 
 export default function Home() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function Home() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
 
   useEffect(() => {
     fetchMeetings();
@@ -30,6 +32,7 @@ export default function Home() {
       const { data, error } = await supabase
         .from('meetings')
         .select('id, name, duration, created_at, updated_at, status, user_id')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -47,53 +50,24 @@ export default function Home() {
 
   const handleDeleteMeeting = async (meetingId: string) => {
     try {
-      console.log('Starting deletion process for meeting:', meetingId);
+      console.log('Starting soft delete process for meeting:', meetingId);
 
-      // First check if meeting exists
-      const { data: meeting, error: fetchError } = await supabase
+      // Update the meeting to mark as deleted
+      const { error: updateError } = await supabase
         .from('meetings')
-        .select('*')
-        .eq('id', meetingId)
-        .single();
+        .update({ 
+          is_deleted: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', meetingId);
 
-      if (fetchError) {
-        console.error('Error fetching meeting:', fetchError);
-        Alert.alert('Error', 'Could not find meeting to delete');
-        return;
-      }
-
-      console.log('Found meeting to delete:', meeting);
-
-      // Delete objectives
-      console.log('Deleting meeting objectives...');
-      const { error: objectivesError, data: deletedObjectives } = await supabase
-        .from('objectives')
-        .delete()
-        .eq('meeting_id', meetingId)
-        .select();
-
-      if (objectivesError) {
-        console.error('Error deleting objectives:', objectivesError);
-        Alert.alert('Error', 'Failed to delete meeting objectives');
-        return;
-      }
-      console.log('Objectives deleted:', deletedObjectives?.length || 0, 'objectives removed');
-
-      // Delete the meeting
-      console.log('Deleting meeting record...');
-      const { error: meetingError, data: deletedMeeting } = await supabase
-        .from('meetings')
-        .delete()
-        .eq('id', meetingId)
-        .select();
-
-      if (meetingError) {
-        console.error('Error deleting meeting:', meetingError);
+      if (updateError) {
+        console.error('Error updating meeting:', updateError);
         Alert.alert('Error', 'Failed to delete meeting');
         return;
       }
 
-      console.log('Meeting deleted successfully:', deletedMeeting);
+      console.log('Meeting marked as deleted successfully');
 
       // Update local state
       setMeetings(meetings.filter(m => m.id !== meetingId));
@@ -105,52 +79,124 @@ export default function Home() {
     }
   };
 
+  const handleRenameMeeting = async (meetingId: string, newName: string) => {
+    try {
+      if (!newName || !newName.trim()) {
+        Alert.alert('Error', 'Meeting name cannot be empty');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('meetings')
+        .update({ 
+          name: newName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', meetingId);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state
+      setMeetings(meetings.map(m => 
+        m.id === meetingId ? { ...m, name: newName } : m
+      ));
+
+    } catch (error) {
+      console.error('Error renaming meeting:', error);
+      Alert.alert('Error', 'Failed to rename meeting');
+    }
+  };
+
+  const formatDuration = (duration: number) => {
+    const minutes = Math.floor(duration / 60);
+    const seconds = Math.ceil(duration % 60);
+    if (minutes === 0) {
+      return `${seconds} seconds`;
+    }
+    return `${minutes} min, ${seconds} seconds`;
+  };
+
   const renderRightActions = (meetingId: string) => {
     return (
-      <TouchableOpacity
-        onPress={() => {
-          Alert.alert(
-            'Delete Meeting',
-            'Are you sure you want to delete this meeting?',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { 
-                text: 'Delete', 
-                onPress: () => handleDeleteMeeting(meetingId),
-                style: 'destructive'
-              }
-            ]
-          );
-        }}
-        className="bg-red-500 w-20 h-full justify-center items-center"
-      >
-        <MaterialIcons name="delete" size={24} color="white" />
-      </TouchableOpacity>
+      <View className="flex-row">
+        <TouchableOpacity
+          onPress={() => {
+            const meeting = meetings.find(m => m.id === meetingId);
+            Alert.prompt(
+              'Rename Meeting',
+              'Enter new name:',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Save',
+                  onPress: async (text) => {
+                    if (text) {
+                      await handleRenameMeeting(meetingId, text);
+                      swipeableRefs.current[meetingId]?.close();
+                    }
+                  }
+                }
+              ],
+              'plain-text',
+              meeting?.name || ''
+            );
+          }}
+          className="bg-blue-500 w-20 h-full justify-center items-center"
+        >
+          <MaterialIcons name="edit" size={24} color="white" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(
+              'Delete Meeting',
+              'Are you sure you want to delete this meeting?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Delete', 
+                  onPress: () => handleDeleteMeeting(meetingId),
+                  style: 'destructive'
+                }
+              ]
+            );
+          }}
+          className="bg-red-500 w-20 h-full justify-center items-center"
+        >
+          <MaterialIcons name="delete" size={24} color="white" />
+        </TouchableOpacity>
+      </View>
     );
   };
 
   const renderMeetingCard = (meeting: Meeting) => (
-    <TouchableOpacity
+    <Swipeable
+      ref={ref => swipeableRefs.current[meeting.id] = ref}
       key={meeting.id}
-      onPress={() => router.push(`/meeting/${meeting.id}`)}
-      className="bg-card rounded-lg p-4 mb-4"
+      renderRightActions={() => renderRightActions(meeting.id)}
+      overshootRight={false}
     >
-      <View className="flex-row items-center">
-        <View className="w-12 h-12 rounded-full bg-primary/20 mr-4 items-center justify-center">
-          <Text className="text-2xl">📝</Text>
+      <TouchableOpacity
+        onPress={() => router.push(`/meeting/${meeting.id}`)}
+        className="bg-card rounded-lg p-3 mb-[0.5]"
+      >
+        <View className="flex-row items-center">
+          <View className="w-14 h-14 rounded-full bg-primary/20 mr-4 items-center justify-center">
+            <Text className="text-3xl">📝</Text>
+          </View>
+          <View className="flex-1">
+            <Text className="text-lg font-semibold text-white">{meeting.name}</Text>
+            <Text className="text-sm text-muted-foreground">
+              {new Date(meeting.created_at).toLocaleDateString()}
+            </Text>
+            <Text className="text-sm text-muted-foreground">
+              {meeting.duration ? formatDuration(meeting.duration) : 'No recording'}
+            </Text>
+          </View>
         </View>
-        <View className="flex-1">
-          <Text className="text-lg font-semibold">{meeting.name}</Text>
-          <Text className="text-muted-foreground">
-            {new Date(meeting.created_at).toLocaleDateString()}
-          </Text>
-          <Text className="text-muted-foreground">
-            Duration: {meeting.duration ? `${Math.floor(meeting.duration / 60)} minutes` : 'N/A'}
-          </Text>
-          <Text className="text-muted-foreground text-xs mt-1">ID: {meeting.id}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Swipeable>
   );
 
   const handleStartMeeting = () => {
