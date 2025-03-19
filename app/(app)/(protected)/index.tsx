@@ -33,6 +33,7 @@ export default function Home() {
         .from('meetings')
         .select('id, name, duration, created_at, updated_at, status, user_id')
         .eq('is_deleted', false)
+        .gt('duration', 0)
         .order('created_at', { ascending: false });
 
       if (error) {
