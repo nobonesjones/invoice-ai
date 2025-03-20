@@ -9,10 +9,15 @@
 		"userInterfaceStyle": "automatic",
 		"assetBundlePatterns": ["**/*"],
 		"newArchEnabled": true,
+		"plugins": ["expo-router", "expo-secure-store", "expo-av"],
 		"ios": {
 			"supportsTablet": true,
 			"config": {
 				"usesNonExemptEncryption": false
+			},
+			"infoPlist": {
+				"NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
+				"UIBackgroundModes": ["audio"]
 			},
 			"splash": {
 				"image": "./assets/splash.png",
@@ -29,6 +34,7 @@
 			"adaptiveIcon": {
 				"foregroundImage": "./assets/adaptive-icon.png"
 			},
+			"permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
 			"splash": {
 				"image": "./assets/splash.png",
 				"resizeMode": "cover",
@@ -42,7 +48,6 @@
 		},
 		"experiments": {
 			"typedRoutes": true
-		},
-		"plugins": ["expo-router", "expo-secure-store"]
+		}
 	}
 }

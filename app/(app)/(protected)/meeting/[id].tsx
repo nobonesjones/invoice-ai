@@ -16,6 +16,7 @@ interface Meeting {
   created_at: string;
   transcript_json?: any;
   minutes_json?: any;
+  minutes_text?: string;
   audio_url?: string;
 }
 
@@ -26,14 +27,16 @@ export default function MeetingView() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<TabType>('minutes');
   const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [transcripts, setTranscripts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
     fetchMeeting();
+    fetchTranscripts();
     return () => {
       // Cleanup sound when component unmounts
       if (sound) {
@@ -51,11 +54,13 @@ export default function MeetingView() {
         .single();
 
       if (error) throw error;
-      setMeeting(data);
-      
-      // Load audio if available
-      if (data.audio_url) {
-        loadAudio(data.audio_url);
+
+      if (data) {
+        setMeeting(data);
+        // Load audio but don't play automatically
+        if (data.audio_url) {
+          loadAudio(data.audio_url);
+        }
       }
     } catch (error) {
       console.error('Error fetching meeting:', error);
@@ -64,48 +69,53 @@ export default function MeetingView() {
     }
   };
 
-  const playRecording = async (url: string) => {
+  const fetchTranscripts = async () => {
     try {
-      console.log('Playing recording from URL:', url);
-      
-      // Create the sound object with proper headers
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { 
-          uri: url,
-          headers: {
-            'Accept': 'audio/m4a',
-            'Content-Type': 'audio/m4a'
-          }
-        },
-        { 
-          shouldPlay: true,
-          progressUpdateIntervalMillis: 1000
-        },
-        onPlaybackStatusUpdate
-      );
+      const { data, error } = await supabase
+        .from('transcripts')
+        .select('content')
+        .eq('meeting_id', id)
+        .order('timestamp', { ascending: true });
 
-      setSound(newSound);
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        // Combine all transcripts
+        const combinedTranscript = data.map(t => t.content).join('\n');
+        setTranscripts([combinedTranscript]);
+      }
     } catch (error) {
-      console.error('Error playing recording:', error);
+      console.error('Error fetching transcripts:', error);
     }
   };
 
-  const loadAudio = async (audioUrl: string) => {
+  const loadAudio = async (url: string) => {
     try {
-      await playRecording(audioUrl);
+      console.log('Loading audio from URL:', url);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: false },
+        onPlaybackStatusUpdate
+      );
+      setSound(newSound);
+      
+      // Get initial status to set duration
+      const status = await newSound.getStatusAsync();
+      if (status.isLoaded) {
+        setDuration(status.durationMillis || 0);
+      }
     } catch (error) {
       console.error('Error loading audio:', error);
     }
   };
 
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    
-    setPlaybackPosition(status.positionMillis);
-    setDuration(status.durationMillis || 0);
-    setIsPlaying(status.isPlaying);
-    if (status.didJustFinish) {
-      setIsPlaying(false);
+    if (status.isLoaded) {
+      setPosition(status.positionMillis);
+      setIsPlaying(status.isPlaying);
+      if (!duration && status.durationMillis) {
+        setDuration(status.durationMillis);
+      }
     }
   };
 
@@ -172,16 +182,39 @@ export default function MeetingView() {
       case 'minutes':
         return (
           <ScrollView className="flex-1 px-4">
-            <Text className="text-gray-300 leading-6">
-              {meeting.minutes_json?.content || 'No minutes available yet.'}
-            </Text>
+            {meeting.minutes_text ? (
+              <>
+                {meeting.minutes_text.split('\n\n').map((section, index) => {
+                  if (section.startsWith('Meeting Summary:') || 
+                      section.startsWith('Main Action Items:') || 
+                      section.startsWith('Meeting Minutes:')) {
+                    const [header, ...content] = section.split('\n');
+                    return (
+                      <View key={index} className="mb-4">
+                        <Text className="text-gray-300 font-bold text-lg mb-2">
+                          {header}
+                        </Text>
+                        <Text className="text-gray-300 leading-6 font-normal">
+                          {content.join('\n').trim()}
+                        </Text>
+                      </View>
+                    );
+                  }
+                  return null;
+                })}
+              </>
+            ) : (
+              <Text className="text-gray-300 leading-6">
+                Minutes are being generated...
+              </Text>
+            )}
           </ScrollView>
         );
       case 'transcript':
         return (
           <ScrollView className="flex-1 px-4">
             <Text className="text-gray-300 leading-6">
-              {meeting.transcript_json?.content || 'No transcript available yet.'}
+              {transcripts.length > 0 ? transcripts[0] : 'No transcript available yet.'}
             </Text>
           </ScrollView>
         );
@@ -243,7 +276,7 @@ export default function MeetingView() {
         <View className="h-20 border-t border-gray-800 px-4">
           <View className="flex-row items-center justify-between py-4">
             <Text className="text-gray-400">
-              {formatTime(playbackPosition)} / {formatTime(duration)}
+              {formatTime(position)} / {formatTime(duration)}
             </Text>
             <Button
               onPress={handlePlayPause}

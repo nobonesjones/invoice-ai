@@ -11,8 +11,14 @@ export default function AppLayout() {
 	const { colorScheme } = useColorScheme();
 
 	return (
-		<Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
-			<Stack.Screen name="(protected)" />
+		<Stack screenOptions={{ headerShown: false, gestureEnabled: true }}>
+			<Stack.Screen 
+				name="(protected)" 
+				options={{
+					gestureEnabled: true,
+					gestureDirection: "horizontal"
+				}}
+			/>
 			<Stack.Screen name="welcome" />
 			<Stack.Screen name="(auth)" options={{ headerShown: false }} />
 			<Stack.Screen

@@ -10,6 +10,8 @@ import * as FileSystem from 'expo-file-system';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { useAudioRecorder } from '@/lib/hooks/use-audio-recorder';
+import { useMinutesGeneration } from '@/lib/hooks/use-minutes-generation';
+import { useTranscription } from '@/lib/hooks/use-transcription';
 
 interface Objective {
   id: string;
@@ -45,6 +47,9 @@ export default function RecordingScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { generateMinutes } = useMinutesGeneration();
+  const { transcribeAudio } = useTranscription();
 
   // Memoize the error handler to avoid recreating it on each render
   const handleError = useCallback((error: string) => {
@@ -215,8 +220,23 @@ export default function RecordingScreen() {
       await stopRecording();
       // Reset recording time after stopping
       setRecordingTime(0);
+
+      // If we have a recording and meeting ID, start transcription
+      if (recording && meetingIdState) {
+        const uri = recording.getURI();
+        if (uri) {
+          // Start transcription process
+          try {
+            await transcribeAudio(uri, meetingIdState);
+            // After transcription is complete, generate minutes
+            await generateMinutes(meetingIdState);
+          } catch (error) {
+            console.error('Error processing recording:', error);
+          }
+        }
+      }
     }
-  }, [isRecording, stopRecording, recordingTime]);
+  }, [isRecording, stopRecording, recordingTime, recording, meetingIdState, generateMinutes, transcribeAudio]);
 
   // Initialize and check permissions on mount
   useEffect(() => {
