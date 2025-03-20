@@ -20,11 +20,15 @@ export default function Home() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [userName, setUserName] = useState('');
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
 
   useEffect(() => {
     fetchMeetings();
-  }, []);
+    if (user) {
+      fetchUserName();
+    }
+  }, [user]);
 
   const fetchMeetings = async () => {
     try {
@@ -46,6 +50,16 @@ export default function Home() {
       console.error("Error fetching meetings:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchUserName = async () => {
+    if (!user) return;
+    
+    // Get display name from user metadata
+    const displayName = user.user_metadata?.display_name;
+    if (displayName) {
+      setUserName(displayName);
     }
   };
 
@@ -224,12 +238,6 @@ export default function Home() {
           />
           <View className="flex-row">
             <TouchableOpacity
-              onPress={() => router.push("/test-recording")}
-              className="w-10 h-10 rounded-full bg-primary/20 items-center justify-center mr-2"
-            >
-              <Text className="text-xl">🎙️</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               onPress={() => router.push("/profile")}
               className="w-10 h-10 rounded-full bg-primary/20 items-center justify-center"
             >
@@ -240,7 +248,7 @@ export default function Home() {
 
         {/* Welcome Section */}
         <View className="mb-8">
-          <H1>Welcome Back{user?.email ? `, ${user.email.split('@')[0]}` : ''}</H1>
+          <H1>Welcome Back{userName ? `, ${userName}` : ''}</H1>
         </View>
 
         {/* Meetings Section */}

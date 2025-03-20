@@ -1,53 +1,76 @@
 {
-	"expo": {
-		"name": "ExpoSupabaseStarter",
-		"slug": "ExpoSupabaseStarter",
-		"scheme": "expo-supabase-starter",
-		"version": "1.0.0",
-		"orientation": "portrait",
-		"icon": "./assets/icon.png",
-		"userInterfaceStyle": "automatic",
-		"assetBundlePatterns": ["**/*"],
-		"newArchEnabled": true,
-		"plugins": ["expo-router", "expo-secure-store", "expo-av"],
-		"ios": {
-			"supportsTablet": true,
-			"config": {
-				"usesNonExemptEncryption": false
-			},
-			"infoPlist": {
-				"NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
-				"UIBackgroundModes": ["audio"]
-			},
-			"splash": {
-				"image": "./assets/splash.png",
-				"resizeMode": "cover",
-				"backgroundColor": "#ffffff",
-				"dark": {
-					"backgroundColor": "#000000",
-					"resizeMode": "cover",
-					"image": "./assets/splash-dark.png"
-				}
-			}
-		},
-		"android": {
-			"adaptiveIcon": {
-				"foregroundImage": "./assets/adaptive-icon.png"
-			},
-			"permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
-			"splash": {
-				"image": "./assets/splash.png",
-				"resizeMode": "cover",
-				"backgroundColor": "#ffffff",
-				"dark": {
-					"backgroundColor": "#000000",
-					"resizeMode": "cover",
-					"image": "./assets/splash-dark.png"
-				}
-			}
-		},
-		"experiments": {
-			"typedRoutes": true
-		}
-	}
+  "expo": {
+    "name": "ExpoSupabaseStarter",
+    "slug": "ExpoSupabaseStarter",
+    "scheme": "expo-supabase-starter",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-av"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      },
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "backgroundColor": "#000000",
+          "resizeMode": "cover",
+          "image": "./assets/splash-dark.png"
+        }
+      },
+      "bundleIdentifier": "com.indianabones.ExpoSupabaseStarter"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "backgroundColor": "#000000",
+          "resizeMode": "cover",
+          "image": "./assets/splash-dark.png"
+        }
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "06b2649b-5bbd-4809-843b-55f98d11f572"
+      }
+    },
+    "owner": "indianabones"
+  }
 }
