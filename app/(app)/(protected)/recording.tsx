@@ -42,6 +42,7 @@ export default function RecordingScreen() {
     duration: string;
     file: string;
   }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   const rotationAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -97,6 +98,8 @@ export default function RecordingScreen() {
         }]);
 
         if (meetingIdState) {
+          setIsLoading(true);
+          
           // Upload the file to Supabase Storage
           // Log file info before reading
           const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
@@ -130,6 +133,7 @@ export default function RecordingScreen() {
 
             if (uploadError) {
               console.error('Upload error:', uploadError);
+              setIsLoading(false);
               Alert.alert(
                 'Error',
                 'Failed to upload recording to storage.',
@@ -162,6 +166,7 @@ export default function RecordingScreen() {
             
             if (updateError) {
               console.error('Error updating meeting:', updateError);
+              setIsLoading(false);
               Alert.alert(
                 'Error',
                 'Failed to update meeting status.',
@@ -169,17 +174,20 @@ export default function RecordingScreen() {
               );
             } else {
               console.log('Successfully updated meeting with duration:', finalDuration, 'Meeting ID:', meetingIdState);
-              Alert.alert(
-                'Recording Complete',
-                `Meeting ID: ${meetingIdState}\n\nDuration: ${getDurationFormatted(finalDuration * 1000)}`,
-                [{ 
-                  text: 'View Meetings', 
-                  onPress: () => router.push('/')
-                }]
-              );
+              // Wait for 2 seconds then navigate to transcript tab
+              setTimeout(() => {
+                router.replace({
+                  pathname: '/meeting/[id]',
+                  params: { 
+                    id: meetingIdState,
+                    tab: 'transcript' as const
+                  }
+                });
+              }, 2000);
             }
           } catch (error) {
             console.error('Error processing file:', error);
+            setIsLoading(false);
             Alert.alert(
               'Error',
               'Failed to process audio file.',
@@ -190,6 +198,7 @@ export default function RecordingScreen() {
         }
       } catch (err) {
         console.error('Error in onRecordingComplete:', err);
+        setIsLoading(false);
         Alert.alert(
           'Error',
           'Failed to process recording.',
@@ -592,6 +601,23 @@ export default function RecordingScreen() {
     );
   }
 
+  // Early return for loading state
+  if (isLoading) {
+    return (
+      <View className="flex-1 bg-black items-center justify-center px-4">
+        <View className="items-center space-y-4">
+          <ActivityIndicator size="large" color="#a855f7" />
+          <Text className="text-white text-lg text-center">
+            Saving your meeting...
+          </Text>
+          <Text className="text-gray-400 text-sm text-center">
+            You'll be redirected to your meeting page in a moment
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-black px-4 pt-20">
       {/* Header */}
@@ -620,34 +646,38 @@ export default function RecordingScreen() {
       {/* Permission status */}
       {!isRecording && (
         <View className="bg-[#222222] rounded-lg p-4 mb-8">
-          <View className="flex-row items-center mb-2">
+        <View className="flex-row items-center mb-2">
+          <Text>
             <Mic size={20} color={permissionStatus === PERMISSION_GRANTED ? "#10B981" : "#EF4444"} className="mr-2" />
-            <Text className={permissionStatus === PERMISSION_GRANTED ? "text-green-400" : "text-red-400"}>
-              Microphone Permission: {permissionStatus === PERMISSION_GRANTED ? "Granted" : permissionStatus === PERMISSION_DENIED ? "Denied" : "Unknown"}
-            </Text>
-          </View>
-          <View>
-            <Text className="text-white text-sm mb-3">
-              Audio permission is required to record meetings with audio. This is especially important for iOS devices.
-            </Text>
-          </View>
-          {permissionStatus === PERMISSION_DENIED && (
-            <Button
-              onPress={requestAudioPermission}
-              className="bg-blue-600 py-2 mt-1"
-              disabled={isProcessing}
-            >
-              <Text className="text-white text-center">Request Permission</Text>
-            </Button>
-          )}
+          </Text>
+          <Text className={permissionStatus === PERMISSION_GRANTED ? "text-green-400" : "text-red-400"}>
+            Microphone Permission: {permissionStatus === PERMISSION_GRANTED ? "Granted" : permissionStatus === PERMISSION_DENIED ? "Denied" : "Unknown"}
+          </Text>
         </View>
+        <View>
+          <Text className="text-white text-sm mb-3">
+            Audio permission is required to record meetings with audio. This is especially important for iOS devices.
+          </Text>
+        </View>
+        {permissionStatus === PERMISSION_DENIED && (
+          <Button
+            onPress={requestAudioPermission}
+            className="bg-blue-600 py-2 mt-1"
+            disabled={isProcessing}
+          >
+            <Text className="text-white text-center">Request Permission</Text>
+          </Button>
+        )}
+      </View>
       )}
 
       {/* Reminder Card */}
       {currentObjective && isRecording && (
         <View className="bg-[#222222] rounded-lg p-4 mb-8">
           <View className="flex-row items-center mb-2">
-            <Bell size={20} className="text-purple-500 mr-2" />
+            <Text>
+              <Bell size={20} className="text-purple-500 mr-2" />
+            </Text>
             <Text className="text-purple-400">Reminder</Text>
           </View>
           <View>

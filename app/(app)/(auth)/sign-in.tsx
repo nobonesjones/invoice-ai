@@ -48,7 +48,9 @@ export default function SignIn() {
 				onPress={() => router.back()}
 				className="mb-4"
 			>
-				<ChevronLeft size={24} color="white" className="opacity-60" />
+				<Text>
+					<ChevronLeft size={24} color="white" className="opacity-60" />
+				</Text>
 			</TouchableOpacity>
 			<View className="flex-1 gap-4 web:m-4">
 				<H1 className="self-start">Sign In</H1>

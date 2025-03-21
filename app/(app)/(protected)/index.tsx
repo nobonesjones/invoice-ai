@@ -1,8 +1,8 @@
 import { View, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '@/config/supabase';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Meeting } from '@/types/meetings';
 import { Button } from '@/components/ui/button';
 import { colors } from '@/constants/colors';
@@ -11,7 +11,6 @@ import { Image } from "@/components/image";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { H1, H2, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
-import MeetingObjectivesModal from "./meeting-objectives-modal";
 import { Swipeable } from 'react-native-gesture-handler';
 
 export default function Home() {
@@ -19,25 +18,17 @@ export default function Home() {
   const { user } = useSupabase();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [userName, setUserName] = useState('');
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
-
-  useEffect(() => {
-    fetchMeetings();
-    if (user) {
-      fetchUserName();
-    }
-  }, [user]);
 
   const fetchMeetings = async () => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('meetings')
-        .select('id, name, duration, created_at, updated_at, status, user_id')
+        .select('id, name, duration, created_at, updated_at, status, user_id, audio_url')
         .eq('is_deleted', false)
-        .gt('duration', 0)
+        .not('audio_url', 'is', null)  // Only get meetings with recordings
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -52,6 +43,20 @@ export default function Home() {
       setIsLoading(false);
     }
   };
+
+  // Fetch meetings when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('Home screen focused, fetching meetings...');
+      fetchMeetings();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (user) {
+      fetchUserName();
+    }
+  }, [user]);
 
   const fetchUserName = async () => {
     if (!user) return;
@@ -160,7 +165,9 @@ export default function Home() {
           }}
           className="bg-blue-500 w-20 h-full justify-center items-center"
         >
-          <MaterialIcons name="edit" size={24} color="white" />
+          <Text>
+            <MaterialIcons name="edit" size={24} color="white" />
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => {
@@ -179,7 +186,9 @@ export default function Home() {
           }}
           className="bg-red-500 w-20 h-full justify-center items-center"
         >
-          <MaterialIcons name="delete" size={24} color="white" />
+          <Text>
+            <MaterialIcons name="delete" size={24} color="white" />
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -214,17 +223,49 @@ export default function Home() {
     </Swipeable>
   );
 
-  const handleStartMeeting = () => {
-    setIsModalVisible(true);
-  };
+  const handleCreateMeeting = async () => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in');
+        return;
+      }
 
-  const handleModalClose = () => {
-    setIsModalVisible(false);
-  };
+      const { data: meetingData, error: meetingError } = await supabase
+        .from('meetings')
+        .insert([
+          { 
+            user_id: user.id,
+            name: 'New Meeting',
+            status: 'recording',
+            duration: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select()
+        .single();
 
-  const handleObjectivesConfirm = (objectives: string) => {
-    console.log('Meeting objectives:', objectives);
-    setIsModalVisible(false);
+      if (meetingError) {
+        console.error('Meeting creation error:', meetingError);
+        Alert.alert('Error', `Failed to create meeting: ${meetingError.message}`);
+        return;
+      }
+
+      if (!meetingData) {
+        console.error('No meeting data returned');
+        Alert.alert('Error', 'Failed to create meeting: No data returned');
+        return;
+      }
+
+      // Navigate to recording screen with meeting ID
+      router.push({
+        pathname: "/recording",
+        params: { meetingId: meetingData.id }
+      });
+    } catch (error) {
+      console.error('Error creating meeting:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
+    }
   };
 
   return (
@@ -279,17 +320,11 @@ export default function Home() {
       <View className="p-4">
         <Button
           className="w-full bg-gradient-to-r from-purple-500 to-blue-500"
-          onPress={handleStartMeeting}
+          onPress={handleCreateMeeting}
         >
           <Text className="text-black font-semibold">Start</Text>
         </Button>
       </View>
-
-      <MeetingObjectivesModal
-        isVisible={isModalVisible}
-        onClose={handleModalClose}
-        onConfirm={handleObjectivesConfirm}
-      />
     </SafeAreaView>
   );
 }

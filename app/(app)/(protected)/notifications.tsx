@@ -16,7 +16,9 @@ export default function Notifications() {
                 className="flex-row items-center px-4 py-6"
             >
                 <View className="flex-row items-center">
-                    <ChevronLeft size={24} className="text-white" />
+                    <Text>
+                        <ChevronLeft size={24} className="text-white" />
+                    </Text>
                     <Text className="text-2xl font-semibold text-gray-300 ml-2">Notifications</Text>
                 </View>
             </TouchableOpacity>

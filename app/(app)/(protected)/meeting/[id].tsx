@@ -8,6 +8,8 @@ import { Audio, AVPlaybackStatus } from 'expo-av';
 
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
+import { ActionItemsList } from '@/components/ActionItemsList';
+import { ChatInterface } from '@/components/ChatInterface';
 
 interface Meeting {
   id: string;
@@ -18,14 +20,15 @@ interface Meeting {
   minutes_json?: any;
   minutes_text?: string;
   audio_url?: string;
+  transcript?: any;
 }
 
 type TabType = 'minutes' | 'transcript' | 'chat';
 
 export default function MeetingView() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<TabType>('minutes');
+  const { id, tab } = useLocalSearchParams<{ id: string; tab?: TabType }>();
+  const [activeTab, setActiveTab] = useState<TabType>(tab as TabType || 'minutes');
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [transcripts, setTranscripts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,20 +50,36 @@ export default function MeetingView() {
 
   const fetchMeeting = async () => {
     try {
-      const { data, error } = await supabase
+      setIsLoading(true);
+      const { data: meetingData, error: meetingError } = await supabase
         .from('meetings')
         .select('*')
         .eq('id', id)
         .single();
 
-      if (error) throw error;
+      if (meetingError) throw meetingError;
 
-      if (data) {
-        setMeeting(data);
-        // Load audio but don't play automatically
-        if (data.audio_url) {
-          loadAudio(data.audio_url);
-        }
+      // Fetch transcript
+      const { data: transcriptData, error: transcriptError } = await supabase
+        .from('transcripts')
+        .select('content')
+        .eq('meeting_id', id)
+        .order('created_at', { ascending: true })
+        .single();
+
+      if (transcriptError && transcriptError.code !== 'PGRST116') {
+        // PGRST116 is "no rows returned" - not an error if no transcript yet
+        throw transcriptError;
+      }
+
+      setMeeting({
+        ...meetingData,
+        transcript: transcriptData?.content || null
+      });
+
+      // Load audio but don't play automatically
+      if (meetingData.audio_url) {
+        loadAudio(meetingData.audio_url);
       }
     } catch (error) {
       console.error('Error fetching meeting:', error);
@@ -184,10 +203,9 @@ export default function MeetingView() {
           <ScrollView className="flex-1 px-4">
             {meeting.minutes_text ? (
               <>
+                {/* Meeting Summary Section */}
                 {meeting.minutes_text.split('\n\n').map((section, index) => {
-                  if (section.startsWith('Meeting Summary:') || 
-                      section.startsWith('Main Action Items:') || 
-                      section.startsWith('Meeting Minutes:')) {
+                  if (section.startsWith('Meeting Summary:')) {
                     const [header, ...content] = section.split('\n');
                     return (
                       <View key={index} className="mb-4">
@@ -197,6 +215,41 @@ export default function MeetingView() {
                         <Text className="text-gray-300 leading-6 font-normal">
                           {content.join('\n').trim()}
                         </Text>
+                      </View>
+                    );
+                  }
+                  return null;
+                })}
+
+                {/* Action Items Section */}
+                <View className="mb-4">
+                  <Text className="text-gray-300 font-bold text-lg mb-2">
+                    Action Items
+                  </Text>
+                  <ActionItemsList meetingId={id} />
+                </View>
+
+                {/* Meeting Minutes Section */}
+                {meeting.minutes_text.split('\n\n').map((section, index) => {
+                  if (section.startsWith('Meeting Minutes:')) {
+                    const [header, ...content] = section.split('\n');
+                    return (
+                      <View key={index} className="mb-4">
+                        <Text className="text-gray-300 font-bold text-lg mb-2">
+                          {header}
+                        </Text>
+                        <View className="space-y-2">
+                          {content.map((point, pointIndex) => (
+                            point.trim() && (
+                              <View key={pointIndex} className="flex-row">
+                                <Text className="text-gray-300 leading-6 mr-2">•</Text>
+                                <Text className="text-gray-300 leading-6 flex-1">
+                                  {point.trim().replace(/^[•-]\s*/, '')}
+                                </Text>
+                              </View>
+                            )
+                          ))}
+                        </View>
                       </View>
                     );
                   }
@@ -220,8 +273,19 @@ export default function MeetingView() {
         );
       case 'chat':
         return (
-          <View className="flex-1 items-center justify-center">
-            <Text className="text-gray-400">Chat feature coming soon</Text>
+          <View className="flex-1">
+            {meeting.transcript && meeting.minutes_text ? (
+              <ChatInterface 
+                transcript={meeting.transcript} 
+                minutes={meeting.minutes_text}
+              />
+            ) : (
+              <View className="flex-1 items-center justify-center p-4">
+                <Text className="text-gray-300 text-center">
+                  Chat will be available once the meeting transcript and minutes are generated.
+                </Text>
+              </View>
+            )}
           </View>
         );
       default:
@@ -234,7 +298,9 @@ export default function MeetingView() {
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-16 pb-4">
         <TouchableOpacity onPress={() => router.back()}>
-          <ChevronLeft size={24} color="white" />
+          <Text>
+            <ChevronLeft size={24} color="white" />
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -271,8 +337,8 @@ export default function MeetingView() {
         {renderContent()}
       </View>
 
-      {/* Audio Playback Controls */}
-      {meeting?.audio_url && (
+      {/* Show audio playback controls only for Minutes and Transcript tabs */}
+      {(activeTab === 'minutes' || activeTab === 'transcript') && meeting?.audio_url && (
         <View className="h-20 border-t border-gray-800 px-4">
           <View className="flex-row items-center justify-between py-4">
             <Text className="text-gray-400">
@@ -283,9 +349,13 @@ export default function MeetingView() {
               className="bg-purple-500 w-12 h-12 rounded-full items-center justify-center"
             >
               {isPlaying ? (
-                <Pause size={24} color="white" />
+                <Text>
+                  <Pause size={24} color="white" />
+                </Text>
               ) : (
-                <Play size={24} color="white" />
+                <Text>
+                  <Play size={24} color="white" />
+                </Text>
               )}
             </Button>
           </View>
