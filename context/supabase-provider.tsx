@@ -38,12 +38,22 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	const [initialized, setInitialized] = useState<boolean>(false);
 
 	const signUp = async (email: string, password: string) => {
-		const { error } = await supabase.auth.signUp({
+		// Sign up the user
+		const { error: signUpError } = await supabase.auth.signUp({
 			email,
 			password,
 		});
-		if (error) {
-			throw error;
+		if (signUpError) {
+			throw signUpError;
+		}
+
+		// After successful sign-up, sign in the user
+		const { error: signInError } = await supabase.auth.signInWithPassword({
+			email,
+			password,
+		});
+		if (signInError) {
+			throw signInError;
 		}
 	};
 

@@ -6,19 +6,16 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   Alert,
   Keyboard,
   TouchableWithoutFeedback,
-  SafeAreaView,
   KeyboardEvent,
-  Dimensions,
   LayoutAnimation,
   UIManager,
 } from 'react-native';
 import { Send, RefreshCw } from 'lucide-react-native';
-import { ChatService, StoredChatMessage } from '@/lib/services/chat-service';
+import { GlobalChatService, StoredGlobalChatMessage } from '@/lib/services/global-chat-service';
 import { colors } from '@/constants/colors';
 
 interface Message {
@@ -29,13 +26,11 @@ interface Message {
   error?: boolean;
 }
 
-interface ChatInterfaceProps {
-  transcript: string;
-  minutes: string;
-  meetingId: string;
+interface GlobalChatInterfaceProps {
+  userId: string;
 }
 
-export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceProps) {
+export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -44,7 +39,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
-  const chatService = useRef<ChatService | null>(null);
+  const chatService = useRef<GlobalChatService | null>(null);
 
   // Enable LayoutAnimation for Android
   if (Platform.OS === 'android') {
@@ -57,8 +52,14 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
     const initializeChat = async () => {
       try {
         setIsInitializing(true);
-        // Initialize chat service with transcript, minutes, and meetingId
-        chatService.current = new ChatService(transcript, minutes, meetingId);
+        // Initialize chat service with user ID
+        chatService.current = new GlobalChatService(userId);
+        
+        // Load meetings context
+        const contextLoaded = await chatService.current.loadMeetingsContext();
+        if (!contextLoaded) {
+          throw new Error('Failed to load meetings context');
+        }
         
         // Load chat history
         const history = await chatService.current.loadChatHistory();
@@ -74,9 +75,10 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
         
         setMessages(formattedMessages);
       } catch (error) {
+        console.error('Error initializing global chat:', error);
         Alert.alert(
           'Chat Unavailable',
-          'Chat functionality is not available until the transcript and minutes are generated.'
+          'Global chat functionality is not available. Please try again later.'
         );
       } finally {
         setIsInitializing(false);
@@ -84,7 +86,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
     };
     
     initializeChat();
-  }, [transcript, minutes, meetingId]);
+  }, [userId]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -152,7 +154,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
     if (!chatService.current) {
       Alert.alert(
         'Chat Unavailable',
-        'Chat functionality is not available until the transcript and minutes are generated.'
+        'Global chat functionality is not available. Please try again later.'
       );
       return;
     }
@@ -247,7 +249,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
               {messages.length === 0 && !isLoading && (
                 <View style={{ padding: 16, alignItems: 'center' }}>
                   <Text style={{ color: colors.light.mutedForeground, textAlign: 'center' }}>
-                    Ask questions about your meeting transcript and minutes.
+                    Ask questions about any of your meetings or get help with your tasks.
                   </Text>
                 </View>
               )}
@@ -340,6 +342,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
           borderTopColor: colors.light.border,
           backgroundColor: colors.light.background,
           borderTopWidth: 1,
+          paddingBottom: 0,
           // Position at bottom or above keyboard
           position: 'absolute',
           bottom: isKeyboardVisible ? keyboardHeight : 0,
@@ -369,7 +372,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                 color: colors.light.foreground,
                 maxHeight: 100
               }}
-              placeholder="Ask about your meeting..."
+              placeholder="Ask about your meetings..."
               placeholderTextColor={colors.light.mutedForeground}
               value={inputMessage}
               onChangeText={setInputMessage}

@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, TextInput, ScrollView } from 'react-native';
 import { Link, useRouter, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '@/config/supabase';
@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Meeting } from '@/types/meetings';
 import { Button } from '@/components/ui/button';
 import { colors } from '@/constants/colors';
+import { useTheme } from "@/context/theme-provider";
 
 import { Image } from "@/components/image";
 import { SafeAreaView } from "@/components/safe-area-view";
@@ -16,10 +17,16 @@ import { Swipeable } from 'react-native-gesture-handler';
 export default function Home() {
   const router = useRouter();
   const { user } = useSupabase();
+  const { theme, isLightMode } = useTheme();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
+  
+  // Move state from renderRightActions to component level
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renamingMeetingId, setRenamingMeetingId] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
 
   const fetchMeetings = async () => {
     try {
@@ -49,6 +56,19 @@ export default function Home() {
     useCallback(() => {
       console.log('Home screen focused, fetching meetings...');
       fetchMeetings();
+      
+      // Reset any ongoing rename operations when screen is focused
+      setIsRenaming(false);
+      setRenamingMeetingId(null);
+      setNewName('');
+      
+      // Return a cleanup function that runs when the screen loses focus
+      return () => {
+        // Reset renaming state when navigating away from the screen
+        setIsRenaming(false);
+        setRenamingMeetingId(null);
+        setNewName('');
+      };
     }, [])
   );
 
@@ -138,90 +158,220 @@ export default function Home() {
     return `${minutes} min, ${seconds} seconds`;
   };
 
-  const renderRightActions = (meetingId: string) => {
+  // Memoize the renderRightActions function to prevent recreation on each render
+  const renderRightActions = useCallback((meetingId: string) => {
+    const handleActionPress = (text: string) => {
+      if (text === 'Delete') {
+        handleDeletePress();
+      } else if (text === 'Rename') {
+        handleRenamePress();
+      }
+
+      function handleRenamePress() {
+        // Find the meeting to get its current name
+        const meeting = meetings.find(m => m.id === meetingId);
+        if (meeting) {
+          setNewName(meeting.name);
+          setIsRenaming(true);
+          setRenamingMeetingId(meetingId);
+        }
+      }
+
+      function handleDeletePress() {
+        Alert.alert(
+          'Delete Meeting',
+          'Are you sure you want to delete this meeting?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => {
+                if (swipeableRefs.current[meetingId]) {
+                  swipeableRefs.current[meetingId]?.close();
+                }
+              }
+            },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: () => {
+                handleDeleteMeeting(meetingId);
+                if (swipeableRefs.current[meetingId]) {
+                  swipeableRefs.current[meetingId]?.close();
+                }
+              }
+            }
+          ]
+        );
+      }
+    };
+
+    if (isRenaming && renamingMeetingId === meetingId) {
+      return (
+        <View style={{ backgroundColor: theme.background, width: 250 }} className="flex-row items-center p-2">
+          <TextInput
+            style={{ 
+              flex: 1, 
+              borderWidth: 1, 
+              borderColor: theme.border,
+              borderRadius: 4,
+              padding: 8,
+              marginRight: 8,
+              color: theme.foreground,
+              backgroundColor: theme.card
+            }}
+            value={newName}
+            onChangeText={setNewName}
+          />
+          <TouchableOpacity
+            style={{ backgroundColor: theme.primary, padding: 8, borderRadius: 4 }}
+            onPress={() => {
+              handleRenameMeeting(meetingId, newName);
+              setIsRenaming(false);
+              setRenamingMeetingId(null);
+              if (swipeableRefs.current[meetingId]) {
+                swipeableRefs.current[meetingId]?.close();
+              }
+            }}
+          >
+            <Text style={{ color: theme.primaryForeground }}>Save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ 
+              backgroundColor: theme.muted, 
+              padding: 8, 
+              borderRadius: 4,
+              marginLeft: 4
+            }}
+            onPress={() => {
+              setIsRenaming(false);
+              setRenamingMeetingId(null);
+              if (swipeableRefs.current[meetingId]) {
+                swipeableRefs.current[meetingId]?.close();
+              }
+            }}
+          >
+            <Text style={{ color: theme.mutedForeground }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
-      <View className="flex-row">
-        <TouchableOpacity
-          onPress={() => {
-            const meeting = meetings.find(m => m.id === meetingId);
-            Alert.prompt(
-              'Rename Meeting',
-              'Enter new name:',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Save',
-                  onPress: async (text) => {
-                    if (text) {
-                      await handleRenameMeeting(meetingId, text);
-                      swipeableRefs.current[meetingId]?.close();
-                    }
-                  }
-                }
-              ],
-              'plain-text',
-              meeting?.name || ''
-            );
-          }}
-          className="bg-blue-500 w-20 h-full justify-center items-center"
-        >
-          <Text>
-            <MaterialIcons name="edit" size={24} color="white" />
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => {
-            Alert.alert(
-              'Delete Meeting',
-              'Are you sure you want to delete this meeting?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                  text: 'Delete', 
-                  onPress: () => handleDeleteMeeting(meetingId),
-                  style: 'destructive'
-                }
-              ]
-            );
-          }}
-          className="bg-red-500 w-20 h-full justify-center items-center"
-        >
-          <Text>
-            <MaterialIcons name="delete" size={24} color="white" />
-          </Text>
-        </TouchableOpacity>
+      <View style={{ 
+        flexDirection: 'row', 
+        height: '100%',
+        overflow: 'hidden',
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+      }}>
+        {['Rename', 'Delete'].map((text, index) => (
+          <TouchableOpacity
+            key={text}
+            style={{
+              backgroundColor: text === 'Delete' ? '#FF4136' : theme.primary,
+              justifyContent: 'center',
+              alignItems: 'center',
+              width: 80,
+              height: '100%',
+              borderTopRightRadius: index === 1 ? 12 : 0,
+              borderBottomRightRadius: index === 1 ? 12 : 0,
+            }}
+            onPress={() => handleActionPress(text)}
+          >
+            <Text style={{ 
+              color: 'white',
+              fontWeight: '600',
+              fontSize: 14
+            }}>{text}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     );
-  };
+  }, [theme, meetings, isRenaming, renamingMeetingId, newName, handleDeleteMeeting, handleRenameMeeting]);
 
-  const renderMeetingCard = (meeting: Meeting) => (
-    <Swipeable
-      ref={ref => swipeableRefs.current[meeting.id] = ref}
-      key={meeting.id}
-      renderRightActions={() => renderRightActions(meeting.id)}
-      overshootRight={false}
-    >
-      <TouchableOpacity
-        onPress={() => router.push(`/meeting/${meeting.id}`)}
-        className="bg-card rounded-lg p-3 mb-[0.5]"
+  // Memoize the renderMeetingCard function to prevent recreation on each render
+  const renderMeetingCard = useCallback((meeting: Meeting) => {
+    return (
+      <Swipeable
+        key={meeting.id}
+        ref={(ref) => {
+          if (ref) {
+            swipeableRefs.current[meeting.id] = ref;
+          }
+        }}
+        renderRightActions={() => renderRightActions(meeting.id)}
+        onSwipeableOpen={() => {
+          // Close any other open swipeables
+          Object.keys(swipeableRefs.current).forEach((key) => {
+            if (key !== meeting.id && swipeableRefs.current[key]) {
+              swipeableRefs.current[key]?.close();
+            }
+          });
+        }}
+        onSwipeableClose={() => {
+          // Reset renaming state if this meeting was being renamed
+          if (isRenaming && renamingMeetingId === meeting.id) {
+            setIsRenaming(false);
+            setRenamingMeetingId(null);
+            setNewName('');
+          }
+        }}
+        onSwipeableWillClose={() => {
+          // Also reset on will close to catch all scenarios
+          if (isRenaming && renamingMeetingId === meeting.id) {
+            setIsRenaming(false);
+            setRenamingMeetingId(null);
+            setNewName('');
+          }
+        }}
+        containerStyle={{
+          marginBottom: 15,
+          paddingHorizontal: 2,
+          paddingVertical: 2
+        }}
+        childrenContainerStyle={{
+          borderRadius: 12,
+          overflow: 'hidden'
+        }}
       >
-        <View className="flex-row items-center">
-          <View className="w-14 h-14 rounded-full bg-primary/20 mr-4 items-center justify-center">
-            <Text className="text-3xl">📝</Text>
+        <TouchableOpacity
+          onPress={() => router.push(`/meeting/${meeting.id}`)}
+          style={{ 
+            backgroundColor: theme.card,
+            borderRadius: 12,
+            // iOS shadow
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            // Android elevation
+            elevation: 4,
+            // Add margin to ensure shadow is visible
+            margin: 2,
+          }}
+          className="p-4"
+        >
+          <View className="flex-row items-center">
+            <View className="mr-3">
+              <Text className="text-3xl">📝</Text>
+            </View>
+            <View className="flex-1">
+              <Text style={{ color: theme.foreground }} className="text-lg font-semibold">
+                {meeting.name}
+              </Text>
+              <Text style={{ color: theme.mutedForeground }} className="text-sm">
+                {new Date(meeting.created_at).toLocaleDateString()}
+              </Text>
+              <Text style={{ color: theme.mutedForeground }} className="text-sm">
+                {meeting.duration ? formatDuration(meeting.duration) : 'No recording'}
+              </Text>
+            </View>
           </View>
-          <View className="flex-1">
-            <Text className="text-lg font-semibold text-white">{meeting.name}</Text>
-            <Text className="text-sm text-muted-foreground">
-              {new Date(meeting.created_at).toLocaleDateString()}
-            </Text>
-            <Text className="text-sm text-muted-foreground">
-              {meeting.duration ? formatDuration(meeting.duration) : 'No recording'}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Swipeable>
-  );
+        </TouchableOpacity>
+      </Swipeable>
+    );
+  }, [theme, router, renderRightActions]);
 
   const handleCreateMeeting = async () => {
     try {
@@ -269,7 +419,7 @@ export default function Home() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView style={{ backgroundColor: theme.background }} className="flex-1">
       <View className="flex-1 px-4">
         {/* Header */}
         <View className="flex-row items-center justify-between py-4">
@@ -280,7 +430,7 @@ export default function Home() {
           <View className="flex-row">
             <TouchableOpacity
               onPress={() => router.push("/profile")}
-              className="w-10 h-10 rounded-full bg-primary/20 items-center justify-center"
+              className="w-10 h-10 rounded-full bg-gray-200 items-center justify-center"
             >
               <Text className="text-xl">👤</Text>
             </TouchableOpacity>
@@ -289,41 +439,37 @@ export default function Home() {
 
         {/* Welcome Section */}
         <View className="mb-8">
-          <H1>Welcome Back{userName ? `, ${userName}` : ''}</H1>
+          <H1 style={{ color: theme.foreground }}>Welcome Back{userName ? `, ${userName}` : ''}</H1>
         </View>
 
         {/* Meetings Section */}
         <View className="mb-4">
-          <H2>My Meetings</H2>
+          <H2 style={{ color: theme.foreground }}>My Meetings</H2>
         </View>
 
-        {/* Meetings List */}
+        {/* Meetings List - Now Scrollable */}
         {isLoading ? (
           <View className="mt-8" />
         ) : meetings.length > 0 ? (
-          <View>
-            {meetings.map(renderMeetingCard)}
-          </View>
+          <ScrollView 
+            className="flex-1" 
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          >
+            <View className="mt-2">
+              {meetings.map(renderMeetingCard)}
+            </View>
+          </ScrollView>
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Text className="text-muted-foreground text-center mb-2">
+            <Text style={{ color: theme.mutedForeground }} className="text-center mb-2">
               No meetings yet
             </Text>
-            <Muted className="text-center">
+            <Muted style={{ color: theme.mutedForeground }} className="text-center">
               Start recording your first meeting
             </Muted>
           </View>
         )}
-      </View>
-
-      {/* Start Button */}
-      <View className="p-4">
-        <Button
-          className="w-full bg-gradient-to-r from-purple-500 to-blue-500"
-          onPress={handleCreateMeeting}
-        >
-          <Text className="text-black font-semibold">Start</Text>
-        </Button>
       </View>
     </SafeAreaView>
   );

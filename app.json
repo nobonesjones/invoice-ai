@@ -29,11 +29,11 @@
       },
       "splash": {
         "image": "./assets/splash.png",
-        "resizeMode": "cover",
+        "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
           "backgroundColor": "#000000",
-          "resizeMode": "cover",
+          "resizeMode": "contain",
           "image": "./assets/splash-dark.png"
         }
       },
@@ -51,11 +51,11 @@
       ],
       "splash": {
         "image": "./assets/splash.png",
-        "resizeMode": "cover",
+        "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
           "backgroundColor": "#000000",
-          "resizeMode": "cover",
+          "resizeMode": "contain",
           "image": "./assets/splash-dark.png"
         }
       }

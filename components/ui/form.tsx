@@ -93,8 +93,9 @@ const FormLabel = React.forwardRef<
 	React.ElementRef<typeof Label>,
 	Omit<React.ComponentPropsWithoutRef<typeof Label>, "children"> & {
 		children: string;
+		style?: any;
 	}
->(({ className, nativeID: _nativeID, ...props }, ref) => {
+>(({ className, nativeID: _nativeID, style, ...props }, ref) => {
 	const { error, formItemNativeID } = useFormField();
 
 	return (
@@ -105,6 +106,7 @@ const FormLabel = React.forwardRef<
 				error && "text-destructive",
 				className,
 			)}
+			style={style}
 			nativeID={formItemNativeID}
 			{...props}
 		/>
@@ -171,12 +173,13 @@ type FormItemProps<T extends React.ElementType<any>, U> = Override<
 > & {
 	label?: string;
 	description?: string;
+	labelStyle?: any;
 };
 
 const FormInput = React.forwardRef<
 	React.ElementRef<typeof Input>,
 	FormItemProps<typeof Input, string>
->(({ label, description, onChange, ...props }, ref) => {
+>(({ label, description, onChange, labelStyle, ...props }, ref) => {
 	const inputRef = React.useRef<React.ComponentRef<typeof Input>>(null);
 	const {
 		error,
@@ -206,7 +209,7 @@ const FormInput = React.forwardRef<
 	return (
 		<FormItem>
 			{!!label && (
-				<FormLabel nativeID={formItemNativeID} onPress={handleOnLabelPress}>
+				<FormLabel nativeID={formItemNativeID} onPress={handleOnLabelPress} style={labelStyle}>
 					{label}
 				</FormLabel>
 			)}

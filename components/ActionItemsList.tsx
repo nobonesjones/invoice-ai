@@ -3,6 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/config/supabase';
 import { useState, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
+import { colors } from '@/constants/colors';
 
 interface ActionItem {
   id: string;
@@ -13,13 +14,23 @@ interface ActionItem {
   meeting_id: string;
 }
 
-export function ActionItemsList({ meetingId }: { meetingId: string }) {
-  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+interface ActionItemsListProps {
+  meetingId: string;
+  actionItems?: ActionItem[] | any[];
+}
+
+export function ActionItemsList({ meetingId, actionItems: initialItems }: ActionItemsListProps) {
+  const [actionItems, setActionItems] = useState<ActionItem[]>(initialItems || []);
+  const [isLoading, setIsLoading] = useState(!initialItems);
 
   useEffect(() => {
-    fetchActionItems();
-  }, [meetingId]);
+    if (!initialItems) {
+      fetchActionItems();
+    } else if (initialItems.length > 0) {
+      setActionItems(initialItems);
+      setIsLoading(false);
+    }
+  }, [meetingId, initialItems]);
 
   const fetchActionItems = async () => {
     try {
@@ -42,6 +53,11 @@ export function ActionItemsList({ meetingId }: { meetingId: string }) {
   };
 
   const toggleActionItem = async (id: string, completed: boolean) => {
+    // Skip toggling for placeholder items
+    if (actionItems.find(item => item.id === id)?.content === 'No action items identified') {
+      return;
+    }
+    
     // Add subtle haptic feedback
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -90,32 +106,47 @@ export function ActionItemsList({ meetingId }: { meetingId: string }) {
   if (isLoading) {
     return (
       <View className="py-4">
-        <Text className="text-muted-foreground">Loading action items...</Text>
+        <Text style={{ color: colors.light.mutedForeground }} className="text-muted-foreground">Loading action items...</Text>
       </View>
     );
   }
 
-  if (actionItems.length === 0) {
+  // Special handling for placeholder items
+  const hasPlaceholder = actionItems.some(item => item.content === 'No action items identified');
+  
+  if (actionItems.length === 0 || hasPlaceholder) {
     return (
-      <View className="py-4">
-        <Text className="text-muted-foreground">No action items found</Text>
+      <View className="py-2 pl-0">
+        <Text style={{ color: colors.light.mutedForeground }} className="text-muted-foreground italic">
+          No action items identified
+        </Text>
       </View>
     );
   }
 
   return (
-    <View className="space-y-2">
+    <View className="space-y-2 pl-0">
       {actionItems.map(item => (
         <TouchableOpacity
           key={item.id}
           onPress={() => toggleActionItem(item.id, !item.completed)}
-          className="flex-row items-center space-x-3 p-3 bg-card rounded-lg active:opacity-70"
+          className="flex-row items-center bg-card rounded-lg active:opacity-70 pl-0 pr-3 py-3"
+          style={{ backgroundColor: colors.light.card }}
+          activeOpacity={0.7}
         >
-          <Checkbox
-            checked={item.completed}
-            onCheckedChange={(checked: boolean) => toggleActionItem(item.id, checked)}
-          />
-          <Text className={`flex-1 text-white ${item.completed ? 'line-through text-gray-500' : ''}`}>
+          <View className="ml-0 mr-3">
+            <Checkbox
+              checked={item.completed}
+              onCheckedChange={(checked: boolean) => toggleActionItem(item.id, checked)}
+            />
+          </View>
+          <Text 
+            style={{ 
+              color: item.completed ? colors.light.mutedForeground : colors.light.foreground,
+              textDecorationLine: item.completed ? 'line-through' : 'none'
+            }}
+            className="flex-1"
+          >
             {item.content}
           </Text>
         </TouchableOpacity>

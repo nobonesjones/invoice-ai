@@ -8,7 +8,8 @@ export const unstable_settings = {
 };
 
 export default function AuthLayout() {
-	const { colorScheme } = useColorScheme();
+	// Force light mode for auth screens
+	const colorScheme = "light";
 
 	return (
 		<Stack screenOptions={{ headerShown: false }}>
@@ -18,15 +19,9 @@ export default function AuthLayout() {
 					headerShown: true,
 					headerTitle: "Sign Up",
 					headerStyle: {
-						backgroundColor:
-							colorScheme === "dark"
-								? colors.dark.background
-								: colors.light.background,
+						backgroundColor: colors.light.background,
 					},
-					headerTintColor:
-						colorScheme === "dark"
-							? colors.dark.foreground
-							: colors.light.foreground,
+					headerTintColor: colors.light.foreground,
 					gestureEnabled: false,
 				}}
 			/>
@@ -37,18 +32,12 @@ export default function AuthLayout() {
 					headerShown: true,
 					headerTitle: "Sign In",
 					headerStyle: {
-						backgroundColor:
-							colorScheme === "dark"
-								? colors.dark.background
-								: colors.light.background,
+						backgroundColor: colors.light.background,
 					},
-					headerTintColor:
-						colorScheme === "dark"
-							? colors.dark.foreground
-							: colors.light.foreground,
+					headerTintColor: colors.light.foreground,
 					gestureEnabled: true,
 				}}
 			/>
 		</Stack>
 	);
-} 
+}

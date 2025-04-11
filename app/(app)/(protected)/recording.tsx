@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { useAudioRecorder } from '@/lib/hooks/use-audio-recorder';
 import { useMinutesGeneration } from '@/lib/hooks/use-minutes-generation';
 import { useTranscription } from '@/lib/hooks/use-transcription';
+import { useTheme } from "@/context/theme-provider";
 
 interface Objective {
   id: string;
@@ -29,12 +30,14 @@ const PERMISSION_UNDETERMINED: PermissionStatusType = "undetermined";
 export default function RecordingScreen() {
   const router = useRouter();
   const { meetingId } = useLocalSearchParams<{ meetingId: string }>();
+  const { theme, isLightMode } = useTheme();
   const [recordingTime, setRecordingTime] = useState(0);
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [currentObjective, setCurrentObjective] = useState<Objective | null>(null);
   const [meetingIdState, setMeetingId] = useState<string | undefined>(meetingId || undefined);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState<string>('');
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatusType>(PERMISSION_UNDETERMINED);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<{
@@ -43,6 +46,8 @@ export default function RecordingScreen() {
     file: string;
   }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   
   const rotationAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -66,8 +71,8 @@ export default function RecordingScreen() {
   }, []);
 
   const { 
-    isRecording, 
-    isUploading,
+    isRecording: recorderIsRecording, 
+    isUploading: recorderIsUploading,
     recording,
     startRecording, 
     stopRecording, 
@@ -86,6 +91,10 @@ export default function RecordingScreen() {
         const finalDuration = recordingTime;
         console.log('Final recording duration:', finalDuration);
 
+        // Show processing screen
+        setIsProcessing(true);
+        setProcessingStep('Preparing audio...');
+
         // Create a playable sound from the recording
         const { sound, status } = await recording.createNewLoadedSoundAsync();
         console.log('Recording status:', status);
@@ -99,6 +108,7 @@ export default function RecordingScreen() {
 
         if (meetingIdState) {
           setIsLoading(true);
+          setProcessingStep('Uploading recording...');
           
           // Upload the file to Supabase Storage
           // Log file info before reading
@@ -134,6 +144,7 @@ export default function RecordingScreen() {
             if (uploadError) {
               console.error('Upload error:', uploadError);
               setIsLoading(false);
+              setIsProcessing(false);
               Alert.alert(
                 'Error',
                 'Failed to upload recording to storage.',
@@ -143,6 +154,7 @@ export default function RecordingScreen() {
             }
 
             console.log('Upload response:', data);
+            setProcessingStep('Finalizing meeting...');
 
             // Get public URL without any query parameters
             const { data: { publicUrl } } = supabase.storage
@@ -167,6 +179,7 @@ export default function RecordingScreen() {
             if (updateError) {
               console.error('Error updating meeting:', updateError);
               setIsLoading(false);
+              setIsProcessing(false);
               Alert.alert(
                 'Error',
                 'Failed to update meeting status.',
@@ -174,7 +187,11 @@ export default function RecordingScreen() {
               );
             } else {
               console.log('Successfully updated meeting with duration:', finalDuration, 'Meeting ID:', meetingIdState);
-              // Wait for 2 seconds then navigate to transcript tab
+              
+              // Navigate directly to transcript tab
+              setProcessingStep('Navigating to transcript...');
+              
+              // Small delay to ensure UI updates
               setTimeout(() => {
                 router.replace({
                   pathname: '/meeting/[id]',
@@ -183,11 +200,12 @@ export default function RecordingScreen() {
                     tab: 'transcript' as const
                   }
                 });
-              }, 2000);
+              }, 1000);
             }
           } catch (error) {
             console.error('Error processing file:', error);
             setIsLoading(false);
+            setIsProcessing(false);
             Alert.alert(
               'Error',
               'Failed to process audio file.',
@@ -199,6 +217,7 @@ export default function RecordingScreen() {
       } catch (err) {
         console.error('Error in onRecordingComplete:', err);
         setIsLoading(false);
+        setIsProcessing(false);
         Alert.alert(
           'Error',
           'Failed to process recording.',
@@ -208,6 +227,12 @@ export default function RecordingScreen() {
     },
     onError: handleError
   });
+
+  // Update local isRecording state based on recorder state
+  useEffect(() => {
+    setIsRecording(recorderIsRecording);
+    setIsUploading(recorderIsUploading);
+  }, [recorderIsRecording, recorderIsUploading]);
 
   // Cleanup function for recordings
   useEffect(() => {
@@ -234,18 +259,55 @@ export default function RecordingScreen() {
       if (recording && meetingIdState) {
         const uri = recording.getURI();
         if (uri) {
-          // Start transcription process
           try {
-            await transcribeAudio(uri, meetingIdState);
-            // After transcription is complete, generate minutes
-            await generateMinutes(meetingIdState);
+            setIsProcessing(true);
+            
+            // Navigate to the meeting details page with a processing indicator
+            router.replace({
+              pathname: '/meeting/[id]',
+              params: { 
+                id: meetingIdState,
+                tab: 'transcript' as const,
+                processing: 'true'
+              }
+            });
+            
+            // Process in sequence to ensure everything completes
+            try {
+              // First transcribe the audio
+              console.log('Starting transcription...');
+              await transcribeAudio(uri, meetingIdState);
+              console.log('Transcription completed');
+              
+              // Then generate minutes
+              console.log('Starting minutes generation...');
+              await generateMinutes(meetingIdState);
+              console.log('Minutes generation completed');
+              
+              // Update the UI to show completion
+              console.log('All processing completed successfully');
+            } catch (processingError) {
+              console.error('Error in audio processing:', processingError);
+            } finally {
+              setIsProcessing(false);
+            }
           } catch (error) {
             console.error('Error processing recording:', error);
+            setIsProcessing(false);
+            
+            // Still navigate to the meeting details page even if there's an error
+            router.replace({
+              pathname: '/meeting/[id]',
+              params: { 
+                id: meetingIdState,
+                tab: 'transcript' as const
+              }
+            });
           }
         }
       }
     }
-  }, [isRecording, stopRecording, recordingTime, recording, meetingIdState, generateMinutes, transcribeAudio]);
+  }, [isRecording, stopRecording, recordingTime, recording, meetingIdState, generateMinutes, transcribeAudio, router]);
 
   // Initialize and check permissions on mount
   useEffect(() => {
@@ -461,16 +523,16 @@ export default function RecordingScreen() {
   function getRecordingLines() {
     return recordings.map((recordingLine, index) => {
       return (
-        <View key={index} className="flex-row items-center justify-between bg-gray-800 rounded-lg p-4 mb-3">
-          <Text className="text-white flex-1 mr-4">
+        <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#cccccc', borderRadius: 10, padding: 16, marginBottom: 8 }}>
+          <Text style={{ color: '#000000', flex: 1, marginRight: 16 }}>
             Recording #{recordings.length - index} | {recordingLine.duration}
           </Text>
-          <Button
+          <TouchableOpacity
             onPress={() => recordingLine.sound.replayAsync()}
-            className="bg-purple-500 px-4 py-2 rounded-lg"
+            style={{ backgroundColor: '#000000', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 }}
           >
-            <Text className="text-white">Play</Text>
-          </Button>
+            <Text style={{ color: '#ffffff' }}>Play</Text>
+          </TouchableOpacity>
         </View>
       );
     });
@@ -594,9 +656,9 @@ export default function RecordingScreen() {
   // Loading state
   if (isInitializing) {
     return (
-      <View className="flex-1 bg-black items-center justify-center">
+      <View style={{ flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#a855f7" />
-        <Text className="text-white mt-4">Initializing recording...</Text>
+        <Text style={{ color: theme.foreground, marginTop: 16 }}>Initializing recording...</Text>
       </View>
     );
   }
@@ -604,13 +666,13 @@ export default function RecordingScreen() {
   // Early return for loading state
   if (isLoading) {
     return (
-      <View className="flex-1 bg-black items-center justify-center px-4">
-        <View className="items-center space-y-4">
+      <View style={{ flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+        <View style={{ justifyContent: 'center', alignItems: 'center', marginVertical: 16 }}>
           <ActivityIndicator size="large" color="#a855f7" />
-          <Text className="text-white text-lg text-center">
+          <Text style={{ color: theme.foreground, fontSize: 18, textAlign: 'center' }}>
             Saving your meeting...
           </Text>
-          <Text className="text-gray-400 text-sm text-center">
+          <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: 'center' }}>
             You'll be redirected to your meeting page in a moment
           </Text>
         </View>
@@ -619,106 +681,170 @@ export default function RecordingScreen() {
   }
 
   return (
-    <View className="flex-1 bg-black px-4 pt-20">
+    <View style={{ flex: 1, backgroundColor: theme.background, paddingHorizontal: 24, paddingTop: 54 }}>
       {/* Header */}
-      <View className="flex-row items-center mb-8">
-        <TouchableOpacity onPress={() => router.push('/')} className="mr-4">
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        marginBottom: 24,
+        marginTop: 18,
+        justifyContent: 'center', 
+        position: 'relative' 
+      }}>
+        <TouchableOpacity 
+          onPress={() => router.push('/')} 
+          style={{ 
+            position: 'absolute', 
+            left: 0, 
+            padding: 10, 
+            zIndex: 10 
+          }}
+        >
           <Text>
-            <ChevronLeft size={24} color="white" />
+            <ChevronLeft size={24} color={theme.foreground} />
           </Text>
         </TouchableOpacity>
-        <Text className="text-white text-lg flex-1 text-center">
+        <Text style={{ 
+          color: theme.foreground, 
+          fontSize: 18,
+          textAlign: 'center',
+          fontWeight: '600',
+          flex: 0, 
+          width: '70%', 
+          marginHorizontal: 'auto' 
+        }}>
           {isUploading ? 'Uploading...' : isRecording ? 'Recording' : 'Ready to Record'}
         </Text>
-        <View style={{ width: 24 }} /> {/* Spacer to center the title */}
       </View>
 
       {/* Error message display */}
       {errorMessage && (
-        <View className="bg-red-900 rounded-lg p-4 mb-4">
-          <Text className="text-white font-medium">Error</Text>
+        <View style={{ backgroundColor: '#ef4444', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+          <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>Error</Text>
           <View>
-            <Text className="text-white">{errorMessage}</Text>
+            <Text style={{ color: '#ffffff' }}>{errorMessage}</Text>
           </View>
         </View>
       )}
 
       {/* Permission status */}
       {!isRecording && (
-        <View className="bg-[#222222] rounded-lg p-4 mb-8">
-        <View className="flex-row items-center mb-2">
-          <Text>
-            <Mic size={20} color={permissionStatus === PERMISSION_GRANTED ? "#10B981" : "#EF4444"} className="mr-2" />
-          </Text>
-          <Text className={permissionStatus === PERMISSION_GRANTED ? "text-green-400" : "text-red-400"}>
-            Microphone Permission: {permissionStatus === PERMISSION_GRANTED ? "Granted" : permissionStatus === PERMISSION_DENIED ? "Denied" : "Unknown"}
-          </Text>
+        <View style={{ 
+          backgroundColor: '#ffffff',
+          borderRadius: 12,
+          padding: 16, 
+          marginBottom: 24,
+          marginTop: 7,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3
+        }}>
+          <View style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            marginBottom: permissionStatus !== PERMISSION_GRANTED ? 8 : 0,
+            justifyContent: 'center' // Center the content horizontally
+          }}>
+            <Text>
+              <Mic size={20} color={permissionStatus === PERMISSION_GRANTED ? "#10B981" : "#EF4444"} style={{ marginRight: 8 }} />
+            </Text>
+            <Text style={{ 
+              color: permissionStatus === PERMISSION_GRANTED ? "#10B981" : "#EF4444",
+              fontWeight: '500'
+            }}>
+              Microphone Permission: {permissionStatus === PERMISSION_GRANTED ? "Granted" : permissionStatus === PERMISSION_DENIED ? "Denied" : "Unknown"}
+            </Text>
+          </View>
+          
+          {/* Only show explanation text when permission is not granted */}
+          {permissionStatus !== PERMISSION_GRANTED && (
+            <View>
+              <Text style={{ color: '#333333', fontSize: 14, marginBottom: 8, textAlign: 'center' }}>
+                Audio permission is required to record meetings with audio. This is especially important for iOS devices.
+              </Text>
+            </View>
+          )}
+          
+          {permissionStatus === PERMISSION_DENIED && (
+            <View style={{ alignItems: 'center' }}>
+              <TouchableOpacity
+                onPress={requestAudioPermission}
+                style={{ 
+                  backgroundColor: '#000000', 
+                  paddingHorizontal: 16, 
+                  paddingVertical: 8, 
+                  borderRadius: 10,
+                  marginTop: 4
+                }}
+                disabled={isProcessing}
+              >
+                <Text style={{ color: '#ffffff', textAlign: 'center', fontWeight: '500' }}>Request Permission</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        <View>
-          <Text className="text-white text-sm mb-3">
-            Audio permission is required to record meetings with audio. This is especially important for iOS devices.
-          </Text>
-        </View>
-        {permissionStatus === PERMISSION_DENIED && (
-          <Button
-            onPress={requestAudioPermission}
-            className="bg-blue-600 py-2 mt-1"
-            disabled={isProcessing}
-          >
-            <Text className="text-white text-center">Request Permission</Text>
-          </Button>
-        )}
-      </View>
       )}
 
       {/* Reminder Card */}
       {currentObjective && isRecording && (
-        <View className="bg-[#222222] rounded-lg p-4 mb-8">
-          <View className="flex-row items-center mb-2">
+        <View style={{ backgroundColor: '#cccccc', borderRadius: 10, padding: 16, marginBottom: 24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
             <Text>
-              <Bell size={20} className="text-purple-500 mr-2" />
+              <Bell size={20} color="#a855f7" style={{ marginRight: 8 }} />
             </Text>
-            <Text className="text-purple-400">Reminder</Text>
+            <Text style={{ color: '#a855f7' }}>Reminder</Text>
           </View>
           <View>
-            <Text className="text-white text-lg">{currentObjective.description}</Text>
+            <Text style={{ color: '#000000', fontSize: 18 }}>{currentObjective.description}</Text>
           </View>
         </View>
       )}
 
       {/* Audio Visualization */}
-      <View className="flex-1 items-center justify-center">
-        <View className="relative items-center justify-center">
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
           {/* Recording button */}
-          <View className="items-center">
+          <View style={{ alignItems: 'center' }}>
             {isRecording ? (
-              <Button
+              <TouchableOpacity
                 onPress={handleEndRecording}
-                className="bg-red-500 px-6 py-3 rounded-full"
+                style={{
+                  backgroundColor: '#ef4444',
+                  paddingHorizontal: 24,
+                  paddingVertical: 12,
+                  borderRadius: 100,
+                }}
                 disabled={isUploading || isProcessing}
               >
-                <Text className="text-white font-semibold">
+                <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>
                   {isUploading ? "Uploading..." : isProcessing ? "Processing..." : "Stop Recording"}
                 </Text>
-              </Button>
+              </TouchableOpacity>
             ) : (
-              <Button
+              <TouchableOpacity
                 onPress={handleStartRecording}
-                className={`${permissionStatus === PERMISSION_GRANTED ? "bg-gradient-to-r from-purple-500 to-blue-500" : "bg-gray-500"} px-6 py-3 rounded-full`}
+                style={{
+                  backgroundColor: permissionStatus === PERMISSION_GRANTED ? "#000000" : "#cccccc",
+                  paddingHorizontal: 24,
+                  paddingVertical: 12,
+                  borderRadius: 100,
+                }}
                 disabled={permissionStatus !== PERMISSION_GRANTED || isProcessing || isUploading}
               >
-                <Text className={`${permissionStatus === PERMISSION_GRANTED ? "text-black" : "text-gray-300"} font-semibold`}>
+                <Text style={{ color: permissionStatus === PERMISSION_GRANTED ? "#ffffff" : "#666666", fontWeight: 'bold' }}>
                   {isProcessing ? "Preparing..." : "Start Recording"}
                 </Text>
-              </Button>
+              </TouchableOpacity>
             )}
           </View>
         </View>
 
         {/* Recording time */}
         {isRecording && (
-          <View className="mt-8">
-            <Text className="text-white text-2xl font-semibold">
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ color: '#000000', fontSize: 24, fontWeight: 'bold' }}>
               {formatTime(recordingTime)}
             </Text>
           </View>
@@ -727,11 +853,34 @@ export default function RecordingScreen() {
 
       {/* Recordings List */}
       {recordings.length > 0 && (
-        <View className="mt-8 mb-4">
-          <Text className="text-white text-lg mb-4">Recent Recordings</Text>
+        <View style={{ marginTop: 24, marginBottom: 16 }}>
+          <Text style={{ color: '#000000', fontSize: 18, marginBottom: 16 }}>Recent Recordings</Text>
           <ScrollView>
             {getRecordingLines()}
           </ScrollView>
+        </View>
+      )}
+      
+      {/* Processing overlay */}
+      {isProcessing && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <ActivityIndicator size="large" color="#a855f7" />
+          <Text style={{ marginTop: 20, fontSize: 18, fontWeight: '500', color: '#000' }}>
+            Processing Meeting
+          </Text>
+          <Text style={{ marginTop: 8, fontSize: 14, color: '#666' }}>
+            {processingStep}
+          </Text>
         </View>
       )}
     </View>
