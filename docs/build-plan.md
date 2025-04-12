@@ -3,75 +3,73 @@ Type 'null' is not assignable to type 'string | undefined'.# MeetingMind: Meetin
 
 ## Project Phases
 
-### Phase 1: Foundation & Authentication ✅
-- ✅ Development environment setup
-- ✅ Splash screen implementation
-- ✅ Authentication screens (Sign in/Sign up)
-- ✅ Supabase connections established
+### Phase 1: Foundation & Authentication 
+- Development environment setup
+- Splash screen implementation
+- Authentication screens (Sign in/Sign up)
+- Supabase connections established
 
 ### Phase 2: Core UI & Home Experience
-- **Milestone 2.1: Home Screen Implementation**
-  - ✅Create the home screen layout with welcome header
-  - ✅Implement meeting cards with avatar icons
-  - ✅Add date/time and duration formatting
-  - ✅Build gradient "Start" button
-  - ✅Implement empty state for first-time users
+- Milestone 2.1: Home Screen Implementation
+  - Create the home screen layout with welcome header
+  - Implement meeting cards with avatar icons
+  - Add date/time and duration formatting
+  - Build gradient "Start" button
+  - Implement empty state for first-time users
 
-- **Milestone 2.2: Navigation Structure**
-  - ✅Set up Expo Router configuration
-  - ✅Create navigation paths between all screens
-  - ✅Implement proper back navigation
-  - ✅Build transitions between screens
+- Milestone 2.2: Navigation Structure
+  - Set up Expo Router configuration
+  - Create navigation paths between all screens
+  - Implement proper back navigation
+  - Build transitions between screens
 
-- **Milestone 2.3: Account Screen**
-  - ✅Create account/profile screen
-  - ✅Implement user settings options
-  - ✅Add theme toggle functionality
-  - ✅Build logout process
-
-
+- Milestone 2.3: Account Screen
+  - Create account/profile screen
+  - Implement user settings options
+  - Add theme toggle functionality
+  - Build logout process
 
 ### Phase 3: Recording Functionality
-- **Milestone 3.1: Audio Recording Framework**
-  - ✅Set up Expo AV for audio recording
-  - ✅Implement audio file management
-  - ✅Create audio visualization component
-  - ✅Build recording state management
+- Milestone 3.1: Audio Recording Framework
+  - Set up Expo AV for audio recording
+  - Implement audio file management
+  - Create audio visualization component
+  - Build recording state management
 
-- **Milestone 3.2: Meeting Objectives Modal**
-  - ✅Build modal overlay with text input
-  - ✅Implement objectives storage
-  - ✅Create timer and audio visualization
-  - ✅Connect "Confirm" action
+- Milestone 3.2: Meeting Objectives Modal
+  - Build modal overlay with text input
+  - Implement objectives storage
+  - Create timer and audio visualization
+  - Connect "Confirm" action
 
-- **Milestone 3.3: Active Recording Experience**
-  - ✅Implement recording screen with live visualization
-  - ✅Create reminder card component for objectives
-  - ✅Build reminder timing system
-  - ✅Implement "End Call" functionality
+- Milestone 3.3: Active Recording Experience
+  - Implement recording screen with live visualization
+  - Create reminder card component for objectives
+  - Build reminder timing system
+  - Implement "End Call" functionality
 
 ### Phase 4: Meeting Processing & Storage
-- **Milestone 4.1: Backend Integration**
-  - ✅Complete Supabase schema implementation
-  - ✅Set up storage buckets for audio files
-  - ✅Create API services for data operations
-  - ✅Implement proper error handling
+- Milestone 4.1: Backend Integration
+  - Complete Supabase schema implementation
+  - Set up storage buckets for audio files
+  - Create API services for data operations
+  - Implement proper error handling
 
-- **Milestone 4.2: Audio Processing**
-  - ✅Implement audio compression
-  - ✅Build audio upload to Supabase storage
-  - ✅Create processing status management
-  - ✅Add loading/progress indicators
+- Milestone 4.2: Audio Processing
+  - Implement audio compression
+  - Build audio upload to Supabase storage
+  - Create processing status management
+  - Add loading/progress indicators
 
-### Phase 5: AI & Transcription
-- **Milestone 5.1: OpenAI Whisper Integration**
-  - ✅Set up OpenAI API connection
-  - ✅Implement audio transcription service
+### Phase 5: AI & Transcription 
+- Milestone 5.1: OpenAI Whisper Integration 
+  - Set up OpenAI API connection
+  - Implement audio transcription service
   - Create transcript formatting and storage
   - Build error handling for transcription
 
-- **Milestone 5.2: Meeting Minutes Generation**
-  - Implement GPT API connection
+- Milestone 5.2: Meeting Minutes Generation 
+  - Implement Gemini Pro API connection (switched from GPT-4)
   - Create prompt engineering for minutes extraction
   - Build storage for minutes data
   - Add progress indicators for AI processing
@@ -82,57 +80,71 @@ Type 'null' is not assignable to type 'string | undefined'.# MeetingMind: Meetin
   Then the miutes below that.
 
 ### Phase 6: Meeting Details Experience
-- **Milestone 6.1: Meeting Details Screen**
+- Milestone 6.1: Meeting Details Screen 
   - Implement meeting header with gradient
   - Create tab navigation system
   - Build audio playback controls
   - Implement basic playback functionality
 
-- **Milestone 6.2: Minutes & Transcript Implementation**
+- Milestone 6.2: Minutes & Transcript Implementation 
   - Create minutes display component
   - Build transcript view with timestamps
   - Implement search functionality
   - Connect transcript to audio position
+  - Add real-time subscriptions for transcripts and action items
+  - Implement polling mechanism for immediate data loading
+  - Add manual refresh functionality
 
-- **Milestone 6.3: Chat Functionality**
+- Milestone 6.3: Chat Functionality
   - Create chat interface
   - Implement message history
-  - Build OpenAI connection for Q&A
+  - Build Gemini 2.0 Flash connection for Q&A (switched from OpenAI)
   - Create context management for relevant responses
 
 ### Phase 7: Polish & Finalization
-- **Milestone 7.1: UX Refinement**
+- Milestone 7.1: UX Refinement 
   - Add animations and transitions
   - Refine loading states and indicators
   - Implement error handling across the app
   - Create helpful empty states
+  - Add processing overlay with step-by-step status messages
+  - Implement swipe-to-delete for action items
+  - Add haptic feedback for interactions
 
-- **Milestone 7.2: Testing & Optimization**
+- Milestone 7.2: Testing & Optimization 
   - Perform end-to-end testing
   - Optimize audio processing and storage
   - Reduce API usage where possible
   - Implement performance improvements
 
-- **Milestone 7.3: Final Delivery**
+- Milestone 7.3: Final Delivery
   - Final bug fixes
   - Documentation updates
   - Prepare for app store submission
   - Create onboarding experience for new users
 
 ## Current Status
-- Phase 1: ✅ Completed
-- Phase 2-7: ⬜ Not started
+- Phase 1: Completed
+- Phase 2: Completed
+- Phase 3: Completed
+- Phase 4: Completed
+- Phase 5: Completed
+- Phase 6: Completed
+- Phase 7: Completed
 
 ## App Overview
 MeetingMind is a React Native (Expo) mobile application designed to help users record, transcribe, and interact with their meetings. The app captures audio recordings, transcribes them using OpenAI's Whisper API, generates meeting minutes, and enables users to chat with their meeting content using AI. The app features a clean, intuitive interface that allows users to manage recordings, set meeting objectives, and receive timely on-screen prompts to help them stay focused on their goals.
 
 ## Technical Stack
-- **Frontend**: React Native Expo
-- **Navigation**: Expo Router
-- **Authentication**: Supabase Authentication
-- **Database**: Supabase
-- **AI Integration**: OpenAI API (GPT for minutes and chat, Whisper for transcription)
-- **State Management**: React Context API
+- Frontend: React Native Expo
+- Navigation: Expo Router
+- Authentication: Supabase Authentication
+- Database: Supabase
+- AI Integration: 
+  - OpenAI API (Whisper for transcription)
+  - Google Gemini Pro (for minutes generation)
+  - Google Gemini 2.0 Flash (for chat functionality)
+- State Management: React Context API
 
 ## Application Screens
 
@@ -185,6 +197,8 @@ MeetingMind is a React Native (Expo) mobile application designed to help users r
 - Content area showing selected tab information
 - Audio playback controls at bottom
 - Back button and account icon in header
+- Real-time data updates with subscriptions
+- Manual refresh functionality
 
 #### 2.5. Profile/Account Screen
 - User information (name, email)
@@ -195,41 +209,41 @@ MeetingMind is a React Native (Expo) mobile application designed to help users r
 ## State Management (React Context API)
 
 ### 1. Authentication Context
-- **State**:
-  - `user`: Current user object or null
-  - `isLoading`: Boolean indicating authentication status check
-  - `isAuthenticated`: Boolean indicating if user is authenticated
-- **Actions**:
-  - `login(email, password)`: Log in with credentials
-  - `register(name, email, password)`: Register new user
-  - `logout()`: Log out current user
-  - `resetPassword(email)`: Send password reset email
-  - `updateUserProfile(data)`: Update user profile information
+- State:
+  - user: Current user object or null
+  - isLoading: Boolean indicating authentication status check
+  - isAuthenticated: Boolean indicating if user is authenticated
+- Actions:
+  - login(email, password): Log in with credentials
+  - register(name, email, password): Register new user
+  - logout(): Log out current user
+  - resetPassword(email): Send password reset email
+  - updateUserProfile(data): Update user profile information
 
 ### 2. Theme Context
-- **State**:
-  - `theme`: Current theme ('light' or 'dark')
-  - `systemTheme`: Boolean to follow system theme
-- **Actions**:
-  - `toggleTheme()`: Switch between light and dark themes
-  - `setSystemTheme(boolean)`: Enable/disable system theme following
+- State:
+  - theme: Current theme ('light' or 'dark')
+  - systemTheme: Boolean to follow system theme
+- Actions:
+  - toggleTheme(): Switch between light and dark themes
+  - setSystemTheme(boolean): Enable/disable system theme following
 
 ### 3. Recordings Context
-- **State**:
-  - `recordings`: Array of recording objects
-  - `currentRecording`: Current recording object or null
-  - `isRecording`: Boolean indicating if recording is active
-  - `recordingTime`: Current recording duration
-  - `isProcessing`: Boolean indicating if recording is being processed
-- **Actions**:
-  - `startRecording(name, objectives)`: Start a new recording
-  - `stopRecording()`: Stop the current recording
-  - `pauseRecording()`: Pause the current recording
-  - `resumeRecording()`: Resume a paused recording
-  - `deleteRecording(id)`: Delete recording by ID
-  - `updateRecordingName(id, name)`: Update recording name
-  - `addObjective(id, objective)`: Add an objective to a recording
-  - `removeObjective(id, objectiveId)`: Remove an objective from a recording
+- State:
+  - recordings: Array of recording objects
+  - currentRecording: Current recording object or null
+  - isRecording: Boolean indicating if recording is active
+  - recordingTime: Current recording duration
+  - isProcessing: Boolean indicating if recording is being processed
+- Actions:
+  - startRecording(name, objectives): Start a new recording
+  - stopRecording(): Stop the current recording
+  - pauseRecording(): Pause the current recording
+  - resumeRecording(): Resume a paused recording
+  - deleteRecording(id): Delete recording by ID
+  - updateRecordingName(id, name): Update recording name
+  - addObjective(id, objective): Add an objective to a recording
+  - removeObjective(id, objectiveId): Remove an objective from a recording
 
 ## Database Schema (Supabase)
 
@@ -406,99 +420,99 @@ USING (
   bucket_id = 'meetings' AND
   auth.uid()::text = (storage.foldername(name))[1]
 );
-```
 
-### Database Structure Overview
+## Database Structure Overview
 
 #### 1. Profiles Table
 - Extends Supabase Auth users
 - Stores user preferences and profile information
-- `id`: UUID (primary key, linked to auth.users)
-- `email`: Text (unique)
-- `name`: Text
-- `avatar_url`: Text
-- `theme`: Text (default 'light')
-- `created_at`: Timestamp
-- `updated_at`: Timestamp
+- id: UUID (primary key, linked to auth.users)
+- email: Text (unique)
+- name: Text
+- avatar_url: Text
+- theme: Text (default 'light')
+- created_at: Timestamp
+- updated_at: Timestamp
 
 #### 2. Meetings Table
 - Stores information about each meeting recording
-- `id`: UUID (primary key)
-- `user_id`: UUID (foreign key to auth.users)
-- `name`: Text
-- `duration`: Integer (seconds)
-- `date`: Timestamp (when the meeting occurred)
-- `status`: Text (processing status)
-- `audio_url`: Text (Supabase storage URL)
-- `transcript_json`: JSONB (full transcript with timestamps)
-- `minutes_json`: JSONB (generated minutes)
-- `created_at`: Timestamp
-- `updated_at`: Timestamp
+- id: UUID (primary key)
+- user_id: UUID (foreign key to auth.users)
+- name: Text
+- duration: Integer (seconds)
+- date: Timestamp (when the meeting occurred)
+- status: Text (processing status)
+- audio_url: Text (Supabase storage URL)
+- transcript_json: JSONB (full transcript with timestamps)
+- minutes_json: JSONB (generated minutes)
+- created_at: Timestamp
+- updated_at: Timestamp
 
 #### 3. Objectives Table
 - Stores meeting objectives for each meeting
-- `id`: UUID (primary key)
-- `meeting_id`: UUID (foreign key to Meetings)
-- `description`: Text
-- `display_order`: Integer
-- `displayed_at`: Integer (timestamp when shown during recording)
-- `created_at`: Timestamp
+- id: UUID (primary key)
+- meeting_id: UUID (foreign key to Meetings)
+- description: Text
+- display_order: Integer
+- displayed_at: Integer (timestamp when shown during recording)
+- created_at: Timestamp
 
 #### 4. Chat Messages Table
 - Stores conversation history for each meeting
-- `id`: UUID (primary key)
-- `meeting_id`: UUID (foreign key to Meetings)
-- `content`: Text
-- `is_user`: Boolean
-- `created_at`: Timestamp
+- id: UUID (primary key)
+- meeting_id: UUID (foreign key to Meetings)
+- content: Text
+- is_user: Boolean
+- created_at: Timestamp
 
 #### 5. Storage
-- `meetings` bucket: Stores audio files
-- File path structure: `{user_id}/{meeting_id}.m4a`
+- meetings bucket: Stores audio files
+- File path structure: {user_id}/{meeting_id}.m4a
 
 ## OpenAI API Integration
 
 ### 1. Audio Transcription (Whisper API)
-- **Implementation**:
+- Implementation:
   - Upload recording audio to Supabase storage
   - Send audio file URL to OpenAI Whisper API
   - Process and store returned transcript
-  - Function: `transcribeAudio(audioUrl)`
+  - Function: transcribeAudio(audioUrl)
 
-### 2. Meeting Minutes Generation (GPT API)
-- **Implementation**:
-  - Send full transcript to OpenAI GPT API with prompt to generate minutes
+### 2. Meeting Minutes Generation (Gemini Pro API)
+- Implementation:
+  - Send full transcript to Gemini Pro API with prompt to generate minutes
   - Process and store returned minutes
   - Include extraction of key points and action items
-  - Function: `generateMinutes(transcript, objectives)`
+  - Function: generateMinutes(transcript, objectives)
 
-### 3. Chat Integration (GPT API)
-- **Implementation**:
-  - Send user question along with meeting transcript context to OpenAI GPT API
+### 3. Chat Integration (Gemini 2.0 Flash API)
+- Implementation:
+  - Send user question along with meeting transcript context to Gemini 2.0 Flash API
   - Display returned response to user
   - Maintain context through conversation
-  - Function: `generateChatResponse(message, transcript, chatHistory)`
+  - Function: generateChatResponse(message, transcript, chatHistory)
 
 ### 4. Objective Prompting System
-- **Implementation**:
+- Implementation:
   - Analyze transcript in real-time during recording
   - Determine appropriate times to display objective reminders
   - Display on-screen prompts at calculated intervals
-  - Function: `calculatePromptTiming(objectives, ongoingTranscript)`
+  - Function: calculatePromptTiming(objectives, ongoingTranscript)
 
 ## Technical Constraints and Boundaries
 
 ### 1. Supported Libraries and Components
-- **Expo SDK**: Limited to compatible libraries and APIs
-- **UI Components**: React Native Paper or React Native Elements
-- **Storage**: Supabase Storage for audio files and generated content
-- **Authentication**: Supabase Authentication only
-- **State Management**: React Context API only (no Redux or other state managers)
+- Expo SDK: Limited to compatible libraries and APIs
+- UI Components: React Native Paper or React Native Elements
+- Storage: Supabase Storage for audio files and generated content
+- Authentication: Supabase Authentication only
+- State Management: React Context API only (no Redux or other state managers)
 
 ### 2. Performance Constraints
 - Maximum recording duration: 3 hours
 - Maximum file size: 100MB
 - Transcription processing time expectations: 1-2 minutes per 10 minutes of recording
+- Optimized data loading with parallel fetching and real-time subscriptions
 
 ### 3. Feature Boundaries
 - No video recording capability
@@ -530,17 +544,17 @@ USING (
 #### Design Reference
 ![Home Screen](https://i.imgur.com/placeholder.jpg)
 
-1. **UI Components**
-   - **Header Section**:
+1. UI Components
+   - Header Section:
      - App icon/logo on left side
      - "Welcome Back" text
      - User avatar/profile button on right side
    
-   - **Meetings Header**:
+   - Meetings Header:
      - "My Meetings" title
      - "Stay on top of your meetings" subtitle in lighter text
    
-   - **Recordings List**:
+   - Recordings List:
      - Dark-themed cards with rounded corners
      - Each card displays:
        - Colorful avatar icon on left (different for each meeting)
@@ -550,24 +564,24 @@ USING (
      - No visible swipe actions in this design
      - Cards have subtle depth effect
    
-   - **Start Button**:
+   - Start Button:
      - Large gradient button at bottom (purple to blue gradient)
      - Centered "Start" text
      - Full width with rounded corners
 
-2. **Colors & Styling**
+2. Colors & Styling
    - Dark mode theme (black background)
    - Card background: Dark gray (#222222)
    - Text: White and light gray for primary/secondary text
    - Accent colors: Gradient buttons and avatar backgrounds
    - Typography: Clean sans-serif font family
 
-3. **State & Data**
+3. State & Data
    - Fetch recordings from Supabase on component mount
    - Sort recordings by date (newest first)
    - Handle loading, error, and empty states
 
-4. **Interactions**
+4. Interactions
    - Tapping recording card navigates to Meeting Overview
    - "Start" button navigates to Pre-Recording screen
    - Profile icon navigates to Profile/Settings screen
@@ -577,58 +591,58 @@ USING (
 #### Design Reference
 ![Meeting Objectives Modal](https://i.imgur.com/placeholder.jpg)
 
-1. **UI Components**
-   - **Modal Container**:
+1. UI Components
+   - Modal Container:
      - Semi-transparent overlay on the Active Call screen
      - Dark gray modal card with rounded corners
    
-   - **Header Section**:
+   - Header Section:
      - "Set Objectives For Meeting" title
      - "Never forget something important, be reminded if you go off track" subtitle
    
-   - **Audio Visualization**:
+   - Audio Visualization:
      - Purple audio waveform visualization
    
-   - **Confirm Button**:
+   - Confirm Button:
      - Gray button with "Confirm" text
    
-   - **Timer Display**:
+   - Timer Display:
      - Large circular timer showing elapsed time (00:40)
      - Outer ring in purple showing progress
    
-   - **Objectives Input Area**:
+   - Objectives Input Area:
      - Text area with "Notes...... objectives and things that are important" placeholder
      - Dark input field with lighter text
 
-   - **Question Display** (in background):
+   - Question Display (in background):
      - "Question 1" label
      - "What does your business do?" question text
      - Appears to be part of the active call screen behind the modal
 
-   - **Alert Label** (in background):
+   - Alert Label (in background):
      - "Alert" text visible in the background screen
 
-2. **Colors & Styling**
+2. Colors & Styling
    - Dark theme consistent with the home screen
    - Modal background: Dark gray with slight transparency
    - Text: White and light gray for primary/secondary text
    - Accent color: Purple for timer ring and audio visualization
    - Typography: Same clean sans-serif font family
 
-3. **State & Data**
+3. State & Data
    - Store objectives text input
    - Track if modal is open/closed
    - Connect to active recording session
    - Save objectives to database when confirmed
 
-4. **Interactions**
+4. Interactions
    - Modal appears after clicking "Start" on home screen
    - User can type objectives in the text area
    - "Confirm" button saves objectives and closes modal
    - Modal should be dismissible (though not shown in design)
    - Objectives will be used during the meeting to provide reminders
 
-5. **Implementation Notes**
+5. Implementation Notes
    - This modal appears over the Active Call screen
    - The timer indicates recording has already started when setting objectives
    - This suggests recording begins immediately after pressing "Start" on home screen
@@ -639,29 +653,29 @@ USING (
 #### Design Reference
 ![Active Recording Screen](https://i.imgur.com/placeholder.jpg)
 
-1. **UI Components**
-   - **Header Section**:
+1. UI Components
+   - Header Section:
      - Back button (< arrow) on left side
      - "Recording" status indicator with green dot
    
-   - **Reminder Card**:
+   - Reminder Card:
      - Purple bell icon on left
      - "Reminder" label in light purple/blue
      - Reminder text: "Check how much the deposit is."
      - Dark gray card with rounded corners
    
-   - **Audio Visualization**:
+   - Audio Visualization:
      - Large circular container for audio visualization
      - Purple outer ring glowing effect
      - Audio waveform visualization in center (light purple)
      - Black circular background
    
-   - **End Call Button**:
+   - End Call Button:
      - Gradient button (purple to blue) at bottom
      - "End Call" text centered
      - Same gradient style as Start button on home screen
 
-2. **Colors & Styling**
+2. Colors & Styling
    - Dark theme consistent with previous screens
    - Background: Black
    - Reminder card: Dark gray (#222222)
@@ -669,20 +683,20 @@ USING (
    - Accent colors: Purple/blue for visualization and buttons
    - Typography: Same clean sans-serif font family
 
-3. **State & Data**
+3. State & Data
    - Track recording status and time
    - Manage audio recording process
    - Cycle through objectives as reminders
    - Handle background processing for audio
    - Determine when to show objective reminders
 
-4. **Interactions**
+4. Interactions
    - Back button (potentially pauses recording or confirms exit)
    - "End Call" button stops recording and navigates to processing screen
    - Automatic display of objective reminders at appropriate times
    - Audio visualization reacts to actual audio input
 
-5. **Implementation Notes**
+5. Implementation Notes
    - The reminder card displays objectives set earlier
    - Reminder cards should appear at strategic times based on conversation
    - Audio visualization should reflect actual audio input levels
@@ -694,33 +708,33 @@ USING (
 #### Design Reference
 ![Meeting Details Screen](https://i.imgur.com/placeholder.jpg)
 
-1. **UI Components**
-   - **Header Section**:
+1. UI Components
+   - Header Section:
      - Back button (< arrow) on left side
      - Account/profile icon on right side (not a notification bell)
    
-   - **Meeting Info Card**:
+   - Meeting Info Card:
      - Gradient card (blue to pink) with rounded corners
      - Meeting name: "Coffee Business"
      - Date and time: "14/03/2025 11:30"
      - Duration: "7 minutes, 15 seconds"
    
-   - **Tab Navigation**:
+   - Tab Navigation:
      - Three tabs: "Minutes", "Transcript", "Chat"
      - Purple active indicator for selected tab
      - Currently showing "Minutes" tab content
    
-   - **Content Area**:
+   - Content Area:
      - Dark gray background
      - Text content with meeting minutes or transcript
      - Multiple paragraphs of text content
      - Good spacing between paragraphs
    
-   - **Playback Controls**:
+   - Playback Controls:
      - Bottom playback bar (currently shown blank in the design)
      - Needs implementation for audio playback functionality
 
-2. **Colors & Styling**
+2. Colors & Styling
    - Dark theme consistent with previous screens
    - Meeting card: Gradient blue to pink/purple
    - Tab background: Dark gray
@@ -728,34 +742,36 @@ USING (
    - Text: White and light gray for contrast
    - Typography: Same clean sans-serif font family
 
-3. **State & Data**
+3. State & Data
    - Fetch meeting details, transcript, and minutes from Supabase
    - Manage tab selection state
    - Handle audio playback state (playing, paused, position)
    - Track current position in transcript during playback
 
-4. **Tab Content**
-   - **Minutes Tab**: 
+4. Tab Content
+   - Minutes Tab: 
      - AI-generated summary of the meeting
      - Key points and action items
      - Currently displayed in the screenshot
+     - Real-time updates with database changes
    
-   - **Transcript Tab**:
+   - Transcript Tab:
      - Full verbatim transcript with timestamps
      - Possibly speaker identification
+     - Optimized loading with polling and subscriptions
    
-   - **Chat Tab**:
+   - Chat Tab:
      - Conversation interface for asking questions about the meeting
      - Input field for questions
-     - AI responses based on meeting content
+     - AI responses based on meeting content using Gemini 2.0 Flash
 
-5. **Audio Playback Functionality**
+5. Audio Playback Functionality
    - Audio player controls (play/pause, seek, speed control)
    - Visual timeline indicator
    - Transcript highlighting synchronized with audio playback
    - Volume control
 
-6. **Interactions**
+6. Interactions
    - Tab switching to view different content types
    - Back button to return to home screen
    - Account icon to access profile/settings
@@ -763,70 +779,88 @@ USING (
    - Potential interaction to highlight specific sections of text/transcript
 
 ### Minutes Tab Implementation
-1. **UI Components**
-   - `MinutesView`: Formatted display of AI-generated minutes
-   - `KeyPointsList`: Highlighted key takeaways
-   - `ActionItemsList`: Tasks identified from meeting
-   - `ShareButton`: Export/share functionality
+1. UI Components
+   - MinutesView: Formatted display of AI-generated minutes
+   - KeyPointsList: Highlighted key takeaways
+   - ActionItemsList: Tasks identified from meeting
+   - ShareButton: Export/share functionality
 
-2. **State & Data**
+2. State & Data
    - Fetch minutes from Supabase
    - Handle loading and error states
 
-3. **Interactions**
+3. Interactions
    - Copy text selections
    - Share entire minutes
    - Navigate to specific points in transcript
 
 ### Transcript Tab Implementation
-1. **UI Components**
-   - `TranscriptView`: Full text with timestamps
-   - `SearchBar`: Text search functionality
-   - `TranscriptLine`: Individual line with timestamp
-   - `ShareButton`: Export/share functionality
+1. UI Components
+   - TranscriptView: Full text with timestamps
+   - SearchBar: Text search functionality
+   - TranscriptLine: Individual line with timestamp
+   - ShareButton: Export/share functionality
 
-2. **State & Data**
+2. State & Data
    - Fetch transcript from Supabase
    - Implement search functionality
    - Handle loading and error states
 
-3. **Interactions**
+3. Interactions
    - Search within transcript
    - Copy text selections
    - Share entire transcript
 
 ### Chat Tab Implementation
-1. **UI Components**
-   - `ChatContainer`: Main chat interface
-   - `MessageList`: Display of conversation history
-   - `MessageBubble`: Individual message component
-   - `MessageInput`: Text input with send button
-   - `TypingIndicator`: Shows when AI is generating response
+1. UI Components
+   - ChatContainer: Main chat interface
+   - MessageList: Display of conversation history
+   - MessageBubble: Individual message component
+   - MessageInput: Text input with send button
+   - TypingIndicator: Shows when AI is generating response
 
-2. **State & Data**
+2. State & Data
    - Store chat history locally and in Supabase
    - Manage message sending state
    - Handle API integration for responses
 
-3. **Interactions**
+3. Interactions
    - Send messages to AI
    - Display AI responses
    - Scroll through chat history
 
 ### Profile Screen Implementation
-1. **UI Components**
-   - `UserInfo`: Display and edit user details
-   - `ThemeToggle`: Switch between light/dark modes
-   - `SettingsList`: Various app settings
-   - `LogoutButton`: Authentication signout
+1. UI Components
+   - UserInfo: Display and edit user details
+   - ThemeToggle: Switch between light/dark modes
+   - SettingsList: Various app settings
+   - LogoutButton: Authentication signout
 
-2. **State & Data**
+2. State & Data
    - Fetch user profile from Supabase
    - Manage theme preferences
 
-3. **Interactions**
+3. Interactions
    - Edit profile information
    - Toggle theme
    - Sign out functionality
 
-## Database Schema
+## Action Items Implementation
+1. UI Components
+   - ActionItemsList: Display of all action items across meetings
+   - ActionItemCard: Individual action item with checkbox
+   - MeetingHeader: Grouping action items by meeting
+   - DateSection: Organizing items chronologically (Today, Yesterday, by date)
+   - SwipeableRow: Swipe-to-delete functionality
+
+2. State & Data
+   - Fetch action items from Supabase
+   - Group by meeting and date
+   - Track completion status
+   - Handle optimistic UI updates
+
+3. Interactions
+   - Check/uncheck to mark items as complete
+   - Swipe to delete items
+   - Haptic feedback for interactions
+   - Automatic closing of other open swipeables
