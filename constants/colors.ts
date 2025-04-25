@@ -21,24 +21,24 @@ export const colors = {
 		ring: "hsl(240, 5.9%, 10%)",
 	},
 	dark: {
-		background: "hsl(240, 10%, 3.9%)",
+		background: "#000000", // True black background
 		foreground: "hsl(0, 0%, 98%)",
-		card: "hsl(240, 10%, 3.9%)",
+		card: "#1C1C1E", // Dark gray for cards
 		cardForeground: "hsl(0, 0%, 98%)",
-		popover: "hsl(240, 10%, 3.9%)",
+		popover: "#1C1C1E", // Dark gray for popovers
 		popoverForeground: "hsl(0, 0%, 98%)",
 		primary: "hsl(0, 0%, 98%)",
 		primaryForeground: "hsl(240, 5.9%, 10%)",
-		secondary: "hsl(240, 3.7%, 15.9%)",
+		secondary: "#1C1C1E", // Dark gray for secondary elements (tab bar, buttons)
 		secondaryForeground: "hsl(0, 0%, 98%)",
-		muted: "hsl(240, 3.7%, 15.9%)",
+		muted: "#1C1C1E", // Dark gray for muted elements
 		mutedForeground: "hsl(240, 5%, 64.9%)",
-		accent: "hsl(240, 3.7%, 15.9%)",
+		accent: "#1C1C1E", // Dark gray for accent elements
 		accentForeground: "hsl(0, 0%, 98%)",
 		destructive: "hsl(0, 72%, 51%)",
 		destructiveForeground: "hsl(0, 0%, 98%)",
-		border: "hsl(240, 3.7%, 15.9%)",
-		input: "hsl(240, 3.7%, 15.9%)",
+		border: "#1C1C1E", // Dark gray for borders
+		input: "#1C1C1E", // Dark gray for input backgrounds
 		ring: "hsl(240, 4.9%, 83.9%)",
 	},
 };

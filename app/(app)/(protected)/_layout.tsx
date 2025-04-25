@@ -1,18 +1,19 @@
-import { Tabs } from "expo-router";
+import { Tabs, Link } from "expo-router";
 import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-
+import { CircleUserRound } from 'lucide-react-native'; // Import CircleUserRound
 import { colors } from "@/constants/colors";
-import { useColorScheme } from "@/lib/useColorScheme";
+import { useTheme } from "@/context/theme-provider"; // Import custom hook
 import { supabase } from "@/config/supabase";
 import { useSupabase } from "@/context/supabase-provider";
 import { Alert } from "react-native";
 
 export default function ProtectedLayout() {
   // Use light mode for protected screens
-  const colorScheme = "light";
+  const { isLightMode } = useTheme(); // Use state from our provider
+  const currentSchemeString = isLightMode ? 'light' : 'dark'; // Determine scheme based on provider state
   const router = useRouter();
   const { user } = useSupabase();
 
@@ -65,15 +66,9 @@ export default function ProtectedLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.light.background,
-          borderTopWidth: 1,
-          borderTopColor: 'rgba(0, 0, 0, 0.1)',
-          height: 60,
-          paddingBottom: 10
-        },
-        tabBarActiveTintColor: colors.light.primary,
-        tabBarInactiveTintColor: colors.light.mutedForeground
+        tabBarStyle: { height: 0, borderTopWidth: 0 }, // Keep default styling minimal
+        tabBarActiveTintColor: colors[currentSchemeString].primary, // Use correct string key
+        tabBarInactiveTintColor: colors[currentSchemeString].mutedForeground // Use correct string key
       }}
       tabBar={props => {
         // Only show the tab bar on the home screen (index)
@@ -84,75 +79,68 @@ export default function ProtectedLayout() {
         
         // Calculate the increased height (35% more)
         const originalHeight = 60;
-        const increasedHeight = Math.round(originalHeight * 1.35);
+        const increasedHeight = originalHeight + 20 + 1;
         
+        // Get the name of the currently active route
+        const activeRouteName = props.state.routes[props.state.index].name;
+
         return (
           <View style={{ 
             flexDirection: 'row', 
-            backgroundColor: colors.light.background,
-            height: increasedHeight, // Increased height
+            backgroundColor: colors[currentSchemeString].secondary, // Use secondary color (dark gray) for tab bar background
+            height: increasedHeight, 
             borderTopWidth: 1,
-            borderTopColor: 'rgba(0, 0, 0, 0.1)',
+            borderTopColor: 'rgba(0, 0, 0, 0.1)', // Consider adjusting border for dark mode
             paddingHorizontal: 20,
-            paddingBottom: 15 // Added padding to account for increased height
+            alignItems: 'center', 
+            justifyContent: 'space-between' 
           }}>
             {/* Action Items Button */}
             <TouchableOpacity 
               style={{ 
                 flex: 1, 
                 justifyContent: 'center', 
-                alignItems: 'center',
-                paddingBottom: 10 // Adjust position within taller bar
+                alignItems: 'center'
               }}
               onPress={() => props.navigation.navigate('action-items')}
             >
               <Text style={{ 
-                color: props.state.index === 0 ? colors.light.primary : colors.light.mutedForeground,
+                // Set color based on whether 'action-items' is the active route
+                color: activeRouteName === 'action-items' ? colors[currentSchemeString].primary : colors[currentSchemeString].mutedForeground, 
+                fontSize: 16, 
                 fontWeight: '500'
               }}>
                 Action Items
               </Text>
             </TouchableOpacity>
             
-            {/* Add Button */}
+            {/* Placeholder View to maintain spacing for the absolute positioned button */}
+            <View style={{ width: 80 }} />
+            
+            {/* New Placeholder Button (Bigger, Overlapping) */}
             <TouchableOpacity 
               style={{ 
-                width: 60,
-                height: 60,
-                borderRadius: 30,
+                // Re-apply absolute positioning for overlap
+                position: 'absolute',
+                bottom: 30, // Adjust for desired overlap
+                left: '50%',
+                transform: [{ translateX: -25 }], // Nudge further right again
+                width: 80, // Increased size
+                height: 80,
+                borderRadius: 40, // Adjusted border radius
+                backgroundColor: colors[currentSchemeString].secondary, // Use correct string key
                 justifyContent: 'center',
                 alignItems: 'center',
-                bottom: Math.round(15 * 1.35), // Increased bottom offset
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.25,
-                shadowRadius: 3.84,
-                elevation: 5,
-                overflow: 'hidden' // Ensure gradient stays within rounded borders
+                elevation: 4,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.2,
+                shadowRadius: 2,
               }}
-              onPress={handleCreateMeeting}
+              onPress={() => router.push('/(app)/(protected)/recording')} // Navigate to recording screen
             >
-              <LinearGradient
-                colors={['#A2C3F7', '#D94DD6', '#FBC1A9']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                }}
-              />
-              <Text style={{ 
-                color: 'white', 
-                fontSize: 30, 
-                fontWeight: 'bold',
-                marginTop: -3,
-                textShadowColor: 'rgba(0, 0, 0, 0.2)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2
-              }}>+</Text>
+              {/* Placeholder Icon/Text - Replace with actual icon later */}
+              <Text style={{ color: colors[currentSchemeString].secondaryForeground, fontSize: 40, fontWeight: 'bold' }}>+</Text> // Use correct string key
             </TouchableOpacity>
             
             {/* Chat Button */}
@@ -160,13 +148,14 @@ export default function ProtectedLayout() {
               style={{ 
                 flex: 1, 
                 justifyContent: 'center', 
-                alignItems: 'center',
-                paddingBottom: 10 // Adjust position within taller bar
+                alignItems: 'center'
               }}
               onPress={() => props.navigation.navigate('chat')}
             >
               <Text style={{ 
-                color: props.state.index === 6 ? colors.light.primary : colors.light.mutedForeground,
+                // Set color based on whether 'chat' is the active route
+                color: activeRouteName === 'chat' ? colors[currentSchemeString].primary : colors[currentSchemeString].mutedForeground, 
+                fontSize: 16, 
                 fontWeight: '500'
               }}>
                 Chat
@@ -180,7 +169,7 @@ export default function ProtectedLayout() {
         name="index" 
         options={{
           title: "Meetings",
-          tabBarLabel: () => null
+          tabBarLabel: () => null,
         }}
       />
       <Tabs.Screen 

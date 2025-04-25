@@ -4,16 +4,28 @@ import { Slot } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { SupabaseProvider } from "@/context/supabase-provider";
-import { ThemeProvider } from "@/context/theme-provider";
+import { ThemeProvider, useTheme } from "@/context/theme-provider";
+
+// Inner component to access theme context
+function RootLayoutContent() {
+	const { isLightMode } = useTheme();
+
+	// Log when this component renders and the theme mode
+	console.log(`[_layout RootLayoutContent] Rendering. isLightMode: ${isLightMode}`);
+
+	return (
+		<GestureHandlerRootView style={{ flex: 1 }} className={!isLightMode ? "dark" : ""}>
+			<Slot />
+		</GestureHandlerRootView>
+	);
+}
 
 export default function AppLayout() {
 	return (
-		<GestureHandlerRootView style={{ flex: 1 }}>
-			<SupabaseProvider>
-				<ThemeProvider>
-					<Slot />
-				</ThemeProvider>
-			</SupabaseProvider>
-		</GestureHandlerRootView>
+		<SupabaseProvider>
+			<ThemeProvider>
+				<RootLayoutContent />
+			</ThemeProvider>
+		</SupabaseProvider>
 	);
 }

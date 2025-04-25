@@ -94,26 +94,68 @@ async function extractAndSaveActionItems(minutes: string, meetingId: string) {
   }
 }
 
+// Helper function for retrying async operations
+async function retryAsync<T>(fn: () => Promise<T>, retries = 5, delay = 1000, operationName = 'operation'): Promise<T> {
+  let lastError: Error | null = null;
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Attempt ${i + 1}/${retries} for ${operationName}...`);
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Attempt ${i + 1} failed for ${operationName}: ${lastError.message}. Retrying in ${delay / 1000}s...`);
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  console.error(`All ${retries} attempts failed for ${operationName}.`);
+  throw lastError || new Error(`Failed to complete ${operationName} after ${retries} attempts`);
+}
+
 export async function generateAndStoreMeetingMinutes(meetingId: string): Promise<void> {
   try {
     console.log('Starting minutes generation for meeting:', meetingId);
-    
-    // 1. Fetch transcripts for the meeting
-    const { data: transcripts, error: transcriptError } = await supabase
-      .from('transcripts')
-      .select('content')
-      .eq('meeting_id', meetingId)
-      .order('timestamp', { ascending: true });
 
-    if (transcriptError) throw transcriptError;
-    if (!transcripts?.length) {
-      console.log('No transcripts found for meeting:', meetingId);
+    // 1. Fetch transcripts for the meeting with retries
+    let transcripts: { content: string }[] | null = null;
+    try {
+      transcripts = await retryAsync(async () => {
+        console.log(`Fetching transcript for meeting ${meetingId}...`);
+        const { data, error } = await supabase
+          .from('transcripts')
+          .select('content')
+          .eq('meeting_id', meetingId)
+          // Ensure ordering if multiple transcripts (though ideally only one)
+          .order('created_at', { ascending: true }); 
+
+        if (error) {
+          console.error(`Supabase error fetching transcript: ${error.message}`);
+          throw error; // Throw to trigger retry
+        }
+        if (!data || data.length === 0) {
+          console.log('Transcript not found yet...');
+          throw new Error('Transcript not yet available'); // Throw to trigger retry
+        }
+        console.log(`Transcript found with ${data.length} parts.`);
+        return data;
+      }, 5, 2000, 'fetch transcript'); // 5 attempts, 2 second delay
+    } catch (error) {
+      console.error('Failed to fetch transcript after multiple retries:', error);
+      // Optionally update meeting status to indicate failure?
+      // await supabase.from('meetings').update({ status: 'minutes_error', updated_at: new Date().toISOString() }).eq('id', meetingId);
+      return; // Exit if transcript cannot be fetched
+    }
+
+    // If transcripts is null here, retryAsync failed, already logged.
+    if (!transcripts || transcripts.length === 0) {
+      console.error('Proceeding without transcripts, cannot generate minutes.');
       return;
     }
 
-    // 2. Combine all transcripts
-    const fullTranscript = transcripts.map(t => t.content).join('\n');
-    
+    // 2. Combine all transcript parts (if multiple, though ideally only one)
+    const fullTranscript = transcripts.map(t => t.content).join('\n\n'); // Use double newline just in case
+
     // Limit transcript length if it's too long
     const maxLength = 8000; // Characters
     const truncatedTranscript = fullTranscript.length > maxLength 

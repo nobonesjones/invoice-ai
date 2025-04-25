@@ -1,10 +1,11 @@
-import { View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Play, Pause, RefreshCw } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/config/supabase';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import Slider from '@react-native-community/slider';
 
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -66,6 +67,9 @@ export default function MeetingView() {
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioReady, setAudioReady] = useState(false);
   const maxAudioLoadAttempts = 3;
+
+  // Ref to track if playback should resume after seeking
+  const wasPlayingBeforeSeek = useRef(false);
 
   useEffect(() => {
     if (id) {
@@ -214,10 +218,10 @@ export default function MeetingView() {
         transcript: transcriptData?.content || null
       });
 
-      // Don't automatically load audio - let user trigger it manually
-      // if (meetingData.audio_url) {
-      //   loadAudio(meetingData.audio_url);
-      // }
+      // Automatically load audio if URL exists
+      if (meetingData.audio_url) {
+        loadAudio(meetingData.audio_url);
+      }
     } catch (error) {
       console.error('Error fetching meeting:', error);
     }
@@ -294,84 +298,144 @@ export default function MeetingView() {
   };
 
   const loadAudio = async (url: string) => {
-    try {
-      // Clear previous errors
-      setAudioError(null);
-      setIsAudioLoading(true);
-      
-      // Skip loading if we've already tried too many times
-      if (audioLoadAttempts >= maxAudioLoadAttempts) {
-        setAudioError(`Failed to load audio after ${maxAudioLoadAttempts} attempts`);
+    // Reset state before attempting load
+    setIsAudioLoading(true);
+    setAudioReady(false);
+    setAudioError(null);
+    let currentAttempt = 1;
+
+    // Extract expected meeting ID from the URL for validation
+    const urlParts = url.split('/');
+    const expectedMeetingIdInUrl = urlParts[urlParts.length - 2]; // Assumes format .../meetings/{id}/audio.m4a
+
+    // Safeguard - Check if the URL matches the current component ID
+    if (expectedMeetingIdInUrl !== id) {
+      console.warn(`[loadAudio] Skipping load: URL's meeting ID (${expectedMeetingIdInUrl}) does not match current component ID (${id}). This might be stale data.`);
+      setIsAudioLoading(false); // Stop loading indicator
+      return; // Exit early
+    }
+
+    // Ensure any existing sound is unloaded before starting the load/retry loop for the new URL
+    if (sound) {
+      console.log(`[loadAudio] Unloading existing sound before attempting load for URL: ${url}`);
+      await sound.unloadAsync();
+      setSound(null); // Clear sound state immediately
+      setPosition(0);
+      setDuration(0);
+      setIsPlaying(false);
+    }
+
+    const tryLoad = async () => {
+      // Moved URL validation here
+      if (!url || !url.startsWith('http')) {
+        console.error('[loadAudio] Invalid audio URL format:', url);
+        setAudioError('Invalid audio URL format');
+        setIsAudioLoading(false);
         return;
       }
-      
-      console.log(`Loading audio from URL (attempt ${audioLoadAttempts + 1}):`, url);
-      
-      // Validate URL format
-      if (!url || !url.startsWith('http')) {
-        throw new Error('Invalid audio URL format');
-      }
-      
-      // Add a longer delay before loading to ensure the audio file is ready
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Unload any existing sound
-      if (sound) {
-        await sound.unloadAsync();
+      console.log(`[loadAudio] Attempt ${currentAttempt}/${maxAudioLoadAttempts}: Loading audio from URL: ${url} (Matches component ID: ${id})`);
+
+      try {
+        // Initial delay ONLY on the first attempt
+        if (currentAttempt === 1) {
+          console.log('[loadAudio] Waiting 7000ms before first attempt...');
+          await new Promise(resolve => setTimeout(resolve, 7000)); // Increased delay to 7 seconds
+        }
+
+        // Create new sound instance
+        const { sound: newSound, status } = await Audio.Sound.createAsync(
+          { uri: url },
+          { shouldPlay: false }
+        );
+
+        if (status.isLoaded) {
+          console.log(`[loadAudio] Successfully loaded audio on attempt ${currentAttempt}: ${url}`);
+          setSound(newSound); // Set the new sound instance
+          setDuration(status.durationMillis || 0);
+          setPosition(0);
+          setIsPlaying(false);
+          newSound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
+          setAudioReady(true);
+          setAudioError(null);
+          setIsAudioLoading(false);
+        } else {
+          throw new Error('Audio status reported not loaded after creation.');
+        }
+      } catch (error: any) {
+        console.error(`[loadAudio] Error loading audio on attempt ${currentAttempt}:`, error);
+        
+        // Critical: Ensure sound state is cleared on error before retry/failure
         setSound(null);
+        setAudioReady(false);
+
+        // Set error state only after clearing sound/ready state
+        setAudioError(error.message || 'Unknown error loading audio');
+
+        if (currentAttempt < maxAudioLoadAttempts) {
+          currentAttempt++;
+          console.log(`[loadAudio] Will retry audio loading in 3 seconds (attempt ${currentAttempt}/${maxAudioLoadAttempts})`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          await tryLoad(); // Retry
+        } else {
+          console.error(`[loadAudio] Failed to load audio after ${maxAudioLoadAttempts} attempts: ${url}`);
+          setIsAudioLoading(false); // Stop loading indicator
+        }
       }
-      
-      // Create the sound object with error handling
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: url },
-        { shouldPlay: false },
-        onPlaybackStatusUpdate
-      );
-      
-      // Get initial status to set duration
-      const status = await newSound.getStatusAsync();
-      if (status.isLoaded) {
-        setSound(newSound);
-        setDuration(status.durationMillis || 0);
-        setAudioLoadAttempts(0); // Reset attempts on success
-        setAudioReady(true);
-        console.log('Audio loaded successfully, duration:', status.durationMillis);
-      } else {
-        throw new Error('Audio loaded but status indicates it is not ready');
-      }
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      setAudioError(error instanceof Error ? error.message : 'Unknown error loading audio');
-      
-      // Increment attempt counter
-      const newAttemptCount = audioLoadAttempts + 1;
-      setAudioLoadAttempts(newAttemptCount);
-      
-      // Try again after a delay if we haven't exceeded max attempts
-      if (newAttemptCount < maxAudioLoadAttempts) {
-        console.log(`Will retry audio loading in 3 seconds (attempt ${newAttemptCount + 1}/${maxAudioLoadAttempts})`);
-        setTimeout(() => {
-          loadAudio(url);
-        }, 3000);
-      }
-    } finally {
-      setIsAudioLoading(false);
-    }
+    };
+
+    await tryLoad(); // Start the loading process
   };
 
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      setIsPlaying(status.isPlaying);
+  const onPlaybackStatusUpdate = async (status: AVPlaybackStatus) => { // Make async
+    if (!status.isLoaded) {
+      // Handle error state if needed, or return
+      if (status.error) {
+        console.error(`Playback Error: ${status.error}`);
+        // Potentially update UI to show error
+        setAudioError(`Playback Error: ${status.error}`); 
+        setIsPlaying(false); // Ensure playing state is false on error
+      }
+      return;
+    }
+
+    // Update state based on status
+    setIsPlaying(status.isPlaying);
+    setPosition(status.positionMillis);
+    setDuration(status.durationMillis || 0);
+
+    // Check if playback just finished
+    if (status.didJustFinish) {
+      console.log('Playback finished, resetting UI state to start.');
+      // Only update local state variables to reset the UI
+      // Avoid calling sound methods here as it might be unloaded
+      setPosition(0); // Update local state
+      setIsPlaying(false); // Update playing state
     }
   };
 
   const handlePlayPause = async () => {
-    if (!sound) return;
+    if (!sound || !audioReady) return;
     if (isPlaying) {
       await sound.pauseAsync();
     } else {
-      await sound.playAsync();
+      // Check if we are at the end of the track
+      const atEnd = duration > 0 && position >= duration - 50; // 50ms tolerance
+      let startPosition = position;
+
+      if (atEnd) {
+        console.log('Detected playback attempt from end, resetting position to 0 before playing.');
+        try {
+          await sound.setPositionAsync(0); // Explicitly set position to 0
+          startPosition = 0; // Ensure we play from 0
+          setPosition(0); // Update state as well
+        } catch (error) {
+          console.error('Error setting position to 0 before playing:', error);
+          // Fallback or handle error - perhaps just try playing from 0 anyway
+          startPosition = 0;
+        }
+      }
+      
+      await sound.playFromPositionAsync(startPosition);
     }
   };
 
@@ -415,10 +479,11 @@ export default function MeetingView() {
         }}
         style={{
           flex: 1,
-          paddingVertical: 12,
+          height: 36, // Set fixed height
           borderBottomWidth: 2,
           borderBottomColor: activeTab === tab ? colors.light.primary : 'transparent',
-          alignItems: 'center'
+          alignItems: 'center',
+          justifyContent: 'center' // Ensure perfect vertical centering
         }}
       >
         <Text
@@ -646,6 +711,31 @@ export default function MeetingView() {
     });
   };
 
+  // Handler for when the user finishes dragging the slider
+  const handleSeek = async (value: number) => {
+    if (!sound || !audioReady) return;
+    try {
+      await sound.setPositionAsync(value);
+      setPosition(value); // Update position state immediately
+      // Resume playback if it was playing before seeking
+      if (wasPlayingBeforeSeek.current) {
+        await sound.playAsync();
+        setIsPlaying(true); // Ensure state reflects playing
+      }
+    } catch (error) {
+      console.error('Error seeking audio:', error);
+    }
+  };
+
+  // Handler for when the user starts dragging the slider
+  const handleSlidingStart = async () => {
+    if (!sound || !audioReady) return;
+    wasPlayingBeforeSeek.current = isPlaying;
+    if (isPlaying) {
+      await sound.pauseAsync(); // Pause playback while seeking
+    }
+  };
+
   return (
     <View style={{ backgroundColor: colors.light.background }} className="flex-1">
       {/* Header with Gradient Background */}
@@ -781,29 +871,6 @@ export default function MeetingView() {
         <TabButton tab="minutes" label="Minutes" />
         <TabButton tab="transcript" label="Transcript" />
         <TabButton tab="chat" label="Chat" />
-        
-        {/* Refresh button */}
-        <TouchableOpacity
-          onPress={refreshCurrentTab}
-          disabled={isRefreshing}
-          style={{
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}
-        >
-          <RefreshCw 
-            size={18} 
-            color={colors.light.primary}
-            style={{
-              opacity: isRefreshing ? 0.5 : 1,
-              ...(isRefreshing && { 
-                transform: [{ rotate: '45deg' }]
-              })
-            }}
-          />
-        </TouchableOpacity>
       </View>
 
       {/* Content Area */}
@@ -820,80 +887,96 @@ export default function MeetingView() {
         )}
       </View>
 
-      {/* Show audio playback controls only for Minutes and Transcript tabs */}
-      {(activeTab === 'minutes' || activeTab === 'transcript') && meeting?.audio_url && (
+      {/* Audio Player (Fixed at bottom) */}
+      {meeting?.audio_url && (
         <View 
-          style={{ borderTopColor: colors.light.border }}
-          className="h-20 border-t px-4"
+          style={{
+            borderTopColor: colors.light.border,
+            borderTopWidth: 1,
+            backgroundColor: colors.light.background
+          }}
+          className="px-4 py-5 flex-row items-center" 
         >
-          <View className="flex-row items-center justify-between py-4">
-            {audioReady ? (
-              <>
-                <Text style={{ color: colors.light.mutedForeground }}>
-                  {formatTime(position)} / {formatTime(duration)}
-                </Text>
-                <Button
-                  onPress={handlePlayPause}
-                  disabled={isAudioLoading}
-                  className="bg-purple-500 w-12 h-12 rounded-full items-center justify-center"
-                  style={{ overflow: 'hidden' }}
-                >
-                  <View style={{ 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    width: '100%',
-                    height: '100%',
-                    position: 'relative'
-                  }}>
-                    {isAudioLoading ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : isPlaying ? (
-                      <Pause size={24} color="white" style={{ position: 'absolute' }} />
-                    ) : (
-                      <Play size={24} color="white" style={{ position: 'absolute', marginLeft: 2 }} />
-                    )}
-                  </View>
-                </Button>
-              </>
+          {/* Left Button Container (fixed width) */}
+          <View style={styles.buttonContainer}>
+            {isAudioLoading ? (
+              <ActivityIndicator size="small" color={colors.light.primary} />
+            ) : audioError ? (
+               // Placeholder on error for now in this small container
+               <View style={{ width: 28 }} />
+            ) : audioReady && sound ? (
+              <TouchableOpacity 
+                onPress={handlePlayPause} 
+                style={{ transform: [{ translateY: -4 }] }} // Increased nudge amount further
+              >
+                {isPlaying ? (
+                  <Pause size={28} color={colors.light.primary} />
+                ) : (
+                  <Play size={28} color={colors.light.primary} />
+                )}
+              </TouchableOpacity>
             ) : (
-              <>
-                <View>
-                  {audioError ? (
-                    <Text style={{ color: colors.light.destructive, fontSize: 12 }}>
-                      Error: {audioError.includes('AVFoundationErrorDomain') ? 'Audio not ready' : audioError}
-                    </Text>
-                  ) : (
-                    <Text style={{ color: colors.light.mutedForeground }}>
-                      Audio player not loaded
-                    </Text>
-                  )}
-                </View>
-                <Button
-                  onPress={() => loadAudio(meeting.audio_url || '')}
-                  disabled={isAudioLoading}
-                  className="bg-purple-500 px-4 h-10 rounded-full items-center justify-center"
-                  style={{ overflow: 'hidden' }}
-                >
-                  <View style={{ 
-                    flexDirection: 'row',
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                  }}>
-                    {isAudioLoading ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <>
-                        <RefreshCw size={16} color="white" style={{ marginRight: 6 }} />
-                        <Text style={{ color: 'white', fontWeight: '500' }}>Load Audio</Text>
-                      </>
-                    )}
-                  </View>
-                </Button>
-              </>
+              <View style={{ width: 28 }} /> // Placeholder for alignment
             )}
           </View>
+           
+          {/* Slider and Time Codes - Grouped together (takes remaining space) */}
+          {audioReady && sound && (
+            <View style={styles.sliderContainer} className="flex-1 mx-2"> 
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={duration}
+                value={position}
+                minimumTrackTintColor={colors.light.primary}
+                maximumTrackTintColor={colors.light.border}
+                thumbTintColor={colors.light.primary}
+                onSlidingStart={handleSlidingStart}
+                onSlidingComplete={handleSeek}
+              />
+              <View style={styles.timeContainer} className="flex-row justify-between mt-0"> 
+                <Text style={{ color: colors.light.mutedForeground }} className="text-xs">
+                  {formatTime(position)}
+                </Text>
+                <Text style={{ color: colors.light.mutedForeground }} className="text-xs">
+                  {formatTime(duration)}
+                </Text>
+              </View>
+            </View>
+          )}
+          {(!audioReady || !sound) && (
+            <View style={styles.sliderContainer} className="flex-1 mx-2 justify-center items-center">
+              {audioError ? (
+                  <Text style={{ color: colors.light.destructive }} className="text-xs text-center">
+                   Error: {audioError.length > 60 ? audioError.substring(0, 60) + '...' : audioError}
+                  </Text>
+                ) : <View style={{ height: 10 }} /> // Placeholder to maintain layout
+              }
+            </View>
+          )}
+          {/* Right Placeholder (fixed width) */}
+          <View style={styles.buttonContainer} />
         </View>
       )}
     </View>
   );
 }
+
+// Add StyleSheet for Slider
+const styles = StyleSheet.create({
+  buttonContainer: { // Style for left/right fixed width containers
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sliderContainer: {
+    flex: 1,
+  },
+  slider: {
+    width: '100%',
+    height: 10, // Reduced height for thinner look
+  },
+  timeContainer: {
+    width: '100%',
+  }
+});

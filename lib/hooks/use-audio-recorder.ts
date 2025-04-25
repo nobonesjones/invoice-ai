@@ -42,7 +42,7 @@ export function useAudioRecorder({
         console.log('App going to background, checking recording state...');
         if (isRecording && recordingRef.current) {
           console.log('Recording in progress, stopping before app goes to background');
-          stopRecording().catch(err => {
+          stopRecording(meetingIdRef.current as string).catch(err => {
             console.error('Error stopping recording on app state change:', err);
           });
         }
@@ -141,7 +141,8 @@ export function useAudioRecorder({
   };
 
   // Stop recording function
-  const stopRecording = async () => {
+  const stopRecording = async (currentMeetingId: string) => {
+    console.log(`[LOG AUDIO HOOK ${new Date().toISOString()}] ENTERING stopRecording. isRecording=${isRecording}, passedMeetingId=${currentMeetingId}`);
     try {
       if (!recordingRef.current) {
         const errorMsg = 'No active recording to stop';
@@ -152,7 +153,12 @@ export function useAudioRecorder({
       }
 
       console.log('Stopping recording...');
-      await recordingRef.current.stopAndUnloadAsync();
+      const status = await recordingRef.current.stopAndUnloadAsync(); // Capture status
+      console.log('Recording stopped, status:', status);
+
+      // Extract duration in milliseconds
+      const durationMillis = status.durationMillis;
+
       const uri = recordingRef.current.getURI();
       console.log('Recording URI:', uri);
       
@@ -172,56 +178,34 @@ export function useAudioRecorder({
         return null;
       }
 
-      // Get the current meeting ID from ref to avoid closure issues
-      const currentMeetingId = meetingIdRef.current;
-      console.log('Current meeting ID from ref:', currentMeetingId);
-      
-      // Check if meeting exists in the database
-      if (currentMeetingId) {
-        try {
-          console.log('Checking if meeting exists in database...');
-          const { data: meetingData, error: meetingError } = await supabase
-            .from('meetings')
-            .select('*')
-            .eq('id', currentMeetingId)
-            .single();
-            
-          if (meetingError) {
-            console.error('Error fetching meeting:', meetingError);
-            setError(`Meeting not found: ${meetingError.message}`);
-            if (onError) onError(`Meeting not found: ${meetingError.message}`);
-            return null;
-          }
-          
-          console.log('Meeting found in database:', meetingData);
-        } catch (err) {
-          console.error('Error checking meeting existence:', err);
-        }
+      if (!currentMeetingId) {
+        const errorMsg = 'No meeting ID provided to stopRecording function';
+        console.error(errorMsg);
+        setError(errorMsg);
+        if (onError) onError(errorMsg);
+        if (onRecordingComplete) onRecordingComplete(uri);
+        return null;
       }
-      
-      if (uri && currentMeetingId) {
-        try {
-          console.log(`Uploading recording for meeting ${currentMeetingId}`);
-          const publicUrl = await uploadToSupabase(uri, currentMeetingId);
-          console.log('Upload completed, public URL:', publicUrl);
 
-          if (onRecordingComplete) {
-            onRecordingComplete(uri);
-          }
+      try {
+        console.log('Calling uploadToSupabase...');
+        // Pass durationMillis to uploadToSupabase
+        const publicUrl = await uploadToSupabase(uri, currentMeetingId, durationMillis);
 
-          return uri;
-        } catch (uploadError) {
-          console.error('Error uploading recording:', uploadError);
-          setError(`Failed to upload recording: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
-          if (onError) onError(`Failed to upload recording: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
-          return uri; // Still return the URI even if upload failed
-        }
-      } else {
-        console.log('No meeting ID provided, skipping upload');
+        // Log the duration being passed
+        console.log(`Duration passed to uploadToSupabase: ${durationMillis}ms`);
+
         if (onRecordingComplete) {
+          console.log(`[LOG AUDIO HOOK ${new Date().toISOString()}] BEFORE calling onRecordingComplete from stopRecording. URI: ${uri}`);
           onRecordingComplete(uri);
         }
+
         return uri;
+      } catch (uploadError) {
+        console.error('Error uploading recording:', uploadError);
+        setError(`Failed to upload recording: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
+        if (onError) onError(`Failed to upload recording: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
+        return uri; // Still return the URI even if upload failed
       }
     } catch (err) {
       const errorMsg = `Error stopping recording: ${err instanceof Error ? err.message : String(err)}`;
@@ -233,9 +217,16 @@ export function useAudioRecorder({
   };
 
   // Upload recording to Supabase
-  const uploadToSupabase = async (uri: string, meetingId: string) => {
+  // Add durationMillis parameter
+  const uploadToSupabase = async (
+    uri: string, 
+    meetingId: string, 
+    durationMillis: number): Promise<string> => {
+    console.log(`[LOG AUDIO HOOK ${new Date().toISOString()}] ENTERING uploadToSupabase. URI: ${uri}, MeetingID: ${meetingId}`);
+    // Removed isUploading state management as it's handled in recording screen now
+    // setError(null);
+
     try {
-      setIsUploading(true);
       console.log('Starting upload to Supabase...', { uri, meetingId });
 
       // Check if file exists and has content
@@ -245,93 +236,98 @@ export function useAudioRecorder({
       if (!fileInfo.exists) {
         const errorMsg = 'Recording file not found';
         console.error(errorMsg);
-        setError(errorMsg);
-        if (onError) onError(errorMsg);
+        // setError(errorMsg);
+        // if (onError) onError(errorMsg);
         throw new Error(errorMsg);
       }
 
       if (!fileInfo.size || fileInfo.size <= 0) {
         const errorMsg = 'Recording file is empty';
         console.error(errorMsg);
-        setError(errorMsg);
-        if (onError) onError(errorMsg);
+        // setError(errorMsg);
+        // if (onError) onError(errorMsg);
         throw new Error(errorMsg);
       }
 
-      // Check if the meetings bucket exists
+      // Check if the meetings bucket exists (optional, handled by RLS/policy usually)
       try {
         const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
         console.log('Available buckets:', buckets);
-        
         if (bucketsError) {
-          console.error('Error listing buckets:', bucketsError);
+          console.warn('Could not list buckets (might be RLS):', bucketsError.message);
         }
-        
         const meetingsBucketExists = buckets?.some(bucket => bucket.name === 'meetings');
-        console.log('Meetings bucket exists:', meetingsBucketExists);
-        
-        if (!meetingsBucketExists) {
-          console.error('Meetings bucket does not exist, attempting to create it...');
-          
-          // Try to create the meetings bucket
-          const { data: newBucket, error: createError } = await supabase.storage.createBucket('meetings', {
-            public: true
-          });
-          
-          if (createError) {
-            console.error('Error creating meetings bucket:', createError);
-            throw new Error(`Failed to create meetings bucket: ${createError.message}`);
-          }
-          
-          console.log('Created meetings bucket:', newBucket);
-        }
+        console.log('Meetings bucket exists (or check skipped):', meetingsBucketExists ?? 'Check Skipped');
+        // We will proceed assuming the bucket exists or policies allow the upload
       } catch (bucketError) {
-        console.error('Error checking buckets:', bucketError);
+        console.warn('Error checking buckets:', bucketError);
       }
 
-      // Create blob from file and upload
-      console.log('Creating blob from file...');
-      const fileBlob = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // --- NEW: Use FormData ---
+      console.log('Preparing FormData for upload...');
+      const formData = new FormData();
+      const file = {
+          uri: uri,
+          name: 'audio.m4a', // Name for the file field in FormData
+          type: 'audio/m4a'  // Use standard MIME type
+      };
+      formData.append('file', file as any); // 'file' is the field name
 
-      const blob = await fetch(`data:audio/m4a;base64,${fileBlob}`).then(res => res.blob());
-      console.log('Blob created, size:', blob.size);
+      // Optional: Log FormData contents (might not show blob details)
+      // console.log('FormData prepared:', formData); // This might not be very informative for blobs
+
+      // Verify the file object within FormData (conceptual check)
+      const appendedFile = formData.get('file');
+      if (!appendedFile || typeof appendedFile === 'string' || !('size' in appendedFile) || appendedFile.size === 0) {
+           // Note: Direct size check might not work reliably here depending on FormData implementation.
+           // The real check is whether Supabase upload succeeds with content.
+           console.warn("Could not reliably verify FormData file content before upload, proceeding.");
+      }
+      // --- END: Use FormData ---
 
       // Upload to Supabase Storage
       const fileName = `${meetingId}/audio.m4a`;
-      console.log('Uploading to path:', fileName);
+      console.log('Uploading FormData to path:', fileName);
 
+      // *** Pass FormData directly ***
       const { error: uploadError, data } = await supabase.storage
         .from('meetings')
-        .upload(fileName, blob, {
-          contentType: 'audio/m4a',
+        .upload(fileName, formData, { // Pass FormData object
+          // contentType is often inferred from FormData, but we specify to be sure
+          contentType: 'audio/m4a', // Use standard type with FormData
           upsert: true
         });
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        setError(`Upload error: ${uploadError.message}`);
-        if (onError) onError(`Upload error: ${uploadError.message}`);
+        // setError(`Upload error: ${uploadError.message}`);
+        // if (onError) onError(`Upload error: ${uploadError.message}`);
         throw uploadError;
       }
 
       console.log('Upload successful:', data);
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: urlData } = supabase.storage
         .from('meetings')
-        .getPublicUrl(fileName);
+        .getPublicUrl(data.path); // Use path from successful upload data
 
+       if (!urlData || !urlData.publicUrl) {
+            console.error('Failed to get public URL for uploaded file.');
+            throw new Error('Failed to get public URL.');
+        }
+        const publicUrl = urlData.publicUrl;
       console.log('Public URL:', publicUrl);
 
       // Update meeting with audio URL
       console.log('Updating meeting record with audio URL...');
       const { error: updateError, data: updateData } = await supabase
         .from('meetings')
-        .update({ 
+        .update({
           audio_url: publicUrl,
-          status: 'processing'
+          status: 'processing',
+          // Add duration, converting ms to seconds (adjust if DB stores ms)
+          duration: Math.round(durationMillis / 1000) 
         })
         .eq('id', meetingId)
         .select();
@@ -340,44 +336,30 @@ export function useAudioRecorder({
 
       if (updateError) {
         console.error('Update error:', updateError);
-        
-        // Check if the error is due to RLS policies
-        if (updateError.code === '42501') {
-          console.error('This appears to be a permissions error. Checking RLS policies...');
-          
-          // Try to get the meeting to see if it exists
-          const { data: meetingCheck, error: meetingCheckError } = await supabase
-            .from('meetings')
-            .select('*')
-            .eq('id', meetingId)
-            .single();
-            
-          if (meetingCheckError) {
-            console.error('Error checking meeting:', meetingCheckError);
-            setError(`Meeting not found or not accessible: ${meetingCheckError.message}`);
-          } else {
-            console.log('Meeting exists but update failed:', meetingCheck);
-            setError(`Meeting exists but update failed due to permissions: ${updateError.message}`);
-          }
-        } else if (updateError.code === '23503') {
-          console.error('This appears to be a foreign key constraint error. The meeting may have been deleted.');
-          setError(`Meeting reference error: ${updateError.message}`);
-        } else {
-          setError(`Database update error: ${updateError.message}`);
-        }
-        
-        if (onError) onError(`Database update error: ${updateError.message}`);
+        // Simplified error handling, re-throwing
+        // setError(`Database update error: ${updateError.message}`);
+        // if (onError) onError(`Database update error: ${updateError.message}`);
         throw updateError;
       }
 
       return publicUrl;
+
     } catch (err) {
       console.error('Error in uploadToSupabase:', err);
-      throw err;
-    } finally {
-      setIsUploading(false);
-    }
+      // Ensure status is updated to error on any failure during upload/DB update
+       try {
+         await supabase
+           .from('meetings')
+           .update({ status: 'error' })
+           .eq('id', meetingId);
+       } catch (statusUpdateError) {
+         console.error('Failed to update meeting status to error:', statusUpdateError);
+       }
+      throw err; // Re-throw original error
+    } // Removed finally block for setIsUploading
   };
+
+  // --- Transcription & Minutes ---
 
   return {
     isRecording,

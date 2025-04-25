@@ -54,17 +54,17 @@ export default function Profile() {
         <SafeAreaView style={{ backgroundColor: theme.background }} className="flex-1">
             <TouchableOpacity 
                 onPress={() => router.back()}
-                className="flex-row items-center px-4 py-6"
+                className="flex-row items-center px-4 pt-8 pb-4"
             >
                 <View className="flex-row items-center">
                     <Text>
                         <ChevronLeft size={24} color={theme.foreground} />
                     </Text>
-                    <Text style={{ color: theme.foreground }} className="text-2xl font-semibold ml-2">Profile</Text>
+                    <Text style={{ color: theme.foreground }} className="text-3xl font-semibold ml-2">Profile</Text>
                 </View>
             </TouchableOpacity>
 
-            <View className="flex-1 px-4 pt-4">
+            <View className="flex-1 px-4 pt-8">
                 <ScrollView className="pt-4">
                     {/* Personal Information Section */}
                     <View style={{ backgroundColor: theme.card }} className="rounded-lg overflow-hidden mb-8">
@@ -110,7 +110,10 @@ export default function Profile() {
                             <Text style={{ color: theme.foreground }}>Light Mode</Text>
                             <Switch
                                 value={isLightMode}
-                                onValueChange={toggleTheme}
+                                onValueChange={() => {
+                                    console.log('[Profile Switch] onValueChange fired!');
+                                    toggleTheme();
+                                }}
                                 trackColor={{ false: '#4a4a4a', true: '#7c3aed' }}
                                 thumbColor={'#f4f3f4'}
                             />
@@ -128,6 +131,8 @@ export default function Profile() {
                                 </Text>
                             </Pressable>
                         </Link>
+                        */}
+                        {/*
                         <Link href="/(app)/(protected)/change-password" asChild>
                             <Pressable 
                                 className="flex-row items-center justify-between p-4"

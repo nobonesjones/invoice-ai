@@ -59,12 +59,18 @@ export async function transcribeAudioAndStore(audioUri: string, meetingId: strin
 
     // 5. Store transcript in database
     console.log('Storing transcript in database...');
+    // Get current user id from supabase.auth
+    const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null;
+    const user_id = user ? user.id : null;
+    if (!user_id) {
+      throw new Error('No authenticated user found. Please sign in again.');
+    }
     const { data: transcriptData, error: insertError } = await supabase
       .from('transcripts')
       .insert({
         meeting_id: meetingId,
+        user_id,
         content: data.text,
-        timestamp: Math.floor(Date.now() / 1000),
         created_at: new Date().toISOString()
       })
       .select()

@@ -58,6 +58,13 @@ Type 'null' is not assignable to type 'string | undefined'.# MeetingMind: Meetin
 - Milestone 4.2: Audio Processing
   - Implement audio compression
   - Build audio upload to Supabase storage
+  - **Best Practice:** Use `FormData` for uploading audio from React Native/Expo to Supabase Storage. Directly uploading `Blob` objects created via `fetch(fileUri)` or `fetch(dataUri)` can sometimes result in 0-byte files being stored. Using `FormData` ensures reliable file content transfer:
+    ```typescript
+    const formData = new FormData();
+    const file = { uri: localFileUri, name: 'audio.m4a', type: 'audio/m4a' };
+    formData.append('file', file as any);
+    await supabase.storage.from('meetings').upload(path, formData, { contentType: 'audio/m4a', upsert: true });
+    ```
   - Create processing status management
   - Add loading/progress indicators
 

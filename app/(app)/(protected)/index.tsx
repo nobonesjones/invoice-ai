@@ -1,54 +1,52 @@
-import { View, Text, TouchableOpacity, Alert, TextInput, ScrollView } from 'react-native';
-import { Link, useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, TouchableOpacity, Alert, TextInput, ScrollView, Animated, ViewStyle, StyleProp, InteractionManager, Button, StyleSheet, Pressable } from 'react-native';
+import Modal from 'react-native-modal';
+import { useRouter, useFocusEffect, Link } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '@/config/supabase';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Meeting } from '@/types/meetings';
-import { Button } from '@/components/ui/button';
 import { colors } from '@/constants/colors';
 import { useTheme } from "@/context/theme-provider";
+import { CircleUserRound } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Image } from "@/components/image";
-import { SafeAreaView } from "@/components/safe-area-view";
 import { H1, H2, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
-import { Swipeable } from 'react-native-gesture-handler';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function Home() {
   const router = useRouter();
   const { user } = useSupabase();
-  const { theme, isLightMode } = useTheme();
+  const { theme, isLightMode, themePreference } = useTheme();
+  const currentSchemeString = isLightMode ? 'light' : 'dark'; // Determine scheme string
+
+  console.log(`[Home Render] isLightMode: ${isLightMode}, currentSchemeString: ${currentSchemeString}`);
+
+  const insets = useSafeAreaInsets(); // Get safe area insets
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
-  
-  // Move state from renderRightActions to component level
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renamingMeetingId, setRenamingMeetingId] = useState<string | null>(null);
-  const [newName, setNewName] = useState('');
+  const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
+  const [renamingMeetingDetails, setRenamingMeetingDetails] = useState<{ id: string; name: string } | null>(null);
 
   const fetchMeetings = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('meetings')
-        .select('id, name, duration, created_at, updated_at, status, user_id, audio_url')
-        .eq('is_deleted', false)
-        .not('audio_url', 'is', null)  // Only get meetings with recordings
-        .order('created_at', { ascending: false });
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('id, name, duration, created_at, updated_at, status, user_id, audio_url')
+      .eq('is_deleted', false)
+      .not('audio_url', 'is', null)  // Only get meetings with recordings
+      .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
-      }
-
-      console.log('Fetched meetings:', data);
-      setMeetings(data || []);
-    } catch (error) {
-      console.error("Error fetching meetings:", error);
-    } finally {
-      setIsLoading(false);
+    if (error) {
+      throw error;
     }
+
+    console.log('Fetched meetings:', data);
+    setMeetings(data || []);
+    setIsLoading(false);
   };
 
   // Fetch meetings when the screen comes into focus
@@ -58,16 +56,14 @@ export default function Home() {
       fetchMeetings();
       
       // Reset any ongoing rename operations when screen is focused
-      setIsRenaming(false);
-      setRenamingMeetingId(null);
-      setNewName('');
+      setIsRenameModalVisible(false);
+      setRenamingMeetingDetails(null);
       
       // Return a cleanup function that runs when the screen loses focus
       return () => {
         // Reset renaming state when navigating away from the screen
-        setIsRenaming(false);
-        setRenamingMeetingId(null);
-        setNewName('');
+        setIsRenameModalVisible(false);
+        setRenamingMeetingDetails(null);
       };
     }, [])
   );
@@ -119,34 +115,47 @@ export default function Home() {
     }
   };
 
-  const handleRenameMeeting = async (meetingId: string, newName: string) => {
+  // --- Optimistic UI Rename Logic ---
+ 
+  // 1. Function to update the database in the background
+  const updateMeetingNameInDb = async (meetingId: string, newName: string) => {
     try {
-      if (!newName || !newName.trim()) {
-        Alert.alert('Error', 'Meeting name cannot be empty');
-        return;
-      }
-
       const { error } = await supabase
         .from('meetings')
-        .update({ 
-          name: newName,
-          updated_at: new Date().toISOString()
-        })
+        .update({ name: newName })
         .eq('id', meetingId);
 
       if (error) {
-        throw error;
+        console.error('Error updating meeting name in DB:', error);
+        // Show error, but UI is already updated, so maybe just log or use a toast
+        Alert.alert('Sync Error', 'Could not save the name change to the server.'); 
       }
-
-      // Update local state
-      setMeetings(meetings.map(m => 
-        m.id === meetingId ? { ...m, name: newName } : m
-      ));
-
     } catch (error) {
-      console.error('Error renaming meeting:', error);
-      Alert.alert('Error', 'Failed to rename meeting');
+      console.error('Unexpected error updating meeting name in DB:', error);
+      Alert.alert('Sync Error', 'An unexpected error occurred while saving.');
     }
+  };
+
+  // 2. Function passed to the modal's onSave prop
+  const handleModalSave = (meetingId: string, newName: string) => {
+    if (!newName || !newName.trim()) { // Basic validation
+      Alert.alert('Error', 'Meeting name cannot be empty');
+      return;
+    }
+
+    // Optimistic UI Update:
+    setMeetings(currentMeetings => 
+      currentMeetings.map(m => 
+        m.id === meetingId ? { ...m, name: newName } : m
+      )
+    );
+
+    // Close the modal immediately
+    setIsRenameModalVisible(false);
+    setRenamingMeetingDetails(null);
+
+    // Trigger background database update (fire and forget for UI)
+    updateMeetingNameInDb(meetingId, newName);
   };
 
   const formatDuration = (duration: number) => {
@@ -159,138 +168,87 @@ export default function Home() {
   };
 
   // Memoize the renderRightActions function to prevent recreation on each render
-  const renderRightActions = useCallback((meetingId: string) => {
-    const handleActionPress = (text: string) => {
-      if (text === 'Delete') {
-        handleDeletePress();
-      } else if (text === 'Rename') {
-        handleRenamePress();
-      }
+  const renderRightActions = useCallback((progress: any, dragX: any, meetingId: string, meetingName: string) => {
+    const trans = dragX.interpolate({
+      inputRange: [-160, 0], // Width of two 80px buttons
+      outputRange: [0, 160],
+      extrapolate: 'clamp',
+    });
 
-      function handleRenamePress() {
-        // Find the meeting to get its current name
-        const meeting = meetings.find(m => m.id === meetingId);
-        if (meeting) {
-          setNewName(meeting.name);
-          setIsRenaming(true);
-          setRenamingMeetingId(meetingId);
-        }
-      }
-
-      function handleDeletePress() {
-        Alert.alert(
-          'Delete Meeting',
-          'Are you sure you want to delete this meeting?',
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => {
-                if (swipeableRefs.current[meetingId]) {
-                  swipeableRefs.current[meetingId]?.close();
-                }
-              }
-            },
-            {
-              text: 'Delete',
-              style: 'destructive',
-              onPress: () => {
-                handleDeleteMeeting(meetingId);
-                if (swipeableRefs.current[meetingId]) {
-                  swipeableRefs.current[meetingId]?.close();
-                }
-              }
-            }
-          ]
-        );
-      }
+    // Define handlers inside useCallback to capture meetingId/name
+    const handleRenamePress = () => {
+      console.log(`Rename pressed for: ${meetingName} (ID: ${meetingId}) - Opening Modal`);
+      setRenamingMeetingDetails({ id: meetingId, name: meetingName }); // Store details for modal
+      setIsRenameModalVisible(true); // Show the modal
+      swipeableRefs.current[meetingId]?.close(); // Close the swipeable row
     };
 
-    if (isRenaming && renamingMeetingId === meetingId) {
-      return (
-        <View style={{ backgroundColor: theme.background, width: 250 }} className="flex-row items-center p-2">
-          <TextInput
-            style={{ 
-              flex: 1, 
-              borderWidth: 1, 
-              borderColor: theme.border,
-              borderRadius: 4,
-              padding: 8,
-              marginRight: 8,
-              color: theme.foreground,
-              backgroundColor: theme.card
-            }}
-            value={newName}
-            onChangeText={setNewName}
-          />
-          <TouchableOpacity
-            style={{ backgroundColor: theme.primary, padding: 8, borderRadius: 4 }}
-            onPress={() => {
-              handleRenameMeeting(meetingId, newName);
-              setIsRenaming(false);
-              setRenamingMeetingId(null);
-              if (swipeableRefs.current[meetingId]) {
-                swipeableRefs.current[meetingId]?.close();
-              }
-            }}
-          >
-            <Text style={{ color: theme.primaryForeground }}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ 
-              backgroundColor: theme.muted, 
-              padding: 8, 
-              borderRadius: 4,
-              marginLeft: 4
-            }}
-            onPress={() => {
-              setIsRenaming(false);
-              setRenamingMeetingId(null);
-              if (swipeableRefs.current[meetingId]) {
-                swipeableRefs.current[meetingId]?.close();
-              }
-            }}
-          >
-            <Text style={{ color: theme.mutedForeground }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
+    const handleDeletePress = () => {
+      swipeableRefs.current[meetingId]?.close();
+      Alert.alert(
+        "Confirm Delete",
+        `Are you sure you want to delete "${meetingName}"?`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => console.log("Delete cancelled"),
+          },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => handleDeleteMeeting(meetingId),
+          },
+        ],
+        { cancelable: true }
       );
-    }
+    };
+
+    // Define button styles
+    const actionButtonStyle: ViewStyle = {
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      width: 80, // Fixed width for each button
+      height: '100%', // Make button fill height of the container
+    };
 
     return (
-      <View style={{ 
-        flexDirection: 'row', 
-        height: '100%',
-        overflow: 'hidden',
-        borderTopRightRadius: 12,
-        borderBottomRightRadius: 12,
-      }}>
-        {['Rename', 'Delete'].map((text, index) => (
-          <TouchableOpacity
-            key={text}
-            style={{
-              backgroundColor: text === 'Delete' ? '#FF4136' : theme.primary,
-              justifyContent: 'center',
-              alignItems: 'center',
-              width: 80,
-              height: '100%',
-              borderTopRightRadius: index === 1 ? 12 : 0,
-              borderBottomRightRadius: index === 1 ? 12 : 0,
-            }}
-            onPress={() => handleActionPress(text)}
-          >
-            <Text style={{ 
-              color: 'white',
-              fontWeight: '600',
-              fontSize: 14
-            }}>{text}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  }, [theme, meetings, isRenaming, renamingMeetingId, newName, handleDeleteMeeting, handleRenameMeeting]);
+      <Animated.View
+        style={{
+          transform: [{ translateX: trans }],
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: colors[currentSchemeString].card,
+          borderRadius: 10,       // Match card border radius
+          overflow: 'hidden',       // Clip buttons to rounded corners
+          height: '100%',
+        }}
+      >
+        {/* Rename Button */}
+        <TouchableOpacity
+          onPress={handleRenamePress}
+          style={{
+            ...actionButtonStyle,
+            backgroundColor: colors[currentSchemeString].primary, // Use theme primary color
+          } as StyleProp<ViewStyle>}
+        >
+          <MaterialIcons name="edit" size={24} color={colors[currentSchemeString].primaryForeground} />{/* Use theme primary foreground color */}
+        </TouchableOpacity>
 
-  // Memoize the renderMeetingCard function to prevent recreation on each render
+        {/* Delete Button */}
+        <TouchableOpacity
+          onPress={handleDeletePress}
+          style={{
+            ...actionButtonStyle,
+            backgroundColor: colors[currentSchemeString].destructive, // Use theme destructive color
+          } as StyleProp<ViewStyle>}
+        >
+          <MaterialIcons name="delete" size={24} color={colors[currentSchemeString].destructiveForeground} /> {/* Use theme destructive foreground color */}
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }, [theme, handleDeleteMeeting]);
+
   const renderMeetingCard = useCallback((meeting: Meeting) => {
     return (
       <Swipeable
@@ -300,7 +258,7 @@ export default function Home() {
             swipeableRefs.current[meeting.id] = ref;
           }
         }}
-        renderRightActions={() => renderRightActions(meeting.id)}
+        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, meeting.id, meeting.name)}
         onSwipeableOpen={() => {
           // Close any other open swipeables
           Object.keys(swipeableRefs.current).forEach((key) => {
@@ -309,61 +267,33 @@ export default function Home() {
             }
           });
         }}
-        onSwipeableClose={() => {
-          // Reset renaming state if this meeting was being renamed
-          if (isRenaming && renamingMeetingId === meeting.id) {
-            setIsRenaming(false);
-            setRenamingMeetingId(null);
-            setNewName('');
-          }
-        }}
-        onSwipeableWillClose={() => {
-          // Also reset on will close to catch all scenarios
-          if (isRenaming && renamingMeetingId === meeting.id) {
-            setIsRenaming(false);
-            setRenamingMeetingId(null);
-            setNewName('');
-          }
-        }}
         containerStyle={{
-          marginBottom: 15,
-          paddingHorizontal: 2,
-          paddingVertical: 2
+          marginBottom: 5,
         }}
         childrenContainerStyle={{
-          borderRadius: 12,
+          borderRadius: 10, // Match card borderRadius
           overflow: 'hidden'
         }}
       >
         <TouchableOpacity
           onPress={() => router.push(`/meeting/${meeting.id}`)}
-          style={{ 
-            backgroundColor: theme.card,
-            borderRadius: 12,
-            // iOS shadow
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            // Android elevation
-            elevation: 4,
-            // Add margin to ensure shadow is visible
-            margin: 2,
-          }}
-          className="p-4"
+          style={[
+            styles.meetingCardBase, // Base styles
+            { backgroundColor: colors[currentSchemeString].card } // Apply themed card background
+          ]}
         >
           <View className="flex-row items-center">
             <View className="mr-3">
               <Text className="text-3xl">📝</Text>
             </View>
             <View className="flex-1">
-              <Text style={{ color: theme.foreground }} className="text-lg font-semibold">
+              <Text style={{ color: colors[currentSchemeString].foreground }} className="text-lg font-semibold">
                 {meeting.name}
               </Text>
-              <Text style={{ color: theme.mutedForeground }} className="text-sm">
+              <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
                 {new Date(meeting.created_at).toLocaleDateString()}
               </Text>
-              <Text style={{ color: theme.mutedForeground }} className="text-sm">
+              <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
                 {meeting.duration ? formatDuration(meeting.duration) : 'No recording'}
               </Text>
             </View>
@@ -371,7 +301,7 @@ export default function Home() {
         </TouchableOpacity>
       </Swipeable>
     );
-  }, [theme, router, renderRightActions]);
+  }, [theme, router, meetings]);
 
   const handleCreateMeeting = async () => {
     try {
@@ -418,59 +348,213 @@ export default function Home() {
     }
   };
 
-  return (
-    <SafeAreaView style={{ backgroundColor: theme.background }} className="flex-1">
-      <View className="flex-1 px-4">
-        {/* Header */}
-        <View className="flex-row items-center justify-between py-4">
-          <Image
-            source={require("@/assets/summiticon.png")}
-            className="w-12 h-12 rounded-xl"
+  interface RenameModalProps {
+    isVisible: boolean;
+    // Theme props
+    backgroundColor: string;
+    textColor: string;
+    mutedTextColor: string;
+    borderColor: string;
+    primaryColor: string;
+    initialDetails: { id: string; name: string } | null;
+    onClose: () => void;
+    onSave: (meetingId: string, newName: string) => void;
+  }
+
+  const RenameMeetingModal: React.FC<RenameModalProps> = ({
+    isVisible,
+    initialDetails,
+    onClose,
+    onSave,
+    // Destructure theme props
+    backgroundColor,
+    textColor,
+    mutedTextColor,
+    borderColor,
+    primaryColor,
+  }) => {
+    const [internalNewName, setInternalNewName] = useState('');
+    const modalInputRef = useRef<TextInput>(null); // Ref for the input inside the modal
+
+    // Effect to update internal state when modal opens or details change
+    useEffect(() => {
+      if (isVisible && initialDetails) {
+        setInternalNewName(initialDetails.name);
+      } else {
+        // Reset when modal is closed or details are null
+        setInternalNewName(''); 
+      }
+    }, [isVisible, initialDetails]);
+
+    const handleSavePress = () => {
+      if (initialDetails && internalNewName.trim()) {
+        onSave(initialDetails.id, internalNewName.trim());
+        // onClose will likely be called within the onSave implementation in the parent
+      } else {
+        Alert.alert('Error', 'Meeting name cannot be empty.');
+      }
+    };
+
+    return (
+      <Modal
+        animationIn="slideInUp"
+        animationOut="slideOutDown"
+        isVisible={isVisible}
+        onBackdropPress={onClose} // Use onClose prop
+        onModalShow={() => {
+          // Programmatically select text after modal animation is complete
+          // Small delay might sometimes be needed, but try without first
+          modalInputRef.current?.setSelection(0, internalNewName.length || 0);
+        }}
+        style={styles.modal} // Apply styles
+        avoidKeyboard // Automatically adjust position for keyboard
+      >
+        {/* Use passed theme props for styling */}
+        <View style={[styles.modalContent, { backgroundColor: backgroundColor }]}>
+          <Text style={[styles.modalTitle, { color: textColor }]}>Rename Meeting</Text>
+          <TextInput
+            value={internalNewName} // Use internal state
+            onChangeText={setInternalNewName} // Update internal state
+            placeholder="Enter new meeting name"
+            placeholderTextColor={mutedTextColor}
+            style={[styles.modalInput, { color: textColor, borderColor: borderColor }]}
+            autoFocus // Keep autoFocus
+            ref={modalInputRef} // Assign the ref
           />
-          <View className="flex-row">
-            <TouchableOpacity
-              onPress={() => router.push("/profile")}
-              className="w-10 h-10 rounded-full bg-gray-200 items-center justify-center"
+          <View style={styles.modalButtons}>
+            <Button
+              title="Cancel"
+              onPress={onClose} // Use onClose prop
+              color={mutedTextColor} // Use theme prop
+            />
+            <Button
+              title="Save"
+              onPress={handleSavePress} // Use internal handler
+              color={primaryColor} // Use theme prop
+            />
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Use standard View and apply top inset manually */}
+      <View style={{ 
+        flex: 1, 
+        backgroundColor: colors[currentSchemeString].background, // Apply dynamic background color
+        paddingTop: insets.top // Apply top padding for status bar/notch
+      }}>
+        <View style={{ flex: 1, paddingHorizontal: 16 }}> {/* Restore paddingHorizontal */}
+          {/* Header */}
+          <View className="flex-row items-center justify-between py-4">
+            <Image
+              source={require("@/assets/summiticon.png")}
+              className="w-12 h-12 rounded-xl"
+            />
+            <Pressable 
+              onPress={() => router.push('/profile')} 
+              style={{ marginRight: 10, marginBottom: 5 }} // Add inline style for adjustments
             >
-              <Text className="text-xl">👤</Text>
-            </TouchableOpacity>
+              {({ pressed }: { pressed: boolean }) => (
+                <CircleUserRound
+                  size={30} // Adjust size as needed
+                  color={theme.foreground}
+                  style={{ opacity: pressed ? 0.7 : 1 }} // Keep opacity style here
+                />
+              )}
+            </Pressable>
           </View>
-        </View>
 
-        {/* Welcome Section */}
-        <View className="mb-8">
-          <H1 style={{ color: theme.foreground }}>Welcome Back{userName ? `, ${userName}` : ''}</H1>
-        </View>
+          {/* Welcome Section */}
+          <View className="mb-8">
+            <H1 style={{ color: theme.foreground }}>Welcome Back{userName ? `, ${userName}` : ''}</H1>
+          </View>
 
-        {/* Meetings Section */}
-        <View className="mb-4">
-          <H2 style={{ color: theme.foreground }}>My Meetings</H2>
-        </View>
+          {/* Meetings Section */}
+          <View className="mb-4">
+            <H2 style={{ color: theme.foreground }}>My Meetings</H2>
+          </View>
 
-        {/* Meetings List - Now Scrollable */}
-        {isLoading ? (
-          <View className="mt-8" />
-        ) : meetings.length > 0 ? (
-          <ScrollView 
-            className="flex-1" 
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 20 }}
-          >
-            <View className="mt-2">
-              {meetings.map(renderMeetingCard)}
+          {/* Meetings List - Now Scrollable */}
+          {isLoading ? (
+            <View className="mt-8" />
+          ) : meetings.length > 0 ? (
+            <ScrollView 
+              className="flex-1" 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{}} // Removed paddingBottom
+            >
+              <View className="mt-2">
+                {meetings.map(renderMeetingCard)}
+              </View>
+            </ScrollView>
+          ) : (
+            <View className="flex-1 items-center justify-center">
+              <Text style={{ color: theme.mutedForeground }} className="text-center mb-2">
+                No meetings yet
+              </Text>
+              <Muted style={{ color: theme.mutedForeground }} className="text-center">
+                Start recording your first meeting
+              </Muted>
             </View>
-          </ScrollView>
-        ) : (
-          <View className="flex-1 items-center justify-center">
-            <Text style={{ color: theme.mutedForeground }} className="text-center mb-2">
-              No meetings yet
-            </Text>
-            <Muted style={{ color: theme.mutedForeground }} className="text-center">
-              Start recording your first meeting
-            </Muted>
-          </View>
-        )}
+          )}
+        </View>
       </View>
-    </SafeAreaView>
+      <RenameMeetingModal 
+        isVisible={isRenameModalVisible} 
+        // Pass theme colors from parent
+        backgroundColor={theme.card}
+        textColor={theme.foreground}
+        mutedTextColor={theme.mutedForeground}
+        borderColor={theme.border}
+        primaryColor={theme.primary}
+        // Pass other props
+        initialDetails={renamingMeetingDetails} 
+        onClose={() => setIsRenameModalVisible(false)} 
+        onSave={handleModalSave} // Use the new optimistic handler
+      />
+     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  meetingCardBase: {
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 11, // Reduced by ~10% (from 12)
+    shadowOffset: { width: 0, height: 2 }, // Slightly increased offset
+    shadowRadius: 3, // Slightly increased radius
+    elevation: 4, // Increased elevation for Android
+    shadowColor: '#000', // Default shadow color
+    shadowOpacity: 0.10, // Slightly increased opacity
+  },
+  modal: {
+    justifyContent: 'center',
+    margin: 0,
+  },
+  modalContent: {
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 20,
+    width: '100%',
+    fontSize: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+});
