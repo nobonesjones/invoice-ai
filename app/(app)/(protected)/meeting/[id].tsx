@@ -571,78 +571,77 @@ export default function MeetingView() {
 
   // Helper function to render minutes in the specified order
   const renderMinutesInOrder = (minutesText: string) => {
-    // Split the text into sections based on headings
-    const sections = minutesText.split(/\n(?=[A-Z][a-z]+ [A-Z][a-z]+:)/);
-    
-    // Extract sections by title
-    let meetingSummary = null;
-    let meetingMinutes = null;
-    let otherSections: React.ReactNode[] = [];
-    
-    // First pass: identify each section
-    sections.forEach((section, index) => {
-      // Skip empty sections
-      if (!section.trim()) return;
-      
-      // Extract the section title and content
-      const titleMatch = section.match(/^([A-Z][a-z]+ [A-Z][a-z]+):/);
-      if (!titleMatch) return;
-      
-      const title = titleMatch[1];
-      const content = section.replace(/^[A-Z][a-z]+ [A-Z][a-z]+:/, '').trim();
-      
-      // Skip the action items section as we're displaying it separately
-      if (title === "Main Action Items") {
-        return;
-      }
-      
-      // Format bullet points
-      const bulletPoints = content.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
-      
-      const formattedSection = (
-        <View key={index} className="mb-6">
-          <Text 
-            style={{ color: colors.light.foreground }}
-            className="text-lg font-semibold mb-2"
-          >
-            {title}
-          </Text>
-          <View className="pl-0">
-            {bulletPoints.map((point, i) => (
-              <View key={i} className="flex-row mb-1 pl-0">
-                <Text style={{ color: colors.light.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
-                <Text 
-                  style={{ color: colors.light.foreground }}
-                  className="flex-1"
-                >
-                  {point.replace(/^[•\-]\s*/, '')}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      );
-      
-      // Categorize sections
-      if (title === "Meeting Summary") {
-        meetingSummary = formattedSection;
-      } else if (title === "Meeting Minutes") {
-        meetingMinutes = formattedSection;
-      } else {
-        otherSections.push(formattedSection);
+    if (!minutesText) return null;
+
+    const lines = minutesText.split('\n');
+    const sections: { [key: string]: string[] } = {
+      summary: [],
+      minutes: [],
+      actionItems: [] // We won't render this directly, but parse for completeness
+    };
+    let currentSection: keyof typeof sections | null = null;
+
+    lines.forEach(line => {
+      const trimmedLine = line.trim();
+      // Use the new headings with asterisks
+      if (trimmedLine.startsWith('**Meeting Summary:**')) {
+        currentSection = 'summary';
+      } else if (trimmedLine.startsWith('**Meeting Minutes:**')) {
+        currentSection = 'minutes';
+      } else if (trimmedLine.startsWith('**Main Action Items:**')) {
+        currentSection = 'actionItems'; 
+        // Don't add the heading itself to actionItems section if it's just "None"
+        if (lines.find(l => l.trim() === '**Main Action Items:**')?.split('\n').map(s => s.trim()).filter(Boolean)[1]?.toLowerCase() === 'none') {
+            // If the line immediately after Action Items is 'None', skip adding lines to this section
+        } else if (currentSection && trimmedLine !== '**Main Action Items:**') { // Avoid adding the heading itself
+           sections[currentSection].push(line); // Push original line to preserve formatting
+        }
+      } else if (currentSection && trimmedLine) { // Add non-empty lines to the current section
+         // Add line to the current section, excluding the heading lines themselves
+         if (currentSection === 'summary' && trimmedLine !== '**Meeting Summary:**') {
+            sections.summary.push(line);
+         } else if (currentSection === 'minutes' && trimmedLine !== '**Meeting Minutes:**') {
+            sections.minutes.push(line);
+         }
+         // Action items are handled by the ActionItemsList component, so no need to push here
       }
     });
-    
-    // Now return sections in the desired order
+
+    // Filter out the heading lines from the content arrays
+    const cleanSummary = sections.summary.filter(line => !line.trim().startsWith('**Meeting Summary:**')).join('\n').trim();
+    const cleanMinutes = sections.minutes.filter(line => !line.trim().startsWith('**Meeting Minutes:**')).join('\n').trim();
+
     return (
-      <>
-        {/* 1. Meeting Summary */}
-        {meetingSummary}
+      <View>
+        {cleanSummary ? (
+          <View className="mb-4">
+            <Text 
+              style={{ color: colors.light.foreground }}
+              className="text-lg font-semibold mb-2"
+            >
+              Meeting Summary
+            </Text>
+            <View className="pl-0">
+              {cleanSummary.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0)
+                .map((point, i) => (
+                  <View key={i} className="flex-row mb-1 pl-0">
+                    <Text style={{ color: colors.light.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
+                    <Text 
+                      style={{ color: colors.light.foreground }}
+                      className="flex-1"
+                    >
+                      {point.replace(/^[•\-\*]\s*/, '')}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+          </View>
+        ) : null}
         
-        {/* 2. Action Items */}
-        <View className="mb-6">
+        {/* Action Items Section (using the dedicated component) */}
+        <View className="mb-4">
           <Text 
             style={{ color: colors.light.foreground }}
             className="text-lg font-semibold mb-2"
@@ -653,13 +652,34 @@ export default function MeetingView() {
             <ActionItemsList meetingId={meeting!.id} actionItems={actionItems} />
           </View>
         </View>
-        
-        {/* 3. Meeting Minutes */}
-        {meetingMinutes}
-        
-        {/* 4. Any other sections */}
-        {otherSections}
-      </>
+
+        {cleanMinutes ? (
+          <View className="mb-4">
+            <Text 
+              style={{ color: colors.light.foreground }}
+              className="text-lg font-semibold mb-2"
+            >
+              Meeting Minutes
+            </Text>
+            <View className="pl-0">
+              {cleanMinutes.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0)
+                .map((point, i) => (
+                  <View key={i} className="flex-row mb-1 pl-0">
+                    <Text style={{ color: colors.light.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
+                    <Text 
+                      style={{ color: colors.light.foreground }}
+                      className="flex-1"
+                    >
+                      {point.replace(/^[•\-\*]\s*/, '')}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+          </View>
+        ) : null}
+      </View>
     );
   };
 

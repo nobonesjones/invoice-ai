@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { transcribeAudioAndStore } from '../services/transcribe-audio';
 
 interface UseTranscription {
-  transcribeAudio: (audioUri: string, meetingId: string) => Promise<void>;
+  transcribeAudio: (audioUri: string, meetingId: string, duration: number) => Promise<void>;
   isTranscribing: boolean;
   error: string | null;
 }
@@ -13,8 +13,8 @@ export function useTranscription(): UseTranscription {
   // Ref to track URIs currently being processed to prevent double calls (e.g., from StrictMode)
   const processingUris = useRef(new Set<string>());
 
-  const transcribeAudio = async (audioUri: string, meetingId: string) => {
-    console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] ENTERING hook's transcribeAudio. URI: ${audioUri}, MeetingID: ${meetingId}`);
+  const transcribeAudio = async (audioUri: string, meetingId: string, duration: number) => {
+    console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] ENTERING hook's transcribeAudio. URI: ${audioUri}, MeetingID: ${meetingId}, Duration: ${duration}`);
 
     // Guard against double invocation
     if (processingUris.current.has(audioUri)) {
@@ -28,8 +28,8 @@ export function useTranscription(): UseTranscription {
 
       setIsTranscribing(true);
       setError(null);
-      console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] BEFORE calling transcribeAudioAndStore. URI: ${audioUri}, MeetingID: ${meetingId}`);
-      await transcribeAudioAndStore(audioUri, meetingId);
+      console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] BEFORE calling transcribeAudioAndStore. URI: ${audioUri}, MeetingID: ${meetingId}, Duration: ${duration}`);
+      await transcribeAudioAndStore(audioUri, meetingId, duration);
       console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] AFTER calling transcribeAudioAndStore. URI: ${audioUri}, MeetingID: ${meetingId}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to transcribe audio';

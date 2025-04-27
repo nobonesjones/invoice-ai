@@ -1,25 +1,52 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { supabase } from '@/config/supabase';
+import Constants from 'expo-constants';
 
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+const GEMINI_API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GEMINI_API_KEY;
+let genAI: GoogleGenerativeAI | null = null;
+let geminiProModel: any = null;
 
-const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
-  timeout: 30000, // 30 second timeout
-});
+if (GEMINI_API_KEY) {
+  try {
+    genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    geminiProModel = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      safetySettings: [
+        {
+          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        },
+      ],
+    });
+    console.log('Gemini Pro model initialized for minutes generation.');
+  } catch (error) {
+    console.error('Error initializing Gemini API for minutes:', error);
+  }
+} else {
+  console.warn('Gemini API key is not set. Minutes generation may fail.');
+}
 
 async function extractAndSaveActionItems(minutes: string, meetingId: string) {
   try {
     console.log('Starting action items extraction for meeting:', meetingId);
 
-    // Find the action items section with more flexible pattern matching
-    // This handles both "Main Action Items:" and "Action Items:" formats
     const actionItemsMatch = minutes.match(/(?:Main\s+)?Action\s+Items:?\s*\n([\s\S]*?)(?=\n\n|\n[A-Z]|\s*$)/i);
     
-    if (!actionItemsMatch || !actionItemsMatch[1] || actionItemsMatch[1].trim() === 'No action items agreed') {
+    if (!actionItemsMatch || !actionItemsMatch[1] || actionItemsMatch[1].trim() === 'None') {
       console.log('No action items found for meeting:', meetingId);
       
-      // Even if no action items found, we'll create a placeholder to indicate we checked
       const { error } = await supabase
         .from('action_items')
         .upsert([{
@@ -36,7 +63,6 @@ async function extractAndSaveActionItems(minutes: string, meetingId: string) {
       return;
     }
 
-    // Split into individual items and clean them up
     const actionItems = actionItemsMatch[1]
       .split(/\n/)
       .map(item => item.trim().replace(/^[•\-\*]\s*/, '')) // Remove bullet points
@@ -44,7 +70,6 @@ async function extractAndSaveActionItems(minutes: string, meetingId: string) {
 
     console.log(`Extracted ${actionItems.length} action items:`, actionItems);
 
-    // Delete any existing action items for this meeting to avoid duplicates
     const { error: deleteError } = await supabase
       .from('action_items')
       .delete()
@@ -54,7 +79,6 @@ async function extractAndSaveActionItems(minutes: string, meetingId: string) {
       console.error('Error deleting existing action items:', deleteError);
     }
 
-    // Save action items in a batch
     if (actionItems.length > 0) {
       const actionItemsToInsert = actionItems.map(content => ({
         meeting_id: meetingId,
@@ -74,7 +98,6 @@ async function extractAndSaveActionItems(minutes: string, meetingId: string) {
         console.log(`Successfully saved ${actionItemsToInsert.length} action items`);
       }
     } else {
-      // If no valid action items were found after filtering, create a placeholder
       const { error } = await supabase
         .from('action_items')
         .upsert([{
@@ -94,7 +117,6 @@ async function extractAndSaveActionItems(minutes: string, meetingId: string) {
   }
 }
 
-// Helper function for retrying async operations
 async function retryAsync<T>(fn: () => Promise<T>, retries = 5, delay = 1000, operationName = 'operation'): Promise<T> {
   let lastError: Error | null = null;
   for (let i = 0; i < retries; i++) {
@@ -117,7 +139,6 @@ export async function generateAndStoreMeetingMinutes(meetingId: string): Promise
   try {
     console.log('Starting minutes generation for meeting:', meetingId);
 
-    // 1. Fetch transcripts for the meeting with retries
     let transcripts: { content: string }[] | null = null;
     try {
       transcripts = await retryAsync(async () => {
@@ -126,7 +147,6 @@ export async function generateAndStoreMeetingMinutes(meetingId: string): Promise
           .from('transcripts')
           .select('content')
           .eq('meeting_id', meetingId)
-          // Ensure ordering if multiple transcripts (though ideally only one)
           .order('created_at', { ascending: true }); 
 
         if (error) {
@@ -142,94 +162,89 @@ export async function generateAndStoreMeetingMinutes(meetingId: string): Promise
       }, 5, 2000, 'fetch transcript'); // 5 attempts, 2 second delay
     } catch (error) {
       console.error('Failed to fetch transcript after multiple retries:', error);
-      // Optionally update meeting status to indicate failure?
-      // await supabase.from('meetings').update({ status: 'minutes_error', updated_at: new Date().toISOString() }).eq('id', meetingId);
       return; // Exit if transcript cannot be fetched
     }
 
-    // If transcripts is null here, retryAsync failed, already logged.
     if (!transcripts || transcripts.length === 0) {
       console.error('Proceeding without transcripts, cannot generate minutes.');
       return;
     }
 
-    // 2. Combine all transcript parts (if multiple, though ideally only one)
+    if (!geminiProModel) {
+      console.error('Gemini Pro model is not initialized. Cannot generate minutes.');
+      throw new Error('Gemini Pro model failed to initialize. Check API Key.');
+    }
+
     const fullTranscript = transcripts.map(t => t.content).join('\n\n'); // Use double newline just in case
 
-    // Limit transcript length if it's too long
-    const maxLength = 8000; // Characters
+    const maxLength = 30000; // Characters (adjust based on Gemini limits/testing)
     const truncatedTranscript = fullTranscript.length > maxLength 
       ? fullTranscript.substring(0, maxLength) + "... [transcript truncated due to length]"
       : fullTranscript;
 
     console.log(`Transcript length: ${fullTranscript.length} characters, using ${truncatedTranscript.length} characters`);
 
-    // 3. Generate minutes using OpenAI - using a faster model
-    const prompt = `Please analyze this meeting transcript and create concise meeting minutes with the following structure:
+    const prompt = `Analyze the following meeting transcript. Generate meeting minutes strictly adhering to the structure and markers below. DO NOT deviate from this format.
 
-Meeting Summary:
-[A concise 2-3 sentence overview of the key points discussed]
+TRANSCRIPT:
+"""
+${truncatedTranscript}
+"""
 
-Meeting Minutes:
-[Convert the discussion into clear bullet points, with each point representing a distinct topic or decision]
+OUTPUT FORMAT:
 
-Main Action Items:
-[List specific tasks or actions agreed upon, with each on a new line starting with a bullet point]
+**Meeting Summary:**
+[A single paragraph, 2-3 sentences long, summarizing key discussion points. NO bullet points.]
 
-Here's the transcript:
-${truncatedTranscript}`;
+**Meeting Minutes:**
+[Bulleted list using '-' or '*'. Each bullet point represents a distinct topic, decision, or key piece of information.]
 
-    console.log('Sending request to OpenAI...');
-    const startTime = Date.now();
-    
-    // Use gpt-3.5-turbo instead of gpt-4 for faster response
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo-0125", // Using the latest 3.5 model which is much faster
-      messages: [
-        {
-          role: "system",
-          content: "You are a professional meeting minutes creator. Create clear, concise minutes with bullet points for easy readability. Be brief but comprehensive."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.5, // Lower temperature for more consistent results
-      max_tokens: 1000, // Limit response size
-    });
+**Main Action Items:**
+[Bulleted list using '-' or '*'. List specific, actionable tasks. If NO action items exist, write exactly "None" on a single line under this heading and nothing else.]
 
-    const endTime = Date.now();
-    console.log(`OpenAI response received in ${(endTime - startTime) / 1000} seconds`);
+Ensure each section heading (**Meeting Summary:**, **Meeting Minutes:**, **Main Action Items:**) appears exactly as shown, including the double asterisks and colon, on its own line, followed by the content for that section.
+`;
 
-    const minutes = completion.choices[0].message.content || '';
-    if (!minutes) {
-      console.log('No minutes generated for meeting:', meetingId);
-      return;
+    try {
+      console.log('Sending request to Gemini Pro...');
+      const startTime = Date.now();
+      
+      const result = await geminiProModel.generateContent(prompt);
+      const response = await result.response;
+      const minutes = response.text();
+
+      const endTime = Date.now();
+      console.log(`Gemini Pro response received in ${(endTime - startTime) / 1000} seconds`);
+
+      if (!minutes) {
+        console.log('No minutes generated by Gemini for meeting:', meetingId);
+        return;
+      }
+
+      console.log('Storing minutes in database...');
+      const { error: updateError } = await supabase
+        .from('meetings')
+        .update({ 
+          minutes_text: minutes,
+          has_minutes: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', meetingId);
+
+      if (updateError) {
+        console.error('Error updating meeting with minutes:', updateError);
+        throw updateError;
+      } else {
+        console.log('Successfully stored minutes for meeting:', meetingId);
+      }
+
+      await extractAndSaveActionItems(minutes, meetingId);
+
+      console.log('Successfully generated and stored minutes for meeting:', meetingId);
+    } catch (error) {
+      console.error('Error generating minutes:', error);
+      throw error;
     }
-
-    // 4. Store minutes in the meetings table
-    console.log('Storing minutes in database...');
-    const { error: updateError } = await supabase
-      .from('meetings')
-      .update({ 
-        minutes_text: minutes,
-        has_minutes: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', meetingId);
-
-    if (updateError) {
-      console.error('Error updating meeting with minutes:', updateError);
-      throw updateError;
-    } else {
-      console.log('Successfully stored minutes for meeting:', meetingId);
-    }
-
-    // 5. Extract and save action items
-    await extractAndSaveActionItems(minutes, meetingId);
-
-    console.log('Successfully generated and stored minutes for meeting:', meetingId);
   } catch (error) {
     console.error('Error generating minutes:', error);
     throw error;

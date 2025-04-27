@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Audio } from 'expo-av';
+import { 
+  Audio, 
+  InterruptionModeIOS, 
+  InterruptionModeAndroid,
+} from 'expo-av';
 import { supabase } from '@/config/supabase';
 import * as FileSystem from 'expo-file-system';
 import { Platform, AppState } from 'react-native';
@@ -12,6 +16,11 @@ interface UseAudioRecorderProps {
   meetingId?: string;
   onRecordingComplete?: (uri: string) => void;
   onError?: (error: string) => void;
+}
+
+interface StopRecordingResult {
+  uri: string | null;
+  durationMillis: number;
 }
 
 export function useAudioRecorder({ 
@@ -119,9 +128,39 @@ export function useAudioRecorder({
         playThroughEarpieceAndroid: false
       });
       
-      // Create and start recording
+      // Define explicit recording options instead of preset
+      const customRecordingOptions: Audio.RecordingOptions = {
+        isMeteringEnabled: true,
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 1, // Use 1 channel for potentially better compatibility
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 1, // Use 1 channel for potentially better compatibility
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: { // Add basic web options if needed, though likely not primary target
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        }
+      };
+
+      console.log('Creating recording with custom options:', customRecordingOptions);
+
+      // Create and start recording using custom options
       const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        customRecordingOptions // Use custom options object
       );
       
       // Update state and refs
@@ -141,26 +180,43 @@ export function useAudioRecorder({
   };
 
   // Stop recording function
-  const stopRecording = async (currentMeetingId: string) => {
+  const stopRecording = async (currentMeetingId: string): Promise<StopRecordingResult> => {
     console.log(`[LOG AUDIO HOOK ${new Date().toISOString()}] ENTERING stopRecording. isRecording=${isRecording}, passedMeetingId=${currentMeetingId}`);
+    let durationMillis = 0; // Initialize duration
+    let finalUri: string | null = null; // Initialize URI
+
     try {
       if (!recordingRef.current) {
         const errorMsg = 'No active recording to stop';
         console.error(errorMsg);
         setError(errorMsg);
         if (onError) onError(errorMsg);
-        return null;
+        return { uri: null, durationMillis: 0 }; // Return default object
       }
 
+      // --- Get status BEFORE stopping --- 
+      try {
+        const statusBeforeStop = await recordingRef.current.getStatusAsync();
+        if (statusBeforeStop.isRecording) {
+          durationMillis = statusBeforeStop.durationMillis ?? 0;
+          console.log(`[LOG AUDIO HOOK] Status BEFORE stop: durationMillis = ${durationMillis}`);
+        } else {
+          console.warn('[LOG AUDIO HOOK] Recording status showed not recording before stop command.');
+        }
+      } catch (statusError) {
+        console.error('[LOG AUDIO HOOK] Error getting status before stop:', statusError);
+        // Continue stopping even if getting status fails, but duration might be 0
+      }
+      // --- End get status before stopping ---
+
       console.log('Stopping recording...');
-      const status = await recordingRef.current.stopAndUnloadAsync(); // Capture status
-      console.log('Recording stopped, status:', status);
+      await recordingRef.current.stopAndUnloadAsync(); // Stop and unload (ignore status here)
+      console.log('Recording stopped and unloaded.');
 
-      // Extract duration in milliseconds
-      const durationMillis = status.durationMillis;
-
-      const uri = recordingRef.current.getURI();
-      console.log('Recording URI:', uri);
+      // Get URI *after* stopping (might still work, documentation is a bit ambiguous)
+      // If getURI fails after unload, we might need to store it from statusBeforeStop if available
+      finalUri = recordingRef.current.getURI(); 
+      console.log('Recording URI:', finalUri);
       
       // Clear recording state
       setRecording(null);
@@ -170,12 +226,12 @@ export function useAudioRecorder({
       const currentRecording = recordingRef.current;
       recordingRef.current = null;
 
-      if (!uri) {
+      if (!finalUri) {
         const errorMsg = 'Recording URI is undefined after stopping';
         console.error(errorMsg);
         setError(errorMsg);
         if (onError) onError(errorMsg);
-        return null;
+        return { uri: null, durationMillis: durationMillis }; // Return object
       }
 
       if (!currentMeetingId) {
@@ -183,41 +239,40 @@ export function useAudioRecorder({
         console.error(errorMsg);
         setError(errorMsg);
         if (onError) onError(errorMsg);
-        if (onRecordingComplete) onRecordingComplete(uri);
-        return null;
+        if (onRecordingComplete) onRecordingComplete(finalUri);
+        return { uri: finalUri, durationMillis: durationMillis }; // Return object
       }
 
       try {
         console.log('Calling uploadToSupabase...');
         // Pass durationMillis to uploadToSupabase
-        const publicUrl = await uploadToSupabase(uri, currentMeetingId, durationMillis);
+        const publicUrl = await uploadToSupabase(finalUri, currentMeetingId, durationMillis);
 
         // Log the duration being passed
         console.log(`Duration passed to uploadToSupabase: ${durationMillis}ms`);
 
         if (onRecordingComplete) {
-          console.log(`[LOG AUDIO HOOK ${new Date().toISOString()}] BEFORE calling onRecordingComplete from stopRecording. URI: ${uri}`);
-          onRecordingComplete(uri);
+          console.log(`[LOG AUDIO HOOK ${new Date().toISOString()}] BEFORE calling onRecordingComplete from stopRecording. URI: ${finalUri}`);
+          onRecordingComplete(finalUri);
         }
 
-        return uri;
+        return { uri: finalUri, durationMillis: durationMillis }; // Return object
       } catch (uploadError) {
         console.error('Error uploading recording:', uploadError);
         setError(`Failed to upload recording: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
         if (onError) onError(`Failed to upload recording: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
-        return uri; // Still return the URI even if upload failed
+        return { uri: finalUri, durationMillis: durationMillis }; // Still return the object even if upload failed
       }
     } catch (err) {
       const errorMsg = `Error stopping recording: ${err instanceof Error ? err.message : String(err)}`;
       console.error(errorMsg);
       setError(errorMsg);
       if (onError) onError(errorMsg);
-      return null;
+      return { uri: null, durationMillis: 0 }; // Return object on error
     }
   };
 
   // Upload recording to Supabase
-  // Add durationMillis parameter
   const uploadToSupabase = async (
     uri: string, 
     meetingId: string, 

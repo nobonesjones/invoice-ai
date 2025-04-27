@@ -35,85 +35,103 @@ export default function RecordingScreen() {
   const { transcribeAudio, isTranscribing, error: transcriptionError } = useTranscription();
   const { generateMinutes, isGenerating, error: minutesError } = useMinutesGeneration(); 
 
-  // Define the callback first
-  const onRecordingComplete = useCallback(async (uri: string | null) => {
-    console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] ENTERING onRecordingComplete. URI: ${uri}, meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
-    if (!isActiveRef.current) {
-      console.warn(`[WARN ${new Date().toISOString()}] onRecordingComplete called but screen inactive. Aborting post-processing.`);
-      setIsProcessing(false); 
-      setProcessingStep('');
-      return;
-    }
-    if (!uri) {
-      console.error(`[ERROR ${new Date().toISOString()}] onRecordingComplete called with null URI.`);
-      setErrorMessage('Recording failed: No audio file was generated.');
-      setIsProcessing(false);
-      setProcessingStep('');
-      return;
-    }
-    if (!meetingIdState) {
-      console.error(`[ERROR ${new Date().toISOString()}] onRecordingComplete called but meetingIdState is missing.`);
-      setErrorMessage('Recording failed: Could not associate with a meeting.');
-      setIsProcessing(false);
-      setProcessingStep('');
+  const {
+    startRecording,
+    stopRecording,
+    isRecording: isAudioHookRecording, 
+    isUploading: isAudioHookUploading, 
+    error: audioError,
+  } = useAudioRecorder({
+    meetingId: meetingIdState,
+    onError: (err) => {
+      console.error("[Audio Hook Error Callback]:", err);
+      if (isActiveRef.current) setErrorMessage(err);
+    },
+  });
+
+  // Handle stopping the recording
+  const handleStopRecording = async (isDiscarding = false) => {
+    console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] handleStopRecording called. isDiscarding=${isDiscarding}, isRecording=${isRecording}`);
+    if (isDiscarding || !meetingIdState) {
+      // If discarding, simply stop without processing
+      // If no meetingId, also stop without processing (log error)
+      if (!meetingIdState) {
+        console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Cannot stop recording: meetingIdState is null or undefined.`);
+        Alert.alert('Error', 'Cannot stop recording, missing meeting ID.');
+      }
+      try {
+        await stopRecording(meetingIdState ?? 'unknown'); // Call stopRecording even if discarding or no ID to unload audio
+        setIsRecording(false); // Manually update state if needed
+        setRecordingTime(0);
+      } catch (stopErr) {
+        console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Error during simple stop/discard:`, stopErr);
+      }
+      if (isDiscarding) router.back(); // Go back if discarding
       return;
     }
 
-    setIsProcessing(true);
-    setProcessingStep('Processing audio...'); 
-    console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: Setting isProcessing = true. Upload already done by hook. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
+    console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Attempting graceful stop and process for meeting: ${meetingIdState}`);
+    setStopInitiated(true); // Indicate stop process has started
+    setIsProcessing(true); // Show processing indicator immediately
+    setProcessingStep('Stopping recording...');
 
     try {
+      // Call the hook's stopRecording and get the result object
+      const { uri, durationMillis } = await stopRecording(meetingIdState);
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] stopRecording hook returned - URI: ${uri}, Duration: ${durationMillis}ms`);
+
+      // Update local state immediately after stopping
+      setIsRecording(false);
+      setRecordingTime(0);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+      if (!uri) {
+        throw new Error('Recording failed: No audio file URI returned.');
+      }
+
+      // --- Start Post-Processing --- 
+      setProcessingStep('Processing audio...'); 
+
       // --- Transcription --- 
       setProcessingStep('Transcribing audio...');
-      console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: Starting transcribeAudio. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
-      await transcribeAudio(uri, meetingIdState); 
-      console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: Finished transcribeAudio. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
+      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Starting transcribeAudio. URI: ${uri}, MeetingID: ${meetingIdState}, Duration: ${durationMillis}`);
+      // Pass the durationMillis to transcribeAudio
+      await transcribeAudio(uri, meetingIdState, durationMillis);
+      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Finished transcribeAudio.`);
       if (!isActiveRef.current) throw new Error("Component inactive after transcription");
 
       // --- Minutes Generation --- 
       setProcessingStep('Generating minutes & action items...');
-      console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: Starting generateMinutes. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
-      await generateMinutes(meetingIdState); 
-      console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: Finished generateMinutes. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
+      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Starting generateMinutes.`);
+      await generateMinutes(meetingIdState);
+      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Finished generateMinutes.`);
       if (!isActiveRef.current) throw new Error("Component inactive after minutes generation");
 
       // --- Navigation --- 
       setProcessingStep('Finalizing...');
-      console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: Navigating to meeting page. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
-      // Navigate to the meeting details page, specifying the transcript tab
-      router.push(`/(app)/(protected)/meeting/${meetingIdState}?tab=transcript`); // Append query param directly
+      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Navigating to meeting page.`);
+      router.push(`/(app)/(protected)/meeting/${meetingIdState}?tab=transcript`);
 
     } catch (error: any) {
-      if (error.message.includes("Component inactive")) {
-         console.warn(`[WARN ${new Date().toISOString()}] Post-processing aborted due to component inactivity.`);
-      } else {
-        console.error(`[ERROR ${new Date().toISOString()}] Error during post-processing:`, error);
-        if (isActiveRef.current) {
+      console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Error during stop/processing:`, error);
+      if (isActiveRef.current) {
+        if (error.message.includes("Component inactive")) {
+           console.warn(`[WARN ${new Date().toISOString()}] Post-processing aborted due to component inactivity.`);
+           setErrorMessage('Processing stopped as you navigated away.');
+        } else {
           setErrorMessage(`Processing failed: ${error.message}`);
         }
       }
     } finally {
        // Ensure overlay is hidden even on error or inactivity
       if (isActiveRef.current) {
-         console.log(`[LOG ${new Date().toISOString()}] onRecordingComplete: FINALLY block, Setting isProcessing = false. meetingId=${meetingIdState}, isActive=${isActiveRef.current}`);
-         setIsProcessing(false); 
+         console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] handleStopRecording: FINALLY block, Setting isProcessing = false.`);
+         setIsProcessing(false);
          setProcessingStep('');
-      } else {
-         console.warn(`[WARN ${new Date().toISOString()}] onRecordingComplete: FINALLY block executing but component inactive.`);
+         setStopInitiated(false); // Reset stop initiation flag
       }
     }
-  }, [meetingIdState, router, transcribeAudio, generateMinutes, isActiveRef]); 
-
-
-  const { 
-      startRecording,
-      stopRecording,
-      recording,
-      isRecording: isAudioRecording, 
-      isUploading: isAudioUploading, 
-      error: audioHookError
-   } = useAudioRecorder({ onRecordingComplete }); 
+  };
 
   // Memoize the error handler to avoid recreating it on each render
   const handleError = useCallback((error: string) => {
@@ -131,20 +149,20 @@ export default function RecordingScreen() {
 
   // Update local recording state based on hook
   useEffect(() => {
-    setIsRecording(isAudioRecording);
-  }, [isAudioRecording]);
+    setIsRecording(isAudioHookRecording);
+  }, [isAudioHookRecording]);
 
   useEffect(() => {
-    setIsUploading(isAudioUploading);
-  }, [isAudioUploading]);
+    setIsUploading(isAudioHookUploading);
+  }, [isAudioHookUploading]);
 
   // Combine errors from different hooks/stages
   useEffect(() => {
-    const combinedError = audioHookError || transcriptionError || minutesError;
+    const combinedError = audioError || transcriptionError || minutesError;
     if (combinedError) {
       handleError(combinedError);
     }
-  }, [audioHookError, transcriptionError, minutesError, handleError]);
+  }, [audioError, transcriptionError, minutesError, handleError]);
 
   // --- Timer Logic ---
   useEffect(() => {
@@ -341,37 +359,6 @@ export default function RecordingScreen() {
     }
   };
 
-  // Handle stopping the recording
-  const handleStopRecording = async (isDiscarding = false) => {
-    console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] handleStopRecording called. isDiscarding=${isDiscarding}, isRecording=${isRecording}`);
-    if (isDiscarding) return; // Prevent double-stopping during discard
-    if (!meetingIdState) {
-      console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Cannot stop recording: meetingIdState is null or undefined.`);
-      Alert.alert('Error', 'Cannot stop recording, missing meeting ID.');
-      // Optionally, try to stop recording without upload? Or just return?
-      // For now, just return to prevent errors.
-      return; 
-    }
-    if (!isRecording) return; // Only stop if currently recording
-
-    // Set stop initiated flag
-    setStopInitiated(true);
-
-    console.log(`[LOG ${new Date().toISOString()}] Stopping recording normally for meeting ${meetingIdState}`);
-
-    try {
-      // Pass the confirmed meetingIdState to the hook's stopRecording function
-      const uri = await stopRecording(meetingIdState);
-      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] stopRecording hook returned URI: ${uri}`);
-
-      // The onRecordingComplete callback should still handle the rest (transcription, etc.)
-      // Note: onRecordingComplete is triggered internally by the hook after stopping
-    } catch (error) {
-      console.error(`[LOG ${new Date().toISOString()}] Error in handleStopRecording:`, error);
-      Alert.alert('Stop Error', `Failed to stop recording: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-  
   const handleGoBack = () => {
     if (isRecording) {
       Alert.alert(

@@ -12,7 +12,7 @@ const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
 
-export async function transcribeAudioAndStore(audioUri: string, meetingId: string): Promise<void> {
+export async function transcribeAudioAndStore(audioUri: string, meetingId: string, duration: number): Promise<void> {
   try {
     console.log('Starting transcription for meeting:', meetingId);
     
@@ -88,11 +88,16 @@ export async function transcribeAudioAndStore(audioUri: string, meetingId: strin
 
     // 6. Update meeting status and transcript URL
     console.log('Updating meeting status and transcript URL...');
+    
+    // Convert duration from milliseconds (as passed in) to seconds for storage
+    const durationInSeconds = Math.round(duration / 1000);
+
     const { error: updateError } = await supabase
       .from('meetings')
       .update({ 
         status: 'transcribed',
         transcript_url: `/api/transcripts/${transcriptData.id}`, // Add transcript URL
+        duration: durationInSeconds, // Save duration in seconds
         updated_at: new Date().toISOString()
       })
       .eq('id', meetingId);

@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, Alert, TextInput, ScrollView, Animated, ViewStyle, StyleProp, InteractionManager, Button, StyleSheet, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, TextInput, FlatList, Animated, ViewStyle, StyleProp, InteractionManager, Button, StyleSheet, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import Modal from 'react-native-modal';
 import { useRouter, useFocusEffect, Link } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -26,6 +26,7 @@ export default function Home() {
   const insets = useSafeAreaInsets(); // Get safe area insets
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [userName, setUserName] = useState('');
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
   const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
@@ -48,6 +49,12 @@ export default function Home() {
     setMeetings(data || []);
     setIsLoading(false);
   };
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchMeetings();
+    setIsRefreshing(false);
+  }, []);
 
   // Fetch meetings when the screen comes into focus
   useFocusEffect(
@@ -249,20 +256,20 @@ export default function Home() {
     );
   }, [theme, handleDeleteMeeting]);
 
-  const renderMeetingCard = useCallback((meeting: Meeting) => {
+  const renderMeetingCard = useCallback(({ item }: { item: Meeting }) => {
     return (
       <Swipeable
-        key={meeting.id}
+        key={item.id}
         ref={(ref) => {
           if (ref) {
-            swipeableRefs.current[meeting.id] = ref;
+            swipeableRefs.current[item.id] = ref;
           }
         }}
-        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, meeting.id, meeting.name)}
+        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item.id, item.name)}
         onSwipeableOpen={() => {
           // Close any other open swipeables
           Object.keys(swipeableRefs.current).forEach((key) => {
-            if (key !== meeting.id && swipeableRefs.current[key]) {
+            if (key !== item.id && swipeableRefs.current[key]) {
               swipeableRefs.current[key]?.close();
             }
           });
@@ -276,7 +283,7 @@ export default function Home() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.push(`/meeting/${meeting.id}`)}
+          onPress={() => router.push(`/meeting/${item.id}`)}
           style={[
             styles.meetingCardBase, // Base styles
             { backgroundColor: colors[currentSchemeString].card } // Apply themed card background
@@ -288,13 +295,13 @@ export default function Home() {
             </View>
             <View className="flex-1">
               <Text style={{ color: colors[currentSchemeString].foreground }} className="text-lg font-semibold">
-                {meeting.name}
+                {item.name}
               </Text>
               <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
-                {new Date(meeting.created_at).toLocaleDateString()}
+                {new Date(item.created_at).toLocaleDateString()}
               </Text>
               <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
-                {meeting.duration ? formatDuration(meeting.duration) : 'No recording'}
+                {item.duration ? formatDuration(item.duration) : 'No recording'}
               </Text>
             </View>
           </View>
@@ -478,27 +485,30 @@ export default function Home() {
           </View>
 
           {/* Meetings List - Now Scrollable */}
-          {isLoading ? (
-            <View className="mt-8" />
-          ) : meetings.length > 0 ? (
-            <ScrollView 
-              className="flex-1" 
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{}} // Removed paddingBottom
-            >
-              <View className="mt-2">
-                {meetings.map(renderMeetingCard)}
-              </View>
-            </ScrollView>
-          ) : (
-            <View className="flex-1 items-center justify-center">
-              <Text style={{ color: theme.mutedForeground }} className="text-center mb-2">
-                No meetings yet
-              </Text>
-              <Muted style={{ color: theme.mutedForeground }} className="text-center">
-                Start recording your first meeting
-              </Muted>
+          {isLoading && !meetings.length ? (
+            <View className="flex-1 justify-center items-center">
+              <ActivityIndicator size="large" color={colors[currentSchemeString].primary} />
             </View>
+          ) : (
+            <FlatList
+              data={meetings}
+              renderItem={renderMeetingCard}
+              keyExtractor={(item) => item.id}
+              ListEmptyComponent={() => (
+                <View className="flex-1 justify-center items-center mt-10 px-4">
+                  <Muted>You haven't recorded any meetings yet.</Muted>
+                  <Muted>Tap the record button to start.</Muted>
+                </View>
+              )}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={onRefresh}
+                  tintColor={colors[currentSchemeString].primary} // Style refresh indicator
+                />
+              }
+              contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 100 }} // Reduce horizontal padding
+            />
           )}
         </View>
       </View>

@@ -1,9 +1,10 @@
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/config/supabase';
 import { useState, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/constants/colors';
+import { Muted } from '@/components/ui/typography';
 
 interface ActionItem {
   id: string;
@@ -24,15 +25,17 @@ export function ActionItemsList({ meetingId, actionItems: initialItems }: Action
   const [isLoading, setIsLoading] = useState(!initialItems);
 
   useEffect(() => {
-    if (!initialItems) {
+    if (!initialItems && meetingId) {
       fetchActionItems();
-    } else if (initialItems.length > 0) {
+    } else if (initialItems) {
       setActionItems(initialItems);
       setIsLoading(false);
     }
   }, [meetingId, initialItems]);
 
   const fetchActionItems = async () => {
+    if (!meetingId) return;
+    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('action_items')
@@ -53,15 +56,12 @@ export function ActionItemsList({ meetingId, actionItems: initialItems }: Action
   };
 
   const toggleActionItem = async (id: string, completed: boolean) => {
-    // Skip toggling for placeholder items
     if (actionItems.find(item => item.id === id)?.content === 'No action items identified') {
       return;
     }
     
-    // Add subtle haptic feedback
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Optimistically update the UI
     setActionItems(prevItems => 
       prevItems.map(item => 
         item.id === id 
@@ -80,7 +80,6 @@ export function ActionItemsList({ meetingId, actionItems: initialItems }: Action
         .eq('id', id);
 
       if (error) {
-        // Revert the optimistic update if there was an error
         setActionItems(prevItems => 
           prevItems.map(item => 
             item.id === id 
@@ -91,7 +90,6 @@ export function ActionItemsList({ meetingId, actionItems: initialItems }: Action
         console.error('Error updating action item:', error);
       }
     } catch (error) {
-      // Revert the optimistic update if there was an error
       setActionItems(prevItems => 
         prevItems.map(item => 
           item.id === id 
@@ -103,54 +101,48 @@ export function ActionItemsList({ meetingId, actionItems: initialItems }: Action
     }
   };
 
-  if (isLoading) {
-    return (
-      <View className="py-4">
-        <Text style={{ color: colors.light.mutedForeground }} className="text-muted-foreground">Loading action items...</Text>
-      </View>
-    );
-  }
-
-  // Special handling for placeholder items
-  const hasPlaceholder = actionItems.some(item => item.content === 'No action items identified');
-  
-  if (actionItems.length === 0 || hasPlaceholder) {
-    return (
-      <View className="py-2 pl-0">
-        <Text style={{ color: colors.light.mutedForeground }} className="text-muted-foreground italic">
-          No action items identified
-        </Text>
-      </View>
-    );
-  }
+  const noRealItems = 
+    actionItems.length === 0 || 
+    (actionItems.length === 1 && actionItems[0].content === 'No action items identified');
 
   return (
-    <View className="space-y-2 pl-0">
-      {actionItems.map(item => (
-        <TouchableOpacity
-          key={item.id}
-          onPress={() => toggleActionItem(item.id, !item.completed)}
-          className="flex-row items-center bg-card rounded-lg active:opacity-70 pl-0 pr-3 py-3"
-          style={{ backgroundColor: colors.light.card }}
-          activeOpacity={0.7}
-        >
-          <View className="ml-0 mr-3">
-            <Checkbox
-              checked={item.completed}
-              onCheckedChange={(checked: boolean) => toggleActionItem(item.id, checked)}
-            />
-          </View>
-          <Text 
-            style={{ 
-              color: item.completed ? colors.light.mutedForeground : colors.light.foreground,
-              textDecorationLine: item.completed ? 'line-through' : 'none'
+    <View>
+      {isLoading ? (
+        <View style={{ paddingVertical: 10 }}>
+          <ActivityIndicator size="small" color={colors.light.primary} />
+        </View>
+      ) : noRealItems ? (
+        <Muted style={{ paddingVertical: 10 }}>No action items were identified for this meeting.</Muted>
+      ) : (
+        actionItems.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            onPress={() => toggleActionItem(item.id, !item.completed)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingVertical: 8,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.light.border, 
             }}
-            className="flex-1"
           >
-            {item.content}
-          </Text>
-        </TouchableOpacity>
-      ))}
+            <View style={{ marginLeft: 0, marginRight: 8 }}>
+              <Checkbox
+                checked={item.completed}
+                onCheckedChange={(checked: boolean) => toggleActionItem(item.id, checked)}
+              />
+            </View>
+            <Text 
+              style={{ 
+                color: item.completed ? colors.light.mutedForeground : colors.light.foreground,
+                textDecorationLine: item.completed ? 'line-through' : 'none'
+              }}
+            >
+              {item.content}
+            </Text>
+          </TouchableOpacity>
+        ))
+      )}
     </View>
   );
 }
