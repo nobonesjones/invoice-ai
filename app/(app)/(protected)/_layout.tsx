@@ -87,7 +87,7 @@ export default function ProtectedLayout() {
         return (
           <View style={{ 
             flexDirection: 'row', 
-            backgroundColor: colors[currentSchemeString].secondary, // Use secondary color (dark gray) for tab bar background
+            backgroundColor: colors[currentSchemeString].background, // Changed from .secondary to .background
             height: increasedHeight, 
             borderTopWidth: 1,
             borderTopColor: 'rgba(0, 0, 0, 0.1)', // Consider adjusting border for dark mode
@@ -115,7 +115,7 @@ export default function ProtectedLayout() {
             </TouchableOpacity>
             
             {/* Placeholder View to maintain spacing for the absolute positioned button */}
-            <View style={{ width: 80 }} />
+            <View style={{ width: 68 }} /> // Changed from 80 to 68
             
             {/* New Placeholder Button (Bigger, Overlapping) */}
             <TouchableOpacity 
@@ -124,11 +124,11 @@ export default function ProtectedLayout() {
                 position: 'absolute',
                 bottom: 30, // Adjust for desired overlap
                 left: '50%',
-                transform: [{ translateX: -25 }], // Nudge further right again
-                width: 80, // Increased size
-                height: 80,
-                borderRadius: 40, // Adjusted border radius
-                backgroundColor: colors[currentSchemeString].secondary, // Use correct string key
+                transform: [{ translateX: -14 }], // Set value to -14 as requested
+                width: 68, // Reduced size (80 * 0.85)
+                height: 68, // Reduced size (80 * 0.85)
+                borderRadius: 34, // Adjusted border radius (68 / 2)
+                backgroundColor: colors[currentSchemeString].card, // Changed from .background to .card
                 justifyContent: 'center',
                 alignItems: 'center',
                 elevation: 4,
@@ -137,10 +137,10 @@ export default function ProtectedLayout() {
                 shadowOpacity: 0.2,
                 shadowRadius: 2,
               }}
-              onPress={() => router.push('/(app)/(protected)/recording')} // Navigate to recording screen
+              onPress={handleCreateMeeting} // Use the correct handler
             >
               {/* Placeholder Icon/Text - Replace with actual icon later */}
-              <Text style={{ color: colors[currentSchemeString].secondaryForeground, fontSize: 40, fontWeight: 'bold' }}>+</Text> // Use correct string key
+              <Text style={{ color: colors[currentSchemeString].secondaryForeground, fontSize: 34, fontWeight: 'bold' }}>+</Text> // Reduced font size (40 * 0.85)
             </TouchableOpacity>
             
             {/* Chat Button */}
@@ -161,6 +161,7 @@ export default function ProtectedLayout() {
                 Chat
               </Text>
             </TouchableOpacity>
+
           </View>
         );
       }}

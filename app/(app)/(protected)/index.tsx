@@ -216,7 +216,7 @@ export default function Home() {
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
       width: 80, // Fixed width for each button
-      height: '100%', // Make button fill height of the container
+      height: '100%', // Add this back
     };
 
     return (
@@ -224,11 +224,12 @@ export default function Home() {
         style={{
           transform: [{ translateX: trans }],
           flexDirection: 'row',
-          alignItems: 'center',
+          alignItems: 'center', 
           backgroundColor: colors[currentSchemeString].card,
-          borderRadius: 10,       // Match card border radius
-          overflow: 'hidden',       // Clip buttons to rounded corners
-          height: '100%',
+          borderRadius: 10,       
+          overflow: 'hidden',       
+          height: '100%', 
+          // Remove marginVertical: -16
         }}
       >
         {/* Rename Button */}
@@ -236,10 +237,10 @@ export default function Home() {
           onPress={handleRenamePress}
           style={{
             ...actionButtonStyle,
-            backgroundColor: colors[currentSchemeString].primary, // Use theme primary color
+            backgroundColor: colors[currentSchemeString].primary, 
           } as StyleProp<ViewStyle>}
         >
-          <MaterialIcons name="edit" size={24} color={colors[currentSchemeString].primaryForeground} />{/* Use theme primary foreground color */}
+          <MaterialIcons name="edit" size={24} color={colors[currentSchemeString].primaryForeground} /> 
         </TouchableOpacity>
 
         {/* Delete Button */}
@@ -247,10 +248,10 @@ export default function Home() {
           onPress={handleDeletePress}
           style={{
             ...actionButtonStyle,
-            backgroundColor: colors[currentSchemeString].destructive, // Use theme destructive color
+            backgroundColor: colors[currentSchemeString].destructive, 
           } as StyleProp<ViewStyle>}
         >
-          <MaterialIcons name="delete" size={24} color={colors[currentSchemeString].destructiveForeground} /> {/* Use theme destructive foreground color */}
+          <MaterialIcons name="delete" size={24} color={colors[currentSchemeString].destructiveForeground} /> 
         </TouchableOpacity>
       </Animated.View>
     );
@@ -275,36 +276,39 @@ export default function Home() {
           });
         }}
         containerStyle={{
-          marginBottom: 5,
+          marginBottom: 11, // Apply margin here instead of on card
         }}
         childrenContainerStyle={{
-          borderRadius: 10, // Match card borderRadius
+          borderRadius: 10, 
           overflow: 'hidden'
         }}
       >
         <TouchableOpacity
           onPress={() => router.push(`/meeting/${item.id}`)}
           style={[
-            styles.meetingCardBase, // Base styles
-            { backgroundColor: colors[currentSchemeString].card } // Apply themed card background
+            styles.meetingCardBase, 
+            { backgroundColor: colors[currentSchemeString].card } 
           ]}
         >
-          <View className="flex-row items-center">
-            <View className="mr-3">
-              <Text className="text-3xl">📝</Text>
+          {/* Add inner View for padding */}
+          <View style={{ padding: 16 }}> 
+            <View className="flex-row items-center">
+              <View className="mr-3">
+                <Text className="text-3xl">📝</Text>
+              </View>
+              <View className="flex-1">
+                <Text style={{ color: colors[currentSchemeString].foreground }} className="text-lg font-semibold">
+                  {item.name}
+                </Text>
+                <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
+                  {new Date(item.created_at).toLocaleDateString()}
+                </Text>
+                <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
+                  {item.duration ? formatDuration(item.duration) : 'No recording'}
+                </Text>
+              </View>
             </View>
-            <View className="flex-1">
-              <Text style={{ color: colors[currentSchemeString].foreground }} className="text-lg font-semibold">
-                {item.name}
-              </Text>
-              <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
-                {new Date(item.created_at).toLocaleDateString()}
-              </Text>
-              <Text style={{ color: colors[currentSchemeString].mutedForeground }} className="text-sm">
-                {item.duration ? formatDuration(item.duration) : 'No recording'}
-              </Text>
-            </View>
-          </View>
+          </View> { /* Close inner padding View */ }
         </TouchableOpacity>
       </Swipeable>
     );
@@ -408,16 +412,23 @@ export default function Home() {
         animationOut="slideOutDown"
         isVisible={isVisible}
         onBackdropPress={onClose} // Use onClose prop
-        onModalShow={() => {
-          // Programmatically select text after modal animation is complete
-          // Small delay might sometimes be needed, but try without first
-          modalInputRef.current?.setSelection(0, internalNewName.length || 0);
-        }}
-        style={styles.modal} // Apply styles
+        onSwipeComplete={onClose}
+        swipeDirection={['down']} // Allow swipe down to close
+        style={styles.modal} // Use style for backdrop/positioning
         avoidKeyboard // Automatically adjust position for keyboard
       >
         {/* Use passed theme props for styling */}
-        <View style={[styles.modalContent, { backgroundColor: backgroundColor }]}>
+        <View style={[styles.modalContent, { 
+          backgroundColor: backgroundColor, 
+          marginHorizontal: 24, // Set margin to 24 (16 outer + 8 FlatList)
+          // Removed explicit width and alignSelf
+          // Add shadow styles copied from meetingCardBase
+          shadowOffset: { width: 0, height: 2 }, 
+          shadowRadius: 3, 
+          elevation: 4, 
+          shadowColor: '#000', 
+          shadowOpacity: 0.10, 
+        }]}>
           <Text style={[styles.modalTitle, { color: textColor }]}>Rename Meeting</Text>
           <TextInput
             value={internalNewName} // Use internal state
@@ -507,7 +518,7 @@ export default function Home() {
                   tintColor={colors[currentSchemeString].primary} // Style refresh indicator
                 />
               }
-              contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 100 }} // Reduce horizontal padding
+              contentContainerStyle={{ paddingBottom: 100 }} // Removed paddingHorizontal: 8
             />
           )}
         </View>
@@ -531,14 +542,14 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   meetingCardBase: {
-    padding: 16,
+    // padding: 16, // REMOVED
     borderRadius: 10,
-    marginBottom: 11, // Reduced by ~10% (from 12)
-    shadowOffset: { width: 0, height: 2 }, // Slightly increased offset
-    shadowRadius: 3, // Slightly increased radius
-    elevation: 4, // Increased elevation for Android
-    shadowColor: '#000', // Default shadow color
-    shadowOpacity: 0.10, // Slightly increased opacity
+    // marginBottom: 11, // REMOVED
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowRadius: 3, 
+    elevation: 4, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.10, 
   },
   modal: {
     justifyContent: 'center',
@@ -546,8 +557,16 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     borderRadius: 10,
-    padding: 20,
-    alignItems: 'center',
+    padding: 16, // Changed from 20 to 16 to match card's original padding
+    alignItems: 'stretch', // Changed from 'center' to allow input/buttons to stretch
+    marginHorizontal: 24, // Set margin to 24 (16 outer + 8 FlatList)
+    // Removed explicit width and alignSelf
+    // Add shadow styles copied from meetingCardBase
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowRadius: 3, 
+    elevation: 4, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.10, 
   },
   modalTitle: {
     fontSize: 20,

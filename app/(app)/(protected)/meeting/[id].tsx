@@ -11,7 +11,7 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { ActionItemsList } from '@/components/ActionItemsList';
 import { ChatInterface } from '@/components/ChatInterface';
-import { colors } from '@/constants/colors';
+import { useTheme } from '@/context/theme-provider'; // Import useTheme
 
 interface Meeting {
   id: string;
@@ -31,6 +31,9 @@ type TabType = 'minutes' | 'transcript' | 'chat';
 export default function MeetingView() {
   const router = useRouter();
   const { id, tab } = useLocalSearchParams<{ id: string; tab?: TabType }>();
+  const { isLightMode, theme } = useTheme(); // Correct destructuring: use 'theme'
+  const currentSchemeString = isLightMode ? 'light' : 'dark'; // Keep for potential direct access if needed
+
   const [activeTab, setActiveTab] = useState<TabType>(tab as TabType || 'minutes');
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [transcripts, setTranscripts] = useState<string[]>([]);
@@ -481,14 +484,14 @@ export default function MeetingView() {
           flex: 1,
           height: 36, // Set fixed height
           borderBottomWidth: 2,
-          borderBottomColor: activeTab === tab ? colors.light.primary : 'transparent',
+          borderBottomColor: activeTab === tab ? theme.primary : 'transparent',
           alignItems: 'center',
           justifyContent: 'center' // Ensure perfect vertical centering
         }}
       >
         <Text
           style={{
-            color: activeTab === tab ? colors.light.primary : colors.light.mutedForeground,
+            color: activeTab === tab ? theme.primary : theme.mutedForeground,
             fontWeight: activeTab === tab ? '600' : '400'
           }}
         >
@@ -505,8 +508,8 @@ export default function MeetingView() {
           <ScrollView className="flex-1 px-4">
             {tabSpecificLoading.minutes ? (
               <View className="flex-1 items-center justify-center py-8">
-                <ActivityIndicator size="small" color={colors.light.primary} />
-                <Text style={{ marginTop: 8, color: colors.light.mutedForeground }}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={{ marginTop: 8, color: theme.mutedForeground }}>
                   Loading minutes...
                 </Text>
               </View>
@@ -516,7 +519,7 @@ export default function MeetingView() {
                 {renderMinutesInOrder(meeting.minutes_text)}
               </View>
             ) : (
-              <Text style={{ color: colors.light.foreground }}>
+              <Text style={{ color: theme.foreground }}>
                 Minutes are being generated...
               </Text>
             )}
@@ -527,13 +530,13 @@ export default function MeetingView() {
           <ScrollView className="flex-1 px-4">
             {tabSpecificLoading.transcript ? (
               <View className="flex-1 items-center justify-center py-8">
-                <ActivityIndicator size="small" color={colors.light.primary} />
-                <Text style={{ marginTop: 8, color: colors.light.mutedForeground }}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={{ marginTop: 8, color: theme.mutedForeground }}>
                   Loading transcript...
                 </Text>
               </View>
             ) : (
-              <Text style={{ color: colors.light.foreground }}>
+              <Text style={{ color: theme.foreground }}>
                 {transcripts.length > 0 ? transcripts[0] : 'No transcript available yet.'}
               </Text>
             )}
@@ -544,8 +547,8 @@ export default function MeetingView() {
           <View className="flex-1">
             {tabSpecificLoading.chat ? (
               <View className="flex-1 items-center justify-center">
-                <ActivityIndicator size="small" color={colors.light.primary} />
-                <Text style={{ marginTop: 8, color: colors.light.mutedForeground }}>
+                <ActivityIndicator size="small" color={theme.primary} />
+                <Text style={{ marginTop: 8, color: theme.mutedForeground }}>
                   Loading chat...
                 </Text>
               </View>
@@ -557,7 +560,7 @@ export default function MeetingView() {
               />
             ) : (
               <View className="flex-1 items-center justify-center p-4">
-                <Text style={{ color: colors.light.foreground }} className="text-center">
+                <Text style={{ color: theme.foreground }} className="text-center">
                   Chat will be available once the meeting transcript and minutes are generated.
                 </Text>
               </View>
@@ -616,7 +619,7 @@ export default function MeetingView() {
         {cleanSummary ? (
           <View className="mb-4">
             <Text 
-              style={{ color: colors.light.foreground }}
+              style={{ color: theme.foreground }}
               className="text-lg font-semibold mb-2"
             >
               Meeting Summary
@@ -627,9 +630,9 @@ export default function MeetingView() {
                 .filter(line => line.length > 0)
                 .map((point, i) => (
                   <View key={i} className="flex-row mb-1 pl-0">
-                    <Text style={{ color: colors.light.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
+                    <Text style={{ color: theme.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
                     <Text 
-                      style={{ color: colors.light.foreground }}
+                      style={{ color: theme.foreground }}
                       className="flex-1"
                     >
                       {point.replace(/^[•\-\*]\s*/, '')}
@@ -643,7 +646,7 @@ export default function MeetingView() {
         {/* Action Items Section (using the dedicated component) */}
         <View className="mb-4">
           <Text 
-            style={{ color: colors.light.foreground }}
+            style={{ color: theme.foreground }}
             className="text-lg font-semibold mb-2"
           >
             Action Items
@@ -656,7 +659,7 @@ export default function MeetingView() {
         {cleanMinutes ? (
           <View className="mb-4">
             <Text 
-              style={{ color: colors.light.foreground }}
+              style={{ color: theme.foreground }}
               className="text-lg font-semibold mb-2"
             >
               Meeting Minutes
@@ -667,9 +670,9 @@ export default function MeetingView() {
                 .filter(line => line.length > 0)
                 .map((point, i) => (
                   <View key={i} className="flex-row mb-1 pl-0">
-                    <Text style={{ color: colors.light.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
+                    <Text style={{ color: theme.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
                     <Text 
-                      style={{ color: colors.light.foreground }}
+                      style={{ color: theme.foreground }}
                       className="flex-1"
                     >
                       {point.replace(/^[•\-\*]\s*/, '')}
@@ -756,11 +759,49 @@ export default function MeetingView() {
     }
   };
 
+  // Determine slider or placeholder content
+  let sliderOrPlaceholderContent;
+  if (audioReady && sound) {
+    sliderOrPlaceholderContent = (
+      <View style={styles.sliderContainer}> 
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={duration}
+          value={position}
+          minimumTrackTintColor={theme.primary} 
+          maximumTrackTintColor={theme.border} 
+          thumbTintColor={theme.primary} 
+          onSlidingStart={handleSlidingStart}
+          onSlidingComplete={handleSeek}
+        />
+        <View style={styles.timeContainer} className="flex-row justify-between mt-0"> 
+          <Text style={{ color: theme.mutedForeground }} className="text-xs">
+            {formatTime(position)}
+          </Text>
+          <Text style={{ color: theme.mutedForeground }} className="text-xs">
+            {formatTime(duration)}
+          </Text>
+        </View>
+      </View>
+    );
+  } else {
+    sliderOrPlaceholderContent = (
+      <View style={[styles.sliderContainer, { justifyContent: 'center', alignItems: 'center' }]}> 
+        {audioError ? (
+            <Text style={{ color: theme.destructive }} className="text-xs text-center">
+             Error: {audioError.length > 60 ? audioError.substring(0, 60) + '...' : audioError}
+            </Text>
+          ) : <View style={{ height: 10 }} />}
+      </View>
+    );
+  }
+
   return (
-    <View style={{ backgroundColor: colors.light.background }} className="flex-1">
+    <View style={{ backgroundColor: theme.background }} className="flex-1">
       {/* Header with Gradient Background */}
       <LinearGradient
-        colors={['#A2C3F7', '#D94DD6', '#FBC1A9']}
+        colors={['#A2C3F7', '#D94DD6', '#FBC1A9']} // Always use light mode gradient
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{
@@ -790,7 +831,7 @@ export default function MeetingView() {
 
         {/* Back Button - Visual only */}
         <View className="flex-row items-center px-4 mb-3">
-          <ChevronLeft size={24} color="#ffffff" />
+          <ChevronLeft size={24} color={theme.primaryForeground} />
         </View>
 
         {/* Meeting Info */}
@@ -801,7 +842,7 @@ export default function MeetingView() {
                 value={newMeetingName}
                 onChangeText={setNewMeetingName}
                 style={{
-                  color: 'white',
+                  color: theme.primaryForeground,
                   fontSize: 30,
                   fontWeight: '600',
                   letterSpacing: 0.3,
@@ -809,7 +850,7 @@ export default function MeetingView() {
                   marginBottom: 12,
                   paddingVertical: 0,
                   borderBottomWidth: 1,
-                  borderBottomColor: 'rgba(255, 255, 255, 0.3)',
+                  borderBottomColor: theme.primaryForeground,
                 }}
                 autoFocus
               />
@@ -820,16 +861,16 @@ export default function MeetingView() {
                   width: 30,
                   height: 30,
                   borderRadius: 15,
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  backgroundColor: theme.primary,
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginLeft: 8,
                 }}
               >
                 {isUpdatingName ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <ActivityIndicator size="small" color={theme.primaryForeground} />
                 ) : (
-                  <Text style={{ color: 'white', fontSize: 16 }}>✓</Text>
+                  <Text style={{ color: theme.primaryForeground, fontSize: 16 }}>✓</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -882,7 +923,7 @@ export default function MeetingView() {
       {/* Tabs */}
       <View 
         style={{ 
-          borderBottomColor: colors.light.border,
+          borderBottomColor: theme.border,
           borderBottomWidth: 1,
           marginBottom: 16
         }}
@@ -897,8 +938,8 @@ export default function MeetingView() {
       <View className="flex-1">
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color={colors.light.primary} />
-            <Text style={{ marginTop: 16, color: colors.light.mutedForeground }}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ marginTop: 16, color: theme.mutedForeground }}>
               Loading meeting data...
             </Text>
           </View>
@@ -911,16 +952,16 @@ export default function MeetingView() {
       {meeting?.audio_url && (
         <View 
           style={{
-            borderTopColor: colors.light.border,
+            borderTopColor: theme.border,
             borderTopWidth: 1,
-            backgroundColor: colors.light.background
+            backgroundColor: theme.background
           }}
           className="px-4 py-5 flex-row items-center" 
         >
           {/* Left Button Container (fixed width) */}
           <View style={styles.buttonContainer}>
             {isAudioLoading ? (
-              <ActivityIndicator size="small" color={colors.light.primary} />
+              <ActivityIndicator size="small" color={theme.primary} />
             ) : audioError ? (
                // Placeholder on error for now in this small container
                <View style={{ width: 28 }} />
@@ -930,9 +971,9 @@ export default function MeetingView() {
                 style={{ transform: [{ translateY: -4 }] }} // Increased nudge amount further
               >
                 {isPlaying ? (
-                  <Pause size={28} color={colors.light.primary} />
+                  <Pause size={28} color={theme.primary} />
                 ) : (
-                  <Play size={28} color={colors.light.primary} />
+                  <Play size={28} color={theme.primary} />
                 )}
               </TouchableOpacity>
             ) : (
@@ -940,40 +981,11 @@ export default function MeetingView() {
             )}
           </View>
            
-          {/* Slider and Time Codes - Grouped together (takes remaining space) */}
-          {audioReady && sound && (
-            <View style={styles.sliderContainer} className="flex-1 mx-2"> 
-              <Slider
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={duration}
-                value={position}
-                minimumTrackTintColor={colors.light.primary}
-                maximumTrackTintColor={colors.light.border}
-                thumbTintColor={colors.light.primary}
-                onSlidingStart={handleSlidingStart}
-                onSlidingComplete={handleSeek}
-              />
-              <View style={styles.timeContainer} className="flex-row justify-between mt-0"> 
-                <Text style={{ color: colors.light.mutedForeground }} className="text-xs">
-                  {formatTime(position)}
-                </Text>
-                <Text style={{ color: colors.light.mutedForeground }} className="text-xs">
-                  {formatTime(duration)}
-                </Text>
-              </View>
-            </View>
-          )}
-          {(!audioReady || !sound) && (
-            <View style={styles.sliderContainer} className="flex-1 mx-2 justify-center items-center">
-              {audioError ? (
-                  <Text style={{ color: colors.light.destructive }} className="text-xs text-center">
-                   Error: {audioError.length > 60 ? audioError.substring(0, 60) + '...' : audioError}
-                  </Text>
-                ) : <View style={{ height: 10 }} /> // Placeholder to maintain layout
-              }
-            </View>
-          )}
+          {/* Container View for Slider OR Error/Placeholder */}
+          <View className="flex-1 mx-2">
+            {sliderOrPlaceholderContent}
+          </View>
+
           {/* Right Placeholder (fixed width) */}
           <View style={styles.buttonContainer} />
         </View>
