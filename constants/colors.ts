@@ -1,6 +1,6 @@
 export const colors = {
 	light: {
-		background: "#F8F9FC",
+		background: "#F0F0F0", // Changed from #F8F9FC
 		foreground: "hsl(240, 10%, 3.9%)",
 		card: "hsl(0, 0%, 100%)",
 		cardForeground: "hsl(240, 10%, 3.9%)",

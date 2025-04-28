@@ -1,5 +1,4 @@
-import { View, Text, TouchableOpacity, Alert, TextInput, FlatList, Animated, ViewStyle, StyleProp, InteractionManager, Button, StyleSheet, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import Modal from 'react-native-modal';
+import { View, Text, TouchableOpacity, Alert, TextInput, Animated, ViewStyle, StyleProp, InteractionManager, Button, StyleSheet, Pressable, RefreshControl, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter, useFocusEffect, Link } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '@/config/supabase';
@@ -9,36 +8,39 @@ import { colors } from '@/constants/colors';
 import { useTheme } from "@/context/theme-provider";
 import { CircleUserRound } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Skeleton } from 'moti/skeleton';
+import { useColorScheme } from 'react-native'; 
 
 import { Image } from "@/components/image";
 import { H1, H2, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { RenameAndEmojiModal } from '@/components/modals/RenameAndEmojiModal'; 
 
 export default function Home() {
   const router = useRouter();
   const { user } = useSupabase();
   const { theme, isLightMode, themePreference } = useTheme();
-  const currentSchemeString = isLightMode ? 'light' : 'dark'; // Determine scheme string
+  const currentSchemeString = isLightMode ? 'light' : 'dark'; 
 
   console.log(`[Home Render] isLightMode: ${isLightMode}, currentSchemeString: ${currentSchemeString}`);
 
-  const insets = useSafeAreaInsets(); // Get safe area insets
+  const insets = useSafeAreaInsets(); 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userName, setUserName] = useState('');
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
-  const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
-  const [renamingMeetingDetails, setRenamingMeetingDetails] = useState<{ id: string; name: string } | null>(null);
+  const [isRenameAndEmojiModalVisible, setIsRenameAndEmojiModalVisible] = useState(false);
+  const [editingMeetingDetails, setEditingMeetingDetails] = useState<{ id: string; name: string; icon: string } | null>(null);
 
   const fetchMeetings = async () => {
     setIsLoading(true);
     const { data, error } = await supabase
       .from('meetings')
-      .select('id, name, duration, created_at, updated_at, status, user_id, audio_url')
+      .select('id, name, duration, created_at, updated_at, status, user_id, audio_url, icon')  
       .eq('is_deleted', false)
-      .not('audio_url', 'is', null)  // Only get meetings with recordings
+      .not('audio_url', 'is', null)  
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -56,21 +58,14 @@ export default function Home() {
     setIsRefreshing(false);
   }, []);
 
-  // Fetch meetings when the screen comes into focus
   useFocusEffect(
     useCallback(() => {
       console.log('Home screen focused, fetching meetings...');
       fetchMeetings();
       
-      // Reset any ongoing rename operations when screen is focused
-      setIsRenameModalVisible(false);
-      setRenamingMeetingDetails(null);
-      
-      // Return a cleanup function that runs when the screen loses focus
       return () => {
-        // Reset renaming state when navigating away from the screen
-        setIsRenameModalVisible(false);
-        setRenamingMeetingDetails(null);
+        setIsRenameAndEmojiModalVisible(false);
+        setEditingMeetingDetails(null);
       };
     }, [])
   );
@@ -84,7 +79,6 @@ export default function Home() {
   const fetchUserName = async () => {
     if (!user) return;
     
-    // Get display name from user metadata
     const displayName = user.user_metadata?.display_name;
     if (displayName) {
       setUserName(displayName);
@@ -95,7 +89,6 @@ export default function Home() {
     try {
       console.log('Starting soft delete process for meeting:', meetingId);
 
-      // Update the meeting to mark as deleted
       const { error: updateError } = await supabase
         .from('meetings')
         .update({ 
@@ -112,7 +105,6 @@ export default function Home() {
 
       console.log('Meeting marked as deleted successfully');
 
-      // Update local state
       setMeetings(meetings.filter(m => m.id !== meetingId));
       console.log('Local state updated');
 
@@ -122,50 +114,33 @@ export default function Home() {
     }
   };
 
-  // --- Optimistic UI Rename Logic ---
- 
-  // 1. Function to update the database in the background
-  const updateMeetingNameInDb = async (meetingId: string, newName: string) => {
-    try {
-      const { error } = await supabase
-        .from('meetings')
-        .update({ name: newName })
-        .eq('id', meetingId);
+  const updateMeetingDetailsInDb = async ({ id, name, icon }: { id: string, name: string, icon: string }) => {
+    console.log('Updating meeting in DB:', { id, name, icon });
+    const { error } = await supabase
+      .from('meetings')
+      .update({ name: name, icon: icon }) 
+      .eq('id', id);
 
-      if (error) {
-        console.error('Error updating meeting name in DB:', error);
-        // Show error, but UI is already updated, so maybe just log or use a toast
-        Alert.alert('Sync Error', 'Could not save the name change to the server.'); 
-      }
-    } catch (error) {
-      console.error('Unexpected error updating meeting name in DB:', error);
-      Alert.alert('Sync Error', 'An unexpected error occurred while saving.');
+    if (error) {
+      console.error('Error updating meeting details in DB:', error.message);
+      throw error; 
     }
   };
 
-  // 2. Function passed to the modal's onSave prop
-  const handleModalSave = (meetingId: string, newName: string) => {
-    if (!newName || !newName.trim()) { // Basic validation
-      Alert.alert('Error', 'Meeting name cannot be empty');
-      return;
-    }
-
-    // Optimistic UI Update:
-    setMeetings(currentMeetings => 
-      currentMeetings.map(m => 
-        m.id === meetingId ? { ...m, name: newName } : m
-      )
+  const handleModalSave = async ({ id, name, icon }: { id: string, name: string, icon: string }) => {
+    console.log('Saving meeting details:', { id, name, icon });
+    setMeetings((prevMeetings) =>
+      prevMeetings.map((m) => (m.id === id ? { ...m, name: name.trim(), icon: icon } : m))
     );
+    setIsRenameAndEmojiModalVisible(false); 
+    setEditingMeetingDetails(null); 
 
-    // Close the modal immediately
-    setIsRenameModalVisible(false);
-    setRenamingMeetingDetails(null);
-
-    // Trigger background database update (fire and forget for UI)
-    updateMeetingNameInDb(meetingId, newName);
+    InteractionManager.runAfterInteractions(() => {
+      updateMeetingDetailsInDb({ id, name: name.trim(), icon });
+    });
   };
 
-  const formatDuration = (duration: number) => {
+  const formatDuration = (duration: number): string => {
     const minutes = Math.floor(duration / 60);
     const seconds = Math.ceil(duration % 60);
     if (minutes === 0) {
@@ -174,20 +149,23 @@ export default function Home() {
     return `${minutes} min, ${seconds} seconds`;
   };
 
-  // Memoize the renderRightActions function to prevent recreation on each render
   const renderRightActions = useCallback((progress: any, dragX: any, meetingId: string, meetingName: string) => {
     const trans = dragX.interpolate({
-      inputRange: [-160, 0], // Width of two 80px buttons
+      inputRange: [-160, 0], 
       outputRange: [0, 160],
       extrapolate: 'clamp',
     });
 
-    // Define handlers inside useCallback to capture meetingId/name
     const handleRenamePress = () => {
       console.log(`Rename pressed for: ${meetingName} (ID: ${meetingId}) - Opening Modal`);
-      setRenamingMeetingDetails({ id: meetingId, name: meetingName }); // Store details for modal
-      setIsRenameModalVisible(true); // Show the modal
-      swipeableRefs.current[meetingId]?.close(); // Close the swipeable row
+      const currentMeeting = meetings.find(m => m.id === meetingId);
+      setEditingMeetingDetails({ 
+        id: meetingId, 
+        name: meetingName, 
+        icon: currentMeeting?.icon ?? '📝' 
+      }); 
+      setIsRenameAndEmojiModalVisible(true); 
+      swipeableRefs.current[meetingId]?.close(); 
     };
 
     const handleDeletePress = () => {
@@ -211,12 +189,11 @@ export default function Home() {
       );
     };
 
-    // Define button styles
     const actionButtonStyle: ViewStyle = {
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
-      width: 80, // Fixed width for each button
-      height: '100%', // Add this back
+      width: 80, 
+      height: '100%', 
     };
 
     return (
@@ -229,10 +206,8 @@ export default function Home() {
           borderRadius: 10,       
           overflow: 'hidden',       
           height: '100%', 
-          // Remove marginVertical: -16
         }}
       >
-        {/* Rename Button */}
         <TouchableOpacity
           onPress={handleRenamePress}
           style={{
@@ -243,7 +218,6 @@ export default function Home() {
           <MaterialIcons name="edit" size={24} color={colors[currentSchemeString].primaryForeground} /> 
         </TouchableOpacity>
 
-        {/* Delete Button */}
         <TouchableOpacity
           onPress={handleDeletePress}
           style={{
@@ -257,7 +231,24 @@ export default function Home() {
     );
   }, [theme, handleDeleteMeeting]);
 
-  const renderMeetingCard = useCallback(({ item }: { item: Meeting }) => {
+  const MeetingCardSkeleton: React.FC<{ style?: StyleProp<ViewStyle> }> = ({ style }) => (
+    <View style={[styles.meetingCardBase, { backgroundColor: theme.card, opacity: 0.7 }, style]}>
+      <View style={{ padding: 16 }}> 
+        <View className="flex-row items-center">
+          <View className="mr-3">
+            <Skeleton colorMode={currentSchemeString} width={36} height={36} radius="round"/> 
+          </View>
+          <View className="flex-1">
+            <Skeleton colorMode={currentSchemeString} width={'80%'} height={22} /> 
+            <Skeleton colorMode={currentSchemeString} width={'50%'} height={16} /> 
+            <Skeleton colorMode={currentSchemeString} width={'60%'} height={16} /> 
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderMeetingCard = useCallback((item: Meeting) => {
     return (
       <Swipeable
         key={item.id}
@@ -268,7 +259,6 @@ export default function Home() {
         }}
         renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item.id, item.name)}
         onSwipeableOpen={() => {
-          // Close any other open swipeables
           Object.keys(swipeableRefs.current).forEach((key) => {
             if (key !== item.id && swipeableRefs.current[key]) {
               swipeableRefs.current[key]?.close();
@@ -276,7 +266,7 @@ export default function Home() {
           });
         }}
         containerStyle={{
-          marginBottom: 11, // Apply margin here instead of on card
+          marginBottom: 11, 
         }}
         childrenContainerStyle={{
           borderRadius: 10, 
@@ -290,11 +280,10 @@ export default function Home() {
             { backgroundColor: colors[currentSchemeString].card } 
           ]}
         >
-          {/* Add inner View for padding */}
           <View style={{ padding: 16 }}> 
             <View className="flex-row items-center">
               <View className="mr-3">
-                <Text className="text-3xl">📝</Text>
+                <Text className="text-3xl">{item.icon ?? '📝'}</Text> 
               </View>
               <View className="flex-1">
                 <Text style={{ color: colors[currentSchemeString].foreground }} className="text-lg font-semibold">
@@ -308,7 +297,7 @@ export default function Home() {
                 </Text>
               </View>
             </View>
-          </View> { /* Close inner padding View */ }
+          </View> 
         </TouchableOpacity>
       </Swipeable>
     );
@@ -348,7 +337,6 @@ export default function Home() {
         return;
       }
 
-      // Navigate to recording screen with meeting ID
       router.push({
         pathname: "/recording",
         params: { meetingId: meetingData.id }
@@ -359,197 +347,112 @@ export default function Home() {
     }
   };
 
-  interface RenameModalProps {
-    isVisible: boolean;
-    // Theme props
-    backgroundColor: string;
-    textColor: string;
-    mutedTextColor: string;
-    borderColor: string;
-    primaryColor: string;
-    initialDetails: { id: string; name: string } | null;
-    onClose: () => void;
-    onSave: (meetingId: string, newName: string) => void;
-  }
-
-  const RenameMeetingModal: React.FC<RenameModalProps> = ({
-    isVisible,
-    initialDetails,
-    onClose,
-    onSave,
-    // Destructure theme props
-    backgroundColor,
-    textColor,
-    mutedTextColor,
-    borderColor,
-    primaryColor,
-  }) => {
-    const [internalNewName, setInternalNewName] = useState('');
-    const modalInputRef = useRef<TextInput>(null); // Ref for the input inside the modal
-
-    // Effect to update internal state when modal opens or details change
-    useEffect(() => {
-      if (isVisible && initialDetails) {
-        setInternalNewName(initialDetails.name);
-      } else {
-        // Reset when modal is closed or details are null
-        setInternalNewName(''); 
-      }
-    }, [isVisible, initialDetails]);
-
-    const handleSavePress = () => {
-      if (initialDetails && internalNewName.trim()) {
-        onSave(initialDetails.id, internalNewName.trim());
-        // onClose will likely be called within the onSave implementation in the parent
-      } else {
-        Alert.alert('Error', 'Meeting name cannot be empty.');
-      }
-    };
-
-    return (
-      <Modal
-        animationIn="slideInUp"
-        animationOut="slideOutDown"
-        isVisible={isVisible}
-        onBackdropPress={onClose} // Use onClose prop
-        onSwipeComplete={onClose}
-        swipeDirection={['down']} // Allow swipe down to close
-        style={styles.modal} // Use style for backdrop/positioning
-        avoidKeyboard // Automatically adjust position for keyboard
-      >
-        {/* Use passed theme props for styling */}
-        <View style={[styles.modalContent, { 
-          backgroundColor: backgroundColor, 
-          marginHorizontal: 24, // Set margin to 24 (16 outer + 8 FlatList)
-          // Removed explicit width and alignSelf
-          // Add shadow styles copied from meetingCardBase
-          shadowOffset: { width: 0, height: 2 }, 
-          shadowRadius: 3, 
-          elevation: 4, 
-          shadowColor: '#000', 
-          shadowOpacity: 0.10, 
-        }]}>
-          <Text style={[styles.modalTitle, { color: textColor }]}>Rename Meeting</Text>
-          <TextInput
-            value={internalNewName} // Use internal state
-            onChangeText={setInternalNewName} // Update internal state
-            placeholder="Enter new meeting name"
-            placeholderTextColor={mutedTextColor}
-            style={[styles.modalInput, { color: textColor, borderColor: borderColor }]}
-            autoFocus // Keep autoFocus
-            ref={modalInputRef} // Assign the ref
-          />
-          <View style={styles.modalButtons}>
-            <Button
-              title="Cancel"
-              onPress={onClose} // Use onClose prop
-              color={mutedTextColor} // Use theme prop
-            />
-            <Button
-              title="Save"
-              onPress={handleSavePress} // Use internal handler
-              color={primaryColor} // Use theme prop
-            />
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* Use standard View and apply top inset manually */}
+      {/* Main screen view */}
       <View style={{ 
         flex: 1, 
-        backgroundColor: colors[currentSchemeString].background, // Apply dynamic background color
-        paddingTop: insets.top // Apply top padding for status bar/notch
+        backgroundColor: colors[currentSchemeString].background, 
       }}>
-        <View style={{ flex: 1, paddingHorizontal: 16 }}> {/* Restore paddingHorizontal */}
-          {/* Header */}
-          <View className="flex-row items-center justify-between py-4">
+        {/* Header Cloud Wrapper */}
+        <View 
+          style={{ 
+            backgroundColor: theme.card, 
+            paddingTop: insets.top, // Add safe area padding HERE for content
+            borderBottomLeftRadius: 24,
+            borderBottomRightRadius: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 3,
+            elevation: 3, // For Android
+          }}
+          // Reduce bottom padding further (pb-4 to pb-2)
+          className="px-4 pb-2 mb-4" 
+        >
+          {/* Logo/Profile Row */}
+          <View className="flex-row items-center justify-between">
             <Image
               source={require("@/assets/summiticon.png")}
               className="w-12 h-12 rounded-xl"
             />
             <Pressable 
               onPress={() => router.push('/profile')} 
-              style={{ marginRight: 10, marginBottom: 5 }} // Add inline style for adjustments
+              style={{ marginRight: 10, marginBottom: 5 }} 
             >
               {({ pressed }: { pressed: boolean }) => (
                 <CircleUserRound
-                  size={30} // Adjust size as needed
+                  size={30} 
                   color={theme.foreground}
-                  style={{ opacity: pressed ? 0.7 : 1 }} // Keep opacity style here
+                  style={{ opacity: pressed ? 0.7 : 1 }} 
                 />
               )}
             </Pressable>
           </View>
 
-          {/* Welcome Section */}
-          <View className="mb-8">
+          {/* Add marginTop to push text down */}
+          <View style={{ marginTop: 16 }}> 
             <H1 style={{ color: theme.foreground }}>Welcome Back{userName ? `, ${userName}` : ''}</H1>
+            <H2 style={{ color: theme.foreground, marginTop: 8, borderBottomWidth: 0 }}>My Meetings</H2>
           </View>
+        </View>
+        {/* End Header Cloud Wrapper */}
 
-          {/* Meetings Section */}
-          <View className="mb-4">
-            <H2 style={{ color: theme.foreground }}>My Meetings</H2>
-          </View>
-
-          {/* Meetings List - Now Scrollable */}
-          {isLoading && !meetings.length ? (
-            <View className="flex-1 justify-center items-center">
-              <ActivityIndicator size="large" color={colors[currentSchemeString].primary} />
-            </View>
+        {/* Content Section below the cloud */}
+        <View style={{ flex: 1, paddingHorizontal: 16 }}> 
+          {isLoading ? ( 
+            <Skeleton.Group show={true}>
+              <MeetingCardSkeleton style={{ marginBottom: 11 }}/> 
+              <MeetingCardSkeleton style={{ marginBottom: 11 }}/>
+              <MeetingCardSkeleton style={{ marginBottom: 11 }}/>
+              <MeetingCardSkeleton /> 
+            </Skeleton.Group>
           ) : (
-            <FlatList
-              data={meetings}
-              renderItem={renderMeetingCard}
-              keyExtractor={(item) => item.id}
-              ListEmptyComponent={() => (
-                <View className="flex-1 justify-center items-center mt-10 px-4">
-                  <Muted>You haven't recorded any meetings yet.</Muted>
-                  <Muted>Tap the record button to start.</Muted>
-                </View>
-              )}
+            <ScrollView
+              className="flex-1" 
+              showsVerticalScrollIndicator={false}
               refreshControl={
-                <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={onRefresh}
-                  tintColor={colors[currentSchemeString].primary} // Style refresh indicator
-                />
+                <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors[currentSchemeString].primary} />
               }
-              contentContainerStyle={{ paddingBottom: 100 }} // Removed paddingHorizontal: 8
-            />
+            >
+              <View className="mt-2">
+                {meetings.map((item) => renderMeetingCard(item))}
+              </View>
+            </ScrollView>
           )}
         </View>
       </View>
-      <RenameMeetingModal 
-        isVisible={isRenameModalVisible} 
-        // Pass theme colors from parent
+      <RenameAndEmojiModal
+        isVisible={isRenameAndEmojiModalVisible}
+        onClose={() => {
+          setIsRenameAndEmojiModalVisible(false);
+          setEditingMeetingDetails(null); 
+        }}
+        onSave={handleModalSave}
+        initialDetails={editingMeetingDetails}
         backgroundColor={theme.card}
         textColor={theme.foreground}
         mutedTextColor={theme.mutedForeground}
         borderColor={theme.border}
-        primaryColor={theme.primary}
-        // Pass other props
-        initialDetails={renamingMeetingDetails} 
-        onClose={() => setIsRenameModalVisible(false)} 
-        onSave={handleModalSave} // Use the new optimistic handler
+        secondaryColor={theme.secondary} 
+        inputBackgroundColor={theme.input} 
+        primaryColor={theme.primary} 
+        primaryForeground={theme.primaryForeground} 
+        card={theme.card}
+        border={theme.border}
       />
-     </GestureHandlerRootView>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   meetingCardBase: {
-    // padding: 16, // REMOVED
     borderRadius: 10,
-    // marginBottom: 11, // REMOVED
     shadowOffset: { width: 0, height: 2 }, 
     shadowRadius: 3, 
     elevation: 4, 
     shadowColor: '#000', 
-    shadowOpacity: 0.10, 
+    shadowOpacity: 0.15, 
   },
   modal: {
     justifyContent: 'center',
@@ -557,11 +460,9 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     borderRadius: 10,
-    padding: 16, // Changed from 20 to 16 to match card's original padding
-    alignItems: 'stretch', // Changed from 'center' to allow input/buttons to stretch
-    marginHorizontal: 24, // Set margin to 24 (16 outer + 8 FlatList)
-    // Removed explicit width and alignSelf
-    // Add shadow styles copied from meetingCardBase
+    padding: 16, 
+    alignItems: 'stretch', 
+    marginHorizontal: 24, 
     shadowOffset: { width: 0, height: 2 }, 
     shadowRadius: 3, 
     elevation: 4, 
@@ -575,15 +476,37 @@ const styles = StyleSheet.create({
   },
   modalInput: {
     borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 20,
-    width: '100%',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 16,
   },
   modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
+    justifyContent: 'flex-end', 
+    marginTop: 10,
+  },
+  inputRow: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  emojiButton: { 
+    width: 40,
+    height: 40,
+    borderRadius: 20, 
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    backgroundColor: colors['light'].secondary, 
+    borderWidth: 1, 
+    borderColor: colors['light'].border, 
+  },
+  emojiButtonDark: { 
+    backgroundColor: colors['dark'].secondary,
+    borderColor: colors['dark'].border,
+  },
+  emojiButtonText: { 
+    fontSize: 24,
   },
 });

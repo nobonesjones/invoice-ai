@@ -9,6 +9,7 @@ export interface Meeting {
   audio_url?: string;
   transcript_url?: string;
   summary?: string;
+  icon?: string;
 }
 
 export interface Objective {
