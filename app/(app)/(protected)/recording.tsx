@@ -36,6 +36,7 @@ export default function RecordingScreen() {
   const { generateMinutes, isGenerating, error: minutesError } = useMinutesGeneration(); 
 
   const {
+    audioLevel, // Destructure audioLevel
     startRecording,
     stopRecording,
     isRecording: isAudioHookRecording, 
@@ -408,7 +409,7 @@ export default function RecordingScreen() {
     },
     timerContainer: {
       alignItems: 'center',
-      marginBottom: 40, 
+      marginBottom: 30, 
     },
     timerText: {
       fontSize: 18,
@@ -485,6 +486,27 @@ export default function RecordingScreen() {
       fontWeight: 'bold',
       marginTop: 10,
     },
+    visualizerContainer: { // Container for the visualizer bar
+      marginTop: 20,
+      height: 60, // Fixed height for the container
+      width: '50%', // Take up some width
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    visualizerBase: { // The background/base of the bar
+      height: '100%',
+      width: 15, // Fixed width for the bar
+      backgroundColor: themeColors.border, // Use theme border color
+      borderRadius: 8,
+      overflow: 'hidden', // Clip the level indicator
+      justifyContent: 'flex-end', // Make the level grow from bottom
+    },
+    visualizerLevel: { // The actual level indicator
+      width: '100%',
+      borderRadius: 8, // Match base rounding
+      // backgroundColor is set dynamically
+      // height is set dynamically
+    },
   });
 
   // --- Render ---
@@ -518,9 +540,25 @@ export default function RecordingScreen() {
             {/* Recording Timer and Status */} 
             <View style={styles.timerContainer}>
               <Text style={styles.timerText}>
-                {isRecording ? 'Recording...' : 'Ready to Record'}
+                {isRecording ? 'Recording...' : hasPermission ? 'Ready to Record' : ''}
               </Text>
               <Text style={styles.timer}>{formatTime(recordingTime)}</Text> 
+              {/* Audio Level Visualizer */} 
+              {isRecording && (
+                <View style={styles.visualizerContainer}>
+                  <View style={styles.visualizerBase}>
+                    <View 
+                      style={[
+                        styles.visualizerLevel, 
+                        { 
+                          height: `${10 + audioLevel * 90}%`, // Height from 10% to 100%
+                          backgroundColor: themeColors.primary // Use theme color
+                        }
+                      ]} 
+                    />
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Recording Controls */} 

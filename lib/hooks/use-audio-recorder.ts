@@ -2,15 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Audio, 
   InterruptionModeIOS, 
-  InterruptionModeAndroid,
+  InterruptionModeAndroid
 } from 'expo-av';
 import { supabase } from '@/config/supabase';
 import * as FileSystem from 'expo-file-system';
 import { Platform, AppState } from 'react-native';
 
 // Define constants for audio configuration
-const INTERRUPTION_MODE_IOS_DO_NOT_MIX = 1;
-const INTERRUPTION_MODE_ANDROID_DO_NOT_MIX = 1;
+const INTERRUPTION_MODE_IOS_DO_NOT_MIX = InterruptionModeIOS.DoNotMix;
+const INTERRUPTION_MODE_ANDROID_DO_NOT_MIX = InterruptionModeAndroid.DoNotMix;
+const METERING_UPDATE_INTERVAL = 100; // ms - How often to update audio level
+const MIN_DBFS = -60; // dBFS value to treat as minimum (maps to 0.0)
+const MAX_DBFS = 0;   // dBFS value to treat as maximum (maps to 1.0)
 
 interface UseAudioRecorderProps {
   meetingId?: string;
@@ -33,10 +36,12 @@ export function useAudioRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0); // Normalized 0-1
   
   // Refs for stable values across re-renders
   const meetingIdRef = useRef<string | undefined>(meetingId);
   const recordingRef = useRef<null | Audio.Recording>(null);
+  const meteringIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const appState = useRef(AppState.currentState);
   
   // Update refs when props change
@@ -76,6 +81,13 @@ export function useAudioRecorder({
   const cleanup = async () => {
     try {
       console.log('Running cleanup...');
+      
+      // Clear metering interval
+      if (meteringIntervalRef.current) {
+        clearInterval(meteringIntervalRef.current);
+        meteringIntervalRef.current = null;
+      }
+      setAudioLevel(0);
       
       // Clean up recording if it exists
       if (recordingRef.current) {
@@ -167,8 +179,39 @@ export function useAudioRecorder({
       setRecording(recording);
       recordingRef.current = recording;
       setIsRecording(true);
+      setAudioLevel(0); // Reset level on new recording start
       
       console.log('Recording started successfully');
+      
+      // Start metering interval
+      if (meteringIntervalRef.current) clearInterval(meteringIntervalRef.current);
+      meteringIntervalRef.current = setInterval(async () => {
+        if (recordingRef.current) {
+          try {
+            const status = await recordingRef.current.getStatusAsync();
+            if (status.isRecording && status.metering !== undefined) {
+              // Normalize the dBFS value
+              const normalizedLevel = Math.max(
+                0,
+                Math.min(1, (status.metering - MIN_DBFS) / (MAX_DBFS - MIN_DBFS))
+              );
+              setAudioLevel(normalizedLevel); 
+            } else if (!status.isRecording) {
+                // If status says not recording, stop the interval
+                if (meteringIntervalRef.current) clearInterval(meteringIntervalRef.current);
+                meteringIntervalRef.current = null;
+                setAudioLevel(0);
+            }
+          } catch (statusError) {
+            console.error('Error getting recording status for metering:', statusError);
+            // Stop interval on error to prevent spamming
+            if (meteringIntervalRef.current) clearInterval(meteringIntervalRef.current);
+            meteringIntervalRef.current = null;
+            setAudioLevel(0);
+          }
+        }
+      }, METERING_UPDATE_INTERVAL);
+      
       return true;
     } catch (err) {
       const errorMsg = `Failed to start recording: ${err instanceof Error ? err.message : String(err)}`;
@@ -186,6 +229,13 @@ export function useAudioRecorder({
     let finalUri: string | null = null; // Initialize URI
 
     try {
+      // Stop metering interval
+      if (meteringIntervalRef.current) {
+        clearInterval(meteringIntervalRef.current);
+        meteringIntervalRef.current = null;
+      }
+      setAudioLevel(0); // Reset level on stop
+
       if (!recordingRef.current) {
         const errorMsg = 'No active recording to stop';
         console.error(errorMsg);
@@ -220,7 +270,7 @@ export function useAudioRecorder({
       
       // Clear recording state
       setRecording(null);
-      setIsRecording(false);
+      setIsRecording(false); // Ensure isRecording is false after stop
       
       // Store current recording reference before clearing
       const currentRecording = recordingRef.current;
@@ -420,6 +470,7 @@ export function useAudioRecorder({
     isRecording,
     isUploading,
     recording,
+    audioLevel, // Expose audio level
     startRecording,
     stopRecording,
     error
