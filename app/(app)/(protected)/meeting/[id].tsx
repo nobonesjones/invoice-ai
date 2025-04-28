@@ -1,7 +1,8 @@
 import { View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Play, Pause, RefreshCw } from 'lucide-react-native';
+import { ChevronLeft, Play, Pause, RefreshCw, MoreHorizontal } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
+import { Share } from 'react-native'; // Import Share API
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/config/supabase';
 import { Audio, AVPlaybackStatus } from 'expo-av';
@@ -11,6 +12,7 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { ActionItemsList } from '@/components/ActionItemsList';
 import { ChatInterface } from '@/components/ChatInterface';
+import { ShareMeetingModal } from '@/components/modals/ShareMeetingModal'; // Import the new modal
 import { useTheme } from '@/context/theme-provider'; // Import useTheme
 
 interface Meeting {
@@ -73,6 +75,9 @@ export default function MeetingView() {
 
   // Ref to track if playback should resume after seeking
   const wasPlayingBeforeSeek = useRef(false);
+
+  // State for share modal visibility
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -797,6 +802,65 @@ export default function MeetingView() {
     );
   }
 
+  // --- Share Modal Handlers ---
+  const openShareModal = () => setIsShareModalVisible(true);
+  const closeShareModal = () => setIsShareModalVisible(false);
+
+  // Placeholder share handlers (implement logic next)
+  const handleShareMinutes = async () => {
+    if (!meeting?.minutes_text) {
+      console.warn('No minutes text available to share.');
+      // Optionally show an alert to the user
+      return;
+    }
+    try {
+      await Share.share({
+        message: `Meeting Minutes: ${meeting.name}\n\n${meeting.minutes_text}`,
+        title: `Minutes for ${meeting.name}` // Optional: for email subject etc.
+      });
+    } catch (error) {
+      console.error('Error sharing minutes:', error);
+      // Optionally show an alert to the user
+    }
+    closeShareModal();
+  };
+  const handleShareTranscript = async () => {
+    if (!meeting?.transcript) {
+      console.warn('No transcript available to share.');
+      return;
+    }
+    try {
+      await Share.share({
+        message: `Meeting Transcript: ${meeting.name}\n\n${meeting.transcript}`,
+        title: `Transcript for ${meeting.name}`
+      });
+    } catch (error) {
+      console.error('Error sharing transcript:', error);
+    }
+    closeShareModal();
+  };
+  const handleShareAudio = async () => {
+    if (!meeting?.audio_url) {
+      console.warn('No audio URL available to share.');
+      return;
+    }
+    // Basic check if it looks like a URL
+    if (!meeting.audio_url.startsWith('http')) {
+      console.warn('Invalid audio URL format:', meeting.audio_url);
+      return; 
+    }
+    try {
+      await Share.share({
+        message: `Audio recording for meeting: ${meeting.name}\n${meeting.audio_url}`,
+        url: meeting.audio_url, // url is specifically for platforms like iOS
+        title: `Audio for ${meeting.name}`
+      });
+    } catch (error) {
+      console.error('Error sharing audio URL:', error);
+    }
+    closeShareModal();
+  };
+
   return (
     <View style={{ backgroundColor: theme.background }} className="flex-1">
       {/* Header with Gradient Background */}
@@ -810,7 +874,7 @@ export default function MeetingView() {
           shadowOpacity: 0.15,
           shadowRadius: 12,
           elevation: 6,
-          paddingTop: 57,
+          paddingTop: 60, // Increased padding to accommodate status bar etc.
           paddingBottom: 20,
           marginBottom: 16,
           position: 'relative' // Add relative positioning for absolute children
@@ -833,6 +897,20 @@ export default function MeetingView() {
         <View className="flex-row items-center px-4 mb-3">
           <ChevronLeft size={24} color={theme.primaryForeground} />
         </View>
+
+        {/* Three Dots Menu Button */}
+        <TouchableOpacity
+          onPress={openShareModal} // Open the modal
+          style={{
+            position: 'absolute',
+            top: 60, // Align with back button roughly
+            right: 16,
+            padding: 8, // Add padding for easier tapping
+            zIndex: 10 // Ensure it's above gradient content
+          }}
+        >
+          <MoreHorizontal size={24} color="#FFFFFF" />
+        </TouchableOpacity>
 
         {/* Meeting Info */}
         <View className="px-4">
@@ -948,8 +1026,8 @@ export default function MeetingView() {
         )}
       </View>
 
-      {/* Audio Player (Fixed at bottom) */}
-      {meeting?.audio_url && (
+      {/* Audio Player (Fixed at bottom, hidden on Chat tab) */}
+      {meeting?.audio_url && activeTab !== 'chat' && (
         <View 
           style={{
             borderTopColor: theme.border,
@@ -990,6 +1068,16 @@ export default function MeetingView() {
           <View style={styles.buttonContainer} />
         </View>
       )}
+      
+      {/* Share Modal */}
+      <ShareMeetingModal 
+        isVisible={isShareModalVisible}
+        onClose={closeShareModal}
+        onShareMinutes={handleShareMinutes}
+        onShareTranscript={handleShareTranscript}
+        onShareAudio={handleShareAudio}
+        hasAudio={!!meeting?.audio_url} // Pass boolean based on audio_url existence
+      />
     </View>
   );
 }

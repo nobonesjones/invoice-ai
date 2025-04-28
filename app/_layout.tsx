@@ -3,6 +3,7 @@ import "../global.css";
 
 import { Slot } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Host } from 'react-native-portalize';
 
 import { SupabaseProvider } from "@/context/supabase-provider";
 import { ThemeProvider, useTheme } from "@/context/theme-provider";
@@ -11,22 +12,23 @@ import { ThemeProvider, useTheme } from "@/context/theme-provider";
 function RootLayoutContent() {
 	const { isLightMode } = useTheme();
 
-	// Log when this component renders and the theme mode
-	console.log(`[_layout RootLayoutContent] Rendering. isLightMode: ${isLightMode}`);
+	// console.log(`[_layout RootLayoutContent] Rendering. isLightMode: ${isLightMode}`);
 
 	return (
-		<GestureHandlerRootView style={{ flex: 1 }} className={!isLightMode ? "dark" : ""}>
-			<Slot />
-		</GestureHandlerRootView>
+		<Slot />
 	);
 }
 
 export default function AppLayout() {
 	return (
-		<SupabaseProvider>
-			<ThemeProvider>
-				<RootLayoutContent />
-			</ThemeProvider>
-		</SupabaseProvider>
+		<GestureHandlerRootView style={{ flex: 1 }}>
+			<Host>
+				<SupabaseProvider>
+					<ThemeProvider>
+						<RootLayoutContent />
+					</ThemeProvider>
+				</SupabaseProvider>
+			</Host>
+		</GestureHandlerRootView>
 	);
 }

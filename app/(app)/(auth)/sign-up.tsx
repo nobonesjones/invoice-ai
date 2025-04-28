@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
-import { useTheme } from "@/context/theme-provider";
 import { colors } from "@/constants/colors";
+import { SafeAreaView } from "@/components/safe-area-view";
 
 const signUpSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
@@ -23,7 +23,6 @@ const signUpSchema = z.object({
 export default function SignUp() {
 	const router = useRouter();
 	const { signUp } = useSupabase();
-	const { theme, isLightMode } = useTheme();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -74,103 +73,110 @@ export default function SignUp() {
 	};
 
 	return (
-		<View style={{ flex: 1, backgroundColor: theme.background }}>
+		<SafeAreaView
+			className="flex-1 p-4"
+			style={{ backgroundColor: colors.light.background }}
+			edges={["bottom"]}
+		>
 			<TouchableOpacity
 				onPress={() => router.back()}
-				className="p-4 absolute top-12 left-4 z-10"
+				className="mb-4"
 			>
 				<Text>
-					<ChevronLeft size={24} color={theme.foreground} />
+					<ChevronLeft size={24} color={colors.light.foreground} />
 				</Text>
 			</TouchableOpacity>
+
 			<View className="flex-1 gap-4 web:m-4">
-				<H1 className="self-start" style={{ color: theme.foreground }}>Sign Up - Test Change</H1>
-				<Muted className="self-start" style={{ color: theme.mutedForeground }}>
-					Saving the world from admin, one meeting at a time.
-				</Muted>
+				<View className="w-full">
+					<H1 className="self-start mb-4" style={{ color: colors.light.foreground }}>Sign Up</H1>
+					<Muted className="self-start mb-2.5" style={{ color: colors.light.mutedForeground }}>
+						Saving the world from admin, one meeting at a time.
+					</Muted>
 
-				{generalError ? (
-					<View className="bg-red-500/10 p-3 rounded-lg">
-						<Text className="text-red-500">{generalError}</Text>
+					{generalError ? (
+						<View className="bg-red-500/10 p-3 rounded-lg">
+							<Text className="text-red-500">{generalError}</Text>
+						</View>
+					) : null}
+
+					<View className="gap-4">
+						<View>
+							<Text style={{ color: colors.light.foreground }} className="mb-1.5">
+								Email
+							</Text>
+							<Input
+								value={email}
+								onChangeText={setEmail}
+								placeholder="Enter your email"
+								keyboardType="email-address"
+								autoCapitalize="none"
+								style={{ backgroundColor: colors.light.card, color: colors.light.foreground, borderColor: colors.light.border, borderWidth: 1 }}
+								placeholderTextColor={colors.light.mutedForeground}
+							/>
+							{errors.email ? (
+								<Text className="text-red-500 mt-1">{errors.email}</Text>
+							) : null}
+						</View>
+
+						<View>
+							<Text style={{ color: colors.light.foreground }} className="mb-1.5">
+								Password
+							</Text>
+							<Input
+								value={password}
+								onChangeText={setPassword}
+								placeholder="Create a password"
+								secureTextEntry
+								style={{ backgroundColor: colors.light.card, color: colors.light.foreground, borderColor: colors.light.border, borderWidth: 1 }}
+								placeholderTextColor={colors.light.mutedForeground}
+							/>
+							{errors.password ? (
+								<Text className="text-red-500 mt-1">{errors.password}</Text>
+							) : null}
+						</View>
+
+						<View>
+							<Text style={{ color: colors.light.foreground }} className="mb-1.5">
+								Confirm Password
+							</Text>
+							<Input
+								value={confirmPassword}
+								onChangeText={setConfirmPassword}
+								placeholder="Confirm password"
+								secureTextEntry
+								style={{ backgroundColor: colors.light.card, color: colors.light.foreground, borderColor: colors.light.border, borderWidth: 1 }}
+								placeholderTextColor={colors.light.mutedForeground}
+							/>
+							{confirmPasswordError ? (
+								<Text className="text-red-500 mt-1">{confirmPasswordError}</Text>
+							) : null}
+						</View>
 					</View>
-				) : null}
 
-				<View className="gap-4">
-					<View>
-						<Text style={{ color: theme.foreground }} className="mb-1.5">
-							Email
-						</Text>
-						<Input
-							value={email}
-							onChangeText={setEmail}
-							placeholder="Enter your email"
-							keyboardType="email-address"
-							autoCapitalize="none"
-							style={{ backgroundColor: theme.card, color: theme.foreground }}
-							placeholderTextColor={theme.mutedForeground}
-						/>
-						{errors.email ? (
-							<Text className="text-red-500 mt-1">{errors.email}</Text>
-						) : null}
+					<View className="flex-row justify-center mt-4">
+						<Text style={{ color: colors.light.mutedForeground }}>Already have an account? </Text>
+						<Link href="/sign-in" asChild>
+							<TouchableOpacity>
+								<Text style={{ color: colors.light.primary }}>Sign In</Text>
+							</TouchableOpacity>
+						</Link>
 					</View>
-
-					<View>
-						<Text style={{ color: theme.foreground }} className="mb-1.5">
-							Password
-						</Text>
-						<Input
-							value={password}
-							onChangeText={setPassword}
-							placeholder="Create a password"
-							secureTextEntry
-							style={{ backgroundColor: theme.card, color: theme.foreground }}
-							placeholderTextColor={theme.mutedForeground}
-						/>
-						{errors.password ? (
-							<Text className="text-red-500 mt-1">{errors.password}</Text>
-						) : null}
-					</View>
-
-					<View>
-						<Text style={{ color: theme.foreground }} className="mb-1.5">
-							Confirm Password
-						</Text>
-						<Input
-							value={confirmPassword}
-							onChangeText={setConfirmPassword}
-							placeholder="Confirm password"
-							secureTextEntry
-							style={{ backgroundColor: theme.card, color: theme.foreground }}
-							placeholderTextColor={theme.mutedForeground}
-						/>
-						{confirmPasswordError ? (
-							<Text className="text-red-500 mt-1">{confirmPasswordError}</Text>
-						) : null}
-					</View>
-				</View>
-
-				<Button
-					onPress={handleSignUp}
-					className="mt-4"
-					style={{ backgroundColor: theme.primary }}
-					disabled={isLoading}
-				>
-					{isLoading ? (
-						<ActivityIndicator size="small" color="#fff" />
-					) : (
-						<Text style={{ color: theme.primaryForeground }}>Sign Up</Text>
-					)}
-				</Button>
-
-				<View className="flex-row justify-center mt-4">
-					<Text style={{ color: theme.mutedForeground }}>Already have an account? </Text>
-					<Link href="/sign-in" asChild>
-						<TouchableOpacity>
-							<Text style={{ color: theme.primary }}>Sign In</Text>
-						</TouchableOpacity>
-					</Link>
 				</View>
 			</View>
-		</View>
+
+			<Button
+				onPress={handleSignUp}
+				className="web:m-4"
+				style={{ backgroundColor: colors.light.primary }}
+				disabled={isLoading}
+			>
+				{isLoading ? (
+					<ActivityIndicator size="small" color={colors.light.primaryForeground} />
+				) : (
+					<Text style={{ color: colors.light.primaryForeground }}>Sign Up</Text>
+				)}
+			</Button>
+		</SafeAreaView>
 	);
 }

@@ -16,8 +16,8 @@ export default function AuthLayout() {
 			<Stack.Screen
 				name="sign-up"
 				options={{
-					headerShown: true,
-					headerTitle: "Sign Up",
+					headerShown: true, // Keep header bar space
+					headerTitle: "", // Hide title text
 					headerStyle: {
 						backgroundColor: colors.light.background,
 					},
@@ -30,7 +30,7 @@ export default function AuthLayout() {
 				options={{
 					presentation: "modal",
 					headerShown: true,
-					headerTitle: "Sign In",
+					headerTitle: "", // Hide title text
 					headerStyle: {
 						backgroundColor: colors.light.background,
 					},
