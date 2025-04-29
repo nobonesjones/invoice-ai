@@ -30,9 +30,6 @@ export default function Chat() {
           </TouchableOpacity>
           <View>
             <H1 style={{ color: theme.foreground }}>Chat Assistant</H1>
-            <Text style={{ color: theme.mutedForeground, marginTop: 4 }}>
-              Ask questions about any of your meetings
-            </Text>
           </View>
         </View>
 

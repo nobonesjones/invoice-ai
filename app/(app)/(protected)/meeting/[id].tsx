@@ -1,4 +1,4 @@
-import { View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Play, Pause, RefreshCw, MoreHorizontal } from 'lucide-react-native';
 import React, { useState, useEffect, useRef } from 'react';
@@ -866,8 +866,6 @@ export default function MeetingView() {
       {/* Header with Gradient Background */}
       <LinearGradient
         colors={['#A2C3F7', '#D94DD6', '#FBC1A9']} // Always use light mode gradient
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
         style={{
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 4 },
@@ -877,7 +875,10 @@ export default function MeetingView() {
           paddingTop: 60, // Increased padding to accommodate status bar etc.
           paddingBottom: 20,
           marginBottom: 16,
-          position: 'relative' // Add relative positioning for absolute children
+          position: 'relative', // Add relative positioning for absolute children
+          borderBottomLeftRadius: 24, // Changed to 24
+          borderBottomRightRadius: 24, // Changed to 24
+          borderRadius: 10, // Added for overall rounded corners
         }}
       >
         {/* Large touch area for back button (blue area) */}
@@ -1032,7 +1033,10 @@ export default function MeetingView() {
           style={{
             borderTopColor: theme.border,
             borderTopWidth: 1,
-            backgroundColor: theme.background
+            backgroundColor: theme.background,
+            borderTopLeftRadius: 24, // Changed to 24
+            borderTopRightRadius: 24, // Changed to 24
+            borderRadius: 10, // Added for overall rounded corners
           }}
           className="px-4 py-5 flex-row items-center" 
         >

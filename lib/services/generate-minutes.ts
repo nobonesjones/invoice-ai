@@ -10,7 +10,7 @@ if (GEMINI_API_KEY) {
   try {
     genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     geminiProModel = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash-002',
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -40,80 +40,94 @@ if (GEMINI_API_KEY) {
 
 async function extractAndSaveActionItems(minutes: string, meetingId: string) {
   try {
-    console.log('Starting action items extraction for meeting:', meetingId);
+    console.log('[AI_EXTRACT] Starting action items extraction for meeting:', meetingId);
+    console.log('[AI_EXTRACT] Received Minutes String:\n--- START ---\n', minutes, '\n--- END ---');
 
-    const actionItemsMatch = minutes.match(/(?:Main\s+)?Action\s+Items:?\s*\n([\s\S]*?)(?=\n\n|\n[A-Z]|\s*$)/i);
-    
+    // Update Regex to handle optional ** markdown
+    const actionItemsRegex = /\*{0,2}(?:Main\s+)?Action\s+Items:?\*{0,2}\s*\n([\s\S]*?)(?=\n\n|\n\*{0,2}[A-Z]|\n\s*$)/im;
+    const actionItemsMatch = minutes.match(actionItemsRegex);
+    console.log('[AI_EXTRACT] Regex Match Result:', actionItemsMatch);
+
     if (!actionItemsMatch || !actionItemsMatch[1] || actionItemsMatch[1].trim() === 'None') {
-      console.log('No action items found for meeting:', meetingId);
-      
-      const { error } = await supabase
+      console.log('[AI_EXTRACT] No valid action items section found or section is "None".');
+
+      // Check if a placeholder already exists before attempting to insert
+      const { data: existingPlaceholder, error: checkError } = await supabase
         .from('action_items')
-        .upsert([{
-          meeting_id: meetingId,
-          content: 'No action items identified',
-          completed: false,
-          created_at: new Date().toISOString()
-        }], { onConflict: 'meeting_id,content' })
-        .select();
-        
-      if (error) {
-        console.error('Error creating placeholder action item:', error);
+        .select('id')
+        .eq('meeting_id', meetingId)
+        .eq('content', 'No action items identified')
+        .maybeSingle(); // Use maybeSingle to avoid error if no row exists
+
+      if (checkError) {
+        console.error('[AI_EXTRACT] Error checking for existing placeholder:', checkError);
+        // Decide if you want to proceed or return
       }
-      return;
-    }
 
-    const actionItems = actionItemsMatch[1]
-      .split(/\n/)
-      .map(item => item.trim().replace(/^[•\-\*]\s*/, '')) // Remove bullet points
-      .filter(item => item && item !== 'No action items agreed' && item.length > 3);
-
-    console.log(`Extracted ${actionItems.length} action items:`, actionItems);
-
-    const { error: deleteError } = await supabase
-      .from('action_items')
-      .delete()
-      .eq('meeting_id', meetingId);
-      
-    if (deleteError) {
-      console.error('Error deleting existing action items:', deleteError);
-    }
-
-    if (actionItems.length > 0) {
-      const actionItemsToInsert = actionItems.map(content => ({
-        meeting_id: meetingId,
-        content,
-        completed: false,
-        created_at: new Date().toISOString()
-      }));
-
-      const { data, error } = await supabase
-        .from('action_items')
-        .insert(actionItemsToInsert)
-        .select();
-
-      if (error) {
-        console.error('Error saving action items:', error);
+      if (!existingPlaceholder) {
+        console.log('[AI_EXTRACT] No placeholder found, inserting one.');
+        const { error: placeholderError } = await supabase
+          .from('action_items')
+          .insert([{
+            meeting_id: meetingId,
+            content: 'No action items identified',
+            completed: false,
+            created_at: new Date().toISOString()
+          }]);
+          
+        if (placeholderError) {
+          console.error('[AI_EXTRACT] Error creating placeholder action item:', placeholderError);
+        } else {
+          console.log('[AI_EXTRACT] Placeholder action item inserted.');
+        }
       } else {
-        console.log(`Successfully saved ${actionItemsToInsert.length} action items`);
+        console.log('[AI_EXTRACT] Placeholder already exists.');
       }
+
     } else {
-      const { error } = await supabase
-        .from('action_items')
-        .upsert([{
+      // It found items, now process them
+      const actionItemsContent = actionItemsMatch[1].trim();
+      console.log('[AI_EXTRACT] Extracted Action Items Block:', actionItemsContent);
+
+      const individualItems = actionItemsContent.split('\n')
+        .map(item => item.trim()) // Trim whitespace
+        .filter(item => item.length > 0 && !item.match(/^Action Items:?$/i)) // Filter out empty lines and the heading itself
+        .map(item => item.replace(/^[•*-]\s+/, '').trim()) // Remove leading bullet/hyphen and trim again
+        .filter(item => item.length > 0); // Filter out any items that became empty after cleaning
+
+      console.log('[AI_EXTRACT] Split and Cleaned Individual Items:', individualItems);
+
+      if (individualItems.length > 0) {
+        const actionItemsToInsert = individualItems.map(item => ({
           meeting_id: meetingId,
-          content: 'No action items identified',
+          content: item, // Already cleaned
           completed: false,
           created_at: new Date().toISOString()
-        }], { onConflict: 'meeting_id,content' })
-        .select();
-        
-      if (error) {
-        console.error('Error creating placeholder action item:', error);
+        }));
+
+        console.log('[AI_EXTRACT] Items prepared for upsert:', JSON.stringify(actionItemsToInsert, null, 2));
+
+        // Upsert the items
+        const { data: upsertData, error: upsertError } = await supabase
+          .from('action_items')
+          .upsert(actionItemsToInsert, { 
+            onConflict: 'meeting_id,content', // Prevent duplicate content for the same meeting
+            ignoreDuplicates: true // Changed from false to true - may not be needed with onConflict
+          })
+          .select(); // Select to see what was upserted/updated
+          
+        if (upsertError) {
+          console.error('[AI_EXTRACT] Error upserting action items:', upsertError);
+        } else {
+          console.log(`[AI_EXTRACT] Successfully upserted ${upsertData?.length || 0} action items. Result:`, upsertData);
+        }
+      } else {
+        console.log('[AI_EXTRACT] After splitting and cleaning, no individual action items remained.');
+        // Optionally insert the 'No action items identified' placeholder here too if needed
       }
     }
   } catch (error) {
-    console.error('Error extracting action items:', error);
+    console.error('[AI_EXTRACT] Unexpected error in extractAndSaveActionItems:', error);
   }
 }
 
@@ -194,7 +208,7 @@ ${truncatedTranscript}
 OUTPUT FORMAT:
 
 **Meeting Summary:**
-[A single paragraph, 2-3 sentences long, summarizing key discussion points. NO bullet points.]
+[Write a SINGLE paragraph summarizing the key discussion points. This summary must be 2-3 concise sentences maximum. DO NOT use bullet points or numbered lists in the summary; it must be formatted as plain paragraph text.]
 
 **Meeting Minutes:**
 [Bulleted list using '-' or '*'. Each bullet point represents a distinct topic, decision, or key piece of information.]

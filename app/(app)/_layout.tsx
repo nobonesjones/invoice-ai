@@ -1,4 +1,10 @@
 import { Stack } from "expo-router";
+import * as Haptics from 'expo-haptics'; // Import Haptics
+
+// Function to trigger haptic feedback
+const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+};
 
 import { colors } from "@/constants/colors";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -17,7 +23,11 @@ export default function AppLayout() {
 				name="(protected)" 
 				options={{
 					gestureEnabled: true,
-					gestureDirection: "horizontal"
+					gestureDirection: "horizontal",
+					tabBarOnPress: (e) => {
+						// Trigger haptic before default behavior
+						triggerHaptic();
+					},
 				}}
 			/>
 			<Stack.Screen name="welcome" />

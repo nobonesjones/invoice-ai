@@ -61,19 +61,9 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
           throw new Error('Failed to load meetings context');
         }
         
-        // Load chat history
-        const history = await chatService.current.loadChatHistory();
-        
-        // Convert stored messages to the Message format
-        const formattedMessages = history.map(msg => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.created_at),
-          error: msg.error
-        }));
-        
-        setMessages(formattedMessages);
+        // Ensure messages state starts empty
+        setMessages([]);
+
       } catch (error) {
         console.error('Error initializing global chat:', error);
         Alert.alert(
@@ -336,19 +326,17 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
         </TouchableWithoutFeedback>
       </View>
 
-      {/* Input container that sits at the bottom or above keyboard */}
+      {/* Input container */}
       <View 
         style={{ 
           borderTopColor: colors.light.border,
           backgroundColor: colors.light.background,
           borderTopWidth: 1,
           paddingBottom: 0,
-          // Position at bottom or above keyboard
           position: 'absolute',
-          bottom: isKeyboardVisible ? keyboardHeight : 0,
+          bottom: isKeyboardVisible ? keyboardHeight - 34 : 0,
           left: 0,
           right: 0,
-          // Add shadow for visual separation
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.1,
@@ -357,22 +345,22 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
           zIndex: 10
         }} 
       >
-        <View className="px-4 py-2">
+        <View className="px-4 py-1">
           <View className="flex-row items-center space-x-2">
             <TextInput
               ref={inputRef}
               style={{ 
                 flex: 1, 
-                backgroundColor: 'transparent', 
+                backgroundColor: 'transparent',
                 borderColor: colors.light.border,
                 borderWidth: 1,
                 borderRadius: 24,
                 paddingHorizontal: 16,
-                paddingVertical: 12,
+                paddingVertical: 8, 
                 color: colors.light.foreground,
                 maxHeight: 100
               }}
-              placeholder="Ask about your meetings..."
+              placeholder="Ask about your last meetings..."
               placeholderTextColor={colors.light.mutedForeground}
               value={inputMessage}
               onChangeText={setInputMessage}

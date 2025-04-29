@@ -10,12 +10,14 @@ import { CircleUserRound } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Skeleton } from 'moti/skeleton';
 import { useColorScheme } from 'react-native'; 
+import * as Haptics from 'expo-haptics'; // Import Haptics
 
 import { Image } from "@/components/image";
 import { H1, H2, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { RenameAndEmojiModal } from '@/components/modals/RenameAndEmojiModal'; 
+import { Text as CustomText } from '@/components/ui/text';
 
 export default function Home() {
   const router = useRouter();
@@ -377,7 +379,10 @@ export default function Home() {
               className="w-12 h-12 rounded-xl"
             />
             <Pressable 
-              onPress={() => router.push('/profile')} 
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); // Add haptic feedback
+                router.push('/profile');
+              }} 
               style={{ marginRight: 10, marginBottom: 5 }} 
             >
               {({ pressed }: { pressed: boolean }) => (
@@ -407,6 +412,15 @@ export default function Home() {
               <MeetingCardSkeleton style={{ marginBottom: 11 }}/>
               <MeetingCardSkeleton /> 
             </Skeleton.Group>
+          ) : meetings.length === 0 ? (
+            <View className="flex-1 justify-center items-center px-6">
+              <CustomText style={{ color: theme.mutedForeground }} className="text-lg text-center mb-2">
+                Ready when you are.
+              </CustomText>
+              <CustomText style={{ color: theme.mutedForeground }} className="text-lg text-center">
+                Click below to record your next meeting.
+              </CustomText>
+            </View>
           ) : (
             <ScrollView
               className="flex-1" 

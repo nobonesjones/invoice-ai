@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: 'transparent', // Inherit from parent View/Card
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
   },
   label: {
     marginLeft: 16,
-    fontSize: 16,
+    fontSize: 14,
   },
   rightContainer: {
     marginLeft: 8,

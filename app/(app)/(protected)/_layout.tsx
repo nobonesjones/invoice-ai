@@ -1,6 +1,6 @@
 import { Tabs, Link } from "expo-router";
 import React from "react";
-import { View, Text, TouchableOpacity, Pressable } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { CircleUserRound } from 'lucide-react-native'; // Import CircleUserRound
@@ -9,6 +9,12 @@ import { useTheme } from "@/context/theme-provider"; // Import custom hook
 import { supabase } from "@/config/supabase";
 import { useSupabase } from "@/context/supabase-provider";
 import { Alert } from "react-native";
+import * as Haptics from 'expo-haptics'; // Import Haptics
+
+// Function to trigger haptic feedback
+const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+};
 
 export default function ProtectedLayout() {
   // Use light mode for protected screens
@@ -96,13 +102,16 @@ export default function ProtectedLayout() {
             justifyContent: 'space-between' 
           }}>
             {/* Action Items Button */}
-            <TouchableOpacity 
+            <Pressable 
               style={{ 
                 flex: 1, 
                 justifyContent: 'center', 
                 alignItems: 'center'
               }}
-              onPress={() => props.navigation.navigate('action-items')}
+              onPress={() => {
+                props.navigation.navigate('action-items');
+                triggerHaptic();
+              }}
             >
               <Text style={{ 
                 // Set color based on whether 'action-items' is the active route
@@ -112,13 +121,13 @@ export default function ProtectedLayout() {
               }}>
                 Action Items
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             
             {/* Placeholder View to maintain spacing for the absolute positioned button */}
             <View style={{ width: 68 }} /> // Changed from 80 to 68
             
             {/* New Placeholder Button (Bigger, Overlapping) */}
-            <TouchableOpacity 
+            <Pressable 
               style={{ 
                 // Re-apply absolute positioning for overlap
                 position: 'absolute',
@@ -137,20 +146,26 @@ export default function ProtectedLayout() {
                 shadowOpacity: 0.2,
                 shadowRadius: 2,
               }}
-              onPress={handleCreateMeeting} // Use the correct handler
+              onPress={() => {
+                triggerHaptic(); // Add haptic feedback here
+                handleCreateMeeting(); // Use the correct handler
+              }}
             >
               {/* Placeholder Icon/Text - Replace with actual icon later */}
               <Text style={{ color: colors[currentSchemeString].secondaryForeground, fontSize: 34, fontWeight: 'bold' }}>+</Text> // Reduced font size (40 * 0.85)
-            </TouchableOpacity>
+            </Pressable>
             
             {/* Chat Button */}
-            <TouchableOpacity 
+            <Pressable 
               style={{ 
                 flex: 1, 
                 justifyContent: 'center', 
                 alignItems: 'center'
               }}
-              onPress={() => props.navigation.navigate('chat')}
+              onPress={() => {
+                props.navigation.navigate('chat');
+                triggerHaptic();
+              }}
             >
               <Text style={{ 
                 // Set color based on whether 'chat' is the active route
@@ -160,7 +175,7 @@ export default function ProtectedLayout() {
               }}>
                 Chat
               </Text>
-            </TouchableOpacity>
+            </Pressable>
 
           </View>
         );
@@ -172,12 +187,22 @@ export default function ProtectedLayout() {
           title: "Meetings",
           tabBarLabel: () => null,
         }}
+        listeners={{
+          tabPress: (e) => {
+            triggerHaptic();
+          },
+        }}
       />
       <Tabs.Screen 
         name="action-items" 
         options={{
           title: "Action Items",
           tabBarLabel: () => null
+        }}
+        listeners={{
+          tabPress: (e) => {
+            triggerHaptic();
+          },
         }}
       />
       <Tabs.Screen 
@@ -220,6 +245,11 @@ export default function ProtectedLayout() {
         options={{
           title: "Chat",
           tabBarLabel: () => null
+        }}
+        listeners={{
+          tabPress: (e) => {
+            triggerHaptic();
+          },
         }}
       />
     </Tabs>
