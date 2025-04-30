@@ -8,6 +8,7 @@ import { useTheme } from '@/context/theme-provider';
 import { useAudioRecorder } from '@/lib/hooks/use-audio-recorder';
 import { useTranscription } from '@/lib/hooks/use-transcription';
 import { useMinutesGeneration } from '@/lib/hooks/use-minutes-generation';
+import ProcessingIndicator, { ProcessingStepKey } from '@/components/ui/ProcessingIndicator';
 
 export default function RecordingScreen() {
   const { session } = useSupabase(); 
@@ -20,7 +21,7 @@ export default function RecordingScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stopInitiated, setStopInitiated] = useState(false); 
-  const [processingStep, setProcessingStep] = useState('');
+  const [processingStep, setProcessingStep] = useState<ProcessingStepKey | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const [hasPermission, setHasPermission] = useState(false); 
@@ -74,53 +75,64 @@ export default function RecordingScreen() {
     console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Attempting graceful stop and process for meeting: ${meetingIdState}`);
     setStopInitiated(true); // Indicate stop process has started
     setIsProcessing(true); // Show processing indicator immediately
-    setProcessingStep('Stopping recording...');
+    // Assume upload happens within stopRecording hook, start visual step at transcribing
+    setProcessingStep('transcribing'); 
 
     try {
       // Call the hook's stopRecording and get the result object
-      const { uri, durationMillis } = await stopRecording(meetingIdState);
-      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] stopRecording hook returned - URI: ${uri}, Duration: ${durationMillis}ms`);
-
-      // Update local state immediately after stopping
-      setIsRecording(false);
-      setRecordingTime(0);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-
+      const result = await stopRecording(meetingIdState);
+      const { uri, durationMillis } = result || {}; // Destructure safely
       if (!uri) {
-        throw new Error('Recording failed: No audio file URI returned.');
+          console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Stop recording failed: No URI returned.`);
+          // Set error message, but keep processing indicator on transcribing briefly before showing error?
+          // Or directly throw to show error?
+          throw new Error('Recording failed: No audio file URI returned.');
       }
+      if (!isActiveRef.current) throw new Error("Component inactive after stopping recording");
 
-      // --- Start Post-Processing --- 
-      setProcessingStep('Processing audio...'); 
-
-      // --- Transcription --- 
-      setProcessingStep('Transcribing audio...');
+      // --- Step 2: Transcription --- 
       console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Starting transcribeAudio. URI: ${uri}, MeetingID: ${meetingIdState}, Duration: ${durationMillis}`);
       // Pass the durationMillis to transcribeAudio
       await transcribeAudio(uri, meetingIdState, durationMillis);
       console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Finished transcribeAudio.`);
+      if (transcriptionError) { // Check for transcription error
+          throw new Error(`Transcription failed: ${transcriptionError}`);
+      }
       if (!isActiveRef.current) throw new Error("Component inactive after transcription");
 
-      // --- Minutes Generation --- 
-      setProcessingStep('Generating minutes & action items...');
+      // Update step before starting generation
+      setProcessingStep('generating');
+
+      // --- Step 3: Generate Minutes --- 
       console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Starting generateMinutes.`);
+      // Call generateMinutes (assuming it uses meetingIdState internally)
       await generateMinutes(meetingIdState);
       console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Finished generateMinutes.`);
+      if (minutesError) { // Check for minutes error - Removed !generatedMinutes check
+          throw new Error(`Minutes generation failed: ${minutesError}`);
+      }
       if (!isActiveRef.current) throw new Error("Component inactive after minutes generation");
 
+      // --- Step 4: Finishing --- 
+      setProcessingStep('finishing');
+
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Processing complete for meeting: ${meetingIdState}`);
+      
       // --- Navigation --- 
-      setProcessingStep('Finalizing...');
+      // Keep step as 'finishing' until navigation is complete
       console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Navigating to meeting page.`);
       router.push(`/(app)/(protected)/meeting/${meetingIdState}?tab=transcript`);
 
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Error during stop/processing:`, error);
       if (isActiveRef.current) {
-        if (error.message.includes("Component inactive")) {
-           console.warn(`[WARN ${new Date().toISOString()}] Post-processing aborted due to component inactivity.`);
-           setErrorMessage('Processing stopped as you navigated away.');
+        // Check if error is an instance of Error before accessing message
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        if (errorMessage.includes("Component inactive")) {
+            console.log("Processing stopped because component became inactive.");
+            // Don't show error to user if navigation already happened
         } else {
-          setErrorMessage(`Processing failed: ${error.message}`);
+            setErrorMessage(`Processing failed: ${errorMessage}`);
         }
       }
     } finally {
@@ -128,7 +140,7 @@ export default function RecordingScreen() {
       if (isActiveRef.current) {
          console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] handleStopRecording: FINALLY block, Setting isProcessing = false.`);
          setIsProcessing(false);
-         setProcessingStep('');
+         setProcessingStep(null);
          setStopInitiated(false); // Reset stop initiation flag
       }
     }
@@ -268,7 +280,7 @@ export default function RecordingScreen() {
 
       // Reset state for a new session
       setIsProcessing(false);
-      setProcessingStep('');
+      setProcessingStep(null);
       setErrorMessage(null);
       setMeetingIdState(undefined); 
       setRecordingTime(0); 
@@ -601,9 +613,8 @@ export default function RecordingScreen() {
       {/* Loading/Processing Overlay - Only show for stop/processing */}
       {(isProcessing || stopInitiated) && (
         <View style={styles.overlay}>
-          {/* Use specific messages based on state */} 
-          {stopInitiated && <Text style={styles.overlayText}>Processing Recording...</Text>} 
-          {/* Add other loading states if needed */} 
+          {/* Replace Text with ProcessingIndicator */} 
+          <ProcessingIndicator currentStep={processingStep} />
         </View>
       )}
     </View>
