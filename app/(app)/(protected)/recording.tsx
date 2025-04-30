@@ -475,13 +475,13 @@ export default function RecordingScreen() {
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.5)', 
+      backgroundColor: '#FFFFFF', 
       justifyContent: 'center',
       alignItems: 'center',
       zIndex: 100, 
     },
     overlayText: {
-      color: themeColors.primaryForeground, 
+      color: themeColors.foreground, 
       fontSize: 18,
       fontWeight: 'bold',
       marginTop: 10,
@@ -522,16 +522,12 @@ export default function RecordingScreen() {
       {/* Main Content */} 
       <View style={styles.contentContainer}>
         
-        {/* Initialization / Loading / Error States */}
-        {isInitializing ? (
-          <Text style={[styles.statusText, { color: themeColors.foreground }]}>Initializing...</Text>
-        ) : !hasPermission ? (
+        {/* Initialization / Loading / Error States - Removed Initializing & Creating Meeting Text */}
+        {!hasPermission ? (
           <View style={{alignItems: 'center'}}>
              <Text style={[styles.statusText, { color: themeColors.destructive, marginBottom: 10 }]}>Audio Permission Required</Text>
              {/* Optionally add a button to re-request permission or guide to settings */} 
           </View>
-        ) : isCreatingMeeting ? (
-          <Text style={[styles.statusText, { color: themeColors.foreground }]}>Preparing new meeting...</Text>
         ) : errorMessage ? (
             <Text style={[styles.errorText, { color: themeColors.destructive }]}>{errorMessage}</Text>
         ) : (
@@ -602,13 +598,11 @@ export default function RecordingScreen() {
         )}
       </View>
 
-      {/* Loading/Processing Overlay */} 
-      {(isInitializing || isCreatingMeeting || isProcessing || stopInitiated) && (
+      {/* Loading/Processing Overlay - Only show for stop/processing */}
+      {(isProcessing || stopInitiated) && (
         <View style={styles.overlay}>
           {/* Use specific messages based on state */} 
           {stopInitiated && <Text style={styles.overlayText}>Processing Recording...</Text>} 
-          {isInitializing && <Text style={styles.overlayText}>Initializing...</Text>} 
-          {isCreatingMeeting && <Text style={styles.overlayText}>Preparing new meeting...</Text>} 
           {/* Add other loading states if needed */} 
         </View>
       )}
