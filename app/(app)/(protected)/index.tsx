@@ -276,7 +276,10 @@ export default function Home() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.push(`/meeting/${item.id}`)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push(`/meeting/${item.id}`)
+          }}
           style={[
             styles.meetingCardBase, 
             { backgroundColor: colors[currentSchemeString].card } 

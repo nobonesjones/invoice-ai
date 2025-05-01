@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, AppState, AppStateStatus, Pressable } from 'react-native'; 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av'; 
+import * as Haptics from 'expo-haptics'; 
 import { supabase } from '@/config/supabase'; 
 import { useSupabase } from '@/context/supabase-provider'; 
 import { useTheme } from '@/context/theme-provider'; 
@@ -30,7 +31,7 @@ export default function RecordingScreen() {
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isActiveRef = useRef(true);
   const isFocusedRef = useRef(true);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null); 
+  const timerIntervalRef = useRef<number | null>(null); 
 
   // --- Custom Hooks (must be defined before callbacks that use them) ---
   const { transcribeAudio, isTranscribing, error: transcriptionError } = useTranscription();
@@ -588,7 +589,14 @@ export default function RecordingScreen() {
                     )
                   ) && styles.disabledButton 
                 ]}
-                onPress={isRecording ? () => handleStopRecording() : handleStartRecording}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (isRecording) {
+                    handleStopRecording();
+                  } else {
+                    handleStartRecording();
+                  }
+                }}
                 disabled={
                   isRecording 
                     ? false // Stop button MUST be enabled when recording

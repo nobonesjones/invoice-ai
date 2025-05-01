@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/config/supabase';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import Slider from '@react-native-community/slider';
+import * as Haptics from 'expo-haptics'; // Import Haptics
 
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -883,7 +884,10 @@ export default function MeetingView() {
       >
         {/* Large touch area for back button (blue area) */}
         <TouchableOpacity 
-          onPress={() => router.back()}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); // Add haptic feedback
+            router.back();
+          }}
           style={{
             position: 'absolute',
             top: 0,
