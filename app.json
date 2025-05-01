@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ExpoSupabaseStarter",
-    "slug": "ExpoSupabaseStarter",
+    "slug": "meetings",
     "scheme": "expo-supabase-starter",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -68,8 +68,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "06b2649b-5bbd-4809-843b-55f98d11f572"
-      }
+        "projectId": "d275f575-073b-4bde-8867-4d9b7387cc36"
+      },
+      "EXPO_PUBLIC_GEMINI_API_KEY": "AIzaSyBn7cZCeZEgKesBsxPD1m74siO5-lnPQtI"
     },
     "owner": "indianabones"
   }
