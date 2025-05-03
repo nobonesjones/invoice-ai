@@ -5,8 +5,8 @@
   "scripts": {
     "start": "expo start",
     "web": "expo start --web",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "lint": "eslint . --fix"
   },
   "dependencies": {
@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-community/slider": "4.5.6",
+    "@react-native-masked-view/masked-view": "^0.3.2",
     "@supabase/supabase-js": "^2.46.1",
     "@tamagui/lucide-icons": "^1.125.26",
     "ajv": "^8.17.1",
@@ -42,6 +43,7 @@
     "react-native": "0.79.1",
     "react-native-emoji-selector": "^0.2.0",
     "react-native-gesture-handler": "~2.24.0",
+    "react-native-linear-gradient": "^2.8.3",
     "react-native-modal": "^14.0.0-rc.1",
     "react-native-modalize": "^2.1.1",
     "react-native-portalize": "^1.0.7",
@@ -62,6 +64,7 @@
     "@types/react": "~18.3.12",
     "@types/react-native": "^0.73.0",
     "assert": "^2.1.0",
+    "babel-plugin-module-resolver": "^5.0.2",
     "browserify-fs": "^1.0.0",
     "browserify-zlib": "^0.2.0",
     "crypto-browserify": "^3.12.1",

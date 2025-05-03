@@ -38,19 +38,32 @@ export default function Home() {
 
   const fetchMeetings = async () => {
     setIsLoading(true);
+    if (!user) {
+      console.error("User not found, cannot fetch meetings.");
+      setIsLoading(false);
+      setMeetings([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('meetings')
-      .select('id, name, duration, created_at, updated_at, status, user_id, audio_url, icon')  
+      .select('id, name, duration, created_at, updated_at, status, user_id, audio_url, icon')
+      .eq('user_id', user.id)
       .eq('is_deleted', false)
-      .not('audio_url', 'is', null)  
+      .not('audio_url', 'is', null)
       .order('created_at', { ascending: false });
 
     if (error) {
-      throw error;
+      console.error("Error fetching meetings:", error);
+      // Consider showing an error message to the user
+      setMeetings([]); // Clear meetings on error
+      // Optionally throw the error if you want to handle it higher up
+      // throw error;
+    } else {
+      console.log('Fetched meetings for user:', user.id, data);
+      setMeetings(data || []);
     }
 
-    console.log('Fetched meetings:', data);
-    setMeetings(data || []);
     setIsLoading(false);
   };
 

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ExpoSupabaseStarter",
+    "name": "Easy Minutes",
     "slug": "meetings",
     "scheme": "expo-supabase-starter",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/summiticon.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
@@ -41,7 +41,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png"
+        "backgroundColor": "#ffffff"
       },
       "permissions": [
         "RECORD_AUDIO",

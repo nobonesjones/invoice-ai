@@ -76,110 +76,11 @@ export default function ProtectedLayout() {
         tabBarActiveTintColor: colors[currentSchemeString].primary, // Use correct string key
         tabBarInactiveTintColor: colors[currentSchemeString].mutedForeground // Use correct string key
       }}
-      tabBar={props => {
-        // Only show the tab bar on the home screen (index)
-        const currentRoute = props.state.routes[props.state.index];
-        if (currentRoute.name !== 'index') {
-          return null;
-        }
-        
-        // Calculate the increased height (35% more)
-        const originalHeight = 60;
-        const increasedHeight = originalHeight + 20 + 1;
-        
-        // Get the name of the currently active route
-        const activeRouteName = props.state.routes[props.state.index].name;
-
-        return (
-          <View style={{ 
-            flexDirection: 'row', 
-            backgroundColor: colors[currentSchemeString].background, // Changed from .secondary to .background
-            height: increasedHeight, 
-            borderTopWidth: 1,
-            borderTopColor: 'rgba(0, 0, 0, 0.1)', // Consider adjusting border for dark mode
-            paddingHorizontal: 20,
-            alignItems: 'center', 
-            justifyContent: 'space-between' 
-          }}>
-            {/* Action Items Button */}
-            <Pressable 
-              style={{ 
-                flex: 1, 
-                justifyContent: 'center', 
-                alignItems: 'center'
-              }}
-              onPress={() => {
-                props.navigation.navigate('action-items');
-                triggerHaptic();
-              }}
-            >
-              <Text style={{ 
-                // Set color based on whether 'action-items' is the active route
-                color: activeRouteName === 'action-items' ? colors[currentSchemeString].primary : colors[currentSchemeString].mutedForeground, 
-                fontSize: 16, 
-                fontWeight: '500'
-              }}>
-                Action Items
-              </Text>
-            </Pressable>
-            
-            {/* Placeholder View to maintain spacing for the absolute positioned button */}
-            <View style={{ width: 68 }} /> // Changed from 80 to 68
-            
-            {/* New Placeholder Button (Bigger, Overlapping) */}
-            <Pressable 
-              style={{ 
-                // Re-apply absolute positioning for overlap
-                position: 'absolute',
-                bottom: 30, // Adjust for desired overlap
-                left: '50%',
-                transform: [{ translateX: -14 }], // Set value to -14 as requested
-                width: 68, // Reduced size (80 * 0.85)
-                height: 68, // Reduced size (80 * 0.85)
-                borderRadius: 34, // Adjusted border radius (68 / 2)
-                backgroundColor: colors[currentSchemeString].card, // Changed from .background to .card
-                justifyContent: 'center',
-                alignItems: 'center',
-                elevation: 4,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.2,
-                shadowRadius: 2,
-              }}
-              onPress={() => {
-                triggerHaptic(); // Add haptic feedback here
-                handleCreateMeeting(); // Use the correct handler
-              }}
-            >
-              {/* Placeholder Icon/Text - Replace with actual icon later */}
-              <Text style={{ color: colors[currentSchemeString].secondaryForeground, fontSize: 34, fontWeight: 'bold' }}>+</Text> // Reduced font size (40 * 0.85)
-            </Pressable>
-            
-            {/* Chat Button */}
-            <Pressable 
-              style={{ 
-                flex: 1, 
-                justifyContent: 'center', 
-                alignItems: 'center'
-              }}
-              onPress={() => {
-                props.navigation.navigate('chat');
-                triggerHaptic();
-              }}
-            >
-              <Text style={{ 
-                // Set color based on whether 'chat' is the active route
-                color: activeRouteName === 'chat' ? colors[currentSchemeString].primary : colors[currentSchemeString].mutedForeground, 
-                fontSize: 16, 
-                fontWeight: '500'
-              }}>
-                Chat
-              </Text>
-            </Pressable>
-
-          </View>
-        );
-      }}
+      tabBar={() => (
+        <View style={{ height: 60, backgroundColor: colors[currentSchemeString].background, borderTopWidth: 1, borderTopColor: colors[currentSchemeString].border, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: colors[currentSchemeString].foreground }}>Temporary Tab Bar</Text>
+        </View>
+      )}
     >
       <Tabs.Screen 
         name="index" 
