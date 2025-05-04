@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator, useColorScheme as useDeviceColorScheme } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { z } from "zod";
@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
-import { colors } from "@/constants/colors";
 import { SafeAreaView } from "@/components/safe-area-view";
 
 const signUpSchema = z.object({
@@ -30,6 +29,9 @@ export default function SignUp() {
 	const [generalError, setGeneralError] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [confirmPasswordError, setConfirmPasswordError] = useState("");
+
+	const deviceColorScheme = useDeviceColorScheme() ?? 'light';
+	const isDeviceLightMode = deviceColorScheme === 'light';
 
 	const validateForm = () => {
 		try {
@@ -74,35 +76,34 @@ export default function SignUp() {
 
 	return (
 		<SafeAreaView
-			className="flex-1 p-4"
-			style={{ backgroundColor: colors.light.background }}
+			className={`flex-1 p-4 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}
 			edges={["bottom"]}
 		>
 			<TouchableOpacity
 				onPress={() => router.back()}
 				className="mb-4"
 			>
-				<Text>
-					<ChevronLeft size={24} color={colors.light.foreground} />
+				<Text className="text-foreground">
+					<ChevronLeft size={24} className="text-foreground" />
 				</Text>
 			</TouchableOpacity>
 
 			<View className="flex-1 gap-4 web:m-4">
 				<View className="w-full">
-					<H1 className="self-start mb-4" style={{ color: colors.light.foreground }}>Sign Up</H1>
-					<Muted className="self-start mb-2.5" style={{ color: colors.light.mutedForeground }}>
+					<H1 className="self-start mb-4 text-foreground">Sign Up</H1>
+					<Muted className="self-start mb-2.5 text-muted-foreground">
 						Saving the world from admin, one meeting at a time.
 					</Muted>
 
 					{generalError ? (
-						<View className="bg-red-500/10 p-3 rounded-lg">
-							<Text className="text-red-500">{generalError}</Text>
+						<View className="bg-destructive/10 p-3 rounded-lg">
+							<Text className="text-destructive">{generalError}</Text>
 						</View>
 					) : null}
 
 					<View className="gap-4">
 						<View>
-							<Text style={{ color: colors.light.foreground }} className="mb-1.5">
+							<Text className="mb-1.5 text-foreground">
 								Email
 							</Text>
 							<Input
@@ -111,16 +112,15 @@ export default function SignUp() {
 								placeholder="Enter your email"
 								keyboardType="email-address"
 								autoCapitalize="none"
-								style={{ backgroundColor: colors.light.card, color: colors.light.foreground, borderColor: colors.light.border, borderWidth: 1 }}
-								placeholderTextColor={colors.light.mutedForeground}
+								className="bg-card border border-border text-foreground p-2.5 placeholder:text-muted-foreground"
 							/>
 							{errors.email ? (
-								<Text className="text-red-500 mt-1">{errors.email}</Text>
+								<Text className="text-destructive mt-1">{errors.email}</Text>
 							) : null}
 						</View>
 
 						<View>
-							<Text style={{ color: colors.light.foreground }} className="mb-1.5">
+							<Text className="mb-1.5 text-foreground">
 								Password
 							</Text>
 							<Input
@@ -128,16 +128,15 @@ export default function SignUp() {
 								onChangeText={setPassword}
 								placeholder="Create a password"
 								secureTextEntry
-								style={{ backgroundColor: colors.light.card, color: colors.light.foreground, borderColor: colors.light.border, borderWidth: 1 }}
-								placeholderTextColor={colors.light.mutedForeground}
+								className="bg-card border border-border text-foreground p-2.5 placeholder:text-muted-foreground"
 							/>
 							{errors.password ? (
-								<Text className="text-red-500 mt-1">{errors.password}</Text>
+								<Text className="text-destructive mt-1">{errors.password}</Text>
 							) : null}
 						</View>
 
 						<View>
-							<Text style={{ color: colors.light.foreground }} className="mb-1.5">
+							<Text className="mb-1.5 text-foreground">
 								Confirm Password
 							</Text>
 							<Input
@@ -145,20 +144,19 @@ export default function SignUp() {
 								onChangeText={setConfirmPassword}
 								placeholder="Confirm password"
 								secureTextEntry
-								style={{ backgroundColor: colors.light.card, color: colors.light.foreground, borderColor: colors.light.border, borderWidth: 1 }}
-								placeholderTextColor={colors.light.mutedForeground}
+								className="bg-card border border-border text-foreground p-2.5 placeholder:text-muted-foreground"
 							/>
 							{confirmPasswordError ? (
-								<Text className="text-red-500 mt-1">{confirmPasswordError}</Text>
+								<Text className="text-destructive mt-1">{confirmPasswordError}</Text>
 							) : null}
 						</View>
 					</View>
 
 					<View className="flex-row justify-center mt-4">
-						<Text style={{ color: colors.light.mutedForeground }}>Already have an account? </Text>
+						<Text className="text-muted-foreground">Already have an account? </Text>
 						<Link href="/sign-in" asChild>
 							<TouchableOpacity>
-								<Text style={{ color: colors.light.primary }}>Sign In</Text>
+								<Text className="text-primary">Sign In</Text>
 							</TouchableOpacity>
 						</Link>
 					</View>
@@ -167,14 +165,13 @@ export default function SignUp() {
 
 			<Button
 				onPress={handleSignUp}
-				className="web:m-4"
-				style={{ backgroundColor: colors.light.primary }}
+				className="web:m-4 bg-primary dark:bg-white"
 				disabled={isLoading}
 			>
 				{isLoading ? (
-					<ActivityIndicator size="small" color={colors.light.primaryForeground} />
+					<ActivityIndicator size="small" className="text-primary-foreground dark:text-black" />
 				) : (
-					<Text style={{ color: colors.light.primaryForeground }}>Sign Up</Text>
+					<Text className="text-primary-foreground dark:text-black">Sign Up</Text>
 				)}
 			</Button>
 		</SafeAreaView>

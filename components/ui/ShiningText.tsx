@@ -24,19 +24,20 @@ const ShiningText: React.FC<ShiningTextProps> = ({ text, className, style }) => 
           duration: 1500,
           useNativeDriver: true,
         }),
-        Animated.delay(1000)
+        Animated.delay(2000)
       ])
     ).start();
   }, [animatedValue]);
 
   const translateX = animatedValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [-200, 200],
+    outputRange: [-500, 500], // Increased range for full traversal
   });
 
+  // Tweak dark mode gradient further
   const gradientColors = colorScheme === 'dark'
-    ? ['#ffffff', '#aaaaaa', '#ffffff'] as const
-    : ['#000000', '#555555', '#000000'] as const;
+    ? ['#FFFFFF', '#555555', '#FFFFFF'] as const // Dark Mode: White -> Dark Gray -> White (darker shine)
+    : ['#000000', '#FFFFFF', '#000000'] as const; // Light Mode: Black -> Bright White -> Black
 
   const textStyle = StyleSheet.flatten([styles.baseText, style]);
 

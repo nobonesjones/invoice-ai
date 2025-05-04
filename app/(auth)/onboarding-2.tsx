@@ -1,18 +1,16 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, SafeAreaView, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, useColorScheme as useDeviceColorScheme, Image, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useTheme } from '@/context/theme-provider';
-import { colors } from '../../constants/colors';
-import { StepIndicator } from '@/components/ui/step-indicator'; 
-import { Button } from '@/components/ui/button'; 
-import ShiningText from '@/components/ui/ShiningText'; 
+import { Button } from '@/components/ui/button';
+import { StepIndicator } from '@/components/ui/step-indicator';
+import ShiningText from '@/components/ui/ShiningText';
 import * as Haptics from 'expo-haptics';
+import { colors } from '../../constants/colors';
 
 export default function OnboardingScreen2() {
   const router = useRouter();
-  const { theme } = useTheme();
-  const currentSchemeString = theme === 'light' ? 'light' : 'dark';
-  const themeColors = colors[currentSchemeString];
+  const deviceColorScheme = useDeviceColorScheme() ?? 'light';
+  const isDeviceLightMode = deviceColorScheme === 'light';
 
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -35,16 +33,18 @@ export default function OnboardingScreen2() {
 
   const handleNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Navigate to the onboarding-3 screen
     router.push('/onboarding-3');
   };
 
+  const imageSource = isDeviceLightMode
+    ? require('../../assets/2light.png')
+    : require('../../assets/2dark.png');
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <SafeAreaView className={`flex-1 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}>
       <View style={styles.container}>
         <StepIndicator currentStep={2} totalSteps={3} />
 
-        {/* Image Placeholder Box */}
         <View
           style={styles.box}
         >
@@ -56,27 +56,27 @@ export default function OnboardingScreen2() {
             }}
           >
             <Image
-              source={require('../../assets/2light.png')}
+              source={imageSource}
               className="w-full h-full"
               resizeMode="contain"
             />
           </Animated.View>
         </View>
 
-        {/* Text Content */}
         <View style={styles.textContainer}>
           <ShiningText
             text="Save Hours Every Week"
             className="text-3xl font-bold text-center text-foreground mb-4"
           />
-          <Text style={[styles.description, { color: theme.mutedForeground }]}>Leave the notes to AI, focus on having great meetings.</Text>
+          <Text style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>Leave the notes to AI, focus on having great meetings.</Text>
         </View>
 
-        {/* Spacer */}
         <View style={styles.spacer} />
 
-        {/* Button */}
-        <Button onPress={handleNext} className="w-full">
+        <Button 
+          onPress={handleNext} 
+          className="w-full dark:bg-white dark:text-primary"
+        >
           Continue
         </Button>
       </View>
@@ -84,7 +84,6 @@ export default function OnboardingScreen2() {
   );
 }
 
-// Reuse styles from OnboardingScreen1, potentially extract to a common file later
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -100,24 +99,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 10,
-    width: '100%', // Ensure indicators span width
-    position: 'absolute', // Position at the top
-    top: 10, // Adjust as needed from safe area edge
+    width: '100%', 
+    position: 'absolute', 
+    top: 10, 
   },
   stepIndicator: {
     height: 8,
     width: 60,
     borderRadius: 4,
-    // backgroundColor: '#E0E0E0', // Removed static color
     marginHorizontal: 5,
   },
   stepIndicatorActive: {
-    // backgroundColor: '#007AFF', // Removed static color
   },
   box: {
     width: '80%',
-    aspectRatio: 1, // Square placeholder
-    // backgroundColor: '#EEEEEE', // Removed static color
+    aspectRatio: 1, 
     borderRadius: 10,
     alignSelf: 'center',
     marginBottom: 20,
@@ -141,15 +137,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   spacer: {
-    flex: 1, // Pushes button to the bottom
+    flex: 1, 
   },
   button: {
     paddingVertical: 15,
     paddingHorizontal: 30,
-    borderRadius: 25, // Rounded corners
+    borderRadius: 25, 
     width: '90%',
     alignItems: 'center',
-    marginBottom: 20, // Space from bottom edge
+    marginBottom: 20, 
   },
   buttonText: {
     fontSize: 18,

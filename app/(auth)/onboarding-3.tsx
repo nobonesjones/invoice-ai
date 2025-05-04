@@ -1,14 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, Image, Animated } from 'react-native';
-import { router } from 'expo-router';
+import { View, Text, StyleSheet, SafeAreaView, useColorScheme as useDeviceColorScheme, Image, Animated } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Button } from '@/components/ui/button';
 import { StepIndicator } from '@/components/ui/step-indicator';
-import { useTheme } from '@/context/theme-provider';
 import ShiningText from '@/components/ui/ShiningText';
 import * as Haptics from 'expo-haptics';
+import { colors } from '@/constants/colors';
 
 export default function OnboardingScreen3() {
-  const { theme } = useTheme();
+  const router = useRouter();
+  const deviceColorScheme = useDeviceColorScheme() ?? 'light';
+  const isDeviceLightMode = deviceColorScheme === 'light';
+
   const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -30,11 +33,15 @@ export default function OnboardingScreen3() {
 
   const handleNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/(app)/welcome'); 
+    router.replace('/(app)/welcome'); 
   };
 
+  const imageSource = isDeviceLightMode
+    ? require('../../assets/3light.png')
+    : require('../../assets/3dark.png');
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <SafeAreaView className={`flex-1 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}>
       <View style={styles.container}>
         <StepIndicator currentStep={3} totalSteps={3} />
 
@@ -49,7 +56,7 @@ export default function OnboardingScreen3() {
             }}
           >
             <Image
-              source={require('../../assets/3light.png')}
+              source={imageSource}
               className="w-full h-full"
               resizeMode="contain"
             />
@@ -61,13 +68,13 @@ export default function OnboardingScreen3() {
             text="Share Everything Instantly"
             className="text-3xl font-bold text-center text-foreground mb-4"
           />
-          <Text className="text-lg text-center text-muted-foreground mb-8">
+          <Text style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>
             Replay audio, read transcripts and share minutes with one tap.
           </Text>
         </View>
 
         {/* Action Button */}
-        <Button onPress={handleNext} className="w-full h-12">
+        <Button onPress={handleNext} className="w-full dark:bg-white dark:text-primary">
           Sign Up
         </Button>
       </View>
@@ -96,10 +103,8 @@ const styles = StyleSheet.create({
     padding: 10,
     marginTop: 30,
   },
-  textContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 30,
-    marginTop: 60,
+  description: {
+    textAlign: 'center',
+    fontSize: 18,
   },
 });

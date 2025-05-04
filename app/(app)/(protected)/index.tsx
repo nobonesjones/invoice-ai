@@ -75,14 +75,18 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('Home screen focused, fetching meetings...');
-      fetchMeetings();
+      console.log('Home screen focused, checking user...');
+      // Only fetch if user is available
+      if (user) {
+        console.log('User found, fetching meetings...');
+        fetchMeetings();
+      }
       
       return () => {
         setIsRenameAndEmojiModalVisible(false);
         setEditingMeetingDetails(null);
       };
-    }, [])
+    }, [user])
   );
 
   useEffect(() => {

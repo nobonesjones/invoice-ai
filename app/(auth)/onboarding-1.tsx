@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, SafeAreaView, useColorScheme, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, SafeAreaView, useColorScheme as useDeviceColorScheme, Image, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { Button } from '@/components/ui/button';
@@ -7,10 +7,13 @@ import { StepIndicator } from '@/components/ui/step-indicator';
 import ShiningText from '@/components/ui/ShiningText';
 import { P } from '@/components/ui/typography';
 import * as Haptics from 'expo-haptics';
+import { colors } from '@/constants/colors';
 
 export default function OnboardingScreen1() {
   const router = useRouter();
-  const { theme } = useTheme();
+  const deviceColorScheme = useDeviceColorScheme() ?? 'light';
+  const isDeviceLightMode = deviceColorScheme === 'light';
+
   const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -35,8 +38,12 @@ export default function OnboardingScreen1() {
     router.push('/onboarding-2');
   };
 
+  const imageSource = isDeviceLightMode
+    ? require('../../assets/1light.png')
+    : require('../../assets/1dark.png');
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <SafeAreaView className={`flex-1 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}>
       <View style={styles.container}>
         <StepIndicator currentStep={1} totalSteps={3} />
 
@@ -52,7 +59,7 @@ export default function OnboardingScreen1() {
             }}
           >
             <Image
-              source={require('../../assets/1light.png')}
+              source={imageSource}
               className="w-full h-full"
               resizeMode="contain"
             />
@@ -65,14 +72,17 @@ export default function OnboardingScreen1() {
             text="Easily Record Meetings"
             className="text-3xl font-bold text-center text-foreground mb-4"
           />
-          <P style={[styles.description, { color: theme.mutedForeground }]}>Get crystal clear summaries, minutes and action items in seconds.</P>
+          <P style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>Get crystal clear summaries, minutes and action items in seconds.</P>
         </View>
 
         {/* Spacer */}
         <View style={styles.spacer} />
 
         {/* Button */}
-        <Button onPress={handleNext} className="w-full">
+        <Button 
+          onPress={handleNext} 
+          className="w-full dark:bg-white dark:text-primary"
+        >
           Get Started
         </Button>
       </View>

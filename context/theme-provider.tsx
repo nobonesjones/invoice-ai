@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, ReactNode } from
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '@/constants/colors'; // Ensure colors are imported
+import { useSupabase } from './supabase-provider'; // Import Supabase context hook
 
 // Define the shape of the theme context
 interface ThemeContextType {
@@ -33,33 +34,55 @@ interface ThemeProviderProps {
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   console.log('[ThemeProvider] Rendering...'); // Log on every render
   const systemColorScheme = useColorScheme(); // 'light' or 'dark'
+  const { user, session, isLoading: isAuthLoading } = useSupabase(); // Get auth state
+
+  // Initialize state based on system first, useEffect will refine
   const [themePreference, setThemePreferenceState] = useState<'light' | 'dark' | 'system'>('system');
   const [isLightMode, setIsLightMode] = useState(systemColorScheme === 'light');
 
   useEffect(() => {
+    // Wait for authentication status to be determined
+    if (isAuthLoading) {
+      console.log('[ThemeProvider Load] Waiting for auth state...');
+      return;
+    }
+
     const loadThemePreference = async () => {
-      try {
-        const storedPreference = await AsyncStorage.getItem('themePreference');
-        console.log('[ThemeProvider Load] AsyncStorage value:', storedPreference);
-        const initialPreference = (storedPreference === 'light' || storedPreference === 'dark' || storedPreference === 'system') ? storedPreference : 'system';
-        setThemePreferenceState(initialPreference);
-        console.log('[ThemeProvider Load] Setting initialPreference state:', initialPreference);
+      if (!user || !session) {
+        // Not logged in: Use system preference
+        console.log('[ThemeProvider Load] User not logged in. Using system theme.');
+        const systemIsLight = systemColorScheme === 'light';
+        setIsLightMode(systemIsLight);
+        setThemePreferenceState('system'); 
+      } else {
+        // Logged in: Try loading saved preference
+        console.log('[ThemeProvider Load] User logged in. Loading saved preference...');
+        try {
+          const storedPreference = await AsyncStorage.getItem('themePreference');
+          console.log('[ThemeProvider Load] AsyncStorage value:', storedPreference);
+          const initialPreference = (storedPreference === 'light' || storedPreference === 'dark' || storedPreference === 'system') ? storedPreference : 'system';
+          setThemePreferenceState(initialPreference);
+          console.log('[ThemeProvider Load] Setting initialPreference state:', initialPreference);
 
-        let lightMode;
-        if (initialPreference === 'system') {
-          lightMode = systemColorScheme === 'light';
-        } else {
-          lightMode = initialPreference === 'light';
+          let lightMode;
+          if (initialPreference === 'system') {
+            lightMode = systemColorScheme === 'light';
+          } else {
+            lightMode = initialPreference === 'light';
+          }
+          setIsLightMode(lightMode);
+          console.log('[ThemeProvider Load] Setting initial isLightMode state:', lightMode);
+
+        } catch (error) {
+          console.error('[ThemeProvider Load] Failed to load theme preference:', error);
+          // Fallback to system theme on error
+          setIsLightMode(systemColorScheme === 'light');
+          setThemePreferenceState('system');
         }
-        setIsLightMode(lightMode);
-        console.log('[ThemeProvider Load] Setting initial isLightMode state:', lightMode);
-
-      } catch (error) {
-        console.error('[ThemeProvider Load] Failed to load theme preference:', error);
       }
     };
     loadThemePreference();
-  }, [systemColorScheme]); // Re-run if system scheme changes
+  }, [systemColorScheme, user, session, isAuthLoading]); // Re-run if system scheme or auth state changes
 
   const setThemePreference = async (preference: 'light' | 'dark' | 'system') => {
     console.log('[ThemeProvider] setThemePreference called with:', preference);
