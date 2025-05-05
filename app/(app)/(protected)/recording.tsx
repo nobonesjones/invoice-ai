@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, AppState, AppStateStatus, Pressable } from 'react-native'; 
+import { View, Text, StyleSheet, TouchableOpacity, Alert, AppState, AppStateStatus, Pressable, SafeAreaView } from 'react-native'; 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av'; 
 import * as Haptics from 'expo-haptics'; 
@@ -18,7 +18,6 @@ export default function RecordingScreen() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [meetingIdState, setMeetingIdState] = useState<string | undefined>(undefined); 
   const [isInitializing, setIsInitializing] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stopInitiated, setStopInitiated] = useState(false); 
@@ -38,10 +37,13 @@ export default function RecordingScreen() {
   const { generateMinutes, isGenerating, error: minutesError } = useMinutesGeneration(); 
 
   const {
-    audioLevel, // Destructure audioLevel
+    audioLevel, 
     startRecording,
     stopRecording,
-    isRecording: isAudioHookRecording, 
+    isRecording, 
+    isPaused, 
+    pauseRecording, 
+    resumeRecording, 
     isUploading: isAudioHookUploading, 
     error: audioError,
   } = useAudioRecorder({
@@ -64,7 +66,6 @@ export default function RecordingScreen() {
       }
       try {
         await stopRecording(meetingIdState ?? 'unknown'); // Call stopRecording even if discarding or no ID to unload audio
-        setIsRecording(false); // Manually update state if needed
         setRecordingTime(0);
       } catch (stopErr) {
         console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Error during simple stop/discard:`, stopErr);
@@ -80,55 +81,64 @@ export default function RecordingScreen() {
     setProcessingStep('transcribing'); 
 
     try {
-      // Call the hook's stopRecording and get the result object
-      const result = await stopRecording(meetingIdState);
-      const { uri, durationMillis } = result || {}; // Destructure safely
-      if (!uri) {
-          console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Stop recording failed: No URI returned.`);
-          // Set error message, but keep processing indicator on transcribing briefly before showing error?
-          // Or directly throw to show error?
-          throw new Error('Recording failed: No audio file URI returned.');
-      }
-      if (!isActiveRef.current) throw new Error("Component inactive after stopping recording");
-
-      // --- Step 2: Transcription --- 
-      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Starting transcribeAudio. URI: ${uri}, MeetingID: ${meetingIdState}, Duration: ${durationMillis}`);
-      // Pass the durationMillis to transcribeAudio
-      await transcribeAudio(uri, meetingIdState, durationMillis);
-      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Finished transcribeAudio.`);
-      if (transcriptionError) { // Check for transcription error
-          throw new Error(`Transcription failed: ${transcriptionError}`);
-      }
-      if (!isActiveRef.current) throw new Error("Component inactive after transcription");
-
-      // Update step before starting generation
-      setProcessingStep('generating');
-
-      // --- Step 3: Generate Minutes --- 
-      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Starting generateMinutes.`);
-      // Call generateMinutes (assuming it uses meetingIdState internally)
-      await generateMinutes(meetingIdState);
-      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Finished generateMinutes.`);
-      if (minutesError) { // Check for minutes error - Removed !generatedMinutes check
-          throw new Error(`Minutes generation failed: ${minutesError}`);
-      }
-      if (!isActiveRef.current) throw new Error("Component inactive after minutes generation");
-
-      // --- Step 4: Finishing --- 
-      setProcessingStep('finishing');
-
-      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Processing complete for meeting: ${meetingIdState}`);
+      const stopResult = await stopRecording(meetingIdState); 
       
-      // --- Navigation --- 
-      // Keep step as 'finishing' until navigation is complete
-      console.log(`[LOG ${new Date().toISOString()}] handleStopRecording: Navigating to meeting page.`);
-      router.push(`/(app)/(protected)/meeting/${meetingIdState}?tab=transcript`);
+      if (!stopResult?.uri) {
+        throw new Error('Recording URI is missing after stopping.');
+      }
+      const audioUri = stopResult.uri;
+      const durationMillis = stopResult.durationMillis;
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Recording stopped. URI: ${audioUri}, Duration: ${durationMillis}ms`);
 
-    } catch (error) {
-      console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Error during stop/processing:`, error);
+      // --- Transcription --- 
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Starting transcription for meeting: ${meetingIdState}`);
+      // Pass durationMillis argument, function returns void
+      await transcribeAudio(audioUri, meetingIdState, durationMillis);
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Transcription complete for meeting: ${meetingIdState}`);
+      // HAPTIC 1: Transcription complete
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Use correct key 'generating'
+      setProcessingStep('generating'); // Update UI
+
+      // --- Minutes Generation --- 
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Starting minutes generation for meeting: ${meetingIdState}`);
+      // Pass only meetingIdState, function returns void
+      await generateMinutes(meetingIdState);
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Minutes generation complete for meeting: ${meetingIdState}`);
+      // HAPTIC 2: Minutes generation complete
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Use correct key 'finishing'
+      setProcessingStep('finishing'); // Update UI
+      
+      // --- Final Update --- 
+      // The services handle storing transcript/minutes and duration.
+      // Just update status to completed here.
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Performing final status update for meeting: ${meetingIdState}`);
+      const { error: updateError } = await supabase
+        .from('meetings')
+        .update({ 
+          status: 'completed', // Mark as completed
+          updated_at: new Date().toISOString()
+          // minutes_text: minutesText, // Incorrect - handled by service
+          // duration: Math.round(durationMillis / 1000) // Incorrect - handled by transcribe service
+        })
+        .eq('id', meetingIdState);
+
+      if (updateError) {
+        throw new Error(`Database update error: ${updateError.message}`);
+      }
+      console.log(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Final update successful for meeting: ${meetingIdState}`);
+      // HAPTIC 3: Finishing touches complete
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Navigate to the meeting details page
+      router.replace(`/(app)/(protected)/meeting/${meetingIdState}`);
+      
+    } catch (err: any) {
+      console.error(`[LOG RECORDING SCREEN ${new Date().toISOString()}] Error during stop/processing:`, err);
       if (isActiveRef.current) {
         // Check if error is an instance of Error before accessing message
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
         if (errorMessage.includes("Component inactive")) {
             console.log("Processing stopped because component became inactive.");
             // Don't show error to user if navigation already happened
@@ -163,10 +173,6 @@ export default function RecordingScreen() {
 
   // Update local recording state based on hook
   useEffect(() => {
-    setIsRecording(isAudioHookRecording);
-  }, [isAudioHookRecording]);
-
-  useEffect(() => {
     setIsUploading(isAudioHookUploading);
   }, [isAudioHookUploading]);
 
@@ -180,29 +186,27 @@ export default function RecordingScreen() {
 
   // --- Timer Logic ---
   useEffect(() => {
-    if (isRecording) {
-      const startTime = Date.now();
-      timerIntervalRef.current = setInterval(() => {
+    let interval: number | null = null;
+    // Only run the timer if recording is active and not paused
+    if (isRecording && !isPaused) {
+      interval = setInterval(() => {
         if (isActiveRef.current) { 
-          setRecordingTime((Date.now() - startTime) / 1000);
+          setRecordingTime((prevTime) => prevTime + 1);
         }
-      }, 100); 
+      }, 1000);
     } else {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
+      // Clear interval if not recording or paused
+      if (interval) {
+        clearInterval(interval);
       }
-      // Don't reset recordingTime here, keep the final time until next recording starts
     }
-    
-    // Cleanup interval on unmount or when recording stops
+    // Cleanup function to clear interval when component unmounts or dependencies change
     return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
+      if (interval) {
+        clearInterval(interval);
       }
     };
-  }, [isRecording]);
+  }, [isRecording, isPaused]);
 
   // --- Helper Functions ---
 
@@ -285,8 +289,6 @@ export default function RecordingScreen() {
       setErrorMessage(null);
       setMeetingIdState(undefined); 
       setRecordingTime(0); 
-      setIsRecording(false);
-      setStopInitiated(false);
       setIsInitializing(true); 
 
       const setup = async () => {
@@ -401,11 +403,21 @@ export default function RecordingScreen() {
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
+      padding: 20,
+    },
+    processingContainer: {
+      flex: 1, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+    },
+    processingInnerContainer: {
+      width: '100%', 
+      alignItems: 'center', 
+      paddingHorizontal: 20, 
     },
     header: {
       width: '100%',
       height: 60, 
-      // Add other styling like background color if desired
     },
     backButton: {
       position: 'absolute',
@@ -432,7 +444,7 @@ export default function RecordingScreen() {
     timer: {
       fontSize: 48, 
       fontWeight: 'bold',
-      fontVariant: ['tabular-nums'], // Ensures monospace digit spacing
+      fontVariant: ['tabular-nums'], 
       color: themeColors.foreground,
     },
     controlsContainer: {
@@ -447,7 +459,7 @@ export default function RecordingScreen() {
       borderRadius: 50, 
       justifyContent: 'center',
       alignItems: 'center',
-      marginHorizontal: 20, // Add some space around the main button
+      marginHorizontal: 20, 
     },
     readyButton: {
       backgroundColor: themeColors.primary, 
@@ -467,8 +479,8 @@ export default function RecordingScreen() {
       paddingVertical: 10,
       paddingHorizontal: 15,
       borderRadius: 20,
-      position: 'absolute', // Position it relative to the controls container
-      right: -60, // Adjust as needed to position next to the main button
+      position: 'absolute', 
+      right: -60, 
     },
     discardButtonText: {
       color: themeColors.mutedForeground,
@@ -499,30 +511,60 @@ export default function RecordingScreen() {
       fontWeight: 'bold',
       marginTop: 10,
     },
-    visualizerContainer: { // Container for the visualizer bar
+    visualizerContainer: { 
       marginTop: 20,
-      height: 60, // Fixed height for the container
-      width: '50%', // Take up some width
+      height: 60, 
+      width: '50%', 
       justifyContent: 'center',
       alignItems: 'center',
     },
-    visualizerBase: { // The background/base of the bar
+    visualizerBase: { 
       height: '100%',
-      width: 15, // Fixed width for the bar
-      backgroundColor: themeColors.border, // Use theme border color
+      width: 15, 
+      backgroundColor: themeColors.border, 
       borderRadius: 8,
-      overflow: 'hidden', // Clip the level indicator
-      justifyContent: 'flex-end', // Make the level grow from bottom
+      overflow: 'hidden', 
+      justifyContent: 'flex-end', 
     },
-    visualizerLevel: { // The actual level indicator
+    visualizerLevel: { 
       width: '100%',
-      borderRadius: 8, // Match base rounding
+      borderRadius: 8, 
       // backgroundColor is set dynamically
       // height is set dynamically
+    },
+    controlButton: {
+      paddingVertical: 15,
+      paddingHorizontal: 30,
+      borderRadius: 30,
+      marginHorizontal: 10, 
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    recordingControlsRow: { 
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    pauseButton: {
+      backgroundColor: '#FFA500', 
+    },
+    resumeButton: {
+      backgroundColor: '#32CD32', 
+    },
+    stopButton: {
+      backgroundColor: '#FF4136', 
     },
   });
 
   // --- Render ---
+  if (isProcessing) {
+    return (
+      <SafeAreaView style={[styles.processingContainer, { backgroundColor: themeColors.background }]}>
+        <ProcessingIndicator currentStep={processingStep} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       {/* Header/Back Button */}
@@ -549,19 +591,19 @@ export default function RecordingScreen() {
             {/* Recording Timer and Status */} 
             <View style={styles.timerContainer}>
               <Text style={styles.timerText}>
-                {isRecording ? 'Recording...' : hasPermission ? 'Ready to Record' : ''}
+                {isRecording ? (isPaused ? 'Paused' : 'Recording...') : hasPermission ? 'Ready to Record' : ''}
               </Text>
               <Text style={styles.timer}>{formatTime(recordingTime)}</Text> 
               {/* Audio Level Visualizer */} 
-              {isRecording && (
+              {isRecording && !isPaused && (
                 <View style={styles.visualizerContainer}>
                   <View style={styles.visualizerBase}>
                     <View 
                       style={[
                         styles.visualizerLevel, 
                         { 
-                          height: `${10 + audioLevel * 90}%`, // Height from 10% to 100%
-                          backgroundColor: themeColors.primary // Use theme color
+                          height: `${10 + audioLevel * 90}%`, 
+                          backgroundColor: themeColors.primary 
                         }
                       ]} 
                     />
@@ -572,47 +614,80 @@ export default function RecordingScreen() {
 
             {/* Recording Controls */} 
             <View style={styles.controlsContainer}>
-              {/* Main Record/Stop Button */} 
-              <TouchableOpacity 
-                style={[
-                  styles.recordStopButton, 
-                  isRecording ? styles.recordingButton : styles.readyButton,
-                  (!isRecording && 
-                    (!hasPermission || 
-                     !meetingIdState || 
-                     isInitializing || 
-                     isCreatingMeeting || 
-                     isProcessing || // Local processing state
+              {/* Conditional Rendering based on Recording and Paused State */}
+              {isRecording ? (
+                // Recording is active (either running or paused)
+                <View style={styles.recordingControlsRow}> 
+                  {isPaused ? (
+                    // --- PAUSED STATE --- 
+                    <TouchableOpacity
+                      style={[styles.controlButton, styles.resumeButton]} 
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        resumeRecording();
+                      }}
+                    >
+                      <Text style={styles.buttonText}>Resume</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    // --- ACTIVELY RECORDING STATE --- 
+                    <TouchableOpacity
+                      style={[styles.controlButton, styles.pauseButton]} 
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        pauseRecording();
+                      }}
+                    >
+                      <Text style={styles.buttonText}>Pause</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* STOP BUTTON (Always show when recording/paused) */}
+                   <TouchableOpacity
+                      style={[styles.controlButton, styles.stopButton]} 
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        handleStopRecording();
+                      }}
+                   >
+                     <Text style={styles.buttonText}>Stop</Text>
+                   </TouchableOpacity>
+                </View>
+              ) : (
+                // --- READY/INITIAL STATE --- 
+                <TouchableOpacity
+                  style={[
+                    styles.recordStopButton, 
+                    styles.readyButton, 
+                    // Existing disable logic
+                    (!hasPermission ||
+                     !meetingIdState ||
+                     isInitializing ||
+                     isCreatingMeeting ||
+                     isProcessing ||
                      stopInitiated ||
-                     isTranscribing || // Correct hook state
-                     isGenerating // Correct hook state
-                    )
-                  ) && styles.disabledButton 
-                ]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (isRecording) {
-                    handleStopRecording();
-                  } else {
+                     isTranscribing ||
+                     isGenerating
+                    ) && styles.disabledButton
+                  ]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     handleStartRecording();
+                  }}
+                  disabled={
+                    // Existing disable logic
+                    !hasPermission ||
+                    !meetingIdState ||
+                    isInitializing ||
+                    isCreatingMeeting ||
+                    isProcessing ||
+                    stopInitiated ||
+                    isTranscribing ||
+                    isGenerating
                   }
-                }}
-                disabled={
-                  isRecording 
-                    ? false // Stop button MUST be enabled when recording
-                    : // Record button is disabled if prerequisites not met OR any processing is active
-                      !hasPermission || 
-                      !meetingIdState || 
-                      isInitializing || 
-                      isCreatingMeeting || 
-                      isProcessing || // Local processing state
-                      stopInitiated ||
-                      isTranscribing || // Correct hook state
-                      isGenerating // Correct hook state
-                }
-              >
-                <Text style={styles.buttonText}>{isRecording ? 'Stop' : 'Record'}</Text>
-              </TouchableOpacity>
+                >
+                  <Text style={styles.buttonText}>Record</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}
@@ -620,7 +695,7 @@ export default function RecordingScreen() {
 
       {/* Loading/Processing Overlay - Only show for stop/processing */}
       {(isProcessing || stopInitiated) && (
-        <View style={styles.overlay}>
+        <View style={[styles.overlay, { backgroundColor: themeColors.background }]}>
           {/* Replace Text with ProcessingIndicator */} 
           <ProcessingIndicator currentStep={processingStep} />
         </View>

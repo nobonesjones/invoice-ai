@@ -13,7 +13,7 @@ export function useTranscription(): UseTranscription {
   // Ref to track URIs currently being processed to prevent double calls (e.g., from StrictMode)
   const processingUris = useRef(new Set<string>());
 
-  const transcribeAudio = async (audioUri: string, meetingId: string, duration: number) => {
+  const transcribeAudio = async (audioUri: string, meetingId: string, duration: number): Promise<void> => {
     console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] ENTERING hook's transcribeAudio. URI: ${audioUri}, MeetingID: ${meetingId}, Duration: ${duration}`);
 
     // Guard against double invocation
@@ -29,11 +29,15 @@ export function useTranscription(): UseTranscription {
       setIsTranscribing(true);
       setError(null);
       console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] BEFORE calling transcribeAudioAndStore. URI: ${audioUri}, MeetingID: ${meetingId}, Duration: ${duration}`);
+      // No result capture needed, function returns void
       await transcribeAudioAndStore(audioUri, meetingId, duration);
       console.log(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] AFTER calling transcribeAudioAndStore. URI: ${audioUri}, MeetingID: ${meetingId}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to transcribe audio';
+      // Log the specific error caught from the service function
+      console.error(`[LOG TRANSCRIPTION HOOK ${new Date().toISOString()}] Error received from transcribeAudioAndStore:`, err);
       setError(errorMessage);
+      // Re-throw to allow the caller (recording.tsx) to handle it
       throw err;
     } finally {
       // Remove URI from processing set

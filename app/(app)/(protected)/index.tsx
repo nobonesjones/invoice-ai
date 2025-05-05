@@ -71,7 +71,7 @@ export default function Home() {
     setIsRefreshing(true);
     await fetchMeetings();
     setIsRefreshing(false);
-  }, []);
+  }, [user]); // Added user to dependency array
 
   useFocusEffect(
     useCallback(() => {
@@ -425,7 +425,7 @@ export default function Home() {
 
         {/* Content Section below the cloud */}
         <View style={{ flex: 1, paddingHorizontal: 16 }}> 
-          {isLoading ? ( 
+          {isLoading && !isRefreshing ? ( 
             <Skeleton.Group show={true}>
               <MeetingCardSkeleton style={{ marginBottom: 11 }}/> 
               <MeetingCardSkeleton style={{ marginBottom: 11 }}/>
@@ -434,11 +434,11 @@ export default function Home() {
             </Skeleton.Group>
           ) : meetings.length === 0 ? (
             <View className="flex-1 justify-center items-center px-6">
-              <CustomText style={{ color: theme.mutedForeground }} className="text-lg text-center mb-2">
+              <CustomText style={{ color: theme.mutedForeground }} className="text-xl text-center mb-2"> 
                 Ready when you are.
               </CustomText>
-              <CustomText style={{ color: theme.mutedForeground }} className="text-lg text-center">
-                Click below to record your next meeting.
+              <CustomText style={{ color: theme.mutedForeground }} className="text-xl text-center"> 
+                Click the + button below to record your first meeting.
               </CustomText>
             </View>
           ) : (
@@ -483,10 +483,10 @@ const styles = StyleSheet.create({
   meetingCardBase: {
     borderRadius: 10,
     shadowOffset: { width: 0, height: 2 }, 
-    shadowRadius: 3, 
+    shadowRadius: 6, 
     elevation: 4, 
     shadowColor: '#000', 
-    shadowOpacity: 0.15, 
+    shadowOpacity: 0.30, 
   },
   modal: {
     justifyContent: 'center',

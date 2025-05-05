@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { Send, RefreshCw } from 'lucide-react-native';
 import { ChatService, StoredChatMessage } from '@/lib/services/chat-service';
-import { colors } from '@/constants/colors';
+import { useTheme } from '@/context/theme-provider';
 
 interface Message {
   id: string;
@@ -36,6 +36,7 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceProps) {
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -224,8 +225,8 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
   if (isInitializing) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={colors.light.primary} />
-        <Text style={{ marginTop: 16, color: colors.light.foreground }}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={{ marginTop: 16, color: theme.foreground }}>
           Loading chat history...
         </Text>
       </View>
@@ -233,7 +234,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.light.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <View style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={{ flex: 1 }}>
@@ -246,7 +247,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
             >
               {messages.length === 0 && !isLoading && (
                 <View style={{ padding: 16, alignItems: 'center' }}>
-                  <Text style={{ color: colors.light.mutedForeground, textAlign: 'center' }}>
+                  <Text style={{ color: theme.mutedForeground, textAlign: 'center' }}>
                     Ask questions about your meeting transcript and minutes.
                   </Text>
                 </View>
@@ -262,10 +263,10 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                   <View
                     style={{
                       backgroundColor: message.role === 'user'
-                        ? colors.light.primary
+                        ? theme.primary
                         : message.error
                         ? 'rgba(220, 38, 38, 0.2)'
-                        : colors.light.card,
+                        : theme.card,
                       borderRadius: 16,
                       padding: 12,
                       maxWidth: '80%',
@@ -281,10 +282,10 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                     <Text 
                       style={{ 
                         color: message.role === 'user' 
-                          ? colors.light.primaryForeground 
+                          ? theme.primaryForeground 
                           : message.error 
-                          ? colors.light.destructive 
-                          : colors.light.foreground 
+                          ? theme.destructive 
+                          : theme.foreground 
                       }}
                     >
                       {message.content}
@@ -295,7 +296,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                       style={{ 
                         color: message.role === 'user' 
                           ? 'rgba(255, 255, 255, 0.7)' 
-                          : colors.light.mutedForeground,
+                          : theme.mutedForeground,
                         fontSize: 10,
                         marginTop: 4,
                         textAlign: message.role === 'user' ? 'right' : 'left'
@@ -311,7 +312,7 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                 <View className="items-start mb-4">
                   <View 
                     style={{ 
-                      backgroundColor: colors.light.card,
+                      backgroundColor: theme.card,
                       borderRadius: 16,
                       padding: 16,
                       shadowColor: "#000",
@@ -322,8 +323,8 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <ActivityIndicator color={colors.light.primary} style={{ marginRight: 8 }} />
-                      <Text style={{ color: colors.light.mutedForeground }}>Thinking...</Text>
+                      <ActivityIndicator color={theme.primary} style={{ marginRight: 8 }} />
+                      <Text style={{ color: theme.mutedForeground }}>Thinking...</Text>
                     </View>
                   </View>
                 </View>
@@ -337,8 +338,8 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
       {/* Input container that sits at the bottom or above keyboard */}
       <View 
         style={{ 
-          borderTopColor: colors.light.border,
-          backgroundColor: colors.light.background,
+          borderTopColor: theme.border,
+          backgroundColor: theme.background,
           borderTopWidth: 1,
           // Position at bottom or above keyboard
           position: 'absolute',
@@ -361,16 +362,16 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
               style={{ 
                 flex: 1, 
                 backgroundColor: 'transparent', 
-                borderColor: colors.light.border,
+                borderColor: theme.border,
                 borderWidth: 1,
                 borderRadius: 24,
                 paddingHorizontal: 16,
                 paddingVertical: 12,
-                color: colors.light.foreground,
+                color: theme.foreground,
                 maxHeight: 100
               }}
               placeholder="Ask about your meeting..."
-              placeholderTextColor={colors.light.mutedForeground}
+              placeholderTextColor={theme.mutedForeground}
               value={inputMessage}
               onChangeText={setInputMessage}
               multiline
@@ -385,10 +386,10 @@ export function ChatInterface({ transcript, minutes, meetingId }: ChatInterfaceP
                 padding: 12,
                 borderRadius: 24,
                 opacity: isLoading || !inputMessage.trim() || !chatService.current ? 0.5 : 1,
-                backgroundColor: colors.light.primary
+                backgroundColor: theme.primary
               }}
             >
-              <Send size={20} color={colors.light.primaryForeground} />
+              <Send size={20} color={theme.primaryForeground} />
             </TouchableOpacity>
           </View>
         </View>

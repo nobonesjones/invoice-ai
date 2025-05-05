@@ -1,5 +1,7 @@
 import { useRouter } from "expo-router";
 import { View, StyleSheet, Image, SafeAreaView, Alert, Text } from "react-native";
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 
 import { Button } from '@/components/ui/button';
 import { H1, Muted } from '@/components/ui/typography';
@@ -8,40 +10,97 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/config/supabase'; 
 import { cn } from '@/lib/utils'; 
 
+WebBrowser.maybeCompleteAuthSession();
+
 export default function WelcomeScreen() {
 	const router = useRouter();
 	const { theme } = useTheme();
 
 	const handleContinue = () => {
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-		router.push('/(auth)/login');
+		router.push({ pathname: '/(app)/(auth)/sign-in' });
 	};
 
 	const handleSignUp = () => {
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-		router.push('/(auth)/sign-up'); 
+		router.push({ pathname: '/(app)/(auth)/sign-up' }); 
 	};
 
 	// Function to handle Google Sign-In
 	async function signInWithGoogle() {
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 		try {
+			// Explicitly define the redirect URI using the app's custom scheme
+			const explicitRedirectTo = 'expo-supabase-starter://oauth/callback';
+			console.log('Passing redirectTo to Supabase:', explicitRedirectTo); // Log the URI being passed
+
 			const { data, error } = await supabase.auth.signInWithOAuth({
 				provider: 'google',
 				options: {
+					redirectTo: explicitRedirectTo, // Use the explicitly defined URI
 					// Optional: If you need specific scopes
 					// scopes: 'https://www.googleapis.com/auth/calendar',
 				},
 			});
 
+			// Log the data object regardless of error
+			console.log('Supabase signInWithOAuth data:', JSON.stringify(data, null, 2));
+
 			if (error) {
 				console.error('Google Sign-In Error:', error.message);
 				Alert.alert('Sign In Error', error.message || 'An unexpected error occurred.');
+				return; // Stop execution if there was an error getting the URL
 			}
-			// If successful, Supabase handles the redirect/callback
-			// You might want to add loading state handling here
+
+			// Manually open the auth URL if it exists
+			if (data?.url) {
+				console.log('Attempting to open URL with WebBrowser:', data.url);
+				try {
+					const result = await WebBrowser.openAuthSessionAsync(
+						data.url, 
+						explicitRedirectTo // Use the same redirect URI we told Supabase about
+					);
+					console.log('WebBrowser.openAuthSessionAsync result:', JSON.stringify(result, null, 2));
+
+					// Manually set the session if the login was successful
+					if (result.type === 'success' && result.url) {
+						// Extract tokens from the URL fragment
+						const params = new URLSearchParams(result.url.split('#')[1]);
+						const access_token = params.get('access_token');
+						const refresh_token = params.get('refresh_token');
+
+						if (access_token && refresh_token) {
+							console.log('Attempting to set session manually...');
+							const { error: setError } = await supabase.auth.setSession({
+								access_token,
+								refresh_token,
+							});
+							if (setError) {
+								console.error('Error setting session manually:', setError);
+								Alert.alert('Session Error', 'Could not set user session.');
+							} else {
+								console.log('Session set manually successfully.');
+								// The useEffect in _layout should now detect the session and redirect
+							}
+						} else {
+							console.error('Could not extract tokens from redirect URL');
+							Alert.alert('Sign In Error', 'Could not process authentication response.');
+						}
+					} else if (result.type !== 'cancel') {
+						// Handle other non-cancel results if necessary
+						console.warn('WebBrowser result was not success or cancel:', result);
+					}
+				} catch (webError: any) {
+					console.error('Error opening WebBrowser:', JSON.stringify(webError, null, 2));
+					Alert.alert('Browser Error', webError.message || 'Could not open authentication page.');
+				}
+			} else {
+				console.error('No URL received from Supabase signInWithOAuth');
+				Alert.alert('Sign In Error', 'Could not get authentication URL.');
+			}
 		} catch (catchError: any) {
-			console.error('Caught error during Google Sign-In:', catchError);
+			// Log the entire error object for more details
+			console.error('Caught error during Google Sign-In:', JSON.stringify(catchError, null, 2)); 
 			Alert.alert('Sign In Error', catchError.message || 'An unexpected error occurred.');
 		}
 	}

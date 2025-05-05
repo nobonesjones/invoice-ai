@@ -17,6 +17,7 @@ import {
 import { Send, RefreshCw } from 'lucide-react-native';
 import { GlobalChatService, StoredGlobalChatMessage } from '@/lib/services/global-chat-service';
 import { colors } from '@/constants/colors';
+import { useTheme } from '@/context/theme-provider';
 
 interface Message {
   id: string;
@@ -40,6 +41,8 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const chatService = useRef<GlobalChatService | null>(null);
+  const { theme, isLightMode } = useTheme();
+  const currentSchemeString = isLightMode ? 'light' : 'dark';
 
   // Enable LayoutAnimation for Android
   if (Platform.OS === 'android') {
@@ -216,8 +219,8 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
   if (isInitializing) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={colors.light.primary} />
-        <Text style={{ marginTop: 16, color: colors.light.foreground }}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={{ marginTop: 16, color: theme.mutedForeground }}>
           Loading chat history...
         </Text>
       </View>
@@ -225,21 +228,25 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.light.background }}>
-      <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View style={{ flex: 1, opacity: isInitializing ? 0 : 1 }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: theme.card }}>
             <ScrollView
               ref={scrollViewRef}
-              className="flex-1 px-4"
-              contentContainerStyle={{ paddingTop: 16, paddingBottom: 16 }}
+              style={{ flex: 1 }}
+              contentContainerStyle={{
+                paddingHorizontal: 16,
+                paddingTop: 16,
+                paddingBottom: 80, 
+              }}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
             >
-              {messages.length === 0 && !isLoading && (
+              {messages.length === 0 && (
                 <View style={{ padding: 16, alignItems: 'center' }}>
-                  <Text style={{ color: colors.light.mutedForeground, textAlign: 'center' }}>
-                    Ask questions about any of your meetings or get help with your tasks.
+                  <Text style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                    Ask questions about any of your meetings to get insights on what was discussed.
                   </Text>
                 </View>
               )}
@@ -247,47 +254,46 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
               {messages.map((message) => (
                 <View
                   key={message.id}
-                  className={`mb-4 ${
-                    message.role === 'user' ? 'items-end' : 'items-start'
-                  }`}
+                  style={{
+                    alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
+                    marginBottom: 12,
+                  }}
                 >
                   <View
                     style={{
-                      backgroundColor: message.role === 'user'
-                        ? colors.light.primary
-                        : message.error
-                        ? 'rgba(220, 38, 38, 0.2)'
-                        : colors.light.card,
+                      backgroundColor: message.role === 'user' 
+                        ? theme.primary 
+                        : message.error ? theme.card : theme.card,
                       borderRadius: 16,
                       padding: 12,
                       maxWidth: '80%',
-                      marginLeft: message.role === 'user' ? 'auto' : 0,
-                      marginRight: message.role === 'user' ? 0 : 'auto',
                       shadowColor: "#000",
                       shadowOffset: { width: 0, height: 1 },
                       shadowOpacity: 0.1,
                       shadowRadius: 2,
-                      elevation: 1
+                      elevation: 1,
+                      borderWidth: message.error ? 1 : 0,
+                      borderColor: message.error ? theme.destructive : undefined,
                     }}
                   >
                     <Text 
-                      style={{ 
+                      style={{
                         color: message.role === 'user' 
-                          ? colors.light.primaryForeground 
+                          ? theme.primaryForeground 
                           : message.error 
-                          ? colors.light.destructive 
-                          : colors.light.foreground 
+                          ? theme.destructiveForeground 
+                          : theme.foreground
                       }}
                     >
                       {message.content}
                     </Text>
                     
-                    {/* Message timestamp */}
                     <Text 
                       style={{ 
                         color: message.role === 'user' 
-                          ? 'rgba(255, 255, 255, 0.7)' 
-                          : colors.light.mutedForeground,
+                          ? theme.primaryForeground 
+                          : theme.mutedForeground,
+                        opacity: message.role === 'user' ? 0.7 : 1,
                         fontSize: 10,
                         marginTop: 4,
                         textAlign: message.role === 'user' ? 'right' : 'left'
@@ -303,7 +309,7 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
                 <View className="items-start mb-4">
                   <View 
                     style={{ 
-                      backgroundColor: colors.light.card,
+                      backgroundColor: theme.card,
                       borderRadius: 16,
                       padding: 16,
                       shadowColor: "#000",
@@ -314,8 +320,8 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <ActivityIndicator color={colors.light.primary} style={{ marginRight: 8 }} />
-                      <Text style={{ color: colors.light.mutedForeground }}>Thinking...</Text>
+                      <ActivityIndicator color={theme.primary} style={{ marginRight: 8 }} />
+                      <Text style={{ color: theme.mutedForeground }}>Thinking...</Text>
                     </View>
                   </View>
                 </View>
@@ -326,15 +332,14 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
         </TouchableWithoutFeedback>
       </View>
 
-      {/* Input container */}
       <View 
         style={{ 
-          borderTopColor: colors.light.border,
-          backgroundColor: colors.light.background,
+          borderTopColor: theme.border,
+          backgroundColor: theme.background,
           borderTopWidth: 1,
-          paddingBottom: 0,
+          paddingBottom: 0, 
           position: 'absolute',
-          bottom: isKeyboardVisible ? keyboardHeight - 34 : 0,
+          bottom: isKeyboardVisible ? keyboardHeight - 34 : 0, 
           left: 0,
           right: 0,
           shadowColor: "#000",
@@ -351,17 +356,17 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
               ref={inputRef}
               style={{ 
                 flex: 1, 
-                backgroundColor: 'transparent',
-                borderColor: colors.light.border,
+                backgroundColor: theme.input,
+                borderColor: theme.border,
                 borderWidth: 1,
                 borderRadius: 24,
                 paddingHorizontal: 16,
-                paddingVertical: 8, 
-                color: colors.light.foreground,
-                maxHeight: 100
+                paddingVertical: Platform.OS === 'ios' ? 12 : 8, 
+                color: theme.foreground,
+                maxHeight: 100 
               }}
               placeholder="Ask about your last meetings..."
-              placeholderTextColor={colors.light.mutedForeground}
+              placeholderTextColor={theme.mutedForeground}
               value={inputMessage}
               onChangeText={setInputMessage}
               multiline
@@ -376,10 +381,10 @@ export function GlobalChatInterface({ userId }: GlobalChatInterfaceProps) {
                 padding: 12,
                 borderRadius: 24,
                 opacity: isLoading || !inputMessage.trim() || !chatService.current ? 0.5 : 1,
-                backgroundColor: colors.light.primary
+                backgroundColor: theme.primary
               }}
             >
-              <Send size={20} color={colors.light.primaryForeground} />
+              <Send size={20} color={theme.primaryForeground} />
             </TouchableOpacity>
           </View>
         </View>

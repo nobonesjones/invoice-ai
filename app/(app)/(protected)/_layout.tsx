@@ -1,25 +1,24 @@
 import { Tabs, Link } from "expo-router";
 import React from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Platform, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { CircleUserRound } from 'lucide-react-native'; // Import CircleUserRound
+import { CircleUserRound, ListChecks, MessageSquare } from 'lucide-react-native'; 
 import { colors } from "@/constants/colors";
-import { useTheme } from "@/context/theme-provider"; // Import custom hook
+import { useTheme } from "@/context/theme-provider"; 
 import { supabase } from "@/config/supabase";
 import { useSupabase } from "@/context/supabase-provider";
-import { Alert } from "react-native";
-import * as Haptics from 'expo-haptics'; // Import Haptics
+import * as Haptics from 'expo-haptics'; 
 
 // Function to trigger haptic feedback
 const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 };
 
 export default function ProtectedLayout() {
   // Use light mode for protected screens
-  const { isLightMode } = useTheme(); // Use state from our provider
-  const currentSchemeString = isLightMode ? 'light' : 'dark'; // Determine scheme based on provider state
+  const { isLightMode } = useTheme(); 
+  const theme = isLightMode ? colors.light : colors.dark; // Determine scheme based on provider state
   const router = useRouter();
   const { user } = useSupabase();
 
@@ -72,32 +71,31 @@ export default function ProtectedLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { height: 0, borderTopWidth: 0 }, // Keep default styling minimal
-        tabBarActiveTintColor: colors[currentSchemeString].primary, // Use correct string key
-        tabBarInactiveTintColor: colors[currentSchemeString].mutedForeground // Use correct string key
+        tabBarActiveTintColor: theme.primary, 
+        tabBarInactiveTintColor: theme.mutedForeground, 
+        // Keep tabBarStyle minimal here as we customize in tabBar prop
+        tabBarStyle: { height: 0, borderTopWidth: 0 }, 
       }}
       tabBar={props => {
-        // Only show the tab bar on the home screen (index)
-        const currentRoute = props.state.routes[props.state.index];
-        // Corrected logic: Show tab bar ONLY on 'index', 'action-items', and 'chat'
-        if (!['index', 'action-items', 'chat'].includes(currentRoute.name)) {
-          return null;
-        }
-        
-        // Calculate the increased height (35% more)
-        const originalHeight = 60;
-        const increasedHeight = originalHeight + 20 + 1;
-        
         // Get the name of the currently active route
         const activeRouteName = props.state.routes[props.state.index].name;
 
+        // Only show the tab bar on the home screen (index)
+        // Corrected logic: Show tab bar ONLY on 'index'
+        if (!['index'].includes(activeRouteName)) {
+          return null;
+        }
+        
+        // Calculate the increased height (adjust as needed)
+        const tabBarHeight = Platform.OS === 'ios' ? 90 : 70;
+        
         return (
           <View style={{ 
             flexDirection: 'row', 
-            backgroundColor: colors[currentSchemeString].background, // Changed from .secondary to .background
-            height: increasedHeight, 
+            backgroundColor: isLightMode ? '#FFFFFF' : theme.background, 
+            height: tabBarHeight, 
             borderTopWidth: 1,
-            borderTopColor: 'rgba(0, 0, 0, 0.1)', // Consider adjusting border for dark mode
+            borderTopColor: theme.border, 
             paddingHorizontal: 20,
             alignItems: 'center', 
             justifyContent: 'space-between' 
@@ -107,38 +105,32 @@ export default function ProtectedLayout() {
               style={{ 
                 flex: 1, 
                 justifyContent: 'center', 
-                alignItems: 'center'
+                alignItems: 'center',
+                height: '100%', 
+                paddingBottom: Platform.OS === 'ios' ? 20 : 0, 
               }}
               onPress={() => {
                 props.navigation.navigate('action-items');
                 triggerHaptic();
               }}
             >
-              <Text style={{ 
-                // Set color based on whether 'action-items' is the active route
-                color: activeRouteName === 'action-items' ? colors[currentSchemeString].primary : colors[currentSchemeString].mutedForeground, 
-                fontSize: 16, 
-                fontWeight: '500'
-              }}>
-                Action Items
-              </Text>
+              <ListChecks color={isLightMode ? '#000000' : '#FFFFFF'} size={28} /> 
             </Pressable>
             
             {/* Placeholder View to maintain spacing for the absolute positioned button */}
             <View style={{ width: 68 }} />
             
-            {/* New Placeholder Button (Bigger, Overlapping) */}
+            {/* Floating Action Button (+) */}
             <Pressable 
               style={{ 
-                // Re-apply absolute positioning for overlap
                 position: 'absolute',
-                bottom: 30, // Adjust for desired overlap
+                bottom: Platform.OS === 'ios' ? 35 : 20, 
                 left: '50%',
-                transform: [{ translateX: -14 }], // Set value to -14 as requested
-                width: 68, // Reduced size (80 * 0.85)
-                height: 68, // Reduced size (80 * 0.85)
-                borderRadius: 34, // Adjusted border radius (68 / 2)
-                backgroundColor: colors[currentSchemeString].card, // Changed from .background to .card
+                transform: [{ translateX: -20 }], 
+                width: 68, 
+                height: 68, 
+                borderRadius: 34, 
+                backgroundColor: theme.card, 
                 justifyContent: 'center',
                 alignItems: 'center',
                 elevation: 4,
@@ -148,12 +140,11 @@ export default function ProtectedLayout() {
                 shadowRadius: 2,
               }}
               onPress={() => {
-                triggerHaptic(); // Add haptic feedback here
-                handleCreateMeeting(); // Use the correct handler
+                triggerHaptic(); 
+                handleCreateMeeting(); 
               }}
             >
-              {/* Placeholder Icon/Text - Replace with actual icon later */}
-              <Text style={{ color: colors[currentSchemeString].secondaryForeground, fontSize: 34, fontWeight: 'bold' }}>+</Text>
+              <Text style={{ color: theme.primary, fontSize: 34, fontWeight: 'bold' }}>+</Text> 
             </Pressable>
             
             {/* Chat Button */}
@@ -161,21 +152,16 @@ export default function ProtectedLayout() {
               style={{ 
                 flex: 1, 
                 justifyContent: 'center', 
-                alignItems: 'center'
+                alignItems: 'center',
+                height: '100%', 
+                paddingBottom: Platform.OS === 'ios' ? 20 : 0, 
               }}
               onPress={() => {
                 props.navigation.navigate('chat');
                 triggerHaptic();
               }}
             >
-              <Text style={{ 
-                // Set color based on whether 'chat' is the active route
-                color: activeRouteName === 'chat' ? colors[currentSchemeString].primary : colors[currentSchemeString].mutedForeground, 
-                fontSize: 16, 
-                fontWeight: '500'
-              }}>
-                Chat
-              </Text>
+              <MessageSquare color={isLightMode ? '#000000' : '#FFFFFF'} size={28} />
             </Pressable>
 
           </View>

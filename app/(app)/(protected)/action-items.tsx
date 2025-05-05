@@ -37,7 +37,7 @@ interface GroupedActionItems {
 }
 
 export default function ActionItemsScreen() {
-  const { theme } = useTheme();
+  const { theme, isLightMode } = useTheme();
   const { user } = useSupabase();
   const router = useRouter();
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
@@ -473,7 +473,7 @@ export default function ActionItemsScreen() {
       </View>
 
       {/* Content Area */}
-      <View className="flex-1 px-4">
+      <View style={{ flex: 1, backgroundColor: isLightMode ? '#FFFFFF' : theme.card }}>
         {/* Action Items List or Loading/Empty State */}
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
@@ -489,7 +489,7 @@ export default function ActionItemsScreen() {
               <View key={dateKey} className="mb-6">
                 {/* Date Header */}
                 <View className="mb-3 border-b border-gray-200 pb-1">
-                  <Text style={{ color: theme.foreground }} className="text-xl font-bold">
+                  <Text style={{ color: theme.foreground, paddingLeft: 15 }} className="text-xl font-bold">
                     {formatDateHeader(dateKey)}
                   </Text>
                 </View>
@@ -499,7 +499,15 @@ export default function ActionItemsScreen() {
                   <View key={meetingId} className="mb-3">
                     {/* Meeting Header */}
                     <View className="mb-1">
-                      <Text style={{ color: theme.foreground }} className="text-base font-medium">
+                      <Text 
+                        style={{ 
+                          color: theme.foreground, 
+                          fontWeight: '500', 
+                          fontSize: 16, 
+                          lineHeight: 24, 
+                          paddingLeft: 15 
+                        }} 
+                      >
                         {groupedItems[dateKey][meetingId].meetingName}
                       </Text>
                     </View>
@@ -524,12 +532,12 @@ export default function ActionItemsScreen() {
                         {/* Row Content - Separate touch targets */}
                         <View 
                           className="flex-row items-start py-1.5 px-1"
-                          style={{ backgroundColor: theme.background }}
+                          style={{ backgroundColor: isLightMode ? '#FFFFFF' : theme.card }} // Conditional background
                         >
                           {/* Checkbox Area (Touchable) */}
                           <TouchableOpacity onPress={() => toggleActionItem(item)} className="mr-3 p-1">
                             {item.completed ? (
-                              <CheckCircle size={20} color={colors.light.primary} />
+                              <CheckCircle size={20} color={isLightMode ? '#000000' : '#FFFFFF'} /> 
                             ) : (
                               <Circle size={20} color={theme.mutedForeground} />
                             )}
@@ -567,9 +575,10 @@ export default function ActionItemsScreen() {
                                 style={{ 
                                   color: theme.foreground,
                                   textDecorationLine: item.completed ? 'line-through' : 'none',
-                                  opacity: item.completed ? 0.7 : 1
+                                  opacity: item.completed ? 0.7 : 1,
+                                  fontSize: 16, // Explicitly match TextInput
+                                  lineHeight: 24, // Explicitly match TextInput
                                 }} 
-                                className="text-base"
                               >
                                 {cleanActionItemContent(item.content)}
                               </Text>

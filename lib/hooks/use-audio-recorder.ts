@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Audio, 
   InterruptionModeIOS, 
@@ -37,11 +37,12 @@ export function useAudioRecorder({
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState(0); // Normalized 0-1
-  
+  const [isPaused, setIsPaused] = useState(false); // New state for paused status
+
   // Refs for stable values across re-renders
   const meetingIdRef = useRef<string | undefined>(meetingId);
   const recordingRef = useRef<null | Audio.Recording>(null);
-  const meteringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const meteringIntervalRef = useRef<number | null>(null); // Changed type to number | null
   const appState = useRef(AppState.currentState);
   
   // Update refs when props change
@@ -52,22 +53,39 @@ export function useAudioRecorder({
   // Handle app state changes
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
-      if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
+      const currentAppState = appState.current; // Capture current state
+      appState.current = nextAppState;
+      console.log(`AppState changed from ${currentAppState} to ${nextAppState}`);
+
+      if (currentAppState.match(/active|foreground/) && nextAppState.match(/inactive|background/)) {
         console.log('App going to background, checking recording state...');
-        if (isRecording && recordingRef.current) {
-          console.log('Recording in progress, stopping before app goes to background');
-          stopRecording(meetingIdRef.current as string).catch(err => {
-            console.error('Error stopping recording on app state change:', err);
+        // Use the state value directly, not the ref, as it reflects the current render cycle
+        if (isRecording && !isPaused) { // Only pause if actively recording and not already paused
+          console.log('Recording in progress and not paused, pausing before app goes to background');
+          // Call the pause function directly
+          pauseRecording().catch(err => { // Use the new pause function
+            console.error('Error pausing recording on app state change:', err);
+            // Optionally set an error state or notify the user
+            setError('Failed to pause recording automatically.');
+            if (onError) onError('Failed to pause recording automatically.');
           });
+        } else if (isRecording && isPaused) {
+          console.log('Recording is already paused, doing nothing.');
+        } else {
+          console.log('Not recording or already paused, doing nothing.');
         }
       }
-      appState.current = nextAppState;
+      // Optional: Handle coming back to foreground (e.g., require manual resume)
+      // else if (currentAppState.match(/inactive|background/) && nextAppState === 'active') {
+      //   console.log('App coming to foreground.');
+      //   // Decide if you want to auto-resume or require manual action
+      // }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [isRecording]);
+  }, [isRecording, isPaused]); // Add isPaused to dependency array
 
   // Cleanup on unmount
   useEffect(() => {
@@ -104,7 +122,8 @@ export function useAudioRecorder({
       setRecording(null);
       setIsRecording(false);
       setIsUploading(false);
-      
+      setIsPaused(false); // Reset paused state
+
       console.log('Cleanup complete');
     } catch (err) {
       console.error('Error in cleanup:', err);
@@ -179,6 +198,7 @@ export function useAudioRecorder({
       setRecording(recording);
       recordingRef.current = recording;
       setIsRecording(true);
+      setIsPaused(false); // Ensure not paused when starting
       setAudioLevel(0); // Reset level on new recording start
       
       console.log('Recording started successfully');
@@ -271,7 +291,8 @@ export function useAudioRecorder({
       // Clear recording state
       setRecording(null);
       setIsRecording(false); // Ensure isRecording is false after stop
-      
+      setIsPaused(false); // Ensure not paused when stopped
+
       // Store current recording reference before clearing
       const currentRecording = recordingRef.current;
       recordingRef.current = null;
@@ -464,6 +485,81 @@ export function useAudioRecorder({
     } // Removed finally block for setIsUploading
   };
 
+  // --- Metering Functions ---
+  const startMetering = () => {
+    if (meteringIntervalRef.current) {
+      clearInterval(meteringIntervalRef.current);
+    }
+    meteringIntervalRef.current = setInterval(async () => {
+      if (recordingRef.current) {
+        try {
+          const status = await recordingRef.current.getStatusAsync();
+          if (status.isRecording && status.metering !== undefined) {
+            // Normalize the dBFS value to a 0-1 range
+            const normalizedLevel = Math.max(0, Math.min(1, (status.metering - MIN_DBFS) / (MAX_DBFS - MIN_DBFS)));
+            setAudioLevel(normalizedLevel);
+          }
+        } catch (meteringError) {
+          // console.warn('Error getting recording status for metering:', meteringError);
+          // Stop metering if there's an error (e.g., recording stopped unexpectedly)
+          stopMetering(); 
+        }
+      }
+    }, METERING_UPDATE_INTERVAL);
+  };
+
+  const stopMetering = () => {
+    if (meteringIntervalRef.current) {
+      clearInterval(meteringIntervalRef.current);
+      meteringIntervalRef.current = null;
+    }
+    setAudioLevel(0); // Reset audio level when stopping
+  };
+
+  // --- Pause/Resume Functions ---
+  const pauseRecording = useCallback(async () => {
+    console.log('Attempting to pause recording...');
+    if (!recordingRef.current || !isRecording || isPaused) {
+      console.log('Cannot pause: Not recording, already paused, or no recording object.');
+      return;
+    }
+    try {
+      await recordingRef.current.pauseAsync();
+      stopMetering(); // Stop updating audio level
+      setIsPaused(true);
+      console.log('Recording paused successfully.');
+    } catch (err: any) {
+      const errorMsg = `Failed to pause recording: ${err.message || err}`;
+      console.error(errorMsg, err);
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+    }
+  }, [isRecording, isPaused, onError]);
+
+  const resumeRecording = useCallback(async () => {
+    console.log('Attempting to resume recording...');
+    if (!recordingRef.current || !isRecording || !isPaused) {
+      console.log('Cannot resume: Not recording, not paused, or no recording object.');
+      return;
+    }
+    try {
+      // Expo AV doesn't have a distinct 'resume'. We manage state and restart metering.
+      // The underlying recording is expected to continue when read from.
+      // *** ADD: Call startAsync() on the existing recording instance to resume audio capture ***
+      await recordingRef.current.startAsync(); 
+
+      setIsPaused(false);
+      startMetering(); // Restart audio level updates
+      console.log('Recording resumed successfully (state updated, metering restarted, startAsync called).');
+    } catch (err: any) {
+      // This block might be less likely to error as we're just managing state/interval
+      const errorMsg = `Failed to resume recording: ${err.message || err}`;
+      console.error(errorMsg, err);
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+    }
+  }, [isRecording, isPaused, onError]);
+
   // --- Transcription & Minutes ---
 
   return {
@@ -471,8 +567,11 @@ export function useAudioRecorder({
     isUploading,
     recording,
     audioLevel, // Expose audio level
+    isPaused, // Expose paused state
     startRecording,
     stopRecording,
+    pauseRecording, // Expose pause function
+    resumeRecording, // Expose resume function
     error
   };
 }

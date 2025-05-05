@@ -474,31 +474,22 @@ export default function MeetingView() {
   };
 
   const TabButton = ({ tab, label }: { tab: TabType; label: string }) => {
+    const isActive = activeTab === tab;
     return (
       <TouchableOpacity
-        onPress={() => {
-          setActiveTab(tab);
-          
-          // Refresh data when tab is clicked
-          if (tab === 'transcript') {
-            fetchTranscripts();
-          } else if (tab === 'minutes') {
-            fetchMeeting();
-          }
-        }}
+        onPress={() => setActiveTab(tab)}
+        // Add conditional style for the bottom border
         style={{
-          flex: 1,
-          height: 36, // Set fixed height
-          borderBottomWidth: 2,
-          borderBottomColor: activeTab === tab ? theme.primary : 'transparent',
-          alignItems: 'center',
-          justifyContent: 'center' // Ensure perfect vertical centering
+          borderBottomWidth: isActive ? 2 : 0, // Show border only if active
+          borderBottomColor: isActive ? theme.primary : 'transparent', // Use theme color
         }}
+        // Keep padding in className for consistency
+        className={`flex-1 items-center py-2.5`}
       >
-        <Text
+        <Text 
           style={{
-            color: activeTab === tab ? theme.primary : theme.mutedForeground,
-            fontWeight: activeTab === tab ? '600' : '400'
+            color: isActive ? theme.primary : theme.mutedForeground,
+            fontWeight: isActive ? '600' : '400'
           }}
         >
           {label}
@@ -513,10 +504,10 @@ export default function MeetingView() {
         return (
           <ScrollView className="flex-1 px-4">
             {tabSpecificLoading.minutes ? (
-              <View className="flex-1 items-center justify-center py-8">
+              <View className="flex-1 items-center justify-center py-8" style={{ backgroundColor: theme.card }}>
                 <ActivityIndicator size="small" color={theme.primary} />
                 <Text style={{ marginTop: 8, color: theme.mutedForeground }}>
-                  Loading minutes...
+                  Processing minutes...
                 </Text>
               </View>
             ) : meeting?.minutes_text ? (
@@ -533,12 +524,12 @@ export default function MeetingView() {
         );
       case 'transcript':
         return (
-          <ScrollView className="flex-1 px-4">
+          <ScrollView className="flex-1 px-4 mt-4">
             {tabSpecificLoading.transcript ? (
-              <View className="flex-1 items-center justify-center py-8">
+              <View className="flex-1 items-center justify-center py-8" style={{ backgroundColor: theme.card }}>
                 <ActivityIndicator size="small" color={theme.primary} />
                 <Text style={{ marginTop: 8, color: theme.mutedForeground }}>
-                  Loading transcript...
+                  Processing transcript...
                 </Text>
               </View>
             ) : (
@@ -620,41 +611,65 @@ export default function MeetingView() {
     const cleanSummary = sections.summary.filter(line => !line.trim().startsWith('**Meeting Summary:**')).join('\n').trim();
     const cleanMinutes = sections.minutes.filter(line => !line.trim().startsWith('**Meeting Minutes:**')).join('\n').trim();
 
-    return (
-      <View>
-        {cleanSummary ? (
-          <View className="mb-4">
-            <Text 
-              style={{ color: theme.foreground }}
-              className="text-lg font-semibold mb-2"
-            >
-              Meeting Summary
-            </Text>
-            <View className="pl-0">
-              {cleanSummary.split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0)
-                .map((point, i) => (
-                  <View key={i} className="flex-row mb-1 pl-0">
-                    <Text style={{ color: theme.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
-                    <Text 
-                      style={{ color: theme.foreground }}
-                      className="flex-1"
-                    >
-                      {point.replace(/^[•\-\*]\s*/, '')}
-                    </Text>
-                  </View>
-                ))}
-            </View>
+    // Enhanced rendering logic for different sections
+    const renderSectionContent = (header: string, content: string) => {
+      const title = header.replace(/\*\*/g, ''); // Remove asterisks for display
+
+      // ALWAYS render Meeting Summary as paragraphs, NEVER as bullets
+      if (header === '**Meeting Summary:**') {
+        const paragraphs = content.split('\n').map(p => p.trim()).filter(p => p);
+        if (paragraphs.length === 0) return null;
+        return (
+          <View key={header} className="mb-4">
+            <Text className="text-lg font-bold mb-2" style={{ color: theme.foreground }}>{title}</Text>
+            {paragraphs.map((paragraph, index) => (
+              <Text key={index} className="mb-2" style={{ color: theme.foreground, lineHeight: 20 }}>
+                {paragraph}
+              </Text>
+            ))}
           </View>
+        );
+      }
+
+      // Handle "Meeting Minutes" or general bullet points
+      if (header === '**Meeting Minutes:**' || content.includes('\n- ')) {
+        const points = content.split('\n').map(p => p.trim()).filter(p => p);
+        if (points.length === 0) return null;
+        return (
+          <View key={header} className="mb-4">
+            <Text className="text-lg font-bold mb-2" style={{ color: theme.foreground }}>{title}</Text>
+            {points.map((point, index) => (
+              <View key={index} className="flex-row mb-1">
+                <Text style={{ color: theme.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
+                <Text style={{ color: theme.foreground }} className="flex-1">
+                  {point.replace(/^[•\-\*]\s*/, '')}
+                </Text>
+              </View>
+            ))}
+          </View>
+        );
+      }
+
+      // Default rendering for other sections
+      return (
+        <View key={header} className="mb-4">
+          <Text className="text-lg font-bold mb-2" style={{ color: theme.foreground }}>{title}</Text>
+          <Text style={{ color: theme.foreground }}>
+            {content}
+          </Text>
+        </View>
+      );
+    };
+
+    return (
+      <View className="px-2 py-4 mt-4">
+        {cleanSummary ? (
+          renderSectionContent('**Meeting Summary:**', cleanSummary)
         ) : null}
         
         {/* Action Items Section (using the dedicated component) */}
         <View className="mb-4">
-          <Text 
-            style={{ color: theme.foreground }}
-            className="text-lg font-semibold mb-2"
-          >
+          <Text className="text-lg font-bold mb-2" style={{ color: theme.foreground }}>
             Action Items
           </Text>
           <View className="pl-0 ml-0">
@@ -663,30 +678,7 @@ export default function MeetingView() {
         </View>
 
         {cleanMinutes ? (
-          <View className="mb-4">
-            <Text 
-              style={{ color: theme.foreground }}
-              className="text-lg font-semibold mb-2"
-            >
-              Meeting Minutes
-            </Text>
-            <View className="pl-0">
-              {cleanMinutes.split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0)
-                .map((point, i) => (
-                  <View key={i} className="flex-row mb-1 pl-0">
-                    <Text style={{ color: theme.foreground, marginLeft: 0, marginRight: 8 }}>•</Text>
-                    <Text 
-                      style={{ color: theme.foreground }}
-                      className="flex-1"
-                    >
-                      {point.replace(/^[•\-\*]\s*/, '')}
-                    </Text>
-                  </View>
-                ))}
-            </View>
-          </View>
+          renderSectionContent('**Meeting Minutes:**', cleanMinutes)
         ) : null}
       </View>
     );
@@ -875,11 +867,12 @@ export default function MeetingView() {
           elevation: 6,
           paddingTop: 60, // Increased padding to accommodate status bar etc.
           paddingBottom: 20,
-          marginBottom: 16,
           position: 'relative', // Add relative positioning for absolute children
           borderBottomLeftRadius: 24, // Changed to 24
           borderBottomRightRadius: 24, // Changed to 24
           borderRadius: 10, // Added for overall rounded corners
+          borderBottomColor: theme.border, // Use theme color
+          borderBottomWidth: 1
         }}
       >
         {/* Large touch area for back button (blue area) */}
@@ -1005,11 +998,6 @@ export default function MeetingView() {
 
       {/* Tabs */}
       <View 
-        style={{ 
-          borderBottomColor: theme.border,
-          borderBottomWidth: 1,
-          marginBottom: 16
-        }}
         className="flex-row px-0"
       >
         <TabButton tab="minutes" label="Minutes" />
@@ -1018,7 +1006,7 @@ export default function MeetingView() {
       </View>
 
       {/* Content Area */}
-      <View className="flex-1">
+      <View style={{ flex: 1, backgroundColor: theme.card }}>
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color={theme.primary} />
