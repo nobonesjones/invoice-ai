@@ -51,6 +51,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
+      "package": "com.indianabones.meetings",
       "permissions": [
         "RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",
