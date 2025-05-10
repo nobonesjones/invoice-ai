@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, SafeAreaView, useColorScheme as useDeviceColorScheme, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, SafeAreaView, useColorScheme as useDeviceColorScheme, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { Button } from '@/components/ui/button';
@@ -38,10 +38,6 @@ export default function OnboardingScreen1() {
     router.push('/onboarding-2');
   };
 
-  const imageSource = isDeviceLightMode
-    ? require('../../assets/1light.png')
-    : require('../../assets/1dark.png');
-
   return (
     <SafeAreaView className={`flex-1 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}>
       <View style={styles.container}>
@@ -58,10 +54,8 @@ export default function OnboardingScreen1() {
               transform: [{ translateY }],
             }}
           >
-            <Image
-              source={imageSource}
-              className="w-full h-full"
-              resizeMode="contain"
+            <View
+              className="w-full h-full bg-gray-300 rounded-lg"
             />
           </Animated.View>
         </View>
@@ -69,10 +63,10 @@ export default function OnboardingScreen1() {
         {/* Text Content */}
         <View style={styles.textContainer}>
           <ShiningText
-            text="Easily Record Meetings"
+            text="Onboarding 1"
             className="text-3xl font-bold text-center text-foreground mb-4"
           />
-          <P style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>Get crystal clear summaries, minutes and action items in seconds.</P>
+          <P style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>Something about the app...</P>
         </View>
 
         {/* Spacer */}
@@ -107,6 +101,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 30,
     borderRadius: 10,
+    overflow: 'hidden',
     padding: 10,
     marginTop: 30,
   },

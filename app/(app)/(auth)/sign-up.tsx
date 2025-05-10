@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator, useColorScheme as useDeviceColorScheme } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator, useColorScheme as useDeviceColorScheme, Platform } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { z } from "zod";
@@ -76,7 +76,7 @@ export default function SignUp() {
 
 	return (
 		<SafeAreaView
-			className={`flex-1 p-4 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}
+			style={{ flex: 1, padding: 16, backgroundColor: '#FFFFFF' }}
 			edges={["bottom"]}
 		>
 			<TouchableOpacity
@@ -91,9 +91,9 @@ export default function SignUp() {
 			<View className="flex-1 gap-4 web:m-4">
 				<View className="w-full">
 					<H1 className="self-start mb-4 text-foreground">Sign Up</H1>
-					<Muted className="self-start mb-2.5 text-muted-foreground">
+					{/* <Muted className="self-start mb-2.5 text-muted-foreground">
 						Saving the world from admin, one meeting at a time.
-					</Muted>
+					</Muted> */}
 
 					{generalError ? (
 						<View className="bg-destructive/10 p-3 rounded-lg">
@@ -165,13 +165,27 @@ export default function SignUp() {
 
 			<Button
 				onPress={handleSignUp}
-				className="web:m-4 bg-primary dark:bg-white"
+				style={[
+					{ 
+						backgroundColor: '#FFFFFF', 
+						borderWidth: 1,
+						borderColor: '#E0E0E0', 
+					},
+					Platform.OS === 'ios' ? {
+						shadowColor: '#000',
+						shadowOffset: { width: 0, height: 4 },
+						shadowOpacity: 0.3,
+						shadowRadius: 5,
+					} : {
+						elevation: 8, 
+					}
+				]}
 				disabled={isLoading}
 			>
 				{isLoading ? (
-					<ActivityIndicator size="small" className="text-primary-foreground dark:text-black" />
+					<ActivityIndicator size="small" color="#000000" /> 
 				) : (
-					<Text className="text-primary-foreground dark:text-black">Sign Up</Text>
+					<Text style={{ color: '#000000', fontWeight: '600' }}>Sign Up</Text> 
 				)}
 			</Button>
 		</SafeAreaView>

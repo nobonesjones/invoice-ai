@@ -1,17 +1,21 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
 import { useForm } from "react-hook-form";
-import { ActivityIndicator, TouchableOpacity, View, Alert, useColorScheme as useDeviceColorScheme } from "react-native";
+import { ActivityIndicator, TouchableOpacity, View, Alert, useColorScheme as useDeviceColorScheme, Platform, Image } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 import * as z from "zod";
 import { useState } from "react";
+import * as WebBrowser from 'expo-web-browser';
 
+import { supabase } from '@/config/supabase';
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormInput } from "@/components/ui/form";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const formSchema = z.object({
 	email: z.string().email("Please enter a valid email address."),
@@ -25,6 +29,7 @@ export default function SignIn() {
 	const router = useRouter();
 	const { signInWithPassword } = useSupabase();
 	const [signInError, setSignInError] = useState<string | null>(null);
+	const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 	const deviceColorScheme = useDeviceColorScheme() ?? 'light';
 	const isDeviceLightMode = deviceColorScheme === 'light';
 
@@ -51,9 +56,60 @@ export default function SignIn() {
 		}
 	}
 
+	async function handleGoogleSignIn() {
+		setIsGoogleLoading(true);
+		try {
+			const explicitRedirectTo = 'expo-supabase-starter://oauth/callback';
+			const { data, error } = await supabase.auth.signInWithOAuth({
+				provider: 'google',
+				options: {
+					redirectTo: explicitRedirectTo,
+				},
+			});
+
+			if (error) {
+				console.error('Google Sign-In Error:', error.message);
+				Alert.alert('Sign In Error', error.message || 'An unexpected error occurred.');
+				setIsGoogleLoading(false);
+				return;
+			}
+
+			if (data?.url) {
+				const result = await WebBrowser.openAuthSessionAsync(
+					data.url,
+					explicitRedirectTo
+				);
+				if (result.type === 'success' && result.url) {
+					const params = new URLSearchParams(result.url.split('#')[1]);
+					const access_token = params.get('access_token');
+					const refresh_token = params.get('refresh_token');
+					if (access_token && refresh_token) {
+						const { error: setError } = await supabase.auth.setSession({
+							access_token,
+							refresh_token,
+						});
+						if (setError) {
+							console.error('Error setting session manually:', setError);
+							Alert.alert('Session Error', 'Could not set user session.');
+						}
+					} else {
+						Alert.alert('Sign In Error', 'Could not process authentication response.');
+					}
+				}
+			} else {
+				Alert.alert('Sign In Error', 'Could not get authentication URL.');
+			}
+		} catch (catchError: any) {
+			console.error('Caught error during Google Sign-In:', JSON.stringify(catchError, null, 2));
+			Alert.alert('Sign In Error', catchError.message || 'An unexpected error occurred.');
+		} finally {
+			setIsGoogleLoading(false);
+		}
+	}
+
 	return (
 		<SafeAreaView 
-			className={`flex-1 p-4 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}
+			style={{ flex: 1, padding: 16, backgroundColor: '#FFFFFF' }}
 			edges={["bottom"]}
 		>
 			<TouchableOpacity 
@@ -69,7 +125,52 @@ export default function SignIn() {
 				<Muted className="self-start text-muted-foreground">
 					Welcome back! Sign in to continue.
 				</Muted>
-				
+
+				{/* Sign In With Google Button */}
+				<Button
+					onPress={handleGoogleSignIn}
+					disabled={isGoogleLoading || form.formState.isSubmitting}
+					style={[
+						{
+							backgroundColor: '#FFFFFF',
+							borderWidth: 1,
+							borderColor: '#E0E0E0',
+							flexDirection: 'row',
+							alignItems: 'center',
+							justifyContent: 'center',
+							marginTop: 20,
+							paddingVertical: 12,
+						},
+						Platform.OS === 'ios' ? {
+							shadowColor: '#000',
+							shadowOffset: { width: 0, height: 4 },
+							shadowOpacity: 0.3,
+							shadowRadius: 5,
+						} : {
+							elevation: 8,
+						},
+					]}
+				>
+					{isGoogleLoading ? (
+						<ActivityIndicator size="small" color="#000000" />
+					) : (
+						<>
+							<Image 
+								source={require('@/assets/google.png')} 
+								style={{ width: 20, height: 20, marginRight: 10 }}
+							/>
+							<Text style={{ color: '#000000', fontWeight: '600' }}>Sign In With Google</Text>
+						</>
+					)}
+				</Button>
+
+				{/* OR Divider */}
+				<View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 30, marginBottom: 20 }}>
+					<View style={{ flex: 1, height: 1, borderBottomWidth: 1, borderColor: '#EEEEEE', borderStyle: 'dashed' }} />
+					<Text style={{ paddingHorizontal: 10, color: '#888888', fontSize: 14 }}>OR</Text>
+					<View style={{ flex: 1, height: 1, borderBottomWidth: 1, borderColor: '#EEEEEE', borderStyle: 'dashed' }} />
+				</View>
+
 				{signInError && (
 					<View className="bg-destructive/10 p-3 rounded-md mb-2">
 						<Text className="text-destructive">{signInError}</Text>
@@ -109,20 +210,35 @@ export default function SignIn() {
 								/>
 							)}
 						/>
+						<Button
+							onPress={form.handleSubmit(onSubmit)}
+							disabled={form.formState.isSubmitting || isGoogleLoading}
+							style={[
+								{
+									backgroundColor: '#FFFFFF',
+									borderWidth: 1,
+									borderColor: '#E0E0E0',
+								},
+								Platform.OS === 'ios' ? {
+									shadowColor: '#000',
+									shadowOffset: { width: 0, height: 4 },
+									shadowOpacity: 0.3,
+									shadowRadius: 5,
+								} : {
+									elevation: 8,
+								},
+							]}
+						>
+							{form.formState.isSubmitting ? (
+								<ActivityIndicator size="small" color="#000000" />
+							) : (
+								<Text style={{ color: '#000000', fontWeight: '600' }}>Sign In</Text>
+							)}
+						</Button>
 					</View>
 				</Form>
+
 			</View>
-			<Button
-				onPress={form.handleSubmit(onSubmit)}
-				disabled={form.formState.isSubmitting}
-				className="web:m-4 bg-primary dark:bg-white"
-			>
-				{form.formState.isSubmitting ? (
-					<ActivityIndicator size="small" className="text-primary-foreground dark:text-black" />
-				) : (
-					<Text className="text-primary-foreground dark:text-black">Sign In</Text>
-				)}
-			</Button>
 		</SafeAreaView>
 	);
 }

@@ -1,4 +1,4 @@
-import 'react-native-gesture-handler';
+import 'react-native-gesture-handler'; // This must be the first import
 import "../global.css";
 
 import { Slot, useRouter, useSegments } from "expo-router";
@@ -8,6 +8,8 @@ import { useEffect } from 'react';
 
 import { SupabaseProvider, useSupabase } from "@/context/supabase-provider";
 import { ThemeProvider, useTheme } from "@/context/theme-provider";
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { TabBarVisibilityProvider } from '@/context/TabBarVisibilityContext';
 
 // Inner component to access theme and supabase context
 function RootLayoutNav() {
@@ -58,7 +60,11 @@ export default function AppLayout() {
 			<Host>
 				<SupabaseProvider>
 					<ThemeProvider>
-						<RootLayoutNav />
+						<BottomSheetModalProvider>
+							<TabBarVisibilityProvider>
+								<RootLayoutNav />
+							</TabBarVisibilityProvider>
+						</BottomSheetModalProvider>
 					</ThemeProvider>
 				</SupabaseProvider>
 			</Host>

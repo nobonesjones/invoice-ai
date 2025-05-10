@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, useColorScheme as useDeviceColorScheme, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, useColorScheme as useDeviceColorScheme, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/ui/button';
 import { StepIndicator } from '@/components/ui/step-indicator';
 import ShiningText from '@/components/ui/ShiningText';
+import { P } from '@/components/ui/typography';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 
@@ -36,10 +37,6 @@ export default function OnboardingScreen2() {
     router.push('/onboarding-3');
   };
 
-  const imageSource = isDeviceLightMode
-    ? require('../../assets/2light.png')
-    : require('../../assets/2dark.png');
-
   return (
     <SafeAreaView className={`flex-1 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}>
       <View style={styles.container}>
@@ -55,20 +52,18 @@ export default function OnboardingScreen2() {
               transform: [{ translateY }],
             }}
           >
-            <Image
-              source={imageSource}
-              className="w-full h-full"
-              resizeMode="contain"
+            <View
+              className="w-full h-full bg-gray-300 rounded-lg"
             />
           </Animated.View>
         </View>
 
         <View style={styles.textContainer}>
           <ShiningText
-            text="Save Hours Every Week"
+            text="Onboarding 2"
             className="text-3xl font-bold text-center text-foreground mb-4"
           />
-          <Text style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>Leave the notes to AI, focus on having great meetings.</Text>
+          <P style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>Something else about the app...</P>
         </View>
 
         <View style={styles.spacer} />
@@ -115,6 +110,7 @@ const styles = StyleSheet.create({
     width: '80%',
     aspectRatio: 1, 
     borderRadius: 10,
+    overflow: 'hidden',
     alignSelf: 'center',
     marginBottom: 20,
     marginTop: 30,

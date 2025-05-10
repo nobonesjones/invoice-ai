@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Easy Minutes",
+    "name": "supastarter",
     "slug": "meetings",
     "scheme": "expo-supabase-starter",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/summiticon.png",
+    "icon": "./assets/rocketicon.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
@@ -36,13 +36,11 @@
         ]
       },
       "splash": {
-        "image": "./assets/splash.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
-          "backgroundColor": "#000000",
           "resizeMode": "contain",
-          "image": "./assets/splash-dark.png"
+          "backgroundColor": "#000000"
         }
       },
       "bundleIdentifier": "com.indianabones.ExpoSupabaseStarter"
@@ -59,13 +57,11 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "splash": {
-        "image": "./assets/splash.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
-          "backgroundColor": "#000000",
           "resizeMode": "contain",
-          "image": "./assets/splash-dark.png"
+          "backgroundColor": "#000000"
         }
       }
     },

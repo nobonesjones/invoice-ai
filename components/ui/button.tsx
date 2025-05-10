@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Pressable, Text, ActivityIndicator, useColorScheme } from 'react-native';
 import { cn } from '@/lib/utils';
+import { colors } from '@/constants/colors';
 
 export interface ButtonProps extends React.ComponentPropsWithoutRef<typeof Pressable> {
   isLoading?: boolean;
@@ -19,21 +20,21 @@ const Button = React.forwardRef<
       ref={ref}
       disabled={isLoading || disabled}
       className={cn(
-        'flex-row items-center justify-center rounded-md py-2 px-4',
-        'bg-black dark:bg-white',
-        'h-12',
+        'flex-row items-center justify-center rounded-xl py-3.5 px-4',
+        'bg-primary dark:bg-primary',
+        'h-14',
         (isLoading || disabled) && 'opacity-50',
         className
       )}
       {...props}
     >
       {isLoading ? (
-        <ActivityIndicator size="small" color={isDarkMode ? 'black' : 'white'} />
+        <ActivityIndicator size="small" color={isDarkMode ? colors.dark.primaryForeground : colors.light.primaryForeground} />
       ) : (
         <Text
           className={cn(
             'text-center font-semibold',
-            'text-white dark:text-black'
+            'text-primaryForeground dark:text-primaryForeground'
           )}
         >
           {children}

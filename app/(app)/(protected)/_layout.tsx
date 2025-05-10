@@ -1,243 +1,183 @@
-import { Tabs, Link } from "expo-router";
+import { Tabs } from "expo-router";
 import React from "react";
-import { View, Text, Pressable, Platform, Alert } from "react-native";
+import { View, Text, Pressable, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
-import { CircleUserRound, ListChecks, MessageSquare } from 'lucide-react-native'; 
+import { CircleUserRound, FileText, BarChart3, Bot, Users, PieChart } from 'lucide-react-native'; 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider"; 
 import { supabase } from "@/config/supabase";
 import { useSupabase } from "@/context/supabase-provider";
 import * as Haptics from 'expo-haptics'; 
+import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; 
 
 // Function to trigger haptic feedback
 const triggerHaptic = () => {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 };
 
+const iconMap: Record<string, React.ElementType> = {
+  "invoices": FileText, // Invoices
+  estimates: BarChart3,
+  ai: Bot,
+  customers: Users,
+  reports: PieChart,
+};
+
 export default function ProtectedLayout() {
-  // Use light mode for protected screens
   const { isLightMode } = useTheme(); 
-  const theme = isLightMode ? colors.light : colors.dark; // Determine scheme based on provider state
-  const router = useRouter();
+  const theme = isLightMode ? colors.light : colors.dark;
   const { user } = useSupabase();
-
-  const handleCreateMeeting = async () => {
-    try {
-      if (!user) {
-        Alert.alert('Error', 'You must be logged in');
-        return;
-      }
-
-      const { data: meetingData, error: meetingError } = await supabase
-        .from('meetings')
-        .insert([
-          { 
-            user_id: user.id,
-            name: 'New Meeting',
-            status: 'recording',
-            duration: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ])
-        .select()
-        .single();
-
-      if (meetingError) {
-        console.error('Meeting creation error:', meetingError);
-        Alert.alert('Error', `Failed to create meeting: ${meetingError.message}`);
-        return;
-      }
-
-      if (!meetingData) {
-        console.error('No meeting data returned');
-        Alert.alert('Error', 'Failed to create meeting: No data returned');
-        return;
-      }
-
-      // Navigate to recording screen with meeting ID
-      router.push({
-        pathname: "/recording",
-        params: { meetingId: meetingData.id }
-      });
-    } catch (error) {
-      console.error('Error creating meeting:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
-    }
-  };
+  const router = useRouter();
+  const { isTabBarVisible } = useTabBarVisibility(); 
 
   return (
     <Tabs
+      id="mainProtectedTabs"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.primary, 
-        tabBarInactiveTintColor: theme.mutedForeground, 
-        // Keep tabBarStyle minimal here as we customize in tabBar prop
-        tabBarStyle: { height: 0, borderTopWidth: 0 }, 
+        // These are not strictly needed with a fully custom tabBar, but good for reference
+        // tabBarActiveTintColor: theme.primary, 
+        // tabBarInactiveTintColor: theme.mutedForeground, 
+        tabBarStyle: { height: 0, borderTopWidth: 0 }, // Hides default chrome
       }}
-      tabBar={props => {
-        // Get the name of the currently active route
-        const activeRouteName = props.state.routes[props.state.index].name;
-
-        // Only show the tab bar on the home screen (index)
-        // Corrected logic: Show tab bar ONLY on 'index'
-        if (!['index'].includes(activeRouteName)) {
+      tabBar={({ state, descriptors, navigation }) => {
+        // If context dictates tab bar is hidden, return null immediately
+        if (!isTabBarVisible) {
           return null;
         }
-        
-        // Calculate the increased height (adjust as needed)
-        const tabBarHeight = Platform.OS === 'ios' ? 90 : 70;
-        
-        return (
-          <View style={{ 
-            flexDirection: 'row', 
-            backgroundColor: isLightMode ? '#FFFFFF' : theme.background, 
-            height: tabBarHeight, 
-            borderTopWidth: 1,
-            borderTopColor: theme.border, 
-            paddingHorizontal: 20,
-            alignItems: 'center', 
-            justifyContent: 'space-between' 
-          }}>
-            {/* Action Items Button */}
-            <Pressable 
-              style={{ 
-                flex: 1, 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                height: '100%', 
-                paddingBottom: Platform.OS === 'ios' ? 20 : 0, 
-              }}
-              onPress={() => {
-                props.navigation.navigate('action-items');
-                triggerHaptic();
-              }}
-            >
-              <ListChecks color={isLightMode ? '#000000' : '#FFFFFF'} size={28} /> 
-            </Pressable>
-            
-            {/* Placeholder View to maintain spacing for the absolute positioned button */}
-            <View style={{ width: 68 }} />
-            
-            {/* Floating Action Button (+) */}
-            <Pressable 
-              style={{ 
-                position: 'absolute',
-                bottom: Platform.OS === 'ios' ? 35 : 20, 
-                left: '50%',
-                transform: [{ translateX: -20 }], 
-                width: 68, 
-                height: 68, 
-                borderRadius: 34, 
-                backgroundColor: theme.card, 
-                justifyContent: 'center',
-                alignItems: 'center',
-                elevation: 4,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.2,
-                shadowRadius: 2,
-              }}
-              onPress={() => {
-                triggerHaptic(); 
-                handleCreateMeeting(); 
-              }}
-            >
-              <Text style={{ color: theme.primary, fontSize: 34, fontWeight: 'bold' }}>+</Text> 
-            </Pressable>
-            
-            {/* Chat Button */}
-            <Pressable 
-              style={{ 
-                flex: 1, 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                height: '100%', 
-                paddingBottom: Platform.OS === 'ios' ? 20 : 0, 
-              }}
-              onPress={() => {
-                props.navigation.navigate('chat');
-                triggerHaptic();
-              }}
-            >
-              <MessageSquare color={isLightMode ? '#000000' : '#FFFFFF'} size={28} />
-            </Pressable>
 
+        // Get the descriptor for the currently active NAVIGATOR/SCREEN that is a direct child of Tabs.
+        const currentRoute = state.routes[state.index];
+        const descriptor = descriptors[currentRoute.key];
+        const options = descriptor.options;
+
+        // If the currently active screen *within this tab* has set tabBarVisible to false,
+        // its options should merge, and we can check it here.
+        if (options.tabBarVisible === false) {
+          return null; // Don't render the custom tab bar
+        }
+
+        return (
+          <View style={{
+            flexDirection: 'row',
+            height: 86,
+            backgroundColor: theme.background, // White in light mode
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+            // iOS Shadow
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -1 }, // Softer shadow upwards
+            shadowOpacity: 0.05,
+            shadowRadius: 2,
+            // Android Shadow
+            elevation: 5,
+          }}>
+            {state.routes
+              .filter(route => ['invoices', 'estimates', 'ai', 'customers/index', 'reports'].includes(route.name))
+              .map((route, index) => {
+              const { options } = descriptors[route.key];
+              const label = options.title !== undefined ? options.title : route.name;
+              const isFocused = state.index === index;
+              const IconComponent = iconMap[route.name] || CircleUserRound; // Fallback icon
+
+              const onPress = () => {
+                triggerHaptic();
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+
+                if (!isFocused && !event.defaultPrevented) {
+                  navigation.navigate(route.name, route.params);
+                }
+              };
+
+              const onLongPress = () => {
+                navigation.emit({
+                  type: 'tabLongPress',
+                  target: route.key,
+                });
+              };
+
+              return (
+                <Pressable
+                  key={route.key}
+                  accessibilityRole="button"
+                  accessibilityState={isFocused ? { selected: true } : {}}
+                  onPress={onPress}
+                  onLongPress={onLongPress}
+                  style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 10 }}
+                >
+                  <IconComponent color={isFocused ? theme.primary : theme.mutedForeground} size={24} />
+                  <Text style={{
+                    color: isFocused ? theme.primary : theme.mutedForeground,
+                    fontWeight: isFocused ? 'bold' : 'normal',
+                    fontSize: 10, 
+                    marginTop: 4,
+                  }}>
+                    {label.toUpperCase()} 
+                  </Text>
+                  {isFocused && (
+                    <View style={{
+                      height: 1.5, 
+                      width: '90%', 
+                      backgroundColor: theme.primary,
+                      position: 'absolute',
+                      top: 0, 
+                      borderRadius: 2,
+                    }} />
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         );
       }}
     >
       <Tabs.Screen 
-        name="index" 
+        name="invoices" // This will be your Invoices screen (e.g., app/(app)/(protected)/invoices/index.tsx)
         options={{
-          title: "Meetings",
-          tabBarLabel: () => null,
+          title: "Invoices", 
         }}
-        listeners={{
-          tabPress: (e) => {
-            triggerHaptic();
-          },
-        }}
+        listeners={{ tabPress: triggerHaptic }}
       />
       <Tabs.Screen 
-        name="action-items" 
+        name="estimates" // (e.g., app/(app)/(protected)/estimates.tsx)
         options={{
-          title: "Action Items",
-          tabBarLabel: () => null
+          title: "Estimates",
         }}
-        listeners={{
-          tabPress: (e) => {
-            triggerHaptic();
-          },
-        }}
+        listeners={{ tabPress: triggerHaptic }}
       />
+      <Tabs.Screen 
+        name="ai" // (e.g., app/(app)/(protected)/ai.tsx)
+        options={{
+          title: "AI",
+        }}
+        listeners={{ tabPress: triggerHaptic }}
+      />
+      <Tabs.Screen 
+        name="customers/index" // Route for app/(app)/(protected)/customers/index.tsx
+        options={{
+          title: "Clients", // Renamed from Customers
+        }}
+        listeners={{ tabPress: triggerHaptic }}
+      />
+      <Tabs.Screen 
+        name="reports" // (e.g., app/(app)/(protected)/reports.tsx)
+        options={{
+          title: "Reports",
+        }}
+        listeners={{ tabPress: triggerHaptic }}
+      />
+      {/* Hidden screens, not part of the tab bar */}
       <Tabs.Screen 
         name="profile" 
-        options={{
-          title: "Profile",
-          tabBarButton: () => null
-        }}
+        options={{ tabBarButton: () => null }}
       />
       <Tabs.Screen 
         name="change-password" 
-        options={{
-          title: "Change Password",
-          tabBarButton: () => null
-        }}
-      />
-      <Tabs.Screen 
-        name="notifications" 
-        options={{
-          title: "Notifications",
-          tabBarButton: () => null
-        }}
-      />
-      <Tabs.Screen 
-        name="recording" 
-        options={{
-          title: "Recording",
-          tabBarButton: () => null
-        }}
-      />
-      <Tabs.Screen 
-        name="meeting/[id]" 
-        options={{
-          title: "Meeting Details",
-          tabBarButton: () => null
-        }}
-      />
-      <Tabs.Screen 
-        name="chat" 
-        options={{
-          title: "Chat",
-          tabBarLabel: () => null
-        }}
-        listeners={{
-          tabPress: (e) => {
-            triggerHaptic();
-          },
-        }}
+        options={{ tabBarButton: () => null }}
       />
     </Tabs>
   );

@@ -15,9 +15,9 @@ export default function AuthLayout() {
 				headerShown: false,
 				// Use device scheme for header background and tint color
 				headerStyle: {
-					backgroundColor: colors[deviceColorScheme].background,
+					backgroundColor: '#FFFFFF', // Set header background to white
 				},
-				headerTintColor: colors[deviceColorScheme].foreground,
+				headerTintColor: '#000000', // Set header tint (back arrow, title) to black
 			}}
 		>
 			{/* Sign Up Screen */}

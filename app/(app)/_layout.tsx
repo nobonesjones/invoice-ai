@@ -24,10 +24,7 @@ export default function AppLayout() {
 				options={{
 					gestureEnabled: true,
 					gestureDirection: "horizontal",
-					tabBarOnPress: (e) => {
-						// Trigger haptic before default behavior
-						triggerHaptic();
-					},
+					// tabBarOnPress removed as it's not applicable here
 				}}
 			/>
 			<Stack.Screen name="welcome" />

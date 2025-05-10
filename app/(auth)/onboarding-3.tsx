@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, useColorScheme as useDeviceColorScheme, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, useColorScheme as useDeviceColorScheme, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/ui/button';
 import { StepIndicator } from '@/components/ui/step-indicator';
 import ShiningText from '@/components/ui/ShiningText';
+import { P } from '@/components/ui/typography';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/constants/colors';
 
@@ -36,10 +37,6 @@ export default function OnboardingScreen3() {
     router.replace('/(app)/welcome'); 
   };
 
-  const imageSource = isDeviceLightMode
-    ? require('../../assets/3light.png')
-    : require('../../assets/3dark.png');
-
   return (
     <SafeAreaView className={`flex-1 bg-background ${!isDeviceLightMode ? 'dark' : ''}`}>
       <View style={styles.container}>
@@ -55,23 +52,24 @@ export default function OnboardingScreen3() {
               transform: [{ translateY }],
             }}
           >
-            <Image
-              source={imageSource}
-              className="w-full h-full"
-              resizeMode="contain"
+            <View
+              className="w-full h-full bg-gray-300 rounded-lg"
             />
           </Animated.View>
         </View>
 
-        <View className="items-center mb-12">
+        <View style={styles.textContainer}>
           <ShiningText
-            text="Share Everything Instantly"
+            text="Onboarding 3"
             className="text-3xl font-bold text-center text-foreground mb-4"
+            numberOfLines={1}
           />
-          <Text style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>
-            Replay audio, read transcripts and share minutes with one tap.
-          </Text>
+          <P style={[styles.description, { color: colors[deviceColorScheme].mutedForeground }]}>
+            The best thing about the app...
+          </P>
         </View>
+
+        <View style={styles.spacer} />
 
         {/* Action Button */}
         <Button onPress={handleNext} className="w-full dark:bg-white dark:text-primary">
@@ -102,9 +100,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     marginTop: 30,
+    overflow: 'hidden',
   },
   description: {
     textAlign: 'center',
-    fontSize: 18,
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  textContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 30,
+    marginTop: 60,
+  },
+  spacer: {
+    flex: 1,
   },
 });

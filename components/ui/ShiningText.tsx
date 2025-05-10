@@ -9,9 +9,10 @@ interface ShiningTextProps {
   text: string;
   className?: string;
   style?: StyleProp<TextStyle>;
+  numberOfLines?: number;
 }
 
-const ShiningText: React.FC<ShiningTextProps> = ({ text, className, style }) => {
+const ShiningText: React.FC<ShiningTextProps> = ({ text, className, style, numberOfLines }) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const colorScheme = useColorScheme();
   const { theme } = useTheme();
@@ -46,7 +47,7 @@ const ShiningText: React.FC<ShiningTextProps> = ({ text, className, style }) => 
       <MaskedView
         style={styles.maskedView}
         maskElement={
-          <Text className={cn(className)} style={textStyle}>
+          <Text className={cn(className)} style={textStyle} numberOfLines={numberOfLines}>
             {text}
           </Text>
         }
@@ -54,6 +55,7 @@ const ShiningText: React.FC<ShiningTextProps> = ({ text, className, style }) => 
         <Text
           className={cn(className)}
           style={textStyle}
+          numberOfLines={numberOfLines}
           aria-hidden
         >
           {text}

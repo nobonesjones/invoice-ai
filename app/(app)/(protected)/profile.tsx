@@ -41,7 +41,7 @@ export default function Profile() {
     const handleUpgrade = () => console.log("Upgrade pressed");
     const handleNamePress = () => setIsEditingName(true);
     const handleTranscriptLang = () => {
-        setActiveModalTitle('Transcript Language'); // Use renamed state
+        setActiveModalTitle('App Language'); // Use renamed state
         setIsModalVisible(true); // Use renamed state
     };
     // Renamed handler for Storage
@@ -184,7 +184,7 @@ export default function Profile() {
                 <View style={{ backgroundColor: theme.card }} className="rounded-lg overflow-hidden mx-4 mb-4">
                     <SettingsListItem
                         icon={<Languages size={24} color={theme.foreground} />}
-                        label="Transcript language"
+                        label="App Language"
                         onPress={handleTranscriptLang}
                     />
                     {/* Renamed Item */}

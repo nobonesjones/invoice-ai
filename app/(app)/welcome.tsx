@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { View, StyleSheet, Image, SafeAreaView, Alert, Text } from "react-native";
+import { useRouter, Link } from "expo-router";
+import { View, StyleSheet, SafeAreaView, Alert, Text, Image, Platform } from "react-native";
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 
@@ -107,18 +107,18 @@ export default function WelcomeScreen() {
 
 	return (
 		<SafeAreaView
-			style={[styles.safeArea, { backgroundColor: theme.background }]}
+			style={[styles.safeArea, { backgroundColor: '#FFFFFF' }]}
 		>
 			{/* Main Content Area with Padding */}
 			<View style={styles.contentContainer}>
-				<Image
-					source={require("@/assets/summiticon.png")}
-					className="w-24 h-24 rounded-3xl"
-					resizeMode="contain"
+				{/* Updated to Image component */}
+				<Image 
+					source={require('../../assets/rocketicon.png')}
+					className="w-40 h-40 rounded-3xl"
 				/>
-				<H1 style={{ color: theme.foreground }} className="text-center">EasyMinutes.ai</H1>
+				<H1 style={{ color: theme.foreground }} className="text-center">Supastarter</H1>
 				<Muted style={{ color: theme.mutedForeground }} className="text-center">
-					Saving the world from admin, one meeting at a time.
+					Sign up to this app because it's incredible.
 				</Muted>
 			</View>
 
@@ -127,26 +127,63 @@ export default function WelcomeScreen() {
 				{/* Google Button (White BG, Black Text) */}
 				<Button
           onPress={signInWithGoogle}
-          className={cn('mb-4 flex-row items-center justify-center')} 
-          style={{ backgroundColor: '#FFFFFF' }} 
+          className={cn('mb-4')} 
+          style={[
+            { 
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1,
+              borderColor: '#E0E0E0', // Light gray border for Google button
+            },
+            Platform.OS === 'ios' ? {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 3,
+            } : {
+              elevation: 3,
+            }
+          ]}
         >
-          <Image source={require('../../assets/google.png')} style={styles.googleLogo} />
-          <Text style={{ color: '#000000', marginLeft: 12, fontWeight: '600', marginBottom: -2 }}>Sign up with Google</Text>
+          <View className="flex-row items-center justify-center"> 
+            <Image source={require('../../assets/google.png')} style={styles.googleLogo} /> 
+            <Text style={{ color: '#000000', marginLeft: 12, fontWeight: '600' }}>Sign up with Google</Text>
+          </View>
         </Button>
 
 				{/* Email Sign Up Button (Outline Style) */}
         <Button
           onPress={handleSignUp} 
           className="flex-row items-center justify-center" 
-          style={{
-            backgroundColor: 'transparent',
-            borderColor: theme.border,
-            borderWidth: 1,
-          }}
+          style={[
+            {
+              backgroundColor: 'transparent',
+              borderColor: theme.border,
+              borderWidth: 1,
+            },
+            Platform.OS === 'ios' ? {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 3,
+            } : {
+              elevation: 3,
+            }
+          ]}
         >
           <Text style={{ color: theme.foreground, fontWeight: '600' }}>Sign up with Email</Text>
         </Button>
 
+        {/* Added text and link: 'Have an account? Log In' */}
+        <View style={{ alignItems: 'center', marginTop: 24, marginBottom: 8 }}> 
+          <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: 'center' }}>
+            Have an account?{' '}
+            <Link href="/(app)/(auth)/sign-in" asChild>
+              <Text style={{ color: theme.primary, fontWeight: '600', fontSize: 14 }}>
+                Log In
+              </Text>
+            </Link>
+          </Text>
+        </View>
 			</View>
 		</SafeAreaView>
 	);
@@ -155,18 +192,21 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
 	safeArea: {
 		flex: 1,
+    justifyContent: 'flex-end', // Align children to the bottom
 	},
 	contentContainer: {
-		flex: 1,
+		flex: 1, // Expand upwards to fill available space
 		justifyContent: 'center',
 		alignItems: 'center',
 		padding: 16, 
 		gap: 16, 
+    width: '100%', // Ensure it takes full width
 	},
   buttonContainer: {
     width: '100%',
     paddingHorizontal: 16, 
-    paddingBottom: 40, 
+    paddingBottom: 0, // Removed padding from bottom
+    marginTop: 24, // Space between contentContainer and buttonContainer (was 120)
   },
   googleLogo: {
     width: 22, 
