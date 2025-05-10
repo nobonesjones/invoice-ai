@@ -8,7 +8,9 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView, 
-  Keyboard, 
+  Keyboard,
+  ActivityIndicator, 
+  Alert,
 } from 'react-native';
 import {
   BottomSheetModal,
@@ -18,6 +20,7 @@ import {
 import { X, PlusCircle } from 'lucide-react-native'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
+import { supabase } from '@/lib/supabase'; 
 
 export interface Client { 
   id: string;
@@ -25,16 +28,18 @@ export interface Client {
   email?: string | null;
   phone?: string | null;
   avatar_url?: string | null;
+  user_id: string; 
 }
 
 interface CreateNewClientSheetProps {
   onClose?: () => void;
+  onClientAdded?: () => void; 
 }
 
 const CreateNewClientSheet = forwardRef<
   BottomSheetModal,
   CreateNewClientSheetProps
->(({ onClose }, ref) => {
+>(({ onClose, onClientAdded }, ref) => {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const styles = getStyles(themeColors, isLightMode);
@@ -42,6 +47,7 @@ const CreateNewClientSheet = forwardRef<
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [isLoading, setIsLoading] = useState(false); 
 
   const snapPoints = useMemo(() => ['65%', '98%'], []); 
 
@@ -78,8 +84,52 @@ const CreateNewClientSheet = forwardRef<
     []
   );
 
-  const handleSaveClient = () => {
-    console.log('Saving client:', { fullName, email, phone });
+  const handleSaveClient = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Validation Error', 'Full Name is required.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert('Error', 'Could not get user information. Please try again.');
+        console.error('User fetch error:', userError?.message);
+        setIsLoading(false);
+        return;
+      }
+
+      const clientData = {
+        name: fullName.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        user_id: user.id,
+      };
+
+      const { error: insertError } = await supabase
+        .from('clients')
+        .insert([clientData]);
+
+      if (insertError) {
+        Alert.alert('Error', 'Could not save client. Please try again.');
+        console.error('Client insert error:', insertError.message);
+      } else {
+        Alert.alert('Success', 'Client saved successfully!');
+        setFullName('');
+        setEmail('');
+        setPhone('');
+        if (onClientAdded) {
+          onClientAdded();
+        }
+        (ref as React.RefObject<BottomSheetModal>)?.current?.dismiss();
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      console.error('Unexpected save error:', error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddFromContacts = () => {
@@ -89,7 +139,7 @@ const CreateNewClientSheet = forwardRef<
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <Text style={styles.title}>Add New Client</Text>
-      <TouchableOpacity onPress={() => (ref as React.RefObject<BottomSheetModal>)?.current?.dismiss()} style={styles.closeButton}>
+      <TouchableOpacity onPress={() => (ref as React.RefObject<BottomSheetModal>)?.current?.dismiss()} style={styles.closeButton} disabled={isLoading}>
         <X size={24} color={themeColors.mutedForeground} />
       </TouchableOpacity>
     </View>
@@ -104,13 +154,13 @@ const CreateNewClientSheet = forwardRef<
       onDismiss={onClose}
       handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
       backgroundStyle={{ backgroundColor: themeColors.card }}
-      enablePanDownToClose={true}
+      enablePanDownToClose={!isLoading} 
       keyboardBehavior="interactive" 
       keyboardBlurBehavior="restore"
     >
       {renderHeader()}
       <BottomSheetView style={styles.bottomSheetContentContainer}> 
-        <TouchableOpacity style={styles.addFromContactsButton} onPress={handleAddFromContacts}>
+        <TouchableOpacity style={styles.addFromContactsButton} onPress={handleAddFromContacts} disabled={isLoading}>
           <PlusCircle size={20} color={isLightMode ? '#28A745' : themeColors.primary} style={styles.addFromContactsIcon} />
           <Text style={styles.addFromContactsText}>+ Add From Contacts</Text>
         </TouchableOpacity>
@@ -135,6 +185,7 @@ const CreateNewClientSheet = forwardRef<
                 value={fullName}
                 onChangeText={setFullName}
                 autoCapitalize="words"
+                editable={!isLoading}
               />
             </View>
 
@@ -148,6 +199,7 @@ const CreateNewClientSheet = forwardRef<
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                editable={!isLoading}
               />
             </View>
 
@@ -160,11 +212,16 @@ const CreateNewClientSheet = forwardRef<
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
+                editable={!isLoading}
               />
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveClient}>
-              <Text style={styles.saveButtonText}>Save Client</Text>
+            <TouchableOpacity style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} onPress={handleSaveClient} disabled={isLoading}>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveButtonText}>Save Client</Text>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -242,8 +299,6 @@ const getStyles = (themeColors: any, isLightMode: boolean) => StyleSheet.create(
     paddingVertical: Platform.OS === 'ios' ? 14 : 11, 
     borderRadius: 8, 
     fontSize: 15, 
-    // borderWidth: isLightMode ? StyleSheet.hairlineWidth : 0, 
-    // borderColor: isLightMode ? '#D0D0D0' : 'transparent',
   },
   saveButton: {
     backgroundColor: '#28A745', 
@@ -252,6 +307,9 @@ const getStyles = (themeColors: any, isLightMode: boolean) => StyleSheet.create(
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20, 
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#A5D6A7', 
   },
   saveButtonText: {
     color: '#FFFFFF', 

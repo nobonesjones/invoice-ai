@@ -1,25 +1,27 @@
-import { View, Text, TextInput, StyleSheet, SafeAreaView, FlatList, Pressable, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, StyleSheet, SafeAreaView, Pressable, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Search } from 'lucide-react-native'; 
 import { colors } from '@/constants/colors';
 import CustomerListItem, { Customer } from '@/components/CustomerListItem';
-import CreateNewClientSheet, { Client as ClientType } from './CreateNewClientSheet'; // Import the local, cloned sheet. ClientType might be from here now.
+import CreateNewClientSheet from './CreateNewClientSheet'; 
 import { BottomSheetModal } from '@gorhom/bottom-sheet'; 
-import { supabase } from '@/config/supabase';
+import { supabase } from '@/lib/supabase'; 
+import { FlashList } from "@shopify/flash-list"; 
 
 export default function CustomersScreen() {
   console.log('--- CustomersScreen Component Render ---'); 
-  console.log('--- CUSTOMERS SCREEN V3 DIAGNOSTIC LOG --- File loaded at:', new Date().toISOString()); // <-- DIAGNOSTIC LOG KEPT FOR VERIFICATION
+  console.log('--- CUSTOMERS SCREEN V3 DIAGNOSTIC LOG --- File loaded at:', new Date().toISOString());
+
   const theme = colors.light;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ selectionMode?: string; origin?: string }>();
-  const addNewClientSheetRef = useRef<BottomSheetModal>(null); // Use a ref name suitable for the local sheet
+  const addNewClientSheetRef = useRef<BottomSheetModal>(null);
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => { 
     console.log('Fetching clients from Supabase...');
     setLoading(true);
     setError(null);
@@ -60,37 +62,25 @@ export default function CustomersScreen() {
       setCustomers([]);
     }
     setLoading(false);
-  };
+  }, []); 
 
   useEffect(() => {
+    console.log('CustomersScreen: useEffect calling fetchClients. Selection mode:', params.selectionMode);
     fetchClients();
-  }, [params.selectionMode]);
+  }, [fetchClients, params.selectionMode]); 
 
-  // This handler will now be for the local CreateNewClientSheet
-  // Renaming for clarity, though its function (handling a selected client) is similar for now
-  const handleClientAddedOrSelected = useCallback((client: ClientType) => {
-    console.log('Client selected/added via CreateNewClientSheet:', client);
-    addNewClientSheetRef.current?.dismiss();
-    fetchClients(); // Refresh client list as a new one might have been created or an existing one selected
-  }, []);
+  const handleClientAdded = useCallback(() => {
+    console.log('CustomersScreen: Client added, refreshing list...');
+    fetchClients(); 
+  }, [fetchClients]); 
 
-  // Function to open the local CreateNewClientSheet
-  // Renaming for clarity
   const openAddNewClientSheet = useCallback(() => {
-    console.log('Attempting to open local CreateNewClientSheet from customers/index.tsx');
+    console.log('CustomersScreen: Attempting to open CreateNewClientSheet');
     addNewClientSheetRef.current?.present();
   }, []);
 
-  const handleSaveNewClient = (newClient: any) => {
-    // This function might become more relevant if CreateNewClientSheet is modified to specifically *save* a new client
-    // For now, the cloned sheet uses onClientSelect for any client interaction.
-    console.log('handleSaveNewClient called (currently a placeholder):', newClient);
-    fetchClients();
-    addNewClientSheetRef.current?.dismiss(); 
-  };
-
   const handleCloseAddNewClientSheet = () => {
-    console.log('Local CreateNewClientSheet closed');
+    console.log('CustomersScreen: CreateNewClientSheet closed');
   };
 
   const renderCustomerItem = ({ item }: { item: Customer }) => (
@@ -117,7 +107,7 @@ export default function CustomersScreen() {
         <View style={styles.headerRow}>
           <Text style={styles.title}>Clients</Text>
           <TouchableOpacity
-            onPress={openAddNewClientSheet} // Use the new function for the local sheet
+            onPress={openAddNewClientSheet}
             style={styles.addClientButton} 
             activeOpacity={0.7} 
           >
@@ -133,12 +123,13 @@ export default function CustomersScreen() {
             // TODO: Implement search functionality
           />
         </View>
-        <FlatList
+        <FlashList
           data={customers}
           renderItem={renderCustomerItem}
           keyExtractor={(item) => item.id}
           ItemSeparatorComponent={ItemSeparator}
           contentContainerStyle={styles.listContentContainer}
+          estimatedItemSize={75} 
           ListEmptyComponent={() => {
             if (loading) return <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 20 }} />;
             if (error) return <Text style={styles.emptyListTextError}>{error}</Text>;
@@ -149,7 +140,8 @@ export default function CustomersScreen() {
       </View>
       <CreateNewClientSheet 
         ref={addNewClientSheetRef} 
-        onClose={handleCloseAddNewClientSheet} // Keep onClose if needed
+        onClose={handleCloseAddNewClientSheet}
+        onClientAdded={handleClientAdded} 
       />
     </SafeAreaView>
   );
@@ -174,7 +166,7 @@ const styles = StyleSheet.create({
   },
   listContentContainer: {
     paddingBottom: 20,
-    flexGrow: 1, // Ensure it can grow if content is less
+    flexGrow: 1, 
   },
   title: {
     fontSize: 30,
@@ -200,36 +192,32 @@ const styles = StyleSheet.create({
     color: colors.light.foreground,
     height: Platform.OS === 'ios' ? undefined : 24, 
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.light.border,
-    marginLeft: 16 + 40 + 12, 
-  },
   addClientButton: {
-    backgroundColor: colors.light.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20, 
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: colors.light.primary, 
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
   addClientButtonText: {
-    color: colors.light.primaryForeground,
-    fontWeight: 'bold',
+    color: '#FFFFFF', 
     fontSize: 14,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.light.border, 
+    marginHorizontal: 16,
   },
   emptyListText: {
-    textAlign: 'center', 
-    marginTop: 50, 
-    color: colors.light.mutedForeground, 
+    textAlign: 'center',
+    marginTop: 50,
     fontSize: 16,
-    paddingHorizontal: 16,
+    color: colors.light.mutedForeground,
   },
   emptyListTextError: {
-    textAlign: 'center', 
-    marginTop: 50, 
-    color: colors.light.destructive, 
+    textAlign: 'center',
+    marginTop: 50,
     fontSize: 16,
-    paddingHorizontal: 16,
+    color: colors.light.destructive, 
   },
 });

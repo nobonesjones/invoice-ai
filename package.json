@@ -62,7 +62,8 @@
     "rn-emoji-keyboard": "^1.7.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss": "^3.4.14",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@shopify/flash-list": "1.7.6"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
