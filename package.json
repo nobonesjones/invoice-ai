@@ -17,6 +17,7 @@
     "@react-native-community/datetimepicker": "^8.3.0",
     "@react-native-community/slider": "4.5.6",
     "@react-native-masked-view/masked-view": "^0.3.2",
+    "@shopify/flash-list": "1.7.6",
     "@supabase/supabase-js": "^2.46.1",
     "@tamagui/lucide-icons": "^1.125.26",
     "ajv": "^8.17.1",
@@ -62,8 +63,7 @@
     "rn-emoji-keyboard": "^1.7.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss": "^3.4.14",
-    "zod": "^3.23.8",
-    "@shopify/flash-list": "1.7.6"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
