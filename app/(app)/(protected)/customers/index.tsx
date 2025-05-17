@@ -1,223 +1,268 @@
-import { View, Text, TextInput, StyleSheet, SafeAreaView, Pressable, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Search } from 'lucide-react-native'; 
-import { colors } from '@/constants/colors';
-import CustomerListItem, { Customer } from '@/components/CustomerListItem';
-import CreateNewClientSheet from './CreateNewClientSheet'; 
-import { BottomSheetModal } from '@gorhom/bottom-sheet'; 
-import { supabase } from '@/lib/supabase'; 
-import { FlashList } from "@shopify/flash-list"; 
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { FlashList } from "@shopify/flash-list";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { Search } from "lucide-react-native";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import {
+	View,
+	Text,
+	TextInput,
+	StyleSheet,
+	SafeAreaView,
+	Pressable,
+	ActivityIndicator,
+	Platform,
+	TouchableOpacity,
+} from "react-native";
+
+import CreateNewClientSheet from "./CreateNewClientSheet";
+
+import CustomerListItem, { Customer } from "@/components/CustomerListItem";
+import { colors } from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
 
 export default function CustomersScreen() {
-  console.log('--- CustomersScreen Component Render ---'); 
-  console.log('--- CUSTOMERS SCREEN V3 DIAGNOSTIC LOG --- File loaded at:', new Date().toISOString());
+	console.log("--- CustomersScreen Component Render ---");
+	console.log(
+		"--- CUSTOMERS SCREEN V3 DIAGNOSTIC LOG --- File loaded at:",
+		new Date().toISOString(),
+	);
 
-  const theme = colors.light;
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-  const params = useLocalSearchParams<{ selectionMode?: string; origin?: string }>();
-  const addNewClientSheetRef = useRef<BottomSheetModal>(null);
+	const theme = colors.light;
+	const [customers, setCustomers] = useState<Customer[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const router = useRouter();
+	const params = useLocalSearchParams<{
+		selectionMode?: string;
+		origin?: string;
+	}>();
+	const addNewClientSheetRef = useRef<BottomSheetModal>(null);
 
-  const fetchClients = useCallback(async () => { 
-    console.log('Fetching clients from Supabase...');
-    setLoading(true);
-    setError(null);
-    try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.error('Error getting user:', userError.message);
-        setError('Authentication error. Please log in again.');
-        setLoading(false);
-        setCustomers([]);
-        return;
-      }
-      if (!userData || !userData.user) {
-        console.log('No authenticated user found.');
-        setError('User not authenticated. Please log in.');
-        setLoading(false);
-        setCustomers([]);
-        return;
-      }
-      console.log('Authenticated user ID for fetch:', userData.user.id);
+	const fetchClients = useCallback(async () => {
+		console.log("Fetching clients from Supabase...");
+		setLoading(true);
+		setError(null);
+		try {
+			const { data: userData, error: userError } =
+				await supabase.auth.getUser();
+			if (userError) {
+				console.error("Error getting user:", userError.message);
+				setError("Authentication error. Please log in again.");
+				setLoading(false);
+				setCustomers([]);
+				return;
+			}
+			if (!userData || !userData.user) {
+				console.log("No authenticated user found.");
+				setError("User not authenticated. Please log in.");
+				setLoading(false);
+				setCustomers([]);
+				return;
+			}
+			console.log("Authenticated user ID for fetch:", userData.user.id);
 
-      const { data, error: fetchError } = await supabase
-        .from('clients')
-        .select('id, name, email, phone, avatar_url')
-        .eq('user_id', userData.user.id)
-        .order('name', { ascending: true });
+			const { data, error: fetchError } = await supabase
+				.from("clients")
+				.select("id, name, email, phone, avatar_url")
+				.eq("user_id", userData.user.id)
+				.order("name", { ascending: true });
 
-      if (fetchError) {
-        console.error('Error fetching clients from Supabase:', fetchError.message);
-        throw fetchError;
-      }
-      
-      console.log('Successfully fetched clients:', data ? data.length : 0);
-      setCustomers(data as Customer[] || []);
-    } catch (e: any) {
-      console.error('Detailed error in fetchClients:', e);
-      setError('Failed to load clients. Please try again.');
-      setCustomers([]);
-    }
-    setLoading(false);
-  }, []); 
+			if (fetchError) {
+				console.error(
+					"Error fetching clients from Supabase:",
+					fetchError.message,
+				);
+				throw fetchError;
+			}
 
-  useEffect(() => {
-    console.log('CustomersScreen: useEffect calling fetchClients. Selection mode:', params.selectionMode);
-    fetchClients();
-  }, [fetchClients, params.selectionMode]); 
+			console.log("Successfully fetched clients:", data ? data.length : 0);
+			setCustomers((data as Customer[]) || []);
+		} catch (e: any) {
+			console.error("Detailed error in fetchClients:", e);
+			setError("Failed to load clients. Please try again.");
+			setCustomers([]);
+		}
+		setLoading(false);
+	}, []);
 
-  const handleClientAdded = useCallback(() => {
-    console.log('CustomersScreen: Client added, refreshing list...');
-    fetchClients(); 
-  }, [fetchClients]); 
+	useEffect(() => {
+		console.log(
+			"CustomersScreen: useEffect calling fetchClients. Selection mode:",
+			params.selectionMode,
+		);
+		fetchClients();
+	}, [fetchClients, params.selectionMode]);
 
-  const openAddNewClientSheet = useCallback(() => {
-    console.log('CustomersScreen: Attempting to open CreateNewClientSheet');
-    addNewClientSheetRef.current?.present();
-  }, []);
+	const handleClientAdded = useCallback(() => {
+		console.log("CustomersScreen: Client added, refreshing list...");
+		fetchClients();
+	}, [fetchClients]);
 
-  const handleCloseAddNewClientSheet = () => {
-    console.log('CustomersScreen: CreateNewClientSheet closed');
-  };
+	const openAddNewClientSheet = useCallback(() => {
+		console.log("CustomersScreen: Attempting to open CreateNewClientSheet");
+		addNewClientSheetRef.current?.present();
+	}, []);
 
-  const renderCustomerItem = ({ item }: { item: Customer }) => (
-    <CustomerListItem
-      customer={item}
-      onPress={() => {
-        if (params.selectionMode === 'true' && params.origin) {
-          router.push({
-            pathname: params.origin as any, 
-            params: { selectedClientId: item.id, selectedClientName: item.name },
-          });
-        } else {
-          router.push(`/(app)/(protected)/customers/${item.id}`);
-        }
-      }}
-    />
-  );
+	const handleCloseAddNewClientSheet = () => {
+		console.log("CustomersScreen: CreateNewClientSheet closed");
+	};
 
-  const ItemSeparator = () => <View style={styles.divider} />;
+	const renderCustomerItem = ({ item }: { item: Customer }) => (
+		<CustomerListItem
+			customer={item}
+			onPress={() => {
+				if (params.selectionMode === "true" && params.origin) {
+					router.push({
+						pathname: params.origin as any,
+						params: {
+							selectedClientId: item.id,
+							selectedClientName: item.name,
+						},
+					});
+				} else {
+					router.push(`/(app)/(protected)/customers/${item.id}`);
+				}
+			}}
+		/>
+	);
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>Clients</Text>
-          <TouchableOpacity
-            onPress={openAddNewClientSheet}
-            style={styles.addClientButton} 
-            activeOpacity={0.7} 
-          >
-            <Text style={styles.addClientButtonText}>+ Add Client</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.searchBarContainer}>
-          <Search size={20} color={theme.mutedForeground} style={styles.searchIcon} />
-          <TextInput
-            placeholder="Search Customers"
-            placeholderTextColor={theme.mutedForeground}
-            style={styles.searchInput}
-            // TODO: Implement search functionality
-          />
-        </View>
-        <FlashList
-          data={customers}
-          renderItem={renderCustomerItem}
-          keyExtractor={(item) => item.id}
-          ItemSeparatorComponent={ItemSeparator}
-          contentContainerStyle={styles.listContentContainer}
-          estimatedItemSize={75} 
-          ListEmptyComponent={() => {
-            if (loading) return <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 20 }} />;
-            if (error) return <Text style={styles.emptyListTextError}>{error}</Text>;
-            if (!customers.length) return <Text style={styles.emptyListText}>No clients yet. Click "+ Add Client" to get started!</Text>;
-            return null;
-          }}
-        />
-      </View>
-      <CreateNewClientSheet 
-        ref={addNewClientSheetRef} 
-        onClose={handleCloseAddNewClientSheet}
-        onClientAdded={handleClientAdded} 
-      />
-    </SafeAreaView>
-  );
+	const ItemSeparator = () => <View style={styles.divider} />;
+
+	return (
+		<SafeAreaView style={styles.safeArea}>
+			<View style={styles.container}>
+				<View style={styles.headerRow}>
+					<Text style={styles.title}>Clients</Text>
+					<TouchableOpacity
+						onPress={openAddNewClientSheet}
+						style={styles.addClientButton}
+						activeOpacity={0.7}
+					>
+						<Text style={styles.addClientButtonText}>+ Add Client</Text>
+					</TouchableOpacity>
+				</View>
+				<View style={styles.searchBarContainer}>
+					<Search
+						size={20}
+						color={theme.mutedForeground}
+						style={styles.searchIcon}
+					/>
+					<TextInput
+						placeholder="Search Customers"
+						placeholderTextColor={theme.mutedForeground}
+						style={styles.searchInput}
+						// TODO: Implement search functionality
+					/>
+				</View>
+				<FlashList
+					data={customers}
+					renderItem={renderCustomerItem}
+					keyExtractor={(item) => item.id}
+					ItemSeparatorComponent={ItemSeparator}
+					contentContainerStyle={styles.listContentContainer}
+					estimatedItemSize={75}
+					ListEmptyComponent={() => {
+						if (loading)
+							return (
+								<ActivityIndicator
+									size="large"
+									color={theme.primary}
+									style={{ marginTop: 20 }}
+								/>
+							);
+						if (error)
+							return <Text style={styles.emptyListTextError}>{error}</Text>;
+						if (!customers.length)
+							return (
+								<Text style={styles.emptyListText}>
+									No clients yet. Click "+ Add Client" to get started!
+								</Text>
+							);
+						return null;
+					}}
+				/>
+			</View>
+			<CreateNewClientSheet
+				ref={addNewClientSheetRef}
+				onClose={handleCloseAddNewClientSheet}
+				onClientAdded={handleClientAdded}
+			/>
+		</SafeAreaView>
+	);
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.light.background,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 0,
-    paddingTop: 16,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  listContentContainer: {
-    paddingBottom: 20,
-    flexGrow: 1, 
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: colors.light.foreground,
-  },
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.light.input,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-    marginBottom: 16,
-    marginHorizontal: 16,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: colors.light.foreground,
-    height: Platform.OS === 'ios' ? undefined : 24, 
-  },
-  addClientButton: {
-    backgroundColor: colors.light.primary, 
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  addClientButtonText: {
-    color: '#FFFFFF', 
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.light.border, 
-    marginHorizontal: 16,
-  },
-  emptyListText: {
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
-    color: colors.light.mutedForeground,
-  },
-  emptyListTextError: {
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
-    color: colors.light.destructive, 
-  },
+	safeArea: {
+		flex: 1,
+		backgroundColor: colors.light.background,
+	},
+	container: {
+		flex: 1,
+		paddingHorizontal: 0,
+		paddingTop: 16,
+	},
+	headerRow: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		paddingHorizontal: 16,
+		marginBottom: 16,
+	},
+	listContentContainer: {
+		paddingBottom: 20,
+		flexGrow: 1,
+	},
+	title: {
+		fontSize: 30,
+		fontWeight: "bold",
+		color: colors.light.foreground,
+	},
+	searchBarContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		backgroundColor: colors.light.input,
+		borderRadius: 12,
+		paddingHorizontal: 12,
+		paddingVertical: Platform.OS === "ios" ? 12 : 10,
+		marginBottom: 16,
+		marginHorizontal: 16,
+	},
+	searchIcon: {
+		marginRight: 8,
+	},
+	searchInput: {
+		flex: 1,
+		fontSize: 16,
+		color: colors.light.foreground,
+		height: Platform.OS === "ios" ? undefined : 24,
+	},
+	addClientButton: {
+		backgroundColor: colors.light.primary,
+		paddingHorizontal: 16,
+		paddingVertical: 10,
+		borderRadius: 20,
+	},
+	addClientButtonText: {
+		color: "#FFFFFF",
+		fontSize: 14,
+		fontWeight: "600",
+	},
+	divider: {
+		height: 1,
+		backgroundColor: colors.light.border,
+		marginHorizontal: 16,
+	},
+	emptyListText: {
+		textAlign: "center",
+		marginTop: 50,
+		fontSize: 16,
+		color: colors.light.mutedForeground,
+	},
+	emptyListTextError: {
+		textAlign: "center",
+		marginTop: 50,
+		fontSize: 16,
+		color: colors.light.destructive,
+	},
 });

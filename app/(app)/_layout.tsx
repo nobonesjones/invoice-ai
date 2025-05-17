@@ -1,14 +1,14 @@
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"; // Import BottomSheetModalProvider
+import * as Haptics from "expo-haptics"; // Import Haptics
 import { Stack } from "expo-router";
-import * as Haptics from 'expo-haptics'; // Import Haptics
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'; // Import BottomSheetModalProvider
-
-// Function to trigger haptic feedback
-const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-};
 
 import { colors } from "@/constants/colors";
 import { useColorScheme } from "@/lib/useColorScheme";
+
+// Function to trigger haptic feedback
+const triggerHaptic = () => {
+	Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+};
 
 export const unstable_settings = {
 	initialRouteName: "(auth)",
@@ -21,8 +21,8 @@ export default function AppLayout() {
 	return (
 		<BottomSheetModalProvider>
 			<Stack screenOptions={{ headerShown: false, gestureEnabled: true }}>
-				<Stack.Screen 
-					name="(protected)" 
+				<Stack.Screen
+					name="(protected)"
 					options={{
 						gestureEnabled: true,
 						gestureDirection: "horizontal",

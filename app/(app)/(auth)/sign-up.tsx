@@ -1,15 +1,21 @@
-import { useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator, useColorScheme as useDeviceColorScheme, Platform } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
+import { useState } from "react";
+import {
+	View,
+	TouchableOpacity,
+	ActivityIndicator,
+	useColorScheme as useDeviceColorScheme,
+	Platform,
+} from "react-native";
 import { z } from "zod";
 
+import { SafeAreaView } from "@/components/safe-area-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { H1, Muted } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
-import { SafeAreaView } from "@/components/safe-area-view";
 
 const signUpSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
@@ -24,14 +30,16 @@ export default function SignUp() {
 	const { signUp } = useSupabase();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+	const [errors, setErrors] = useState<{ email?: string; password?: string }>(
+		{},
+	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [generalError, setGeneralError] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [confirmPasswordError, setConfirmPasswordError] = useState("");
 
-	const deviceColorScheme = useDeviceColorScheme() ?? 'light';
-	const isDeviceLightMode = deviceColorScheme === 'light';
+	const deviceColorScheme = useDeviceColorScheme() ?? "light";
+	const isDeviceLightMode = deviceColorScheme === "light";
 
 	const validateForm = () => {
 		try {
@@ -76,13 +84,10 @@ export default function SignUp() {
 
 	return (
 		<SafeAreaView
-			style={{ flex: 1, padding: 16, backgroundColor: '#FFFFFF' }}
+			style={{ flex: 1, padding: 16, backgroundColor: "#FFFFFF" }}
 			edges={["bottom"]}
 		>
-			<TouchableOpacity
-				onPress={() => router.back()}
-				className="mb-4"
-			>
+			<TouchableOpacity onPress={() => router.back()} className="mb-4">
 				<Text className="text-foreground">
 					<ChevronLeft size={24} className="text-foreground" />
 				</Text>
@@ -103,9 +108,7 @@ export default function SignUp() {
 
 					<View className="gap-4">
 						<View>
-							<Text className="mb-1.5 text-foreground">
-								Email
-							</Text>
+							<Text className="mb-1.5 text-foreground">Email</Text>
 							<Input
 								value={email}
 								onChangeText={setEmail}
@@ -120,9 +123,7 @@ export default function SignUp() {
 						</View>
 
 						<View>
-							<Text className="mb-1.5 text-foreground">
-								Password
-							</Text>
+							<Text className="mb-1.5 text-foreground">Password</Text>
 							<Input
 								value={password}
 								onChangeText={setPassword}
@@ -136,9 +137,7 @@ export default function SignUp() {
 						</View>
 
 						<View>
-							<Text className="mb-1.5 text-foreground">
-								Confirm Password
-							</Text>
+							<Text className="mb-1.5 text-foreground">Confirm Password</Text>
 							<Input
 								value={confirmPassword}
 								onChangeText={setConfirmPassword}
@@ -147,13 +146,17 @@ export default function SignUp() {
 								className="bg-card border border-border text-foreground p-2.5 placeholder:text-muted-foreground"
 							/>
 							{confirmPasswordError ? (
-								<Text className="text-destructive mt-1">{confirmPasswordError}</Text>
+								<Text className="text-destructive mt-1">
+									{confirmPasswordError}
+								</Text>
 							) : null}
 						</View>
 					</View>
 
 					<View className="flex-row justify-center mt-4">
-						<Text className="text-muted-foreground">Already have an account? </Text>
+						<Text className="text-muted-foreground">
+							Already have an account?{" "}
+						</Text>
 						<Link href="/sign-in" asChild>
 							<TouchableOpacity>
 								<Text className="text-primary">Sign In</Text>
@@ -166,26 +169,28 @@ export default function SignUp() {
 			<Button
 				onPress={handleSignUp}
 				style={[
-					{ 
-						backgroundColor: '#FFFFFF', 
+					{
+						backgroundColor: "#FFFFFF",
 						borderWidth: 1,
-						borderColor: '#E0E0E0', 
+						borderColor: "#E0E0E0",
 					},
-					Platform.OS === 'ios' ? {
-						shadowColor: '#000',
-						shadowOffset: { width: 0, height: 4 },
-						shadowOpacity: 0.3,
-						shadowRadius: 5,
-					} : {
-						elevation: 8, 
-					}
+					Platform.OS === "ios"
+						? {
+								shadowColor: "#000",
+								shadowOffset: { width: 0, height: 4 },
+								shadowOpacity: 0.3,
+								shadowRadius: 5,
+							}
+						: {
+								elevation: 8,
+							},
 				]}
 				disabled={isLoading}
 			>
 				{isLoading ? (
-					<ActivityIndicator size="small" color="#000000" /> 
+					<ActivityIndicator size="small" color="#000000" />
 				) : (
-					<Text style={{ color: '#000000', fontWeight: '600' }}>Sign Up</Text> 
+					<Text style={{ color: "#000000", fontWeight: "600" }}>Sign Up</Text>
 				)}
 			</Button>
 		</SafeAreaView>

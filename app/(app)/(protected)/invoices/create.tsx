@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   Platform,
   Switch,
+  Keyboard, // Added Keyboard import
+  ViewStyle, // Explicitly import ViewStyle
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
@@ -20,6 +22,9 @@ import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; // Added import
 import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
 import EditInvoiceDetailsSheet from './EditInvoiceDetailsSheet'; // Import the new modal
+import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
+import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
+import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
 
 // Define data structures for the form
 interface InvoiceItem {
@@ -37,11 +42,43 @@ interface InvoiceFormData {
   items: InvoiceItem[];
   po_number?: string; // Added for PO Number
   custom_headline?: string; // Added for Custom Headline
+  taxPercentage?: number | null;
+  discountType?: string | null;
+  discountValue?: number | null;
+  subTotalAmount?: number;
+  totalAmount?: number;
   // Add other fields as necessary, e.g., notes, discount, tax
 }
 
+interface InvoiceLineItem {
+  id: string; // Unique ID for this line item instance on the invoice
+  user_saved_item_id?: string | null; // Link to user_saved_items if it was saved
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number; // Calculated: quantity * unit_price
+  // description?: string | null; // Optional: if you want to display description
+}
+
+// Define a type for the theme color palette structure
+type ThemeColorPalette = typeof colors.light;
+
 // Define FormSection Component
-const FormSection = ({ title, children, themeColors, noPadding }: { title?: string, children: React.ReactNode, themeColors: any, noPadding?: boolean }) => {
+const FormSection = ({ title, children, themeColors, noPadding }: { title?: string, children: React.ReactNode, themeColors: ThemeColorPalette, noPadding?: boolean }) => {
+  const sectionContentStyle: import('react-native').ViewStyle = {
+    backgroundColor: themeColors.card,
+    borderRadius: 10,
+    padding: noPadding ? 0 : 16,
+    overflow: Platform.OS === 'android' ? 'hidden' : 'visible', // visible for iOS shadow
+    // Shadow properties for iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 1.00,
+    // Elevation for Android
+    elevation: 1,
+  };
+  
   return (
     <View style={{ marginHorizontal: 16, marginTop: 20 }}>
       {title && (
@@ -58,19 +95,7 @@ const FormSection = ({ title, children, themeColors, noPadding }: { title?: stri
           {title}
         </Text>
       )}
-      <View style={{
-        backgroundColor: themeColors.card,
-        borderRadius: 10,
-        padding: noPadding ? 0 : 16,
-        overflow: Platform.OS === 'android' ? 'hidden' : 'visible', // visible for iOS shadow
-        // Shadow properties for iOS
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.18,
-        shadowRadius: 1.00,
-        // Elevation for Android
-        elevation: 1,
-      }}>
+      <View style={sectionContentStyle}>
         {children}
       </View>
     </View>
@@ -84,7 +109,7 @@ const ActionRow = ({ label, onPress, icon: IconComponent, value, themeColors, sh
     onPress?: () => void, 
     icon?: React.ElementType, 
     value?: string, 
-    themeColors: any,
+    themeColors: ThemeColorPalette,
     showChevron?: boolean
   }
 ) => {
@@ -101,6 +126,19 @@ const ActionRow = ({ label, onPress, icon: IconComponent, value, themeColors, sh
       </View>
     </TouchableOpacity>
   );
+};
+
+// Helper function to format date as '15th May 2025'
+const formatFriendlyDate = (date: Date | null | undefined): string => {
+  if (!date) return 'Set Date';
+  const day = date.getDate();
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+  let daySuffix = 'th';
+  if (day === 1 || day === 21 || day === 31) daySuffix = 'st';
+  else if (day === 2 || day === 22) daySuffix = 'nd';
+  else if (day === 3 || day === 23) daySuffix = 'rd';
+  return `${day}${daySuffix} ${month} ${year}`;
 };
 
 export default function CreateInvoiceScreen() {
@@ -130,8 +168,15 @@ export default function CreateInvoiceScreen() {
       items: [],
       po_number: '', // Initialize po_number
       custom_headline: '', // Initialize custom_headline
+      taxPercentage: 0,
+      discountType: '',
+      discountValue: 0,
+      subTotalAmount: 0,
+      totalAmount: 0,
     }
   });
+
+  const styles = getStyles(themeColors); // MOVED STYLES DECLARATION HERE
 
   // Initialize invoice_date in the form state
   useEffect(() => {
@@ -186,10 +231,12 @@ export default function CreateInvoiceScreen() {
   }, [setIsTabBarVisible]);
 
   // --- Bottom Sheet Modal (Add Item) --- //
-  const addItemSheetRef = useRef<BottomSheetModal>(null);
+  const addItemSheetRef = useRef<AddItemSheetRef>(null);
   const snapPoints = useMemo(() => ['50%', '90%'], []);
 
   const handlePresentAddItemModal = useCallback(() => {
+    // Dismiss keyboard if open
+    Keyboard.dismiss();
     addItemSheetRef.current?.present();
   }, []);
 
@@ -248,43 +295,69 @@ export default function CreateInvoiceScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {/* Preview button removed */}
-          <TouchableOpacity onPress={() => console.log('Save tapped')} disabled={!isSaveEnabled}>
-            <Text style={{ color: isSaveEnabled ? themeColors.primary : themeColors.muted, fontSize: 17, fontWeight: '600', marginRight: Platform.OS === 'ios' ? 0 : 10 }}>Save</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={handlePreviewInvoice} style={styles.headerPreviewButton}>
+          <Text style={styles.headerPreviewButtonText}>Preview Invoice</Text>
+        </TouchableOpacity>
       ),
       headerLeft: () => null, // Explicitly remove any default left component (like a back arrow)
     });
-  }, [navigation, themeColors, isSaveEnabled]); // Dependencies updated
+  }, [navigation, themeColors, handlePreviewInvoice, styles]); // styles is now defined
 
-  const screenBackgroundColor = isLightMode ? '#F0F2F5' : themeColors.background; // WhatsApp like light gray
-  const styles = getStyles(themeColors); // Get styles dynamically
+  const screenBackgroundColor = isLightMode ? '#F0F2F5' : themeColors.background;
 
+  // Function to generate initial details for the modal
   const getInitialModalDetails = () => {
-    // This function will pass current form values to the modal
-    const values = getValues(); // from react-hook-form
+    const values = getValues(); // Get current form values
+    const defaultDueDateOption = DUE_DATE_OPTIONS.find(opt => opt.type === 'on_receipt');
     return {
       invoiceNumber: values.invoice_number || '',
       creationDate: values.invoice_date || new Date(),
-      dueDateType: 'on_receipt', // Placeholder, will need more logic
-      customDueDate: values.due_date,
-      poNumber: values.po_number || '', 
-      customHeadline: values.custom_headline || '', 
+      dueDateType: 'on_receipt', // Default due date type
+      customDueDate: values.due_date, // Use form's due_date if available
+      poNumber: values.po_number || '',
+      customHeadline: values.custom_headline || '',
+      dueDateDisplayLabel: defaultDueDateOption ? defaultDueDateOption.label : 'Due on receipt', // Explicitly set initial display label
     };
   };
 
+  const [invoiceDetails, setInvoiceDetails] = useState<any>(getInitialModalDetails()); // Initialize invoiceDetails state here
+
+  const watchedInvoiceNumber = watch('invoice_number');
+  const watchedInvoiceDate = watch('invoice_date');
+  const watchedDueDate = watch('due_date');
+  const watchedPoNumber = watch('po_number'); 
+  const watchedCustomHeadline = watch('custom_headline'); 
+  const taxPercentage = watch('taxPercentage');
+  const discountType = watch('discountType');
+  const discountValue = watch('discountValue');
+
   const handleSaveDetailsFromModal = (updatedDetails: any) => {
     // This function will be called when the modal's save button is pressed
-    console.log('Details saved from modal:', updatedDetails);
-    setValue('invoice_number', updatedDetails.invoiceNumber);
-    setValue('invoice_date', updatedDetails.creationDate);
-    setValue('due_date', updatedDetails.customDueDate); // Adjust based on dueDateType logic later
-    setValue('po_number', updatedDetails.poNumber); 
-    setValue('custom_headline', updatedDetails.customHeadline); 
-    // Potentially trigger re-validation or other actions if needed
+    console.log('[CreateInvoiceScreen] handleSaveDetailsFromModal - Received updatedDetails:', updatedDetails);
+    console.log('[CreateInvoiceScreen] handleSaveDetailsFromModal - updatedDetails.dueDateDisplayLabel:', updatedDetails?.dueDateDisplayLabel);
+    setInvoiceDetails(updatedDetails); // Update the local state for UI display
+
+    // Update react-hook-form state as well for consistency and submission
+    setValue('invoice_number', updatedDetails.invoiceNumber || '');
+    // Ensure creationDate is a Date object before setting
+    const creationDate = updatedDetails.creationDate ? new Date(updatedDetails.creationDate) : new Date();
+    setValue('invoice_date', creationDate);
+
+    // Ensure customDueDate is a Date object or null
+    const customDueDate = updatedDetails.customDueDate ? new Date(updatedDetails.customDueDate) : null;
+    setValue('due_date', customDueDate);
+    
+    setValue('po_number', updatedDetails.poNumber || '');
+    setValue('custom_headline', updatedDetails.customHeadline || '');
+
+    // If you had other fields in InvoiceFormData that map to updatedDetails, set them here.
+    // For example, if you added dueDateType to InvoiceFormData:
+    // setValue('due_date_type', updatedDetails.dueDateType);
   };
+
+  React.useEffect(() => {
+    console.log('[CreateInvoiceScreen] useEffect - invoiceDetails.dueDateDisplayLabel changed to:', invoiceDetails?.dueDateDisplayLabel);
+  }, [invoiceDetails?.dueDateDisplayLabel]);
 
   const openEditInvoiceDetailsModal = () => {
     console.log('Attempting to open Edit Invoice Details Modal...');
@@ -294,11 +367,71 @@ export default function CreateInvoiceScreen() {
   // Ref for the new EditInvoiceDetailsSheet modal
   const editInvoiceDetailsSheetRef = useRef<BottomSheetModal>(null);
 
-  const watchedInvoiceNumber = watch('invoice_number');
-  const watchedInvoiceDate = watch('invoice_date');
-  const watchedDueDate = watch('due_date');
-  const watchedPoNumber = watch('po_number'); 
-  const watchedCustomHeadline = watch('custom_headline'); 
+  console.log("[CreateInvoiceScreen] RENDERING, dueDateDisplayLabel:", invoiceDetails?.dueDateDisplayLabel); // Added render log
+
+  const [currentInvoiceLineItems, setCurrentInvoiceLineItems] = useState<InvoiceLineItem[]>([]); // New state for line items
+
+  // Callback to handle item data from AddItemSheet
+  const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
+    console.log('Item data received in create.tsx:', itemDataFromSheet);
+    
+    const newLineItem: InvoiceLineItem = {
+      id: itemDataFromSheet.id, // This is the temporary inv_item_xxx ID
+      user_saved_item_id: itemDataFromSheet.saved_item_db_id || null,
+      item_name: itemDataFromSheet.itemName,
+      quantity: itemDataFromSheet.quantity,
+      unit_price: itemDataFromSheet.price,
+      total_price: itemDataFromSheet.quantity * itemDataFromSheet.price,
+      // description: itemDataFromSheet.description, // Uncomment if needed for display
+    };
+
+    setCurrentInvoiceLineItems(prevItems => [...prevItems, newLineItem]);
+    
+    // Dismiss the AddItemSheet (which might also dismiss AddNewItemFormSheet if it was presented from there)
+    addItemSheetRef.current?.dismiss(); 
+  };
+
+  // State for calculated display values
+  const [displaySubtotal, setDisplaySubtotal] = useState<number>(0);
+  const [displayTaxAmount, setDisplayTaxAmount] = useState<number>(0);
+  const [displayDiscountAmount, setDisplayDiscountAmount] = useState<number>(0);
+  const [displayInvoiceTotal, setDisplayInvoiceTotal] = useState<number>(0);
+
+  // EFFECT: Calculate Subtotal when line items change
+  useEffect(() => {
+    const newSubtotal = currentInvoiceLineItems.reduce((acc, item) => acc + item.total_price, 0);
+    setDisplaySubtotal(newSubtotal);
+    setValue('subTotalAmount', newSubtotal, { shouldValidate: true, shouldDirty: true });
+  }, [currentInvoiceLineItems, setValue]);
+
+  // EFFECT: Calculate Tax, Discount, and Total when subtotal or form tax/discount values change
+  useEffect(() => {
+    let taxCalcAmount = 0;
+    if (taxPercentage && typeof taxPercentage === 'number' && taxPercentage > 0) {
+      taxCalcAmount = displaySubtotal * (taxPercentage / 100);
+    }
+    setDisplayTaxAmount(taxCalcAmount);
+    // setValue('taxAmount', taxCalcAmount); // Assuming taxAmount is just for display or not a direct form field being submitted
+
+    let discountCalcAmount = 0;
+    if (discountValue && typeof discountValue === 'number' && discountValue > 0) {
+      if (discountType === 'percentage') {
+        discountCalcAmount = displaySubtotal * (discountValue / 100);
+      } else if (discountType === 'fixed') {
+        discountCalcAmount = discountValue;
+      }
+    }
+    // Ensure discount doesn't exceed subtotal + tax (or just subtotal if preferred)
+    // For simplicity, capping at subtotal for now. Adjust if tax should be included before discount.
+    discountCalcAmount = Math.min(discountCalcAmount, displaySubtotal + taxCalcAmount); 
+    setDisplayDiscountAmount(discountCalcAmount);
+    // setValue('discountAmountCalculated', discountCalcAmount); // If you have a field for the calculated discount amount
+
+    const newTotal = displaySubtotal + taxCalcAmount - discountCalcAmount;
+    setDisplayInvoiceTotal(newTotal);
+    setValue('totalAmount', newTotal > 0 ? newTotal : 0, { shouldValidate: true, shouldDirty: true }); // Ensure total isn't negative
+
+  }, [displaySubtotal, taxPercentage, discountType, discountValue, setValue]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
@@ -316,7 +449,7 @@ export default function CreateInvoiceScreen() {
             backgroundColor: themeColors.card,
             // Add shadow properties for iOS
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 }, // Shadow towards the bottom
+            shadowOffset: { width: 0, height: 1 },
             shadowOpacity: 0.10, // Subtle shadow
             shadowRadius: 2.00,
             // Add elevation for Android shadow
@@ -324,7 +457,6 @@ export default function CreateInvoiceScreen() {
           }, 
           headerTintColor: '#000000', 
           headerShadowVisible: false, // Keep this false to use our custom shadow from headerStyle
-          headerRight: () => null, // Explicitly remove the Preview button here
         }}
       />
       <ScrollView 
@@ -341,16 +473,14 @@ export default function CreateInvoiceScreen() {
                   {watchedInvoiceNumber || `INV001`}
                 </Text>
               </View>
-              <View style={[styles.duePill, { backgroundColor: themeColors.primary }]}>
-                <Text style={styles.duePillText}>
-                  {watchedDueDate ? watchedDueDate.toLocaleDateString() : 'On receipt'}
-                </Text>
-              </View>
+              <Text style={{ color: themeColors.foreground, fontWeight: 'bold' }}>
+                {`${invoiceDetails?.dueDateDisplayLabel || 'Set Due Date'}`}
+              </Text>
             </View>
             <View style={styles.detailsRow2}>
               <Text style={[styles.subLabel, { color: themeColors.mutedForeground }]}>Creation Date</Text>
-              <Text style={[styles.dateDisplay, { color: themeColors.primary }]}>
-                {watchedInvoiceDate ? watchedInvoiceDate.toLocaleDateString() : 'Set Date'}
+              <Text style={[styles.dateDisplay, { color: themeColors.mutedForeground, fontWeight: 'normal' }]}>
+                {formatFriendlyDate(watchedInvoiceDate)}
               </Text>
             </View>
           </View>
@@ -375,49 +505,53 @@ export default function CreateInvoiceScreen() {
         </FormSection>
 
         {/* Items Section */}
-        <FormSection title="ITEMS" themeColors={themeColors}> 
-          {watch('items').length > 0 ? (
-            watch('items').map((item, index) => (
-              <View key={index} style={styles.itemRow}>
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemQuantityPrice}>
-                    {item.quantity} x ${item.price.toFixed(2)}
-                  </Text>
-                </View>
-                <Text style={styles.itemTotal}>${(item.quantity * item.price).toFixed(2)}</Text>
-                <TouchableOpacity onPress={() => console.log('Remove item pressed')} style={styles.removeItemButton}>
-                  <XIcon size={18} color={themeColors.destructive} />
-                </TouchableOpacity>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptySectionPlaceholder}>
+        <FormSection title="ITEMS" themeColors={themeColors} noPadding={currentInvoiceLineItems.length > 0}> 
+          {currentInvoiceLineItems.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 16 }}> 
               <TouchableOpacity 
                 style={styles.addItemButtonInline} 
-                onPress={handlePresentAddItemModal}
+                onPress={() => addItemSheetRef.current?.present()}
               >
                 <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
-                <Text style={styles.addItemButtonText}>Add item or service</Text>
+                <Text style={styles.addItemButtonText}>Add Item or Service</Text>
               </TouchableOpacity>
-              <Text style={styles.emptySectionText}>No items added yet.</Text>
             </View>
+          ) : (
+            // Display items if they exist
+            currentInvoiceLineItems.map((item, index) => (
+              <View key={item.id} style={[
+                styles.invoiceItemRow,
+                index === 0 && { borderTopWidth: 0 }, // No top border for the first item
+                index === currentInvoiceLineItems.length - 1 && { borderBottomWidth: 0 } // No bottom border for the last item
+              ]}>
+                <Text style={styles.invoiceItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
+                  <Text style={styles.invoiceItemNameText}>{item.item_name} </Text>
+                  <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
+                </Text>
+                <Text style={styles.invoiceItemTotalText}>
+                  ${item.total_price.toFixed(2)}
+                </Text>
+                {/* TODO: Add a remove button here later */}
+              </View>
+            ))
           )}
-          {watch('items').length > 0 && (
+          {/* Always show 'Add Item or Service' button below the list if items exist */}
+          {currentInvoiceLineItems.length > 0 && (
             <TouchableOpacity 
               style={styles.addItemButtonFullWidth} 
-              onPress={handlePresentAddItemModal}
+              onPress={() => addItemSheetRef.current?.present()}
             >
               <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
-              <Text style={styles.addItemButtonText}>Add another item or service</Text>
+              <Text style={styles.addItemButtonText}>Add Another Item or Service</Text>
             </TouchableOpacity>
           )}
         </FormSection>
 
+        {/* Payment Details Section */}
         <FormSection title="SUMMARY" themeColors={themeColors}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryText}>$0.00</Text>
+            <Text style={styles.summaryText}>${displaySubtotal.toFixed(2)}</Text>
           </View>
           <ActionRow 
             label="Add Discount" 
@@ -432,12 +566,12 @@ export default function CreateInvoiceScreen() {
             themeColors={themeColors} 
           />
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tax (0%)</Text> // This might be redundant if VAT is added above
-            <Text style={styles.summaryText}>$0.00</Text>
+            <Text style={styles.summaryLabel}>Tax ({taxPercentage?.toFixed(0) ?? 0}%)</Text> // This might be redundant if VAT is added above
+            <Text style={styles.summaryText}>${displayTaxAmount.toFixed(2)}</Text>
           </View>
           <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>$0.00</Text>
+            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>${displayInvoiceTotal.toFixed(2)}</Text>
           </View>
         </FormSection>
 
@@ -450,7 +584,7 @@ export default function CreateInvoiceScreen() {
           />
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold' }]}>Balance Due</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold' }]}>$0.00</Text>
+            <Text style={[styles.summaryText, { fontWeight: 'bold' }]}>${displayInvoiceTotal.toFixed(2)}</Text>
           </View>
           <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.summaryLabel}>Mark as paid</Text>
@@ -501,92 +635,16 @@ export default function CreateInvoiceScreen() {
 
       </ScrollView>
 
-      {/* Floating Preview Invoice Button */}
-      <TouchableOpacity
-        onPress={() => console.log('Floating Preview Invoice Tapped!')} // Placeholder action
-        style={{
-          position: 'absolute',
-          bottom: 30, // Adjust as needed for padding from bottom
-          right: 20,  // Adjust as needed for padding from right
-          backgroundColor: '#FFD700CC', // Gold color with ~80% opacity
-          paddingVertical: 12,
-          paddingHorizontal: 20,
-          borderRadius: 25, // Pill shape
-          elevation: 5, // Android shadow
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-        }}
-      >
-        <Text style={{ color: '#000000', fontWeight: 'bold', fontSize: 16 }}>Preview Invoice</Text>
+      {/* Full Width Save Button - Not in a separate container */}
+      <TouchableOpacity onPress={handleSaveInvoice} style={styles.bottomSaveButton} disabled={!isSaveEnabled}>
+        <Text style={styles.bottomSaveButtonText}>Save Invoice</Text>
       </TouchableOpacity>
 
       {/* Add Item Bottom Sheet Modal */}
-      <BottomSheetModal
-        ref={addItemSheetRef}
-        index={0} // Start at the first snap point
-        snapPoints={snapPoints}
-        onChange={handleSheetChanges}
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }} // Style the handle
-        backgroundStyle={{ backgroundColor: themeColors.card }} // Style the modal background
-      >
-        <View style={styles.bottomSheetContentContainer}>
-          <Text style={[styles.bottomSheetTitle, { color: themeColors.foreground }]}>Add New Item</Text>
-          
-          <TextInput
-            style={[styles.modalInput, { backgroundColor: themeColors.input, color: themeColors.foreground, borderColor: themeColors.border }]}
-            placeholder="Item Name"
-            placeholderTextColor={themeColors.mutedForeground}
-            value={itemName}
-            onChangeText={setItemName}
-          />
-          <View style={styles.modalRowInputContainer}>
-            <TextInput
-              style={[styles.modalInput, styles.modalInputHalf, { backgroundColor: themeColors.input, color: themeColors.foreground, borderColor: themeColors.border }]}
-              placeholder="Quantity"
-              placeholderTextColor={themeColors.mutedForeground}
-              value={itemQuantity}
-              onChangeText={setItemQuantity}
-              keyboardType="numeric"
-            />
-            <TextInput
-              style={[styles.modalInput, styles.modalInputHalf, { backgroundColor: themeColors.input, color: themeColors.foreground, borderColor: themeColors.border }]}
-              placeholder="Price (e.g., 25.00)"
-              placeholderTextColor={themeColors.mutedForeground}
-              value={itemPrice}
-              onChangeText={setItemPrice}
-              keyboardType="decimal-pad"
-            />
-          </View>
-          <TextInput
-            style={[styles.modalInput, styles.modalInputMultiline, { backgroundColor: themeColors.input, color: themeColors.foreground, borderColor: themeColors.border }]}
-            placeholder="Description (Optional)"
-            placeholderTextColor={themeColors.mutedForeground}
-            value={itemDescription}
-            onChangeText={setItemDescription}
-            multiline
-            numberOfLines={3}
-          />
-
-          <TouchableOpacity 
-            style={[styles.formButton, {backgroundColor: themeColors.primary, marginTop: 30}]} 
-            onPress={() => {
-              console.log('Save Item:', { itemName, itemQuantity, itemPrice, itemDescription });
-              addItemSheetRef.current?.dismiss();
-            }}
-          >
-            <Text style={[styles.formButtonText, {color: themeColors.primaryForeground}]}>Save Item</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.formButton, {backgroundColor: themeColors.card, borderWidth: 1, borderColor: themeColors.border, marginTop: 15}]} 
-            onPress={() => addItemSheetRef.current?.dismiss()}
-          >
-            <Text style={[styles.formButtonText, {color: themeColors.primary}]}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </BottomSheetModal>
+      <AddItemSheet 
+        ref={addItemSheetRef} 
+        onItemFromFormSaved={handleItemFromSheetSaved} // Pass the callback here
+      />
 
       <NewClientSelectionSheet
         ref={newClientSheetRef}
@@ -612,336 +670,403 @@ export default function CreateInvoiceScreen() {
 }
 
 // Styles need to be a function that accepts themeColors
-const getStyles = (themeColors: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    // backgroundColor is now set dynamically
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border, // Use themeColors here
-  },
-  inputRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border, // Use themeColors here
-  },
-  label: {
-    fontSize: 16,
-    // color is set dynamically by inline style or here if needed
-  },
-  input: {
-    flex: 1,
-    textAlign: 'right',
-    fontSize: 16,
-    marginLeft: 10, // Add some space between label and input
-    // color is set dynamically by inline style or here if needed
-  },
-  addItemButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // justifyContent: 'center', // Center if it's the only thing in its section card
-    paddingVertical: 16, // Keep consistent padding
-    borderTopWidth: StyleSheet.hairlineWidth, // Optional: if items list is above
-    borderTopColor: themeColors.border, // Use themeColors here
-  },
-  placeholderText: {
-    fontSize: 15,
-    textAlign: 'center',
-    paddingVertical: 20,
-    color: themeColors.mutedForeground, 
-  },
-  notesInput: {
-    minHeight: 80,
-    fontSize: 16,
-    paddingTop: Platform.OS === 'ios' ? 10 : 0, // Adjust paddingTop for better text alignment
-    paddingBottom: 10,
-    backgroundColor: themeColors.input, 
-    color: themeColors.foreground, 
-  },
-  summaryText: {
-    fontSize: 16,
-    textAlign: 'right',
-    // color is set dynamically by inline style or here if needed
-  },
-  bottomSheetContentContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 10, // Reduced top padding for a tighter look
-    // backgroundColor: themeColors.card, // Background is set by BottomSheetModal component itself
-  },
-  bottomSheetTitle: {
-    fontSize: 20, // Slightly smaller title for the sheet
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-    color: themeColors.foreground, // Use themeColors here
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: themeColors.border, // Use themeColors here
-    borderRadius: 8,
+const getStyles = (themeColors: ThemeColorPalette) => {
+  // Explicitly type problematic style objects to ensure ViewStyle compatibility for shadows
+  const headerPreviewButtonStyle: ViewStyle = {
+    marginRight: 0, // Set to 0 to align as far right as possible within header constraints
+    backgroundColor: '#FFD700', // Gold/Yellow color - consider adding to theme colors
+    paddingVertical: 6, 
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    marginBottom: 15, 
-    backgroundColor: themeColors.inputBackground || themeColors.card, // Use a specific input background or card color
-    color: themeColors.foreground, // Use themeColors here
-  },
-  modalRowInputContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-  modalInputHalf: {
-    width: '48%', 
-    marginBottom: 0, 
-  },
-  modalInputMultiline: {
-    minHeight: 80, 
-    textAlignVertical: 'top',
-  },
-  formButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    borderRadius: 10, 
-    minHeight: 48, 
-    // backgroundColor will be set by inline style based on variant
-  },
-  formButtonText: {
-    fontSize: 17,
-    fontWeight: '600', 
-    // color will be set by inline style based on variant
-  },
-  actionRowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
-  },
-  actionRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionRowIcon: {
-    marginRight: 12,
-  },
-  actionRowLabel: {
-    fontSize: 16,
-    // Default color can be foreground, primary if pressable
-  },
-  actionRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionRowValue: {
-    fontSize: 16,
-    marginRight: 8, // Space before chevron if present
-  },
-  valueText: {
-    fontSize: 16,
-    color: themeColors.foreground,
-    flexShrink: 1, // Allows text to shrink and wrap if necessary
-    textAlign: 'right',
-  },
-  editableTextInput: { // Style for the editable invoice number
-    // Add any specific styling for editable text input here, e.g., borderBottomWidth
-    paddingVertical: Platform.OS === 'ios' ? 8 : 4, // Adjust padding for better text alignment
-    textAlignVertical: 'center', // Android
-  },
-  invoiceNumberContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  newDetailsSectionContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: themeColors.card, // Or themeColors.background if no card look
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
-    marginBottom: 12, // Space before next section
-  },
-  detailsRow1: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  invoiceNumberEditContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1, // Allow it to take space
-  },
-  invoiceNumberDisplay: {
-    fontSize: 28, // Larger font size
-    fontWeight: 'bold',
-    marginRight: 8,
-    // color set inline
-    paddingVertical: 0, // Remove default padding if any
-  },
-  duePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    // backgroundColor set inline
-  },
-  duePillText: {
-    color: themeColors.primaryForeground, // White text on primary background
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  detailsRow2: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingLeft: 2, // Slight indent for 'Details' if needed
-  },
-  subLabel: {
-    fontSize: 14,
-    // color set inline
-  },
-  dateDisplay: {
-    fontSize: 14,
-    // color set inline
-  },
-  staticActionRowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16, // Add horizontal padding consistent with ActionRow
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
-  },
-  staticActionRowLabel: {
-    fontSize: 16,
-    color: themeColors.foreground, // Default color
-  },
-  staticActionRowValue: {
-    fontSize: 16,
-    color: themeColors.mutedForeground, // Muted color for the value
-  },
-  emptySectionPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    // backgroundColor: themeColors.card, // Removed, provided by FormSection
-    // borderRadius: 12, // Removed, provided by FormSection
-    // borderWidth: 1, // Removed, provided by FormSection
-    // borderColor: themeColors.border, // Removed, provided by FormSection
-    // marginTop: 8, // Removed, spacing handled by FormSection
-  },
-  emptySectionText: {
-    fontSize: 16,
-    color: themeColors.mutedForeground,
-    marginTop: 12, // Add some space if button is above
-  },
-  addItemButtonInline: { // For the button when no items are present
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-    backgroundColor: themeColors.primaryMuted, // A softer primary or specific style
-    // marginTop: 16, // Removed, spacing handled differently now
-  },
-  addItemButtonFullWidth: { // For the button when items are present
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: themeColors.primaryMuted, // Or a different style if preferred
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 12, // Spacing from the items list
-  },
-  addItemButtonIcon: {
-    marginRight: 8,
-  },
-  addItemButtonText: {
-    color: themeColors.primary, // Text color to match the icon
-    fontSize: 17, // Updated to match clientSelectorText
-    fontWeight: '500', // Updated to match clientSelectorText
-  },
-  clientSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Center the 'Add Client' button
-    paddingVertical: 12, // Add some padding to make it feel more like a button area
-    // Background and border radius will come from FormSection's sectionContent
-  },
-  clientSelectorText: {
-    marginLeft: 10,
-    fontSize: 17,
-    fontWeight: '500',
-    color: themeColors.primary,
-  },
-  selectedClientContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8, // Adjust padding as needed
-  },
-  selectedClientName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: themeColors.foreground,
-  },
-  changeClientText: {
-    fontSize: 16,
-    color: themeColors.primary,
-    fontWeight: '500',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
-  },
-  itemDetails: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: themeColors.foreground,
-  },
-  itemQuantityPrice: {
-    fontSize: 14,
-    color: themeColors.mutedForeground,
-  },
-  itemTotal: {
-    fontSize: 16,
-    color: themeColors.foreground,
-    fontWeight: '600',
-  },
-  removeItemButton: {
-    marginLeft: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    color: themeColors.foreground,
-  },
-});
+    borderRadius: 18, 
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.20,
+    shadowRadius: 1.5,
+    elevation: 3,
+  };
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      // backgroundColor is now set dynamically
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border, // Use themeColors here
+    },
+    inputRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border, // Use themeColors here
+    },
+    label: {
+      fontSize: 16,
+      // color is set dynamically by inline style or here if needed
+    },
+    input: {
+      flex: 1,
+      textAlign: 'right',
+      fontSize: 16,
+      marginLeft: 10, // Add some space between label and input
+      // color is set dynamically by inline style or here if needed
+    },
+    addItemButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      // justifyContent: 'center', // Center if it's the only thing in its section card
+      paddingVertical: 16, // Keep consistent padding
+      borderTopWidth: StyleSheet.hairlineWidth, // Optional: if items list is above
+      borderTopColor: themeColors.border, // Use themeColors here
+    },
+    placeholderText: {
+      fontSize: 15,
+      textAlign: 'center',
+      paddingVertical: 20,
+      color: themeColors.mutedForeground, 
+    },
+    notesInput: {
+      minHeight: 80,
+      fontSize: 16,
+      paddingTop: Platform.OS === 'ios' ? 10 : 0, // Adjust paddingTop for better text alignment
+      paddingBottom: 10,
+      backgroundColor: themeColors.background, // Replaced inputBackground
+      color: themeColors.foreground, 
+    },
+    summaryText: {
+      fontSize: 16,
+      textAlign: 'right',
+      // color is set dynamically by inline style or here if needed
+    },
+    bottomSheetContentContainer: {
+      flex: 1,
+      paddingHorizontal: 20,
+      paddingTop: 10, // Reduced top padding for a tighter look
+      // backgroundColor: themeColors.card, // Background is set by BottomSheetModal component itself
+    },
+    bottomSheetTitle: {
+      fontSize: 20, // Slightly smaller title for the sheet
+      fontWeight: 'bold',
+      marginBottom: 20,
+      textAlign: 'center',
+      color: themeColors.foreground, // Use themeColors here
+    },
+    modalInput: {
+      borderWidth: 1,
+      borderColor: themeColors.border, // Use themeColors here
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+      marginBottom: 15, 
+      backgroundColor: themeColors.background, // Replaced inputBackground
+      color: themeColors.foreground, // Use themeColors here
+    },
+    modalRowInputContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 15,
+    },
+    modalInputHalf: {
+      width: '48%', 
+      marginBottom: 0, 
+    },
+    modalInputMultiline: {
+      minHeight: 80, 
+      textAlignVertical: 'top',
+    },
+    formButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+      borderRadius: 10, 
+      minHeight: 48, 
+      // backgroundColor will be set by inline style based on variant
+    },
+    formButtonText: {
+      fontSize: 17,
+      fontWeight: '600', 
+      // color will be set by inline style based on variant
+    },
+    actionRowContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+    },
+    actionRowLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    actionRowIcon: {
+      marginRight: 12,
+    },
+    actionRowLabel: {
+      fontSize: 16,
+      // Default color can be foreground, primary if pressable
+    },
+    actionRowRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    actionRowValue: {
+      fontSize: 16,
+      marginRight: 8, // Space before chevron if present
+    },
+    valueText: {
+      fontSize: 16,
+      color: themeColors.foreground,
+      flexShrink: 1, // Allows text to shrink and wrap if necessary
+      textAlign: 'right',
+    },
+    editableTextInput: { // Style for the editable invoice number
+      // Add any specific styling for editable text input here, e.g., borderBottomWidth
+      paddingVertical: Platform.OS === 'ios' ? 8 : 4, // Adjust padding for better text alignment
+      textAlignVertical: 'center', // Android
+    },
+    invoiceNumberContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    newDetailsSectionContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: themeColors.card, // Or themeColors.background if no card look
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+      marginBottom: 12, // Space before next section
+    },
+    detailsRow1: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    invoiceNumberEditContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1, // Allow it to take space
+    },
+    invoiceNumberDisplay: {
+      fontSize: 28, // Larger font size
+      fontWeight: 'bold',
+      marginRight: 8,
+      // color set inline
+      paddingVertical: 0, // Remove default padding if any
+    },
+    duePill: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 15,
+      // backgroundColor set inline
+    },
+    duePillText: {
+      color: themeColors.primaryForeground, // White text on primary background
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    detailsRow2: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingLeft: 2, // Slight indent for 'Details' if needed
+    },
+    subLabel: {
+      fontSize: 14,
+      // color set inline
+    },
+    dateDisplay: {
+      fontSize: 14,
+      // color set inline
+    },
+    staticActionRowContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 16, // Add horizontal padding consistent with ActionRow
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+    },
+    staticActionRowLabel: {
+      fontSize: 16,
+      color: themeColors.foreground, // Default color
+    },
+    staticActionRowValue: {
+      fontSize: 16,
+      color: themeColors.mutedForeground, // Muted color for the value
+    },
+    emptySectionPlaceholder: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 20,
+      paddingHorizontal: 16,
+      // backgroundColor: themeColors.card, // Removed, provided by FormSection
+      // borderRadius: 12, // Removed, provided by FormSection
+      // borderWidth: 1, // Removed, provided by FormSection
+      // borderColor: themeColors.border, // Removed, provided by FormSection
+      // marginTop: 8, // Removed, spacing handled by FormSection
+    },
+    emptySectionText: {
+      fontSize: 16,
+      color: themeColors.mutedForeground,
+      marginTop: 12, // Add some space if button is above
+    },
+    addItemButtonInline: { // For the button when no items are present
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 15,
+      borderRadius: 8,
+      backgroundColor: themeColors.secondary, // Replaced primaryMuted
+      // marginTop: 16, // Removed, spacing handled differently now
+    },
+    addItemButtonFullWidth: { // For the button when items are present
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: themeColors.secondary, // Replaced primaryMuted
+      paddingVertical: 12,
+      borderRadius: 8,
+      marginTop: 12, // Spacing from the items list
+    },
+    addItemButtonIcon: {
+      marginRight: 8,
+    },
+    addItemButtonText: {
+      color: themeColors.primary, // Text color to match the icon
+      fontSize: 17, // Updated to match clientSelectorText
+      fontWeight: '500', // Updated to match clientSelectorText
+    },
+    clientSelector: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center', // Center the 'Add Client' button
+      paddingVertical: 12, // Add some padding to make it feel more like a button area
+      // Background and border radius will come from FormSection's sectionContent
+    },
+    clientSelectorText: {
+      marginLeft: 10,
+      fontSize: 17,
+      fontWeight: '500',
+      color: themeColors.primary,
+    },
+    selectedClientContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 8, // Adjust padding as needed
+    },
+    selectedClientName: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: themeColors.foreground,
+    },
+    changeClientText: {
+      fontSize: 16,
+      color: themeColors.primary,
+      fontWeight: '500',
+    },
+    itemRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+    },
+    itemDetails: {
+      flex: 1,
+    },
+    itemName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: themeColors.foreground,
+    },
+    itemQuantityPrice: {
+      fontSize: 14,
+      color: themeColors.mutedForeground,
+    },
+    itemTotal: {
+      fontSize: 16,
+      color: themeColors.foreground,
+      fontWeight: '600',
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+    },
+    summaryLabel: {
+      fontSize: 16,
+      color: themeColors.foreground,
+    },
+    bottomSaveButton: {
+      backgroundColor: themeColors.primary,
+      paddingVertical: 15, // Standard padding
+      marginHorizontal: 16, // Side margins
+      borderRadius: 12, // Consistent app border radius
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 0, // Hug the bottom of the SafeAreaView content area
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 3.00,
+      elevation: 4,
+    },
+    bottomSaveButtonText: {
+      color: themeColors.primaryForeground,
+      fontSize: 17,
+      fontWeight: '600',
+    },
+    headerPreviewButton: headerPreviewButtonStyle, // Use the explicitly typed style
+    headerPreviewButtonText: {
+      color: '#000000', // Black text for yellow button
+      fontSize: 14, 
+      fontWeight: 'bold',
+    },
+    invoiceItemRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14, // Standard padding
+      paddingHorizontal: 16, // Add horizontal padding to align with FormSection content
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+    },
+    invoiceItemCombinedInfo: { // New style for the left part containing Name, Qty
+      flex: 1,
+      marginRight: 12, // Space before total price
+      fontSize: 16, // Base font size for the line
+      color: themeColors.foreground, // Default color for this combined text container
+    },
+    invoiceItemNameText: {
+      fontWeight: '600', // Bold
+      // Inherits color and fontSize from invoiceItemCombinedInfo or can be set explicitly
+    },
+    invoiceItemQuantityText: {
+      fontWeight: 'normal',
+      color: themeColors.mutedForeground, // Grey
+      // Inherits fontSize or can be set, e.g., fontSize: 15 to be slightly smaller
+    },
+    invoiceItemTotalText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: themeColors.foreground,
+    },
+  });
+}

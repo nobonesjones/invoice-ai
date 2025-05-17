@@ -1,8 +1,8 @@
 export const colors = {
 	light: {
-		background: "#FFFFFF", // Changed to white
+		background: "#F5F5F5", // Changed to off-white for modal background and global app background
 		foreground: "hsl(240, 10%, 3.9%)",
-		card: "hsl(0, 0%, 100%)",
+		card: "hsl(0, 0%, 100%)", // Stays white for input groups
 		cardForeground: "hsl(240, 10%, 3.9%)",
 		popover: "hsl(0, 0%, 100%)",
 		popoverForeground: "hsl(240, 10%, 3.9%)",

@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
-import { useColorScheme } from 'react-native'; // Import useColorScheme
+import { useColorScheme } from "react-native"; // Import useColorScheme
+
 import { colors } from "@/constants/colors";
 
 export const unstable_settings = {
@@ -7,7 +8,7 @@ export const unstable_settings = {
 };
 
 export default function AuthLayout() {
-	const deviceColorScheme = useColorScheme() ?? 'light'; // Get device scheme
+	const deviceColorScheme = useColorScheme() ?? "light"; // Get device scheme
 
 	return (
 		<Stack
@@ -15,9 +16,9 @@ export default function AuthLayout() {
 				headerShown: false,
 				// Use device scheme for header background and tint color
 				headerStyle: {
-					backgroundColor: '#FFFFFF', // Set header background to white
+					backgroundColor: "#FFFFFF", // Set header background to white
 				},
-				headerTintColor: '#000000', // Set header tint (back arrow, title) to black
+				headerTintColor: "#000000", // Set header tint (back arrow, title) to black
 			}}
 		>
 			{/* Sign Up Screen */}

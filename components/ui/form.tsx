@@ -209,7 +209,11 @@ const FormInput = React.forwardRef<
 	return (
 		<FormItem>
 			{!!label && (
-				<FormLabel nativeID={formItemNativeID} onPress={handleOnLabelPress} style={labelStyle}>
+				<FormLabel
+					nativeID={formItemNativeID}
+					onPress={handleOnLabelPress}
+					style={labelStyle}
+				>
 					{label}
 				</FormLabel>
 			)}
