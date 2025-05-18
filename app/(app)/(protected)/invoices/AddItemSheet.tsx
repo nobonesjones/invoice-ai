@@ -140,6 +140,11 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
     bottomSheetModalRef.current?.dismiss(); // Dismiss this sheet after selection
   };
 
+  const handleSheetDismissed = () => {
+    setSearchQuery('');
+    // The useEffect that filters items based on searchQuery will automatically update the list
+  };
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -263,10 +268,11 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
 
   return (
     <BottomSheetModal
-      ref={bottomSheetModalRef} // Use the local ref here
-      index={0} // Start at the first snap point
+      ref={bottomSheetModalRef}
+      index={0} 
       snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
+      onDismiss={handleSheetDismissed} 
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
     >

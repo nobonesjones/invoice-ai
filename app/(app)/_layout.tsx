@@ -24,6 +24,7 @@ export default function AppLayout() {
 				<Stack.Screen
 					name="(protected)"
 					options={{
+						headerShown: false, // Explicitly add for safeguard
 						gestureEnabled: true,
 						gestureDirection: "horizontal",
 						// tabBarOnPress removed as it's not applicable here

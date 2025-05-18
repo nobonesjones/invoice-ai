@@ -7,6 +7,7 @@ import {
 	Bot,
 	Users,
 	PieChart,
+	Cog,
 } from "lucide-react-native";
 import React from "react";
 import { View, Text, Pressable, Platform } from "react-native";
@@ -27,7 +28,8 @@ const iconMap: Record<string, React.ElementType> = {
 	estimates: BarChart3,
 	ai: Bot,
 	customers: Users,
-	reports: PieChart,
+	settings: Cog,
+	newsettings: Cog, // Added icon for newsettings (can be changed)
 };
 
 export default function ProtectedLayout() {
@@ -39,7 +41,6 @@ export default function ProtectedLayout() {
 
 	return (
 		<Tabs
-			id="mainProtectedTabs"
 			screenOptions={{
 				headerShown: false,
 				// These are not strictly needed with a fully custom tabBar, but good for reference
@@ -56,13 +57,9 @@ export default function ProtectedLayout() {
 				// Get the descriptor for the currently active NAVIGATOR/SCREEN that is a direct child of Tabs.
 				const currentRoute = state.routes[state.index];
 				const descriptor = descriptors[currentRoute.key];
-				const options = descriptor.options;
 
-				// If the currently active screen *within this tab* has set tabBarVisible to false,
-				// its options should merge, and we can check it here.
-				if (options.tabBarVisible === false) {
-					return null; // Don't render the custom tab bar
-				}
+				// The global isTabBarVisible check (line 54) is now the sole controller for custom tab bar visibility.
+				// If a specific screen needs to hide the tab bar, it should update the TabBarVisibilityContext.
 
 				return (
 					<View
@@ -88,7 +85,8 @@ export default function ProtectedLayout() {
 									"estimates",
 									"ai",
 									"customers/index",
-									"reports",
+									"settings",
+									"newsettings", // Added to filter
 								].includes(route.name),
 							)
 							.map((route, index) => {
@@ -196,9 +194,19 @@ export default function ProtectedLayout() {
 				listeners={{ tabPress: triggerHaptic }}
 			/>
 			<Tabs.Screen
-				name="reports" // (e.g., app/(app)/(protected)/reports.tsx)
+				name="settings" // Changed from reports to settings
+				// (e.g., app/(app)/(protected)/settings.tsx)
 				options={{
-					title: "Reports",
+					title: "Settings",
+					headerShown: false, // Keep this to hide the default header
+				}}
+				listeners={{ tabPress: triggerHaptic }}
+			/>
+			<Tabs.Screen
+				name="newsettings"
+				options={{
+					title: "New Settings",
+					headerShown: false,
 				}}
 				listeners={{ tabPress: triggerHaptic }}
 			/>
@@ -208,6 +216,10 @@ export default function ProtectedLayout() {
 				name="change-password"
 				options={{ tabBarButton: () => null }}
 			/>
+			<Tabs.Screen 
+        name="account-details" 
+        options={{ tabBarButton: () => null, title: "Account Details" }} 
+      />
 		</Tabs>
 	);
 }

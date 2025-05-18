@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
-import { CircleUserRound } from "lucide-react-native";
-import { View, Pressable } from "react-native";
+import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Text } from "react-native"; // Added missing import
 
 import { useTheme } from "@/context/theme-provider";
 
@@ -11,24 +11,9 @@ export default function Home() {
 
 	return (
 		<SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-			<View
-				style={{
-					paddingHorizontal: 16,
-					paddingVertical: 16,
-					flexDirection: "row",
-					justifyContent: "flex-end",
-					alignItems: "center",
-				}}
-			>
-				<Pressable onPress={() => router.push("/profile")}>
-					{({ pressed }) => (
-						<CircleUserRound
-							color={theme.foreground}
-							size={32}
-							style={{ opacity: pressed ? 0.7 : 1 }}
-						/>
-					)}
-				</Pressable>
+			<View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+				{/* You can add new home screen content here if needed */}
+				<Text style={{color: theme.foreground, fontSize: 18}}>Home Screen Content</Text>
 			</View>
 		</SafeAreaView>
 	);

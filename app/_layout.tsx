@@ -6,6 +6,7 @@ import { Slot, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Host } from "react-native-portalize";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { TabBarVisibilityProvider } from "@/context/TabBarVisibilityContext";
 import { SupabaseProvider, useSupabase } from "@/context/supabase-provider";
@@ -63,18 +64,20 @@ function RootLayoutNav() {
 
 export default function AppLayout() {
 	return (
-		<GestureHandlerRootView style={{ flex: 1 }}>
-			<Host>
-				<SupabaseProvider>
-					<ThemeProvider>
-						<BottomSheetModalProvider>
-							<TabBarVisibilityProvider>
-								<RootLayoutNav />
-							</TabBarVisibilityProvider>
-						</BottomSheetModalProvider>
-					</ThemeProvider>
-				</SupabaseProvider>
-			</Host>
-		</GestureHandlerRootView>
+		<SafeAreaProvider>
+			<GestureHandlerRootView style={{ flex: 1 }}>
+				<Host>
+					<SupabaseProvider>
+						<ThemeProvider>
+							<BottomSheetModalProvider>
+								<TabBarVisibilityProvider>
+									<RootLayoutNav />
+								</TabBarVisibilityProvider>
+							</BottomSheetModalProvider>
+						</ThemeProvider>
+					</SupabaseProvider>
+				</Host>
+			</GestureHandlerRootView>
+		</SafeAreaProvider>
 	);
 }

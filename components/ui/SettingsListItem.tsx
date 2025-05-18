@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
 	},
 	label: {
 		marginLeft: 16,
-		fontSize: 14,
+		fontSize: 15, // Increased from 14 to 15
 	},
 	rightContainer: {
 		marginLeft: 8,

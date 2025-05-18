@@ -21,10 +21,11 @@ import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelect
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; // Added import
 import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
-import EditInvoiceDetailsSheet from './EditInvoiceDetailsSheet'; // Import the new modal
+import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoiceDetailsSheet'; // Correctly import named export
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
 import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
+import DuplicateDiscountSheet, { DuplicateDiscountSheetRef, DiscountData } from './DuplicateDiscountSheet'; // Import new sheet
 
 // Define data structures for the form
 interface InvoiceItem {
@@ -43,7 +44,7 @@ interface InvoiceFormData {
   po_number?: string; // Added for PO Number
   custom_headline?: string; // Added for Custom Headline
   taxPercentage?: number | null;
-  discountType?: string | null;
+  discountType?: 'percentage' | 'fixed' | null; // Made more specific
   discountValue?: number | null;
   subTotalAmount?: number;
   totalAmount?: number;
@@ -118,10 +119,10 @@ const ActionRow = ({ label, onPress, icon: IconComponent, value, themeColors, sh
     <TouchableOpacity onPress={onPress} disabled={!onPress} style={styles.actionRowContainer}>
       <View style={styles.actionRowLeft}>
         {IconComponent && <IconComponent size={20} color={onPress ? themeColors.primary : themeColors.mutedForeground} style={styles.actionRowIcon} />}
-        <Text style={[styles.actionRowLabel, onPress && { color: themeColors.primary }]}>{label}</Text>
+        <Text style={[styles.actionRowLabel, {color: themeColors.foreground}]}>{label}</Text>
       </View>
       <View style={styles.actionRowRight}>
-        {value && <Text style={[styles.actionRowValue, { color: themeColors.foreground }]}>{value}</Text>}
+        {value && <Text style={[styles.actionRowValue, {color: themeColors.foreground, marginRight: showChevron ? 8 : 0}]}>{value}</Text>}
         {onPress && showChevron && <ChevronRight size={20} color={themeColors.mutedForeground} style={{ marginLeft: 8 }} />}
       </View>
     </TouchableOpacity>
@@ -169,7 +170,7 @@ export default function CreateInvoiceScreen() {
       po_number: '', // Initialize po_number
       custom_headline: '', // Initialize custom_headline
       taxPercentage: 0,
-      discountType: '',
+      discountType: null, // Changed from '' to null
       discountValue: 0,
       subTotalAmount: 0,
       totalAmount: 0,
@@ -232,7 +233,7 @@ export default function CreateInvoiceScreen() {
 
   // --- Bottom Sheet Modal (Add Item) --- //
   const addItemSheetRef = useRef<AddItemSheetRef>(null);
-  const snapPoints = useMemo(() => ['50%', '90%'], []);
+  const addItemSnapPoints = useMemo(() => ['50%', '90%'], []);
 
   const handlePresentAddItemModal = useCallback(() => {
     // Dismiss keyboard if open
@@ -353,6 +354,7 @@ export default function CreateInvoiceScreen() {
     // If you had other fields in InvoiceFormData that map to updatedDetails, set them here.
     // For example, if you added dueDateType to InvoiceFormData:
     // setValue('due_date_type', updatedDetails.dueDateType);
+    editInvoiceDetailsSheetRef.current?.dismiss(); // Add this line to close the modal
   };
 
   React.useEffect(() => {
@@ -365,7 +367,7 @@ export default function CreateInvoiceScreen() {
   };
 
   // Ref for the new EditInvoiceDetailsSheet modal
-  const editInvoiceDetailsSheetRef = useRef<BottomSheetModal>(null);
+  const editInvoiceDetailsSheetRef = useRef<EditInvoiceDetailsSheetRef>(null);
 
   console.log("[CreateInvoiceScreen] RENDERING, dueDateDisplayLabel:", invoiceDetails?.dueDateDisplayLabel); // Added render log
 
@@ -432,6 +434,31 @@ export default function CreateInvoiceScreen() {
     setValue('totalAmount', newTotal > 0 ? newTotal : 0, { shouldValidate: true, shouldDirty: true }); // Ensure total isn't negative
 
   }, [displaySubtotal, taxPercentage, discountType, discountValue, setValue]);
+
+  const duplicateDiscountSheetRef = useRef<DuplicateDiscountSheetRef>(null); // Ref for new sheet
+
+  const handlePresentDuplicateDiscountSheet = () => {
+    // Pass current discount values to pre-fill the modal if needed
+    const currentDiscountType = getValues('discountType');
+    const currentDiscountValue = getValues('discountValue');
+    duplicateDiscountSheetRef.current?.present(
+      currentDiscountType,
+      currentDiscountValue
+    );
+  };
+
+  const handleSaveDuplicateDiscount = (data: DiscountData) => {
+    console.log('Duplicate Discount to save:', data);
+    // Update form values with data from discount sheet
+    setValue('discountType', data.discountType, { shouldValidate: true, shouldDirty: true });
+    setValue('discountValue', data.discountValue, { shouldValidate: true, shouldDirty: true });
+    // The useEffect for total calculation will pick up these changes
+  };
+
+  const handleDuplicateDiscountSheetClose = () => {
+    console.log("DuplicateDiscountSheet has been closed.");
+    // Add any other logic needed when the discount sheet is closed by the user
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
@@ -554,10 +581,24 @@ export default function CreateInvoiceScreen() {
             <Text style={styles.summaryText}>${displaySubtotal.toFixed(2)}</Text>
           </View>
           <ActionRow 
-            label="Add Discount" 
-            onPress={() => console.log('Add Discount pressed')} 
-            icon={PlusCircle} 
+            label={
+              discountType === 'percentage' && discountValue && discountValue > 0 
+                ? `Discount ${discountValue}%` 
+                : discountType === 'fixed' && discountValue && discountValue > 0
+                  ? 'Discount'
+                  : discountType // If a type is set but value might be 0 or null
+                    ? 'Edit Discount'
+                    : 'Add Discount' // Cleaner prompt
+            }
+            value={
+              displayDiscountAmount > 0 
+                ? `- $${displayDiscountAmount.toFixed(2)}` 
+                : '' // Empty if no discount applied
+            }
+            onPress={handlePresentDuplicateDiscountSheet} 
+            icon={Percent} 
             themeColors={themeColors} 
+            showChevron={!discountType} // Show chevron only if no discountType is set
           />
           <ActionRow 
             label="Add VAT" 
@@ -665,6 +706,16 @@ export default function CreateInvoiceScreen() {
         initialDetails={getInitialModalDetails()} // Pass current details
         onSave={handleSaveDetailsFromModal} // Handle save action
       />
+
+      <DuplicateDiscountSheet
+        ref={duplicateDiscountSheetRef}
+        onSave={handleSaveDuplicateDiscount}
+        onClose={handleDuplicateDiscountSheetClose}
+        // Pass initial values if needed, though the present method also takes them
+        // initialDiscountType={getValues('discountType')}
+        // initialDiscountValue={getValues('discountValue')}
+      />
+
     </SafeAreaView>
   );
 }

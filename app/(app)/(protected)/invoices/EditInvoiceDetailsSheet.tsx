@@ -37,7 +37,7 @@ import SetDueDateSheet, {
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 
-interface InvoiceDetailsData {
+export interface InvoiceDetailsData {
 	invoiceNumber: string;
 	creationDate: Date;
 	dueDateType: string;
@@ -53,8 +53,14 @@ interface EditInvoiceDetailsSheetProps {
 	onClose?: () => void;
 }
 
+// Define and export the Ref type
+export interface EditInvoiceDetailsSheetRef {
+	present: () => void;
+	dismiss: () => void;
+}
+
 const EditInvoiceDetailsSheet = forwardRef<
-	BottomSheetModal,
+	EditInvoiceDetailsSheetRef,
 	EditInvoiceDetailsSheetProps
 >(({ initialDetails, onSave, onClose }, ref) => {
 	const { isLightMode } = useTheme();
@@ -120,7 +126,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 	// Imperative handle for parent to control sheet (from AddNewItemFormSheet)
 	React.useImperativeHandle(ref, () => ({
 		present: () => bottomSheetModalRef.current?.present(),
-		dismiss: () => bottomSheetModalRef.current?.dismiss(),
+		dismiss: () => bottomSheetModalRef.current?.dismiss(), // Ensure dismiss is also exposed
 	}));
 
 	const snapPoints = useMemo(() => ["75%", "95%"], []); // Adjusted initial snap point
@@ -315,7 +321,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 			marginTop: 10, // Space from last group
 		},
 		saveButtonDisabled: {
-			backgroundColor: themeColors.primaryMuted,
+			backgroundColor: themeColors.muted, // Replaced primaryMuted with muted
 		},
 		saveButtonText: {
 			color: themeColors.primaryForeground,
