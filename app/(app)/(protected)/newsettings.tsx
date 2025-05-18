@@ -11,23 +11,41 @@ import { Text } from '@/components/ui/text';
 import { useTheme } from '@/context/theme-provider'; 
 import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useSupabase } from '@/context/supabase-provider';
+import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 
 export default function NewSettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
+  const { setIsTabBarVisible } = useTabBarVisibility();
   const [isLoadingSignOut, setIsLoadingSignOut] = useState(false);
 
   const handleUpgradePress = () => console.log('Upgrade pressed');
-  const handleEditAccountPress = () => router.push('/(app)/(protected)/account-details');
-  const handleBusinessInformationPress = () => console.log('Business Information pressed');
-  const handleTaxCurrencyPress = () => console.log('Tax and Currency pressed');
+  const handleEditAccountPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/account-details'); 
+  };
+  const handleBusinessInformationPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/business-information');
+  };
+  const handleTaxCurrencyPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/tax-currency');
+  };
   const handlePaymentOptionsPress = () => console.log('Payment Options pressed');
   const handlePaymentRemindersPress = () => console.log('Payment Reminders pressed');
-  const handleAppLanguagePress = () => console.log('App Language pressed');
+  const handleAppLanguagePress = () => {
+    setIsTabBarVisible(false);
+    router.push('/app-language');
+  };
   const handleStoragePress = () => console.log('Storage pressed');
   const handlePrivacyPolicyPress = () => console.log('Privacy Policy pressed');
   const handleTermsOfServicePress = () => console.log('Terms Of Service pressed');
+  const handleHelpPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/customer-support');
+  };
   const handleContactUsPress = () => console.log('Contact Us pressed');
   const handleLeaveReviewPress = () => console.log('Leave Review pressed');
 
@@ -135,8 +153,8 @@ export default function NewSettingsScreen() {
           <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
             <SettingsListItem
               icon={<HelpCircle color={theme.foreground} size={24} />}
-              label="Customer Support"
-              onPress={handleContactUsPress}
+              label="Help & Customer Support"
+              onPress={handleHelpPress}
             />
             <SettingsListItem
               icon={<Star color={theme.foreground} size={24} />}

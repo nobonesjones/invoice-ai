@@ -1,5 +1,13 @@
-ok were just refining the discount section, makign it work and adjusting heights of the way the modal opsna nd snaps, in 2nd position. 
+Ok so we ar epopulationg the settings pages. 
 
-next i want to rename reports to settings...this will be where we manage the tax / vat.
+we fixed the smooth slide transition to the account info, and i asked it to add blank pages to the rest of the items, but it fucked them up and they are going to the home page...need to ask it to remember why 
 
-before that we need full invoice creation should work and client,, everything!
+reason so we need to fix this below...
+
+"The redirection logic in your main app layout (app/_layout.tsx) likely needs to be updated. It might be incorrectly sending you to the home screen if it doesn't recognize these new settings pages as valid destinations when you're logged in.
+
+We fixed a similar issue for "Account Details" by making that layout aware of it. We'll need to do the same for these new pages."
+
+the next steps are. 
+
+fix the settings pages, get them openign nicely, but focus on the VAT pages and once sorted, we can have global settings to use in the invoice creation.. and proceed with that to finish the entire flow! 

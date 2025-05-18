@@ -30,7 +30,14 @@ export default function AppLayout() {
 						// tabBarOnPress removed as it's not applicable here
 					}}
 				/>
-				<Stack.Screen name="welcome" />
+				<Stack.Screen name="index" options={{ headerShown: false }} />
+				<Stack.Screen name="account-details" options={{ headerShown: false }} />
+				<Stack.Screen name="business-information" options={{ headerShown: false }} />
+				<Stack.Screen name="tax-currency" options={{ headerShown: false }} />
+				<Stack.Screen name="app-language" options={{ headerShown: false }} />
+				<Stack.Screen name="customer-support" options={{ headerShown: false }} />
+				{/* <Stack.Screen name="settings" options={{ headerShown: false }} /> */}
+				<Stack.Screen name="welcome" options={{ headerShown: false }} />
 				<Stack.Screen name="(auth)" options={{ headerShown: false }} />
 				<Stack.Screen
 					name="modal"
@@ -45,6 +52,7 @@ export default function AppLayout() {
 						gestureEnabled: true,
 					}}
 				/>
+				<Stack.Screen name="+not-found" />
 			</Stack>
 		</BottomSheetModalProvider>
 	);

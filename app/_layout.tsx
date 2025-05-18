@@ -26,23 +26,30 @@ function RootLayoutNav() {
 		// Check if the current route is within the nested sign-in/(app)/(auth) group
 		const inAppAuthGroup = segments[0] === "(app)" && segments[1] === "(auth)";
 		// Check if the current route is within the main protected/(app)/(protected) group
-		const inAppProtectedRoute =
-			segments[0] === "(app)" && segments[1] === "(protected)";
+		const inAppProtectedRoute = segments[0] === "(app)" && segments[1] === "(protected)";
 		// Check if the current route is the welcome screen
 		const isWelcomeScreen =
 			segments[0] === "(app)" &&
 			segments.length === 2 &&
 			segments[1] === "welcome";
+
+    // Check if the current route is account-details directly under (app)
+    const isAccountDetailsScreen =
+      segments[0] === "(app)" &&
+      segments.length === 2 &&
+      segments[1] === "account-details";
+
 		const isInProtectedGroup = inAppProtectedRoute;
 
 		console.log("[Auth Effect] Running Effect..."); // Log start
 		console.log("[Auth Effect] Session:", session ? "Exists" : "null"); // Log session state
 		console.log("[Auth Effect] Segments:", JSON.stringify(segments)); // Log current route segments
 		console.log("[Auth Effect] inAuthGroup:", inAuthGroup); // Log if in auth group
-		console.log("[Auth Effect] isInProtectedGroup:", isInProtectedGroup); // Log if in protected group
+		console.log("[Auth Effect] isInProtectedGroup:", isInProtectedGroup);
+    console.log("[Auth Effect] isAccountDetailsScreen:", isAccountDetailsScreen);
 
-		if (session && !inAppProtectedRoute) {
-			// User is logged in but not in the main protected area.
+		if (session && !inAppProtectedRoute && !isAccountDetailsScreen) {
+			// User is logged in but not in the main protected area OR account-details.
 			// Redirect to the main protected route (e.g., home screen).
 			console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
 			router.replace("/(app)/(protected)");

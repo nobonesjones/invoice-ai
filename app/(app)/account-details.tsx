@@ -135,112 +135,115 @@ export default function AccountDetailsScreen() {
     }
   };
 
+  const headerLeft = () => (
+    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0, padding: Platform.OS === 'ios' ? 0 :10 }}>
+      <ChevronLeft size={28} color={theme.foreground} />
+    </TouchableOpacity>
+  );
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <>
       <Stack.Screen 
         options={{
           headerShown: true,
-          title: 'Edit Account Details',
+          headerTitle: "Account Details",
+          headerTransparent: false, 
           headerStyle: { backgroundColor: theme.background },
-          headerTitleStyle: { color: theme.foreground },
           headerTintColor: theme.foreground,
-          headerLeft: () => (
-            <TouchableOpacity 
-              onPress={() => router.navigate('/(app)/(protected)/newsettings')} 
-              style={{ marginLeft: 10, padding: 10 }}
-            >
-              <ChevronLeft size={24} color={theme.foreground} />
-            </TouchableOpacity>
-          ),
+          headerTitleStyle: { fontWeight: 'bold' },
+          headerLeft: headerLeft,
+          animation: 'slide_from_right',
         }}
       />
-      <ScrollView 
-        style={[styles.container, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.scrollViewContentContainer} 
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.mainContent}> 
-          <View style={styles.formContainer}>
-            <View style={[styles.inputBlockContainer, {borderColor: theme.border, backgroundColor: theme.card}]}>
-              {/* Name Field */}
-              <View style={[styles.fieldRow, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.fieldLabel, { color: theme.foreground }]}>Name</Text>
-                <TextInput
-                  style={[styles.fieldInput, { color: theme.foreground }]}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  placeholder="Enter full name"
-                  placeholderTextColor={theme.mutedForeground}
-                  autoCapitalize="words"
-                  textAlign="right"
-                />
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <ScrollView 
+          style={[styles.container, { backgroundColor: theme.background }]}
+          contentContainerStyle={styles.scrollViewContentContainer} 
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.mainContent}> 
+            <View style={styles.formContainer}>
+              <View style={[styles.inputBlockContainer, {borderColor: theme.border, backgroundColor: theme.card}]}>
+                {/* Name Field */}
+                <View style={[styles.fieldRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.fieldLabel, { color: theme.foreground }]}>Name</Text>
+                  <TextInput
+                    style={[styles.fieldInput, { color: theme.foreground }]}
+                    value={displayName}
+                    onChangeText={setDisplayName}
+                    placeholder="Enter full name"
+                    placeholderTextColor={theme.mutedForeground}
+                    autoCapitalize="words"
+                    textAlign="right"
+                  />
+                </View>
+
+                {/* Email Field */}
+                <View style={[styles.fieldRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.fieldLabel, { color: theme.foreground }]}>Email</Text>
+                  <TextInput
+                    style={[styles.fieldInput, { color: theme.foreground }]}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Enter email"
+                    placeholderTextColor={theme.mutedForeground}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    textAlign="right"
+                  />
+                </View>
+                <Text style={[styles.inputHelper, { color: theme.mutedForeground, paddingHorizontal:16, paddingBottom: 8}]}>Email changes require verification.</Text>
+
+                {/* Mobile Number Field - No bottom border for the fieldRow itself */}
+                <View style={styles.fieldRow_noBorder}>
+                  <Text style={[styles.fieldLabel, { color: theme.foreground }]}>Mobile</Text>
+                  <TextInput
+                    style={[styles.fieldInput, { color: theme.foreground }]}
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="e.g., +12223334444"
+                    placeholderTextColor={theme.mutedForeground}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                    autoComplete='tel'
+                    textAlign="right"
+                  />
+                </View>
               </View>
 
-              {/* Email Field */}
-              <View style={[styles.fieldRow, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.fieldLabel, { color: theme.foreground }]}>Email</Text>
-                <TextInput
-                  style={[styles.fieldInput, { color: theme.foreground }]}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter email"
-                  placeholderTextColor={theme.mutedForeground}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  textAlign="right"
-                />
-              </View>
-              <Text style={[styles.inputHelper, { color: theme.mutedForeground, paddingHorizontal:16, paddingBottom: 8}]}>Email changes require verification.</Text>
-
-              {/* Mobile Number Field - No bottom border for the fieldRow itself */}
-              <View style={styles.fieldRow_noBorder}>
-                <Text style={[styles.fieldLabel, { color: theme.foreground }]}>Mobile</Text>
-                <TextInput
-                  style={[styles.fieldInput, { color: theme.foreground }]}
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="e.g., +12223334444"
-                  placeholderTextColor={theme.mutedForeground}
-                  keyboardType="phone-pad"
-                  autoCapitalize="none"
-                  autoComplete='tel'
-                  textAlign="right"
-                />
-              </View>
+              <Button 
+                onPress={handleSaveChanges} 
+                disabled={isLoading} 
+                style={[styles.actionButton, { backgroundColor: theme.primary }]} 
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={theme.primaryForeground} /> 
+                ) : (
+                  <Text style={{ color: theme.primaryForeground, fontWeight: 'bold' }}>Save Changes</Text>
+                )}
+              </Button>
             </View>
 
-            <Button 
-              onPress={handleSaveChanges} 
-              disabled={isLoading} 
-              style={[styles.actionButton, { backgroundColor: theme.primary }]} 
-            >
-              {isLoading ? (
-                <ActivityIndicator color={theme.primaryForeground} /> 
-              ) : (
-                <Text style={{ color: theme.primaryForeground, fontWeight: 'bold' }}>Save Changes</Text>
-              )}
-            </Button>
+            <View style={styles.signOutSectionContainer}>
+                <Button 
+                  onPress={handleSignOut} 
+                  disabled={isSigningOut} 
+                  style={[styles.actionButton, styles.signOutButton, { backgroundColor: theme.destructive }]}
+                >
+                    {isSigningOut ? (
+                      <ActivityIndicator color={theme.destructiveForeground} /> 
+                    ) : (
+                      <>
+                        <LogOut size={18} color={theme.destructiveForeground} style={{marginRight: 8}}/>
+                        <Text style={{color: theme.destructiveForeground, fontWeight: 'bold'}}>Sign Out</Text>
+                      </>
+                    )}
+                </Button>
+            </View>
           </View>
-
-          <View style={styles.signOutSectionContainer}>
-              <Button 
-                onPress={handleSignOut} 
-                disabled={isSigningOut} 
-                style={[styles.actionButton, styles.signOutButton, { backgroundColor: theme.destructive }]}
-              >
-                  {isSigningOut ? (
-                    <ActivityIndicator color={theme.destructiveForeground} /> 
-                  ) : (
-                    <>
-                      <LogOut size={18} color={theme.destructiveForeground} style={{marginRight: 8}}/>
-                      <Text style={{color: theme.destructiveForeground, fontWeight: 'bold'}}>Sign Out</Text>
-                    </>
-                  )}
-              </Button>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 

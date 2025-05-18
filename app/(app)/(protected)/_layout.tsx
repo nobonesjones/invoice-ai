@@ -85,7 +85,6 @@ export default function ProtectedLayout() {
 									"estimates",
 									"ai",
 									"customers/index",
-									"settings",
 									"newsettings", // Added to filter
 								].includes(route.name),
 							)
@@ -194,32 +193,15 @@ export default function ProtectedLayout() {
 				listeners={{ tabPress: triggerHaptic }}
 			/>
 			<Tabs.Screen
-				name="settings" // Changed from reports to settings
-				// (e.g., app/(app)/(protected)/settings.tsx)
-				options={{
-					title: "Settings",
-					headerShown: false, // Keep this to hide the default header
-				}}
-				listeners={{ tabPress: triggerHaptic }}
-			/>
-			<Tabs.Screen
 				name="newsettings"
 				options={{
-					title: "New Settings",
+					title: "Settings", // Changed from "New Settings"
 					headerShown: false,
 				}}
 				listeners={{ tabPress: triggerHaptic }}
 			/>
 			{/* Hidden screens, not part of the tab bar */}
 			<Tabs.Screen name="profile" options={{ tabBarButton: () => null }} />
-			<Tabs.Screen
-				name="change-password"
-				options={{ tabBarButton: () => null }}
-			/>
-			<Tabs.Screen 
-        name="account-details" 
-        options={{ tabBarButton: () => null, title: "Account Details" }} 
-      />
 		</Tabs>
 	);
 }

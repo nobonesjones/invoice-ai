@@ -17,6 +17,7 @@
     "@react-native-community/datetimepicker": "^8.3.0",
     "@react-native-community/slider": "4.5.6",
     "@react-native-masked-view/masked-view": "^0.3.2",
+    "@react-navigation/native-stack": "^7.3.13",
     "@shopify/flash-list": "1.7.6",
     "@supabase/supabase-js": "^2.46.1",
     "@tamagui/lucide-icons": "^1.125.26",
