@@ -26,6 +26,8 @@ import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not
 import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
 import DuplicateDiscountSheet, { DuplicateDiscountSheetRef, DiscountData } from './DuplicateDiscountSheet'; // Import new sheet
+import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData } from './EditInvoiceTaxSheet'; // Changed TaxData to InvoiceTaxData to avoid naming conflict if TaxData is used elsewhere
+import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
 
 // Define data structures for the form
 interface InvoiceItem {
@@ -148,6 +150,7 @@ export default function CreateInvoiceScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
+  const { supabase, user } = useSupabase(); // Use Supabase context
 
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
@@ -435,7 +438,56 @@ export default function CreateInvoiceScreen() {
 
   }, [displaySubtotal, taxPercentage, discountType, discountValue, setValue]);
 
+  // State for global tax settings
+  const [globalTaxRatePercent, setGlobalTaxRatePercent] = useState<number | null>(null);
+  const [globalTaxName, setGlobalTaxName] = useState<string | null>(null);
+  const [isLoadingTaxSettings, setIsLoadingTaxSettings] = useState<boolean>(true);
+
+  // State for invoice-specific tax override
+  const [invoiceTaxName, setInvoiceTaxName] = useState<string | null>(null);
+  const [invoiceTaxRatePercent, setInvoiceTaxRatePercent] = useState<number | null>(null);
+
+  // Effect to fetch global tax settings
+  useEffect(() => {
+    if (!user || !supabase) {
+      setIsLoadingTaxSettings(false);
+      return;
+    }
+
+    const fetchTaxSettings = async () => {
+      setIsLoadingTaxSettings(true);
+      try {
+        const { data, error } = await supabase
+          .from('business_settings')
+          .select('default_tax_rate, tax_name')
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching business_settings:', error);
+        } else if (data) {
+          console.log('Fetched business_settings:', data);
+          setGlobalTaxName(data.tax_name || null);
+          // Ensure default_tax_rate is treated as a number
+          const rate = data.default_tax_rate;
+          if (rate !== null && rate !== undefined) {
+            setGlobalTaxRatePercent(parseFloat(String(rate)));
+          } else {
+            setGlobalTaxRatePercent(null);
+          }
+        }
+        setIsLoadingTaxSettings(false);
+      } catch (e) {
+        console.error('Exception fetching tax settings:', e);
+        setIsLoadingTaxSettings(false);
+      }
+    };
+
+    fetchTaxSettings();
+  }, [user, supabase]);
+
   const duplicateDiscountSheetRef = useRef<DuplicateDiscountSheetRef>(null); // Ref for new sheet
+  const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
 
   const handlePresentDuplicateDiscountSheet = () => {
     // Pass current discount values to pre-fill the modal if needed
@@ -459,6 +511,26 @@ export default function CreateInvoiceScreen() {
     console.log("DuplicateDiscountSheet has been closed.");
     // Add any other logic needed when the discount sheet is closed by the user
   };
+
+  const handlePresentEditInvoiceTaxSheet = () => {
+    // For now, present with null/undefined as the EditInvoiceTaxSheet expects discount-like props
+    // This will be updated when EditInvoiceTaxSheet is refactored for tax name and rate
+    const initialName = invoiceTaxName !== null ? invoiceTaxName : globalTaxName;
+    const initialRate = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
+    editInvoiceTaxSheetRef.current?.present(initialName, initialRate);
+  };
+
+  const handleSaveInvoiceTax = (data: InvoiceTaxData) => {
+    // Logic to update invoice-specific tax will be added here
+    console.log('Invoice tax to be saved:', data); 
+    setInvoiceTaxName(data.taxName);
+    const rate = parseFloat(data.taxRate);
+    setInvoiceTaxRatePercent(isNaN(rate) ? null : rate);
+  };
+
+  // Compute displayed tax values, prioritizing invoice-specific, then global
+  const displayTaxName = invoiceTaxName !== null ? invoiceTaxName : globalTaxName;
+  const displayTaxRatePercent = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
@@ -600,16 +672,19 @@ export default function CreateInvoiceScreen() {
             themeColors={themeColors} 
             showChevron={!discountType} // Show chevron only if no discountType is set
           />
-          <ActionRow 
-            label="Add VAT" 
-            onPress={() => console.log('Add VAT pressed')} 
-            icon={PlusCircle} // Or Percent if preferred
-            themeColors={themeColors} 
-          />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tax ({taxPercentage?.toFixed(0) ?? 0}%)</Text> // This might be redundant if VAT is added above
-            <Text style={styles.summaryText}>${displayTaxAmount.toFixed(2)}</Text>
-          </View>
+          {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
+            <>
+              <View style={styles.separator} />
+              <ActionRow
+                label={`Tax ${displayTaxName ? `(${displayTaxName})` : ''}`}
+                value={`${displayTaxRatePercent}%`}
+                icon={Percent}
+                themeColors={themeColors}
+                onPress={handlePresentEditInvoiceTaxSheet} // Connect to new tax sheet
+                showChevron={true} // Make it tappable
+              />
+            </>
+          )}
           <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
             <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>${displayInvoiceTotal.toFixed(2)}</Text>
@@ -716,6 +791,11 @@ export default function CreateInvoiceScreen() {
         // initialDiscountValue={getValues('discountValue')}
       />
 
+      <EditInvoiceTaxSheet 
+        ref={editInvoiceTaxSheetRef}
+        onSave={handleSaveInvoiceTax} // Placeholder save handler
+        onClose={() => console.log('Edit invoice tax sheet closed')}
+      />
     </SafeAreaView>
   );
 }
@@ -1118,6 +1198,14 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       fontSize: 16,
       fontWeight: '600',
       color: themeColors.foreground,
+    },
+    separator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: themeColors.border,
+      marginLeft: 16, // Assuming ActionRow content (like icon) starts after 16px padding
+    },
+    chevron: {
+      marginLeft: 'auto', // Push chevron to the right
     },
   });
 }

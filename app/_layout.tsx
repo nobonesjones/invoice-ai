@@ -39,6 +39,20 @@ function RootLayoutNav() {
       segments.length === 2 &&
       segments[1] === "account-details";
 
+    // Check for new settings screens directly under (app)
+    const isBusinessInformationScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "business-information";
+    const isTaxCurrencyScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "tax-currency";
+    const isAppLanguageScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "app-language";
+    const isCustomerSupportScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "customer-support";
+    const isPaymentOptionsScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-options";
+    const isPaymentRemindersScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-reminders";
+
 		const isInProtectedGroup = inAppProtectedRoute;
 
 		console.log("[Auth Effect] Running Effect..."); // Log start
@@ -47,9 +61,24 @@ function RootLayoutNav() {
 		console.log("[Auth Effect] inAuthGroup:", inAuthGroup); // Log if in auth group
 		console.log("[Auth Effect] isInProtectedGroup:", isInProtectedGroup);
     console.log("[Auth Effect] isAccountDetailsScreen:", isAccountDetailsScreen);
+    console.log("[Auth Effect] isBusinessInformationScreen:", isBusinessInformationScreen);
+    console.log("[Auth Effect] isTaxCurrencyScreen:", isTaxCurrencyScreen);
+    console.log("[Auth Effect] isAppLanguageScreen:", isAppLanguageScreen);
+    console.log("[Auth Effect] isCustomerSupportScreen:", isCustomerSupportScreen);
+    console.log("[Auth Effect] isPaymentOptionsScreen:", isPaymentOptionsScreen);
+    console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
 
-		if (session && !inAppProtectedRoute && !isAccountDetailsScreen) {
-			// User is logged in but not in the main protected area OR account-details.
+		if (session && 
+        !inAppProtectedRoute && 
+        !isAccountDetailsScreen &&
+        !isBusinessInformationScreen &&
+        !isTaxCurrencyScreen &&
+        !isAppLanguageScreen &&
+        !isCustomerSupportScreen &&
+        !isPaymentOptionsScreen &&
+        !isPaymentRemindersScreen
+      ) { 
+			// User is logged in but not in the main protected area OR any allowed app-level screens.
 			// Redirect to the main protected route (e.g., home screen).
 			console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
 			router.replace("/(app)/(protected)");

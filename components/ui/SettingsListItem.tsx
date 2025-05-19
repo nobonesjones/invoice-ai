@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react-native";
 import React from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet, StyleProp, TextStyle } from "react-native";
 
 import { Text } from "./text"; // Use your custom Text component if available
 
@@ -8,9 +8,10 @@ import { useTheme } from "@/context/theme-provider";
 
 interface SettingsListItemProps {
 	icon: React.ReactNode;
-	label: string;
+	label: string | React.ReactNode;
 	onPress?: () => void;
 	rightContent?: React.ReactNode; // For things like Switches or custom text
+	labelStyle?: StyleProp<TextStyle>; // Added labelStyle prop
 	hideChevron?: boolean;
 	isDestructive?: boolean; // For Sign Out styling
 	disabled?: boolean; // Add disabled prop
@@ -21,6 +22,7 @@ export const SettingsListItem: React.FC<SettingsListItemProps> = ({
 	label,
 	onPress,
 	rightContent,
+	labelStyle, // Destructure labelStyle
 	hideChevron = false,
 	isDestructive = false,
 	disabled = false, // Default to false
@@ -36,7 +38,11 @@ export const SettingsListItem: React.FC<SettingsListItemProps> = ({
 		>
 			<View style={styles.leftContainer}>
 				{icon}
-				<Text style={[styles.label, { color: labelColor }]}>{label}</Text>
+				{typeof label === 'string' ? (
+					<Text style={[styles.label, { color: labelColor }, labelStyle]}>{label}</Text> // Apply labelStyle
+				) : (
+					label // If label is already a ReactNode, render it directly
+				)}
 			</View>
 			<View style={styles.rightContainer}>
 				{rightContent}

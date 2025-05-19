@@ -126,8 +126,11 @@ const DuplicateDiscountSheet = forwardRef<DuplicateDiscountSheetRef, DuplicateDi
       padding: 5, 
     },
     contentContainer: { 
-        paddingHorizontal: 20,
-        paddingBottom: 40, 
+      paddingHorizontal: 20,
+      paddingTop: 10, 
+      paddingBottom: 70, 
+      flexGrow: 1,
+      justifyContent: 'space-between',
     },
     handleIndicator: {
       backgroundColor: themeColors.mutedForeground, 

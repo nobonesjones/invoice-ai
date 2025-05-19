@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import {
   ChevronRight, Search, Zap, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
   Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell
@@ -18,7 +18,14 @@ export default function NewSettingsScreen() {
   const { user, signOut } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const [isLoadingSignOut, setIsLoadingSignOut] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsTabBarVisible(true);
+      // Optional: Return a cleanup function if needed when the screen is unfocused
+      // return () => setIsTabBarVisible(false); // Example: if this screen should hide it on unfocus
+    }, [setIsTabBarVisible])
+  );
 
   const handleUpgradePress = () => console.log('Upgrade pressed');
   const handleEditAccountPress = () => {
@@ -33,8 +40,14 @@ export default function NewSettingsScreen() {
     setIsTabBarVisible(false);
     router.push('/tax-currency');
   };
-  const handlePaymentOptionsPress = () => console.log('Payment Options pressed');
-  const handlePaymentRemindersPress = () => console.log('Payment Reminders pressed');
+  const handlePaymentOptionsPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/payment-options');
+  };
+  const handlePaymentRemindersPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/payment-reminders');
+  };
   const handleAppLanguagePress = () => {
     setIsTabBarVisible(false);
     router.push('/app-language');
@@ -49,25 +62,12 @@ export default function NewSettingsScreen() {
   const handleContactUsPress = () => console.log('Contact Us pressed');
   const handleLeaveReviewPress = () => console.log('Leave Review pressed');
 
-  const handleSignOut = async () => {
-    setIsLoadingSignOut(true);
-    try {
-      await signOut();
-      // router.replace('/auth'); // Or your initial auth screen path
-    } catch (error: any) {
-      console.error("Error signing out:", error);
-      Alert.alert("Error", error.message || "Failed to sign out.");
-    } finally {
-      setIsLoadingSignOut(false);
-    }
-  };
-
   const userDisplayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
         <ScrollView
           style={[styles.container, { backgroundColor: theme.background }]}
           contentContainerStyle={styles.contentContainer}
@@ -173,22 +173,6 @@ export default function NewSettingsScreen() {
             />
           </View>
         </ScrollView>
-
-        <View style={[styles.signOutSection, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
-          <SettingsListItem
-            icon={<LogOut size={24} color={theme.destructive} />}
-            label="Sign Out"
-            isDestructive
-            hideChevron
-            onPress={handleSignOut}
-            disabled={isLoadingSignOut}
-            rightContent={
-              isLoadingSignOut ? (
-                <ActivityIndicator size="small" color={theme.destructive} />
-              ) : null
-            }
-          />
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -202,7 +186,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 100,
   },
   header: {
     paddingHorizontal: 16,
@@ -236,6 +219,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginHorizontal: 16,
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3.5,
+    elevation: 5,
   },
   accountHeaderContainer: {
     paddingHorizontal: 16,
@@ -260,7 +248,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     marginHorizontal: 16,
-    marginBottom: 16,
+    // marginBottom: 16, // Adjusted to account for potential safe area insets if this was at very bottom
     borderRadius: 10,
     overflow: 'hidden',
     borderTopWidth: StyleSheet.hairlineWidth,

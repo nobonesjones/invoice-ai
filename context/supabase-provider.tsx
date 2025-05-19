@@ -1,4 +1,4 @@
-import { Session, User } from "@supabase/supabase-js";
+import { Session, User, SupabaseClient } from "@supabase/supabase-js";
 import { SplashScreen } from "expo-router";
 import { createContext, useContext, useEffect, useState } from "react";
 
@@ -7,6 +7,7 @@ import { supabase } from "@/config/supabase";
 SplashScreen.preventAutoHideAsync();
 
 type SupabaseContextProps = {
+	supabase: SupabaseClient;
 	user: User | null;
 	session: Session | null;
 	initialized?: boolean;
@@ -20,6 +21,7 @@ type SupabaseProviderProps = {
 };
 
 export const SupabaseContext = createContext<SupabaseContextProps>({
+	supabase: supabase,
 	user: null,
 	session: null,
 	initialized: false,
@@ -95,6 +97,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	return (
 		<SupabaseContext.Provider
 			value={{
+				supabase,
 				user,
 				session,
 				initialized,
