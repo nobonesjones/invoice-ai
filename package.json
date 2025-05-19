@@ -40,7 +40,7 @@
     "expo-status-bar": "~2.2.3",
     "expo-system-ui": "~5.0.7",
     "expo-web-browser": "~14.1.6",
-    "lucide-react-native": "^0.482.0",
+    "lucide-react-native": "^0.511.0",
     "moti": "^0.30.0",
     "nativewind": "^4.1.23",
     "openai": "^4.95.1",
@@ -71,7 +71,7 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@expo/metro-config": "~0.20.0",
-    "@types/react": "~18.2.45",
+    "@types/react": "~19.0.10",
     "@types/react-native": "^0.73.0",
     "@types/uuid": "^10.0.0",
     "assert": "^2.1.0",
