@@ -357,7 +357,7 @@ export default function CreateInvoiceScreen() {
   const [recordedPayments, setRecordedPayments] = useState<RecordedPayment[]>([]); // State for recorded payments
 
   const totalPaidAmount = recordedPayments.reduce((sum, payment) => sum + payment.amount, 0);
-  const balanceDue = (getValues('totalAmount') || 0) - totalPaidAmount;
+  const balanceDueBeforeMarkAsPaid = (getValues('totalAmount') || 0) - totalPaidAmount; 
 
   const handleSaveDetailsFromModal = (updatedDetails: any) => {
     // This function will be called when the modal's save button is pressed
@@ -825,17 +825,36 @@ export default function CreateInvoiceScreen() {
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold' }]}>Balance Due</Text>
             <Text style={[styles.summaryText, { fontWeight: 'bold' }]}>
-              {(balanceDue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {(displayInvoiceTotal - totalPaidAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Text>
           </View>
           <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.summaryLabel}>Mark as paid</Text>
             <Switch 
-              trackColor={{ false: themeColors.muted, true: themeColors.primary }} 
-              thumbColor={isLightMode ? themeColors.card : themeColors.foreground}
+              trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
+              thumbColor={isMarkedAsPaid ? themeColors.primary : themeColors.card}
               ios_backgroundColor={themeColors.muted}
-              onValueChange={setIsMarkedAsPaid} // Connected back
-              value={isMarkedAsPaid} // Connected back
+              onValueChange={(newValue) => {
+                setIsMarkedAsPaid(newValue);
+                if (newValue === true) {
+                  // If marking as paid and there's a balance, add a payment for that balance
+                  if (balanceDueBeforeMarkAsPaid > 0) {
+                    const paymentToClearBalance: RecordedPayment = {
+                      id: `payment_marked_${new Date().toISOString()}`,
+                      amount: parseFloat(balanceDueBeforeMarkAsPaid.toFixed(2)), // Ensure correct precision
+                      method: 'Marked as Paid',
+                      date: new Date(),
+                    };
+                    setRecordedPayments(prevPayments => [...prevPayments, paymentToClearBalance]);
+                  }
+                } else {
+                  // If unchecking, remove the 'Marked as Paid' payment
+                  setRecordedPayments(prevPayments => 
+                    prevPayments.filter(p => p.method !== 'Marked as Paid')
+                  );
+                }
+              }}
+              value={isMarkedAsPaid}
             />
           </View>
         </FormSection>
