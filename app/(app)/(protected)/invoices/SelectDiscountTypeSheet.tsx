@@ -36,7 +36,7 @@ const SelectDiscountTypeSheet = forwardRef<
 		dismiss: () => bottomSheetModalRef.current?.dismiss(),
 	}));
 
-	const snapPoints = useMemo(() => [Platform.OS === "ios" ? "28%" : "32%"], []); // Short modal
+	const snapPoints = useMemo(() => [Platform.OS === "ios" ? "28%" : "32%", "90%"], []); // Adjusted second snap point to 90%
 
 	const renderBackdrop = useCallback(
 		(props: any) => (
@@ -104,6 +104,8 @@ const SelectDiscountTypeSheet = forwardRef<
 			backdropComponent={renderBackdrop}
 			handleIndicatorStyle={styles.handleIndicator}
 			backgroundStyle={styles.modalBackground}
+			keyboardBehavior="extend" // Added keyboardBehavior
+			keyboardBlurBehavior="restore" // Added keyboardBlurBehavior
 		>
 			<View style={styles.container}>
 				<Text style={styles.title}>Select Discount Type</Text>

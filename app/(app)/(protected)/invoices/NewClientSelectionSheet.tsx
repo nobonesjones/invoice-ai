@@ -62,7 +62,7 @@ const NewClientSelectionSheet = forwardRef<
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const snapPoints = useMemo(() => ["90%", "95%"], []);
+	const snapPoints = useMemo(() => ["90%", "85%"], []);
 
 	const fetchClients = async () => {
 		setLoading(true);

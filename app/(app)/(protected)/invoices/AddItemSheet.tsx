@@ -1,9 +1,9 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, TextInput, FlatList, ActivityIndicator } from 'react-native';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, /* TextInput, */ ActivityIndicator } from 'react-native'; 
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetFlatList } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { PlusCircle, Search } from 'lucide-react-native';
+import { PlusCircle, Search, X } from 'lucide-react-native';
 import AddNewItemFormSheet, { AddNewItemFormSheetRef, NewItemData } from './AddNewItemFormSheet';
 
 // --- Supabase Integration --- 
@@ -41,6 +41,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [listRenderKey, setListRenderKey] = useState(0);
 
   const fetchSavedItems = async () => {
     setIsLoading(true);
@@ -87,15 +88,22 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
   // Expose present/dismiss methods via the forwarded ref
   React.useImperativeHandle(ref, () => ({
     present: () => {
+      setSearchQuery(''); // Reset search query on present
+      setFilteredSavedItems([]); // Explicitly clear items before fetch/present
       fetchSavedItems(); // Fetch items when modal is presented
-      bottomSheetModalRef.current?.present();
+      setListRenderKey(prevKey => prevKey + 1); // Increment key on present
+      
+      // Introduce a small delay before presenting
+      setTimeout(() => {
+        bottomSheetModalRef.current?.present();
+      }, 50); // 50ms delay, can be adjusted
     },
     dismiss: () => {
       bottomSheetModalRef.current?.dismiss();
     },
   }));
 
-  const snapPoints = useMemo(() => ['60%', '85%'], []);
+  const snapPoints = useMemo(() => ['60%', '90%'], []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -145,18 +153,37 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
     // The useEffect that filters items based on searchQuery will automatically update the list
   };
 
+  const handleClosePress = () => { // Handler for the new close button
+    bottomSheetModalRef.current?.dismiss();
+  };
+
   const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      paddingHorizontal: 20,
-      paddingTop: Platform.OS === 'ios' ? 0 : 20, // Adjust top padding for Android if handle is an issue
+    modalHeaderContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+      backgroundColor: themeColors.card, // As per memory for content areas
     },
-    title: {
-      fontSize: 22,
+    modalHeaderTitle: {
+      fontSize: 18,
       fontWeight: 'bold',
       color: themeColors.foreground,
-      marginBottom: 20,
       textAlign: 'center',
+      flex: 1,
+    },
+    modalHeaderSpacer: {
+      width: 24 + 10, // Icon size (24) + typical spacing (10)
+    },
+    modalCloseButton: {
+      // No specific padding in memory, touch target is the icon itself
+    },
+    container: {
+      flex: 1, // Make content area fill remaining space
+      paddingHorizontal: 16, // Adjusted from 20 to 16 as per memory
+      backgroundColor: themeColors.card, // As per memory for content areas
     },
     addNewButton: {
       flexDirection: 'row',
@@ -275,10 +302,20 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       onDismiss={handleSheetDismissed} 
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
+      keyboardBehavior="extend" 
+      keyboardBlurBehavior="restore" 
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>Add Item or Service</Text>
+      {/* New Modal Header */}
+      <View style={styles.modalHeaderContainer}>
+        <View style={styles.modalHeaderSpacer} /> 
+        <Text style={styles.modalHeaderTitle}>Add Item or Service</Text>
+        <TouchableOpacity onPress={handleClosePress} style={styles.modalCloseButton}>
+          <X size={24} color={themeColors.mutedForeground} />
+        </TouchableOpacity>
+      </View>
 
+      {/* Main content area, ensure it's styled according to memory */}
+      <View style={styles.container}>
         <TouchableOpacity style={styles.addNewButton} onPress={handleAddNewItem}>
           <PlusCircle size={22} color={themeColors.primaryForeground} />
           <Text style={styles.addNewButtonText}>Add New</Text>
@@ -286,7 +323,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
 
         <View style={styles.searchContainer}>
           <Search size={20} color={themeColors.foreground} style={styles.searchIcon} />
-          <TextInput
+          <BottomSheetTextInput 
             style={styles.searchInput}
             placeholder="Search saved items"
             placeholderTextColor={themeColors.mutedForeground}
@@ -295,39 +332,40 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
           />
         </View>
 
-        <BottomSheetScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          {/* Placeholder for the list of previously saved items */}
-          {isLoading && (
-            <View style={styles.loadingIndicatorContainer}>
-              <ActivityIndicator size="large" color={themeColors.primary} />
-            </View>
-          )}
-          {fetchError && <Text style={styles.errorText}>{fetchError}</Text>}
-          
-          {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery === '' && (
-             <Text style={styles.emptyListText}>No saved items yet. Add some!</Text>
-          )}
-          {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery !== '' && (
-             <Text style={styles.emptyListText}>No items match your search.</Text>
-          )}
-
-          <FlatList
-            data={filteredSavedItems}
-            renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => handleSavedItemSelect(item)}>
-                <View style={styles.savedItemRow}>
-                  <View style={styles.savedItemInfo}>
-                    <Text style={styles.savedItemName}>{item.itemName}</Text>
-                    {item.description && <Text style={styles.savedItemDescription}>{item.description}</Text>}
-                  </View>
-                  <Text style={styles.savedItemPrice}>${item.price.toFixed(2)}</Text>
+        <BottomSheetFlatList
+          key={listRenderKey}
+          data={filteredSavedItems}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => handleSavedItemSelect(item)}>
+              <View style={styles.savedItemRow}>
+                <View style={styles.savedItemInfo}>
+                  <Text style={styles.savedItemName}>{item.itemName}</Text>
+                  {item.description && <Text style={styles.savedItemDescription}>{item.description}</Text>}
                 </View>
-              </TouchableOpacity>
-            )}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContentContainer}
-          />
-        </BottomSheetScrollView>
+                <Text style={styles.savedItemPrice}>${item.price.toFixed(2)}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContentContainer} // Existing style with paddingBottom
+          ListEmptyComponent={
+            <>
+              {isLoading && (
+                <View style={styles.loadingIndicatorContainer}>
+                  <ActivityIndicator size="large" color={themeColors.primary} />
+                </View>
+              )}
+              {fetchError && <Text style={styles.errorText}>{fetchError}</Text>}
+              {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery === '' && (
+                 <Text style={styles.emptyListText}>No saved items yet. Add some!</Text>
+              )}
+              {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery !== '' && (
+                 <Text style={styles.emptyListText}>No items match your search.</Text>
+              )}
+            </>
+          }
+          style={{ flex: 1 }} // Ensure FlatList takes up available vertical space
+        />
       </View>
       {/* Render the AddNewItemFormSheet modal so it can be presented */}
       <AddNewItemFormSheet ref={addNewItemFormSheetRef} onSave={handleNewItemSaved} />

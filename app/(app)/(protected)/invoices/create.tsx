@@ -15,7 +15,7 @@ import {
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip } from 'lucide-react-native';
+import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2 } from 'lucide-react-native'; // Added Trash2
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -27,7 +27,9 @@ import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type 
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
 import DuplicateDiscountSheet, { DuplicateDiscountSheetRef, DiscountData } from './DuplicateDiscountSheet'; // Import new sheet
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData } from './EditInvoiceTaxSheet'; // Changed TaxData to InvoiceTaxData to avoid naming conflict if TaxData is used elsewhere
+import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
+import { SwipeListView } from 'react-native-swipe-list-view'; // Added SwipeListView import
 
 // Define data structures for the form
 interface InvoiceItem {
@@ -42,7 +44,7 @@ interface InvoiceFormData {
   client_id: string; // Assuming client_id will be stored
   invoice_date: Date;
   due_date: Date | null;
-  items: InvoiceItem[];
+  items: InvoiceLineItem[];
   po_number?: string; // Added for PO Number
   custom_headline?: string; // Added for Custom Headline
   taxPercentage?: number | null;
@@ -169,7 +171,7 @@ export default function CreateInvoiceScreen() {
       client_id: '', 
       invoice_date: new Date(),
       due_date: null, // Represents 'On receipt' or a specific date
-      items: [],
+      items: [] as InvoiceLineItem[], // Explicitly type for clarity with SwipeListView
       po_number: '', // Initialize po_number
       custom_headline: '', // Initialize custom_headline
       taxPercentage: 0,
@@ -335,6 +337,16 @@ export default function CreateInvoiceScreen() {
   const discountType = watch('discountType');
   const discountValue = watch('discountValue');
 
+  const watchedItems = watch('items'); // Watch the items array
+  const [currentInvoiceLineItems, setCurrentInvoiceLineItems] = useState<InvoiceLineItem[]>([]);
+
+  useEffect(() => {
+    console.log('[useEffect for items] watchedItems:', watchedItems);
+    const itemsFromForm = (watchedItems || []) as InvoiceLineItem[];
+    setCurrentInvoiceLineItems(itemsFromForm);
+    console.log('[useEffect for items] setCurrentInvoiceLineItems to:', itemsFromForm);
+  }, [watchedItems]);
+
   const handleSaveDetailsFromModal = (updatedDetails: any) => {
     // This function will be called when the modal's save button is pressed
     console.log('[CreateInvoiceScreen] handleSaveDetailsFromModal - Received updatedDetails:', updatedDetails);
@@ -374,9 +386,6 @@ export default function CreateInvoiceScreen() {
 
   console.log("[CreateInvoiceScreen] RENDERING, dueDateDisplayLabel:", invoiceDetails?.dueDateDisplayLabel); // Added render log
 
-  const [currentInvoiceLineItems, setCurrentInvoiceLineItems] = useState<InvoiceLineItem[]>([]); // New state for line items
-
-  // Callback to handle item data from AddItemSheet
   const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
     console.log('Item data received in create.tsx:', itemDataFromSheet);
     
@@ -486,8 +495,17 @@ export default function CreateInvoiceScreen() {
     fetchTaxSettings();
   }, [user, supabase]);
 
+  // EFFECT: Synchronize global/invoice-specific tax rates with the form's taxPercentage
+  useEffect(() => {
+    const rateToApply = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
+    // Ensure rateToApply is a number before setting it, default to 0 otherwise
+    const numericRateToApply = (typeof rateToApply === 'number' && !isNaN(rateToApply)) ? rateToApply : 0;
+    setValue('taxPercentage', numericRateToApply, { shouldValidate: true, shouldDirty: true });
+  }, [invoiceTaxRatePercent, globalTaxRatePercent, setValue]);
+
   const duplicateDiscountSheetRef = useRef<DuplicateDiscountSheetRef>(null); // Ref for new sheet
   const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
+  const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null); // Ref for new sheet
 
   const handlePresentDuplicateDiscountSheet = () => {
     // Pass current discount values to pre-fill the modal if needed
@@ -528,9 +546,74 @@ export default function CreateInvoiceScreen() {
     setInvoiceTaxRatePercent(isNaN(rate) ? null : rate);
   };
 
+  const handleMakePaymentSheetSave = (data: PaymentData) => {
+    console.log('MakePaymentSheet Save:', data);
+    // We will implement actual payment saving logic later
+  };
+
+  const handleMakePaymentSheetClose = () => {
+    console.log('Closing Make Payment Sheet');
+  };
+
   // Compute displayed tax values, prioritizing invoice-specific, then global
   const displayTaxName = invoiceTaxName !== null ? invoiceTaxName : globalTaxName;
   const displayTaxRatePercent = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
+
+  const handleRemoveItem = (itemId: string) => {
+    console.log('[handleRemoveItem] Attempting to remove itemId:', itemId);
+    const currentItems = getValues('items') || [];
+    console.log('[handleRemoveItem] currentItems from getValues:', JSON.stringify(currentItems));
+    const updatedItems = currentItems.filter(item => item.id !== itemId);
+    console.log('[handleRemoveItem] updatedItems after filter:', JSON.stringify(updatedItems));
+    setValue('items', updatedItems, { shouldValidate: true, shouldDirty: true });
+    console.log('[handleRemoveItem] Called setValue with updatedItems.');
+  };
+
+  // Render function for the visible part of the list item
+  const renderVisibleItem = (data: { item: InvoiceLineItem, index: number }) => {
+    const { item, index } = data;
+    const isFirstItem = index === 0;
+    const isLastItem = index === currentInvoiceLineItems.length - 1;
+    return (
+      <View style={[
+        styles.invoiceItemRow, 
+        { backgroundColor: themeColors.card }, // Ensure background for swipe visibility
+        isFirstItem && { borderTopWidth: 0 },
+        isLastItem && { borderBottomWidth: 0 }
+      ]}>
+        <Text style={styles.invoiceItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
+          <Text style={styles.invoiceItemNameText}>{item.item_name} </Text>
+          <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
+        </Text>
+        <Text style={styles.invoiceItemTotalText}>
+          ${item.total_price.toFixed(2)}
+        </Text>
+      </View>
+    );
+  };
+
+  // Render function for the hidden part of the list item (Remove button)
+  const renderHiddenItem = (data: { item: InvoiceLineItem, index: number }, rowMap: any) => {
+    const { item } = data;
+    return (
+      <View style={styles.rowBack}>
+        <TouchableOpacity
+          style={[styles.backRightBtn, styles.backRightBtnRight]}
+          onPress={() => {
+            console.log('[renderHiddenItem] Remove button pressed for item:', item.id);
+            handleRemoveItem(item.id);
+            // Optionally close the row
+            if (rowMap[item.id]) {
+              rowMap[item.id].closeRow();
+            }
+          }}
+        >
+          <Trash2 size={22} color={themeColors.card} /> 
+          <Text style={{ color: themeColors.card, marginLeft: 8, fontSize: 15, fontWeight: '500' }}>Remove</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
@@ -546,13 +629,14 @@ export default function CreateInvoiceScreen() {
           },
           headerStyle: {
             backgroundColor: themeColors.card,
-            // Add shadow properties for iOS
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.10, // Subtle shadow
-            shadowRadius: 2.00,
-            // Add elevation for Android shadow
-            elevation: 2,
+            ...(Platform.OS === 'ios' ? {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.10, 
+              shadowRadius: 2.00,
+            } : {
+              elevation: 2, // Android shadow
+            }),
           }, 
           headerTintColor: '#000000', 
           headerShadowVisible: false, // Keep this false to use our custom shadow from headerStyle
@@ -616,23 +700,26 @@ export default function CreateInvoiceScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            // Display items if they exist
-            currentInvoiceLineItems.map((item, index) => (
-              <View key={item.id} style={[
-                styles.invoiceItemRow,
-                index === 0 && { borderTopWidth: 0 }, // No top border for the first item
-                index === currentInvoiceLineItems.length - 1 && { borderBottomWidth: 0 } // No bottom border for the last item
-              ]}>
-                <Text style={styles.invoiceItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
-                  <Text style={styles.invoiceItemNameText}>{item.item_name} </Text>
-                  <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
-                </Text>
-                <Text style={styles.invoiceItemTotalText}>
-                  ${item.total_price.toFixed(2)}
-                </Text>
-                {/* TODO: Add a remove button here later */}
-              </View>
-            ))
+            <SwipeListView
+              data={currentInvoiceLineItems}
+              renderItem={renderVisibleItem}
+              renderHiddenItem={renderHiddenItem}
+              rightOpenValue={-110} // Width of the remove button area
+              disableRightSwipe
+              keyExtractor={(item) => item.id}
+              style={[
+                styles.swipeListStyle, 
+                currentInvoiceLineItems.length > 0 && {
+                  borderRadius: 10,
+                  backgroundColor: themeColors.card // SwipeListView acts as the card background
+                }
+              ]}
+              contentContainerStyle={styles.swipeListContentContainer}
+              useNativeDriver={false} // Recommended for SwipeListView if issues occur with animations
+              closeOnRowPress={true}
+              closeOnScroll={true}
+              closeOnRowBeginSwipe={true}
+            />
           )}
           {/* Always show 'Add Item or Service' button below the list if items exist */}
           {currentInvoiceLineItems.length > 0 && (
@@ -676,12 +763,12 @@ export default function CreateInvoiceScreen() {
             <>
               <View style={styles.separator} />
               <ActionRow
-                label={`Tax ${displayTaxName ? `(${displayTaxName})` : ''}`}
-                value={`${displayTaxRatePercent}%`}
-                icon={Percent}
+                label={`${displayTaxName ? `${displayTaxName} ` : ''}${displayTaxRatePercent !== null ? displayTaxRatePercent.toFixed(2) : '0.00'}%`}
+                value={`$${displayTaxAmount > 0 ? displayTaxAmount.toFixed(2) : '0.00'}`}
+                icon={Percent} 
                 themeColors={themeColors}
-                onPress={handlePresentEditInvoiceTaxSheet} // Connect to new tax sheet
-                showChevron={true} // Make it tappable
+                onPress={handlePresentEditInvoiceTaxSheet}
+                showChevron={true}
               />
             </>
           )}
@@ -694,7 +781,12 @@ export default function CreateInvoiceScreen() {
         <FormSection title="PAYMENTS" themeColors={themeColors}>
           <ActionRow 
             label="+ Add Payment" 
-            onPress={() => console.log('Add Payment pressed')} 
+            onPress={() => {
+              console.log('Add Payment button pressed');
+              const currentTotal = displayInvoiceTotal; // Use the state variable totalAmount
+              const currentPreviouslyPaid = 0; // Placeholder for now
+              makePaymentSheetRef.current?.present(currentTotal, currentPreviouslyPaid);
+            }}
             themeColors={themeColors} 
             showChevron={false} // Typically buttons don't have chevrons
           />
@@ -795,6 +887,14 @@ export default function CreateInvoiceScreen() {
         ref={editInvoiceTaxSheetRef}
         onSave={handleSaveInvoiceTax} // Placeholder save handler
         onClose={() => console.log('Edit invoice tax sheet closed')}
+      />
+
+      <MakePaymentSheet 
+        ref={makePaymentSheetRef}
+        onSave={handleMakePaymentSheetSave}
+        onClose={handleMakePaymentSheetClose}
+        invoiceTotal={0} // Provide initial dummy value
+        previouslyPaidAmount={0} // Provide initial dummy value
       />
     </SafeAreaView>
   );
@@ -1186,7 +1286,7 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       color: themeColors.foreground, // Default color for this combined text container
     },
     invoiceItemNameText: {
-      fontWeight: '600', // Bold
+      fontWeight: '500', // Bold
       // Inherits color and fontSize from invoiceItemCombinedInfo or can be set explicitly
     },
     invoiceItemQuantityText: {
@@ -1206,6 +1306,47 @@ const getStyles = (themeColors: ThemeColorPalette) => {
     },
     chevron: {
       marginLeft: 'auto', // Push chevron to the right
+    },
+    hiddenItem: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: themeColors.destructive, // Corrected from 'danger'
+      padding: 16,
+    },
+    rowBack: {
+      alignItems: 'center',
+      backgroundColor: themeColors.destructive, // Corrected from 'danger'
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'flex-end', // Align button to the right
+      // borderRadius handled by SwipeListView style or item styles
+    },
+    backRightBtn: {
+      alignItems: 'center',
+      bottom: 0,
+      justifyContent: 'center',
+      position: 'absolute',
+      top: 0,
+      width: 110, // Width of the hidden button area
+      flexDirection: 'row', // To align icon and text
+    },
+    backRightBtnRight: {
+      backgroundColor: themeColors.destructive, // Corrected from 'danger'
+      right: 0,
+      // borderRadius handled by SwipeListView style or item styles
+    },
+    swipeListStyle: {
+      // This style applies to the SwipeListView container itself
+      overflow: 'hidden', // Important for borderRadius to work on children
+    },
+    swipeListContentContainer: {
+      // If currentInvoiceLineItems.length > 0, no bottom padding as 'Add Another Item' button acts as footer
+      paddingBottom: 0, 
+    },
+    formSectionNoPaddingChildFix: {
+      // When FormSection has noPadding, and it's the only item
+      // This style is no longer needed as SwipeListView handles rounding
     },
   });
 }

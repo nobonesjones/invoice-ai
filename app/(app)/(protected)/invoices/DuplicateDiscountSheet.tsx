@@ -1,5 +1,5 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Keyboard } from 'react-native'; 
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
@@ -71,7 +71,11 @@ const DuplicateDiscountSheet = forwardRef<DuplicateDiscountSheetRef, DuplicateDi
     }
   };
 
+  const snapPoints = useMemo(() => ['60%'], []);
+
   const handleInternalSave = () => {
+    Keyboard.dismiss();
+
     if (!discountType) {
       Alert.alert('No Discount Type', 'Please select a discount type (Percentage or Fixed Amount).');
       return;
@@ -128,7 +132,7 @@ const DuplicateDiscountSheet = forwardRef<DuplicateDiscountSheetRef, DuplicateDi
     contentContainer: { 
       paddingHorizontal: 20,
       paddingTop: 10, 
-      paddingBottom: 70, 
+      paddingBottom: Platform.OS === 'ios' ? 100 : 90, 
       flexGrow: 1,
       justifyContent: 'space-between',
     },
@@ -202,12 +206,14 @@ const DuplicateDiscountSheet = forwardRef<DuplicateDiscountSheetRef, DuplicateDi
     <BottomSheetModal
       ref={bottomSheetModalRef}
       index={0} 
-      enableDynamicSizing={true}
+      snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed} 
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       enablePanDownToClose={true} 
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>

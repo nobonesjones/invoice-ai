@@ -129,7 +129,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 		dismiss: () => bottomSheetModalRef.current?.dismiss(), // Ensure dismiss is also exposed
 	}));
 
-	const snapPoints = useMemo(() => ["75%", "95%"], []); // Adjusted initial snap point
+	const snapPoints = useMemo(() => ["75%", "90%"], []); // Adjusted second snap point to be higher
 
 	const renderBackdrop = useCallback(
 		(props: any) => (
@@ -240,7 +240,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 		contentContainerStyle: {
 			paddingHorizontal: 20,
 			paddingTop: Platform.OS === "ios" ? 10 : 15,
-			paddingBottom: Platform.OS === "ios" ? 70 : 60, // Increased paddingBottom
+			paddingBottom: Platform.OS === "ios" ? 90 : 80, // Increased further
 		},
 		inputGroupContainer: {
 			backgroundColor: themeColors.card,
@@ -341,7 +341,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 			handleIndicatorStyle={styles.handleIndicator}
 			backgroundStyle={styles.modalBackground}
 			enablePanDownToClose
-			keyboardBehavior="interactive"
+			keyboardBehavior="extend" // Changed to extend for behavior like CreateNewClientSheet
 			keyboardBlurBehavior="restore"
 			onDismiss={onClose} // Call onClose when sheet is dismissed by pan down etc.
 		>

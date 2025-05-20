@@ -370,7 +370,6 @@ const styles = StyleSheet.create({
 
 export default App;
 
-
 BottomSheetView
 A pre-integrated React Native View with BottomSheet gestures.
 
@@ -441,9 +440,6 @@ const styles = StyleSheet.create({
 
 export default App;
 
-Edit this page
-Previous
-Scrollables
 BottomSheetScrollView
 A pre-integrated React Native ScrollView with BottomSheet gestures.
 
@@ -1201,4 +1197,31 @@ const styles = StyleSheet.create({
 
 export default App;
 
+### Troubleshooting Snap Points & Keyboard Behavior
 
+When configuring a `BottomSheetModal` to achieve desired height on initial open and correct behavior with the keyboard (especially with action buttons like 'Save'):
+
+1.  **`snapPoints` Prop (on `BottomSheetModal`):**
+    *   Define at least two snap points: `useMemo(() => ["INITIAL_HEIGHT%", "KEYBOARD_ACTIVE_HEIGHT%"], [])`.
+    *   `INITIAL_HEIGHT%`: The desired height when the modal first opens (e.g., `"75%"`).
+    *   `KEYBOARD_ACTIVE_HEIGHT%`: The desired height when an input is focused and the keyboard is visible (e.g., `"90%"`).
+    *   Set `index={0}` on `BottomSheetModal` to ensure it opens to the `INITIAL_HEIGHT%`.
+
+2.  **`keyboardBehavior` Prop (on `BottomSheetModal`):**
+    *   If your primary action button (e.g., "Save") is *inside* your `BottomSheetScrollView`:
+        *   Use `keyboardBehavior="extend"`.
+        *   This keeps the modal itself at the `KEYBOARD_ACTIVE_HEIGHT%` snap point and adds padding to the bottom of the `BottomSheetScrollView`'s content to push it above the keyboard.
+    *   If your primary action button is *outside* the scroll view (e.g., a true sticky footer for the modal itself):
+        *   You might need `keyboardBehavior="interactive"`. This will make the modal itself resize/move. The `KEYBOARD_ACTIVE_HEIGHT%` snap point will be crucial here.
+
+3.  **`contentContainerStyle.paddingBottom` (on `BottomSheetScrollView`):**
+    *   When using `keyboardBehavior="extend"`, ensure the `BottomSheetScrollView` has sufficient `paddingBottom` in its `contentContainerStyle`.
+    *   Example: `paddingBottom: Platform.OS === "ios" ? 90 : 80`. This helps ensure the last items in the scroll view (like a save button) can be scrolled fully into view above the keyboard and internal padding.
+
+4.  **Button Placement:**
+    *   For the most predictable behavior with `keyboardBehavior="extend"`, place action buttons (like "Save") *inside* the `BottomSheetScrollView` as the last item(s).
+
+5.  **Restart & Test:**
+    *   After making changes to snap points or keyboard behavior, always perform a full restart of your development server and app (`npx expo start -c`) to avoid issues with caching or stale state.
+
+By carefully configuring these properties, you can achieve reliable initial modal height and responsive behavior when the keyboard is activated, ensuring all content, including action buttons, remains accessible.
