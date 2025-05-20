@@ -65,6 +65,13 @@ interface InvoiceLineItem {
   // description?: string | null; // Optional: if you want to display description
 }
 
+interface RecordedPayment {
+  id: string; // Unique ID for this payment
+  amount: number;
+  method: string;
+  date: Date;
+}
+
 // Define a type for the theme color palette structure
 type ThemeColorPalette = typeof colors.light;
 
@@ -347,6 +354,11 @@ export default function CreateInvoiceScreen() {
     console.log('[useEffect for items] setCurrentInvoiceLineItems to:', itemsFromForm);
   }, [watchedItems]);
 
+  const [recordedPayments, setRecordedPayments] = useState<RecordedPayment[]>([]); // State for recorded payments
+
+  const totalPaidAmount = recordedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const balanceDue = (getValues('totalAmount') || 0) - totalPaidAmount;
+
   const handleSaveDetailsFromModal = (updatedDetails: any) => {
     // This function will be called when the modal's save button is pressed
     console.log('[CreateInvoiceScreen] handleSaveDetailsFromModal - Received updatedDetails:', updatedDetails);
@@ -420,30 +432,30 @@ export default function CreateInvoiceScreen() {
 
   // EFFECT: Calculate Tax, Discount, and Total when subtotal or form tax/discount values change
   useEffect(() => {
-    let taxCalcAmount = 0;
-    if (taxPercentage && typeof taxPercentage === 'number' && taxPercentage > 0) {
-      taxCalcAmount = displaySubtotal * (taxPercentage / 100);
-    }
-    setDisplayTaxAmount(taxCalcAmount);
-    // setValue('taxAmount', taxCalcAmount); // Assuming taxAmount is just for display or not a direct form field being submitted
+    const subTotal = displaySubtotal;
 
-    let discountCalcAmount = 0;
-    if (discountValue && typeof discountValue === 'number' && discountValue > 0) {
+    let discountAmountApplied = 0;
+    if (discountType && typeof discountValue === 'number' && discountValue > 0) {
       if (discountType === 'percentage') {
-        discountCalcAmount = displaySubtotal * (discountValue / 100);
-      } else if (discountType === 'fixed') {
-        discountCalcAmount = discountValue;
+        discountAmountApplied = subTotal * (discountValue / 100);
+      } else { // Fixed amount
+        discountAmountApplied = discountValue;
       }
     }
-    // Ensure discount doesn't exceed subtotal + tax (or just subtotal if preferred)
-    // For simplicity, capping at subtotal for now. Adjust if tax should be included before discount.
-    discountCalcAmount = Math.min(discountCalcAmount, displaySubtotal + taxCalcAmount); 
-    setDisplayDiscountAmount(discountCalcAmount);
-    // setValue('discountAmountCalculated', discountCalcAmount); // If you have a field for the calculated discount amount
 
-    const newTotal = displaySubtotal + taxCalcAmount - discountCalcAmount;
-    setDisplayInvoiceTotal(newTotal);
-    setValue('totalAmount', newTotal > 0 ? newTotal : 0, { shouldValidate: true, shouldDirty: true }); // Ensure total isn't negative
+    const amountAfterDiscount = subTotal - discountAmountApplied;
+
+    let taxAmountCalculated = 0;
+    if (typeof taxPercentage === 'number' && taxPercentage > 0) {
+      taxAmountCalculated = amountAfterDiscount * (taxPercentage / 100);
+    }
+
+    const finalTotal = amountAfterDiscount + taxAmountCalculated;
+
+    setDisplayDiscountAmount(discountAmountApplied);
+    setDisplayTaxAmount(taxAmountCalculated);
+    setDisplayInvoiceTotal(finalTotal);
+    setValue('totalAmount', finalTotal > 0 ? finalTotal : 0, { shouldValidate: true, shouldDirty: true }); // Ensure total isn't negative
 
   }, [displaySubtotal, taxPercentage, discountType, discountValue, setValue]);
 
@@ -548,7 +560,14 @@ export default function CreateInvoiceScreen() {
 
   const handleMakePaymentSheetSave = (data: PaymentData) => {
     console.log('MakePaymentSheet Save:', data);
-    // We will implement actual payment saving logic later
+    const newPayment: RecordedPayment = {
+      id: `payment_${new Date().toISOString()}_${Math.random().toString(36).substring(2, 9)}`,
+      amount: parseFloat(data.paymentAmount),
+      method: data.paymentMethod,
+      date: new Date(),
+    };
+    setRecordedPayments(prevPayments => [...prevPayments, newPayment]);
+    makePaymentSheetRef.current?.dismiss(); // Close the sheet after saving
   };
 
   const handleMakePaymentSheetClose = () => {
@@ -779,6 +798,19 @@ export default function CreateInvoiceScreen() {
         </FormSection>
 
         <FormSection title="PAYMENTS" themeColors={themeColors}>
+          {recordedPayments.map((payment, index) => (
+            <React.Fragment key={payment.id}>
+              <View style={styles.summaryRow} >
+                <Text style={styles.summaryLabel}>
+                  Payment Received
+                </Text>
+                <Text style={styles.summaryLabel}>
+                  ${payment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
+              </View>
+              {index < recordedPayments.length - 1 && <View style={styles.separator} />}
+            </React.Fragment>
+          ))}
           <ActionRow 
             label="+ Add Payment" 
             onPress={() => {
@@ -792,7 +824,9 @@ export default function CreateInvoiceScreen() {
           />
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold' }]}>Balance Due</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold' }]}>${displayInvoiceTotal.toFixed(2)}</Text>
+            <Text style={[styles.summaryText, { fontWeight: 'bold' }]}>
+              {(balanceDue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Text>
           </View>
           <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.summaryLabel}>Mark as paid</Text>
@@ -1347,6 +1381,21 @@ const getStyles = (themeColors: ThemeColorPalette) => {
     formSectionNoPaddingChildFix: {
       // When FormSection has noPadding, and it's the only item
       // This style is no longer needed as SwipeListView handles rounding
+    },
+    paymentLineItem: { // Style for payment line items
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 10, // Adjust as needed
+      paddingHorizontal: 0, // No extra horizontal padding, FormSection handles it
+    },
+    paymentText: {
+      fontSize: 15,
+      color: themeColors.foreground,
+    },
+    paymentDateText: {
+      fontSize: 13,
+      color: themeColors.mutedForeground,
+      marginTop: 2,
     },
   });
 }
