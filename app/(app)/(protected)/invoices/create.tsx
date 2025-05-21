@@ -11,11 +11,12 @@ import {
   Switch,
   Keyboard, // Added Keyboard import
   ViewStyle, // Explicitly import ViewStyle
+  Alert // Re-added import for Alert
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2 } from 'lucide-react-native'; // Added Trash2
+import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2, Landmark } from 'lucide-react-native'; // Added Trash2 and Landmark
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -30,6 +31,9 @@ import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData 
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
 import { SwipeListView } from 'react-native-swipe-list-view'; // Added SwipeListView import
+import type { Database } from '../../../../types/database.types'; // Corrected path
+import { Image } from 'react-native'; // Added Image import
+import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
 
 // Define data structures for the form
 interface InvoiceItem {
@@ -53,6 +57,9 @@ interface InvoiceFormData {
   subTotalAmount?: number;
   totalAmount?: number;
   // Add other fields as necessary, e.g., notes, discount, tax
+  payment_instructions_active_on_invoice: boolean;
+  bank_account_active_on_invoice: boolean;
+  paypal_active_on_invoice: boolean;
 }
 
 interface InvoiceLineItem {
@@ -115,14 +122,17 @@ const FormSection = ({ title, children, themeColors, noPadding }: { title?: stri
 };
 
 // Define ActionRow Component
-const ActionRow = ({ label, onPress, icon: IconComponent, value, themeColors, showChevron = true }: 
+const ActionRow = ({ label, onPress, icon: IconComponent, value, themeColors, showChevron = true, showSwitch = false, switchValue, onSwitchChange }: 
   { 
-    label: string, 
+    label: string | React.ReactNode, 
     onPress?: () => void, 
     icon?: React.ElementType, 
     value?: string, 
     themeColors: ThemeColorPalette,
-    showChevron?: boolean
+    showChevron?: boolean,
+    showSwitch?: boolean,
+    switchValue?: boolean,
+    onSwitchChange?: (val: boolean) => void
   }
 ) => {
   const styles = getStyles(themeColors); // Assuming getStyles is defined
@@ -134,6 +144,15 @@ const ActionRow = ({ label, onPress, icon: IconComponent, value, themeColors, sh
       </View>
       <View style={styles.actionRowRight}>
         {value && <Text style={[styles.actionRowValue, {color: themeColors.foreground, marginRight: showChevron ? 8 : 0}]}>{value}</Text>}
+        {showSwitch && (
+          <Switch
+            trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
+            thumbColor={switchValue ? themeColors.primary : themeColors.card}
+            ios_backgroundColor={themeColors.muted}
+            onValueChange={onSwitchChange}
+            value={switchValue}
+          />
+        )}
         {onPress && showChevron && <ChevronRight size={20} color={themeColors.mutedForeground} style={{ marginLeft: 8 }} />}
       </View>
     </TouchableOpacity>
@@ -186,6 +205,9 @@ export default function CreateInvoiceScreen() {
       discountValue: 0,
       subTotalAmount: 0,
       totalAmount: 0,
+      payment_instructions_active_on_invoice: true,
+      bank_account_active_on_invoice: false,
+      paypal_active_on_invoice: false,
     }
   });
 
@@ -634,6 +656,55 @@ export default function CreateInvoiceScreen() {
     );
   };
 
+  const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
+
+  const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
+    const currentPaymentSettings = paymentOptionsData;
+
+    if (newValue === true && currentPaymentSettings) { // Check only when toggling ON and paymentOptionsData are loaded
+      let isEnabledInSettings = false;
+      let settingName = '';
+
+      if (methodKey === 'stripe') {
+        isEnabledInSettings = currentPaymentSettings.stripe_enabled === true;
+        settingName = 'Pay With Card (Stripe)';
+      } else if (methodKey === 'paypal') {
+        isEnabledInSettings = currentPaymentSettings.paypal_enabled === true;
+        settingName = 'PayPal';
+      } else if (methodKey === 'bank_account') {
+        isEnabledInSettings = currentPaymentSettings.bank_transfer_enabled === true;
+        // Assuming 'bank_transfer_enabled' is the correct field in payment_options table
+        settingName = 'Bank Transfer';
+      }
+
+      if (!isEnabledInSettings) {
+        Alert.alert(
+          'Payment Method Disabled',
+          `${settingName} is not enabled in your Payment Options. Please update your settings to use this method.`,
+          [{ text: 'OK' }]
+        );
+        return; // Prevent toggling ON
+      }
+    }
+
+    setInvoiceDetails((prev: InvoiceFormData) => ({
+      ...prev,
+      [`${methodKey}_active_on_invoice`]: newValue,
+    }));
+  };
+
+  const iconStyle = {
+    width: 49.152, // Reduced from 61.44 (61.44 * 0.8)
+    height: 32.768, // Reduced from 40.96 (40.96 * 0.8)
+    marginLeft: 6,
+    resizeMode: 'contain' as 'contain', // Type assertion for resizeMode
+  };
+
+  const mastercardSpecificStyle = {
+    ...iconStyle, // Inherit base styles
+    marginLeft: 2, // Reduced margin for the Mastercard icon to bring it closer to Visa
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
       <Stack.Screen
@@ -797,92 +868,55 @@ export default function CreateInvoiceScreen() {
           </View>
         </FormSection>
 
-        <FormSection title="PAYMENTS" themeColors={themeColors}>
-          {recordedPayments.map((payment, index) => (
-            <React.Fragment key={payment.id}>
-              <View style={styles.summaryRow} >
-                <Text style={styles.summaryLabel}>
-                  Payment Received
-                </Text>
-                <Text style={styles.summaryLabel}>
-                  ${payment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Text>
-              </View>
-              {index < recordedPayments.length - 1 && <View style={styles.separator} />}
-            </React.Fragment>
-          ))}
-          <ActionRow 
-            label="+ Add Payment" 
-            onPress={() => {
-              console.log('Add Payment button pressed');
-              const currentTotal = displayInvoiceTotal; // Use the state variable totalAmount
-              const currentPreviouslyPaid = 0; // Placeholder for now
-              makePaymentSheetRef.current?.present(currentTotal, currentPreviouslyPaid);
-            }}
-            themeColors={themeColors} 
-            showChevron={false} // Typically buttons don't have chevrons
-          />
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { fontWeight: 'bold' }]}>Balance Due</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold' }]}>
-              {(displayInvoiceTotal - totalPaidAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Text>
-          </View>
-          <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
-            <Text style={styles.summaryLabel}>Mark as paid</Text>
-            <Switch 
-              trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
-              thumbColor={isMarkedAsPaid ? themeColors.primary : themeColors.card}
-              ios_backgroundColor={themeColors.muted}
-              onValueChange={(newValue) => {
-                setIsMarkedAsPaid(newValue);
-                if (newValue === true) {
-                  // If marking as paid and there's a balance, add a payment for that balance
-                  if (balanceDueBeforeMarkAsPaid > 0) {
-                    const paymentToClearBalance: RecordedPayment = {
-                      id: `payment_marked_${new Date().toISOString()}`,
-                      amount: parseFloat(balanceDueBeforeMarkAsPaid.toFixed(2)), // Ensure correct precision
-                      method: 'Marked as Paid',
-                      date: new Date(),
-                    };
-                    setRecordedPayments(prevPayments => [...prevPayments, paymentToClearBalance]);
-                  }
-                } else {
-                  // If unchecking, remove the 'Marked as Paid' payment
-                  setRecordedPayments(prevPayments => 
-                    prevPayments.filter(p => p.method !== 'Marked as Paid')
-                  );
-                }
-              }}
-              value={isMarkedAsPaid}
-            />
-          </View>
-        </FormSection>
-
         <FormSection title="PAYMENT METHODS" themeColors={themeColors}>
-          <ActionRow 
-            label="Card Payments" 
-            value="Incomplete" 
-            onPress={() => console.log('Card Payments pressed')} 
+          <ActionRow
+            label={
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: themeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
+                <Image source={require('../../../../assets/visaicon.png')} style={iconStyle} />
+                <Image source={require('../../../../assets/mastercardicon.png')} style={mastercardSpecificStyle} />
+              </View>
+            }
             icon={CreditCard}
             themeColors={themeColors} 
+            showSwitch={true}
+            switchValue={invoiceDetails.stripe_active_on_invoice}
+            onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
+            onPress={() => handlePaymentMethodToggle('stripe', !invoiceDetails.stripe_active_on_invoice)}
           />
-          <ActionRow 
-            label="Bank Account & Payment Info" 
-            onPress={() => console.log('Bank Info pressed')} 
-            icon={Banknote}
+          <ActionRow
+            label={
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: themeColors.foreground, fontSize: 16 }}>PayPal</Text>
+                <Image source={require('../../../../assets/paypalicon.png')} style={iconStyle} />
+              </View>
+            }
+            icon={Banknote} 
             themeColors={themeColors} 
+            showSwitch={true}
+            switchValue={invoiceDetails.paypal_active_on_invoice}
+            onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
+            onPress={() => handlePaymentMethodToggle('paypal', !invoiceDetails.paypal_active_on_invoice)}
           />
-          <ActionRow 
-            label="Add images & PDFs (0)" 
+          <ActionRow
+            label="Bank Transfer"
+            icon={Landmark} 
+            themeColors={themeColors} 
+            showSwitch={true}
+            switchValue={invoiceDetails.bank_account_active_on_invoice}
+            onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
+            onPress={() => handlePaymentMethodToggle('bank_account', !invoiceDetails.bank_account_active_on_invoice)}
+          />
+        </FormSection>
+
+        <FormSection title="OTHER SETTINGS" themeColors={themeColors}>
+          <ActionRow
+            label="Add images & PDFs (0)"
             onPress={() => console.log('Add Attachments pressed')} 
             icon={Paperclip}
             themeColors={themeColors} 
             showChevron={false} // This is more of an action button
           />
-        </FormSection>
-
-        <FormSection title="NOTES" themeColors={themeColors}>
           <TextInput
             style={styles.notesInput}
             placeholder="Comments will appear at the bottom of your invoice"
@@ -1104,7 +1138,9 @@ const getStyles = (themeColors: ThemeColorPalette) => {
     },
     actionRowValue: {
       fontSize: 16,
-      marginRight: 8, // Space before chevron if present
+      color: themeColors.foreground,
+      flexShrink: 1, // Allows text to shrink and wrap if necessary
+      textAlign: 'right',
     },
     valueText: {
       fontSize: 16,
