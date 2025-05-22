@@ -11,6 +11,7 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import { View, Text, Pressable, Platform } from "react-native";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"; // Added import
 
 import { supabase } from "@/config/supabase";
 import { colors } from "@/constants/colors";
@@ -40,168 +41,170 @@ export default function ProtectedLayout() {
 	const { isTabBarVisible } = useTabBarVisibility();
 
 	return (
-		<Tabs
-			screenOptions={{
-				headerShown: false,
-				// These are not strictly needed with a fully custom tabBar, but good for reference
-				// tabBarActiveTintColor: theme.primary,
-				// tabBarInactiveTintColor: theme.mutedForeground,
-				tabBarStyle: { height: 0, borderTopWidth: 0 }, // Hides default chrome
-			}}
-			tabBar={({ state, descriptors, navigation }) => {
-				// If context dictates tab bar is hidden, return null immediately
-				if (!isTabBarVisible) {
-					return null;
-				}
+    <BottomSheetModalProvider> {/* Added Provider here */}
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          // These are not strictly needed with a fully custom tabBar, but good for reference
+          // tabBarActiveTintColor: theme.primary,
+          // tabBarInactiveTintColor: theme.mutedForeground,
+          tabBarStyle: { height: 0, borderTopWidth: 0 }, // Hides default chrome
+        }}
+        tabBar={({ state, descriptors, navigation }) => {
+          // If context dictates tab bar is hidden, return null immediately
+          if (!isTabBarVisible) {
+            return null;
+          }
 
-				// Get the descriptor for the currently active NAVIGATOR/SCREEN that is a direct child of Tabs.
-				const currentRoute = state.routes[state.index];
-				const descriptor = descriptors[currentRoute.key];
+          // Get the descriptor for the currently active NAVIGATOR/SCREEN that is a direct child of Tabs.
+          const currentRoute = state.routes[state.index];
+          const descriptor = descriptors[currentRoute.key];
 
-				// The global isTabBarVisible check (line 54) is now the sole controller for custom tab bar visibility.
-				// If a specific screen needs to hide the tab bar, it should update the TabBarVisibilityContext.
+          // The global isTabBarVisible check (line 54) is now the sole controller for custom tab bar visibility.
+          // If a specific screen needs to hide the tab bar, it should update the TabBarVisibilityContext.
 
-				return (
-					<View
-						style={{
-							flexDirection: "row",
-							height: 86,
-							backgroundColor: theme.background, // White in light mode
-							borderTopWidth: 1,
-							borderTopColor: theme.border,
-							// iOS Shadow
-							shadowColor: "#000",
-							shadowOffset: { width: 0, height: -1 }, // Softer shadow upwards
-							shadowOpacity: 0.05,
-							shadowRadius: 2,
-							// Android Shadow
-							elevation: 5,
-						}}
-					>
-						{state.routes
-							.filter((route) =>
-								[
-									"invoices",
-									"estimates",
-									"ai",
-									"customers/index",
-									"newsettings", // Added to filter
-								].includes(route.name),
-							)
-							.map((route, index) => {
-								const { options } = descriptors[route.key];
-								const label =
-									options.title !== undefined ? options.title : route.name;
-								const isFocused = state.index === index;
-								const IconComponent = iconMap[route.name] || CircleUserRound; // Fallback icon
+          return (
+            <View
+              style={{
+                flexDirection: "row",
+                height: 86,
+                backgroundColor: theme.background, // White in light mode
+                borderTopWidth: 1,
+                borderTopColor: theme.border,
+                // iOS Shadow
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: -1 }, // Softer shadow upwards
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+                // Android Shadow
+                elevation: 5,
+              }}
+            >
+              {state.routes
+                .filter((route) =>
+                  [
+                    "invoices",
+                    "estimates",
+                    "ai",
+                    "customers/index",
+                    "newsettings", // Added to filter
+                  ].includes(route.name),
+                )
+                .map((route, index) => {
+                  const { options } = descriptors[route.key];
+                  const label =
+                    options.title !== undefined ? options.title : route.name;
+                  const isFocused = state.index === index;
+                  const IconComponent = iconMap[route.name] || CircleUserRound; // Fallback icon
 
-								const onPress = () => {
-									triggerHaptic();
-									const event = navigation.emit({
-										type: "tabPress",
-										target: route.key,
-										canPreventDefault: true,
-									});
+                  const onPress = () => {
+                    triggerHaptic();
+                    const event = navigation.emit({
+                      type: "tabPress",
+                      target: route.key,
+                      canPreventDefault: true,
+                    });
 
-									if (!isFocused && !event.defaultPrevented) {
-										navigation.navigate(route.name, route.params);
-									}
-								};
+                    if (!isFocused && !event.defaultPrevented) {
+                      navigation.navigate(route.name, route.params);
+                    }
+                  };
 
-								const onLongPress = () => {
-									navigation.emit({
-										type: "tabLongPress",
-										target: route.key,
-									});
-								};
+                  const onLongPress = () => {
+                    navigation.emit({
+                      type: "tabLongPress",
+                      target: route.key,
+                    });
+                  };
 
-								return (
-									<Pressable
-										key={route.key}
-										accessibilityRole="button"
-										accessibilityState={isFocused ? { selected: true } : {}}
-										onPress={onPress}
-										onLongPress={onLongPress}
-										style={{
-											flex: 1,
-											alignItems: "center",
-											justifyContent: "flex-start",
-											paddingTop: 10,
-										}}
-									>
-										<IconComponent
-											color={isFocused ? theme.primary : theme.mutedForeground}
-											size={24}
-										/>
-										<Text
-											style={{
-												color: isFocused
-													? theme.primary
-													: theme.mutedForeground,
-												fontWeight: isFocused ? "bold" : "normal",
-												fontSize: 10,
-												marginTop: 4,
-											}}
-										>
-											{label.toUpperCase()}
-										</Text>
-										{isFocused && (
-											<View
-												style={{
-													height: 1.5,
-													width: "90%",
-													backgroundColor: theme.primary,
-													position: "absolute",
-													top: 0,
-													borderRadius: 2,
-												}}
-											/>
-										)}
-									</Pressable>
-								);
-							})}
-					</View>
-				);
-			}}
-		>
-			<Tabs.Screen
-				name="invoices" // This will be your Invoices screen (e.g., app/(app)/(protected)/invoices/index.tsx)
-				options={{
-					title: "Invoices",
-				}}
-				listeners={{ tabPress: triggerHaptic }}
-			/>
-			<Tabs.Screen
-				name="estimates" // (e.g., app/(app)/(protected)/estimates.tsx)
-				options={{
-					title: "Estimates",
-				}}
-				listeners={{ tabPress: triggerHaptic }}
-			/>
-			<Tabs.Screen
-				name="ai" // (e.g., app/(app)/(protected)/ai.tsx)
-				options={{
-					title: "AI",
-				}}
-				listeners={{ tabPress: triggerHaptic }}
-			/>
-			<Tabs.Screen
-				name="customers/index" // Route for app/(app)/(protected)/customers/index.tsx
-				options={{
-					title: "Clients", // Renamed from Customers
-				}}
-				listeners={{ tabPress: triggerHaptic }}
-			/>
-			<Tabs.Screen
-				name="newsettings"
-				options={{
-					title: "Settings", // Changed from "New Settings"
-					headerShown: false,
-				}}
-				listeners={{ tabPress: triggerHaptic }}
-			/>
-			{/* Hidden screens, not part of the tab bar */}
-			<Tabs.Screen name="profile" options={{ tabBarButton: () => null }} />
-		</Tabs>
+                  return (
+                    <Pressable
+                      key={route.key}
+                      accessibilityRole="button"
+                      accessibilityState={isFocused ? { selected: true } : {}}
+                      onPress={onPress}
+                      onLongPress={onLongPress}
+                      style={{
+                        flex: 1,
+                        alignItems: "center",
+                        justifyContent: "flex-start",
+                        paddingTop: 10,
+                      }}
+                    >
+                      <IconComponent
+                        color={isFocused ? theme.primary : theme.mutedForeground}
+                        size={24}
+                      />
+                      <Text
+                        style={{
+                          color: isFocused
+                            ? theme.primary
+                            : theme.mutedForeground,
+                          fontWeight: isFocused ? "bold" : "normal",
+                          fontSize: 10,
+                          marginTop: 4,
+                        }}
+                      >
+                        {label.toUpperCase()}
+                      </Text>
+                      {isFocused && (
+                        <View
+                          style={{
+                            height: 1.5,
+                            width: "90%",
+                            backgroundColor: theme.primary,
+                            position: "absolute",
+                            top: 0,
+                            borderRadius: 2,
+                          }}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+            </View>
+          );
+        }}
+      >
+        <Tabs.Screen
+          name="invoices" // This will be your Invoices screen (e.g., app/(app)/(protected)/invoices/index.tsx)
+          options={{
+            title: "Invoices",
+          }}
+          listeners={{ tabPress: triggerHaptic }}
+        />
+        <Tabs.Screen
+          name="estimates" // (e.g., app/(app)/(protected)/estimates.tsx)
+          options={{
+            title: "Estimates",
+          }}
+          listeners={{ tabPress: triggerHaptic }}
+        />
+        <Tabs.Screen
+          name="ai" // (e.g., app/(app)/(protected)/ai.tsx)
+          options={{
+            title: "AI",
+          }}
+          listeners={{ tabPress: triggerHaptic }}
+        />
+        <Tabs.Screen
+          name="customers/index" // Route for app/(app)/(protected)/customers/index.tsx
+          options={{
+            title: "Clients", // Renamed from Customers
+          }}
+          listeners={{ tabPress: triggerHaptic }}
+        />
+        <Tabs.Screen
+          name="newsettings"
+          options={{
+            title: "Settings", // Changed from "New Settings"
+            headerShown: false,
+          }}
+          listeners={{ tabPress: triggerHaptic }}
+        />
+        {/* Hidden screens, not part of the tab bar */}
+        <Tabs.Screen name="profile" options={{ tabBarButton: () => null }} />
+      </Tabs>
+    </BottomSheetModalProvider> // Added Provider here
 	);
 }

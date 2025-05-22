@@ -3,8 +3,9 @@ import {
 	PlusCircle,
 	Search as SearchIcon,
 	FileText,
+	ListFilter,
 } from "lucide-react-native"; 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react"; 
 import {
 	View,
 	Text,
@@ -18,6 +19,8 @@ import {
   ActivityIndicator, 
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
+import { BottomSheetModal } from "@gorhom/bottom-sheet"; 
+import InvoiceOverviewDatesSheet from './InvoiceOverviewDatesSheet';
 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
@@ -83,12 +86,29 @@ export default function InvoiceDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
+  const [currentDateFilterType, setCurrentDateFilterType] = useState<string | undefined>("this_month"); // Default filter
+
+  // Ref for the new filter modal
+  const filterModalRef = useRef<BottomSheetModal>(null);
 
 	const createButtonShineX = useShineAnimation({
 		duration: 1000,
 		delay: 4000,
 		outputRange: [-150, 150]
 	});
+
+  // Callback to open the filter modal
+  const handleOpenFilterModal = useCallback(() => {
+    filterModalRef.current?.present();
+  }, []);
+
+  // Updated handler to receive type and label, and set state
+  const handleApplyInvoiceFilters = (filterType: string, displayLabel: string) => {
+    console.log(`Selected Filter Type: ${filterType}, Label: ${displayLabel}`);
+    setCurrentDateFilterType(filterType);
+    // Here you would typically re-fetch or filter your invoices based on filterType
+    // For now, we just update the state and log it.
+  };
 
   const fetchInvoices = useCallback(async () => {
     if (!supabase || !user) return;
@@ -184,6 +204,44 @@ export default function InvoiceDashboardScreen() {
 		</TouchableOpacity>
 	);
 
+  // Summary Header Bar Component - Modified for single large box, full width, filter inside
+  const SummaryHeaderBar = () => {
+    // Dummy data for summary, updated to integers
+    const summaryData = {
+      invoiced: "$1,235",
+      paid: "$800",
+      overdue: "$150",
+    };
+
+    // themeColors is available from the outer InvoiceDashboardScreen scope
+    return (
+      <View style={[styles.summaryBarContainer]}> 
+        <View style={[styles.largeSummaryBox, { backgroundColor: themeColors.card }]}>
+          <View style={styles.summaryDataItemsWrapper}>
+            <View style={styles.summaryDataItem}>
+              <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Invoiced</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{summaryData.invoiced}</Text>
+            </View>
+            <View style={[styles.verticalSeparator, { backgroundColor: themeColors.border }]} />
+            <View style={styles.summaryDataItem}>
+              <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Paid</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{summaryData.paid}</Text>
+            </View>
+            <View style={[styles.verticalSeparator, { backgroundColor: themeColors.border }]} />
+            <View style={styles.summaryDataItem}>
+              <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Overdue</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{summaryData.overdue}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleOpenFilterModal} style={[styles.filterButtonContainerInBox]}> 
+            <ListFilter size={22} color={themeColors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   if (loading && !isRefreshing && invoices.length === 0) { 
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
@@ -208,98 +266,100 @@ export default function InvoiceDashboardScreen() {
   }
 
 	return (
-		<SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
-			<Stack.Screen
-				options={{
-					headerTransparent: true,
-					headerTitle: "",
-					headerLargeTitle: false,
-					headerRight: () => null, 
-					headerLeft: () => null, 
-				}}
-			/>
-			<View style={[styles.container, { backgroundColor: themeColors.background }]}>
-				<View style={styles.headerRow}>
-					<Text style={[styles.title, { color: themeColors.foreground }]}>
-						Invoices
-					</Text>
-					<TouchableOpacity
-						style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
-						onPress={() => router.push("/invoices/create" as any)}
-					>
-            <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
-              <LinearGradient
-                colors={['transparent', 'rgba(255,255,255,0.3)', 'transparent']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.shineGradient}
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+        <Stack.Screen
+          options={{
+            headerTransparent: true,
+            headerTitle: "",
+            headerLargeTitle: false,
+            headerRight: () => null, 
+            headerLeft: () => null, 
+          }}
+        />
+        <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+          <View style={styles.headerRow}>
+            <Text style={[styles.title, { color: themeColors.foreground }]}>
+              Invoices
+            </Text>
+            <TouchableOpacity
+              style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
+              onPress={() => router.push("/invoices/create" as any)}
+            >
+              <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
+                <LinearGradient
+                  colors={['transparent', 'rgba(255,255,255,0.3)', 'transparent']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.shineGradient}
+                />
+              </Animated.View>
+              <PlusCircle
+                size={18}
+                color={themeColors.primaryForeground}
+                style={{ marginRight: 6 }}
               />
-            </Animated.View>
-						<PlusCircle
-							size={18}
-							color={themeColors.primaryForeground}
-							style={{ marginRight: 6 }}
-						/>
-						<Text
-							style={[
-								styles.headerButtonText,
-								{ color: themeColors.primaryForeground },
-							]}
-						>
-							Create Invoice
-						</Text>
-					</TouchableOpacity>
-				</View>
+              <Text
+                style={[
+                  styles.headerButtonText,
+                  { color: themeColors.primaryForeground },
+                ]}
+              >
+                Create Invoice
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-				<View
-					style={[
-						styles.searchBarContainer,
-						{ backgroundColor: themeColors.card },
-					]}
-				>
-					<SearchIcon
-						size={20}
-						color={themeColors.mutedForeground}
-						style={styles.searchIcon}
-					/>
-					<TextInput
-						placeholder="Search Invoices"
-						placeholderTextColor={themeColors.mutedForeground}
-						style={[styles.searchInput, { color: themeColors.foreground }]}
-					/>
-				</View>
+          <View
+            style={[
+              styles.searchBarContainer,
+              { backgroundColor: themeColors.card },
+            ]}
+          >
+            <SearchIcon
+              size={20}
+              color={themeColors.mutedForeground}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              placeholder="Search Invoices"
+              placeholderTextColor={themeColors.mutedForeground}
+              style={[styles.searchInput, { color: themeColors.foreground }]}
+            />
+          </View>
 
-				<FlatList
-					data={invoices}
-					renderItem={renderInvoiceItem}
-					keyExtractor={(item) => item.id}
-					contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={() => (
-            !loading && !error && (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
-                <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
-                  No invoices found.
-                </Text>
-              </View>
-            )
-          )}
-					refreshControl={
-						<RefreshControl
-							refreshing={isRefreshing}
-							onRefresh={onRefresh}
-							tintColor={themeColors.primary} 
-							colors={[themeColors.primary]} 
-						/>
-					}
-					// Summary card - This will need real data too, for now it's removed from ListHeaderComponent
-					// ListHeaderComponent={
-					// 	<View style={[styles.summaryCard, { backgroundColor: themeColors.card }]}>
-					// 		{/* Summary metrics UI - needs real data */}
-					// 	</View>
-					// }
-				/>
-			</View>
-		</SafeAreaView>
+          <SummaryHeaderBar />
+
+          <FlatList
+            data={invoices}
+            renderItem={renderInvoiceItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            ListEmptyComponent={() => (
+              !loading && !error && (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
+                  <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
+                    No invoices found.
+                  </Text>
+                </View>
+              )
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={onRefresh}
+                tintColor={themeColors.primary} 
+                colors={[themeColors.primary]} 
+              />
+            }
+          />
+        </View>
+        <InvoiceOverviewDatesSheet
+          ref={filterModalRef}
+          currentFilterType={currentDateFilterType} // Pass current filter type
+          onApplyFilter={handleApplyInvoiceFilters} // Pass updated handler
+          onClose={() => console.log('Filter modal closed')}
+        />
+      </SafeAreaView>
 	);
 }
 
@@ -309,7 +369,7 @@ const styles = StyleSheet.create({
 	},
 	container: {
 		flex: 1,
-		paddingHorizontal: 0,
+		paddingHorizontal: 0, 
 		paddingTop: 16,
 	},
 	headerRow: {
@@ -342,7 +402,7 @@ const styles = StyleSheet.create({
 		borderRadius: 12,
 		paddingHorizontal: 12,
 		paddingVertical: 10,
-		marginBottom: 16,
+		marginBottom: 6, 
 		marginHorizontal: 16,
 	},
 	searchIcon: {
@@ -357,11 +417,6 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 16,
     paddingBottom: 20, 
 	},
-	// summaryCard: { 
-	// 	padding: 20,
-	// 	borderRadius: 8,
-	// 	marginBottom: 10,
-	// },
 	invoiceItemContainer: {
 		flexDirection: "row",
 		alignItems: "center",
@@ -397,15 +452,66 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-	// timeAndArrowContainer: { 
-	// 	flexDirection: "row",
-	// 	alignItems: "center",
-	// 	marginLeft: "auto",
-	// },
-	// lastActionTime: { 
-	// 	fontSize: 12,
-	// 	marginRight: 8,
-	// },
+	// Styles for Summary Bar
+  summaryBarContainer: {
+    flexDirection: 'row',
+    // justifyContent: 'space-between', 
+    alignItems: 'center',
+    paddingHorizontal: 16, 
+    paddingVertical: 10,
+    // backgroundColor: themeColors.card, 
+  },
+  largeSummaryBox: {
+    flex: 1, 
+    flexDirection: 'row',
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    // backgroundColor: themeColors.card, 
+    paddingVertical: 10, 
+    paddingHorizontal: 16, 
+    borderRadius: 8,
+    // marginRight: 10, 
+    // Shadow properties - consistent with other UI elements
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08, 
+    shadowRadius: 2,    
+    elevation: 3,       
+  },
+  summaryDataItemsWrapper: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around', 
+    flex: 1, 
+    marginRight: 8, 
+  },
+  summaryDataItem: {
+    alignItems: 'center', 
+    paddingHorizontal: 8, 
+  },
+  summaryDataLabel: {
+    fontSize: 13, 
+    marginBottom: 5, 
+  },
+  summaryDataValue: {
+    fontSize: 18, 
+    fontWeight: '600', 
+  },
+  verticalSeparator: {
+    width: StyleSheet.hairlineWidth,
+    height: '70%', 
+    marginHorizontal: 5, 
+  },
+  // Renamed and adjusted for placement inside the box
+  filterButtonContainerInBox: { 
+    padding: 6, 
+    borderRadius: 6,
+  },
+  filterButtonContainer: { 
+    padding: 8,
+    // backgroundColor: themeColors.muted, 
+    borderRadius: 6,
+  },
 	placeholderText: {
 		fontSize: 16,
 		textAlign: "center",
