@@ -3,7 +3,7 @@ import {
 	PlusCircle,
 	Search as SearchIcon,
 	FileText,
-} from "lucide-react-native";
+} from "lucide-react-native"; 
 import React, { useState, useCallback, useEffect } from "react";
 import {
 	View,
@@ -11,42 +11,38 @@ import {
 	StyleSheet,
 	TouchableOpacity,
 	SafeAreaView,
-	SectionList,
+	FlatList,
 	TextInput,
 	RefreshControl,
 	Animated,
-  ActivityIndicator,
+  ActivityIndicator, 
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
-import { useSupabase } from "@/context/supabase-provider";
-import type { Database } from "../../../../supabase/types/database.types";
+import { useSupabase } from "@/context/supabase-provider"; 
+import type { Database } from "../../../../supabase/types/database.types"; 
 
 // Define real Invoice data structure
 interface ClientData {
   id: string;
   name: string | null;
+  // Add other client fields if needed for display, e.g., contact_person_name
 }
 
 interface InvoiceData {
 	id: string;
   invoice_number: string | null;
 	total_amount: number | null;
-	status: string | null;
+	status: string | null; // From DB: 'draft', 'sent', 'paid', 'overdue', 'cancelled'
 	invoice_date: string | null;
-  client: ClientData | null;
+  client: ClientData | null; // For joined client data
+  // We will format date and status for display
 }
 
-// Interface for sectioned data
-interface SectionedInvoiceData {
-  title: string;
-  data: InvoiceData[];
-}
-
-// Helper to get status color
+// Helper to get status color (can be adapted for new status values)
 const getStatusColor = (
 	status: string | null,
 	themeColors: typeof colors.light,
@@ -66,42 +62,15 @@ const getStatusColor = (
 	}
 };
 
-// Helper to format date
+// Helper to format date (e.g., "5 May 2023")
 const formatDisplayDate = (dateString: string | null): string => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }); // e.g., 5 May
   } catch (e) {
     return '';
   }
-};
-
-// Helper to get month section title
-const getMonthSectionTitle = (date: Date): string => {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-  const invoiceYear = date.getFullYear();
-  const invoiceMonth = date.getMonth();
-
-  if (invoiceYear === currentYear && invoiceMonth === currentMonth) {
-    return "This Month";
-  }
-  if (
-    invoiceYear === currentYear &&
-    invoiceMonth === currentMonth - 1
-  ) {
-    return "Last Month";
-  }
-  // For previous month in a new year scenario (e.g. Jan looking at Dec)
-  if (
-    invoiceYear === currentYear - 1 &&
-    currentMonth === 0 && invoiceMonth === 11
-  ) {
-    return "Last Month";
-  }
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 };
 
 export default function InvoiceDashboardScreen() {
@@ -110,7 +79,7 @@ export default function InvoiceDashboardScreen() {
 	const router = useRouter();
   const { supabase, user } = useSupabase();
 
-  const [sections, setSections] = useState<SectionedInvoiceData[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
@@ -122,11 +91,7 @@ export default function InvoiceDashboardScreen() {
 	});
 
   const fetchInvoices = useCallback(async () => {
-    if (!supabase || !user) {
-      setLoading(false);
-      setIsRefreshing(false);
-      return;
-    }
+    if (!supabase || !user) return;
     setLoading(true);
     setError(null);
 
@@ -150,50 +115,20 @@ export default function InvoiceDashboardScreen() {
       if (fetchError) {
         throw fetchError;
       }
-
-      const rawInvoices = data
+      // Re-add explicit mapping for client to satisfy TypeScript, even with !client_id hint
+      const mappedData = data
         ? data.map((invoice: any) => ({
             ...invoice,
             client: invoice.client && Array.isArray(invoice.client) && invoice.client.length > 0 
                     ? invoice.client[0] 
                     : (invoice.client && !Array.isArray(invoice.client) ? invoice.client : null),
-          })) as InvoiceData[]
+          }))
         : [];
-      
-      // Group invoices by month
-      const groupedInvoices: { [key: string]: InvoiceData[] } = {};
-      rawInvoices.forEach(invoice => {
-        if (invoice.invoice_date) {
-          const invoiceDate = new Date(invoice.invoice_date);
-          const sectionTitle = getMonthSectionTitle(invoiceDate);
-          if (!groupedInvoices[sectionTitle]) {
-            groupedInvoices[sectionTitle] = [];
-          }
-          groupedInvoices[sectionTitle].push(invoice);
-        }
-      });
-
-      const monthOrder = [
-        "This Month", 
-        "Last Month", 
-        ...Object.keys(groupedInvoices)
-          .filter(title => title !== "This Month" && title !== "Last Month")
-          .sort((a, b) => new Date(b.split(' ')[1] + '-' + b.split(' ')[0] + '-01').getTime() - new Date(a.split(' ')[1] + '-' + a.split(' ')[0] + '-01').getTime())
-      ];
-      
-      const newSections = monthOrder
-        .filter(title => groupedInvoices[title] && groupedInvoices[title].length > 0)
-        .map(title => ({
-          title,
-          data: groupedInvoices[title],
-        }));
-
-      setSections(newSections);
-
+      setInvoices(mappedData as InvoiceData[] || []);
     } catch (e: any) {
       console.error('Error fetching invoices:', e);
       setError(e.message || 'Failed to fetch invoices.');
-      setSections([]);
+      setInvoices([]); // Clear invoices on error
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -218,7 +153,7 @@ export default function InvoiceDashboardScreen() {
 					borderBottomColor: themeColors.border,
 				},
 			]}
-			onPress={() => router.push(`/invoices/${item.id}` as any)}
+			onPress={() => router.push(`/invoices/${item.id}` as any)} 
 		>
 			<View
 				style={[
@@ -241,7 +176,7 @@ export default function InvoiceDashboardScreen() {
 					{` · ${formatDisplayDate(item.invoice_date)}`}
 				</Text>
 			</View>
-      <View style={styles.amountContainer}>
+      <View style={styles.amountContainer}> 
         <Text style={[styles.invoiceAmount, { color: themeColors.foreground }]}>
           {item.total_amount !== null ? `$${item.total_amount.toFixed(2)}` : '$0.00'}
         </Text>
@@ -249,13 +184,7 @@ export default function InvoiceDashboardScreen() {
 		</TouchableOpacity>
 	);
 
-  const renderSectionHeader = ({ section: { title } }: { section: SectionedInvoiceData }) => (
-    <Text style={[styles.sectionHeader, { color: themeColors.mutedForeground, backgroundColor: themeColors.background }]}>
-      {title}
-    </Text>
-  );
-
-  if (loading && !isRefreshing && sections.length === 0) {
+  if (loading && !isRefreshing && invoices.length === 0) { 
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -265,7 +194,7 @@ export default function InvoiceDashboardScreen() {
     );
   }
 
-  if (error && sections.length === 0) {
+  if (error && invoices.length === 0) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
@@ -285,8 +214,8 @@ export default function InvoiceDashboardScreen() {
 					headerTransparent: true,
 					headerTitle: "",
 					headerLargeTitle: false,
-					headerRight: () => null,
-					headerLeft: () => null,
+					headerRight: () => null, 
+					headerLeft: () => null, 
 				}}
 			/>
 			<View style={[styles.container, { backgroundColor: themeColors.background }]}>
@@ -340,13 +269,11 @@ export default function InvoiceDashboardScreen() {
 					/>
 				</View>
 
-				<SectionList
-          sections={sections}
+				<FlatList
+					data={invoices}
 					renderItem={renderInvoiceItem}
-          renderSectionHeader={renderSectionHeader}
-					keyExtractor={(item, index) => item.id + index}
+					keyExtractor={(item) => item.id}
 					contentContainerStyle={styles.listContainer}
-          stickySectionHeadersEnabled={true}
           ListEmptyComponent={() => (
             !loading && !error && (
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
@@ -360,10 +287,16 @@ export default function InvoiceDashboardScreen() {
 						<RefreshControl
 							refreshing={isRefreshing}
 							onRefresh={onRefresh}
-							tintColor={themeColors.primary}
-							colors={[themeColors.primary]}
+							tintColor={themeColors.primary} 
+							colors={[themeColors.primary]} 
 						/>
 					}
+					// Summary card - This will need real data too, for now it's removed from ListHeaderComponent
+					// ListHeaderComponent={
+					// 	<View style={[styles.summaryCard, { backgroundColor: themeColors.card }]}>
+					// 		{/* Summary metrics UI - needs real data */}
+					// 	</View>
+					// }
 				/>
 			</View>
 		</SafeAreaView>
@@ -422,8 +355,13 @@ const styles = StyleSheet.create({
 	},
 	listContainer: {
 		paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingBottom: 20, 
 	},
+	// summaryCard: { 
+	// 	padding: 20,
+	// 	borderRadius: 8,
+	// 	marginBottom: 10,
+	// },
 	invoiceItemContainer: {
 		flexDirection: "row",
 		alignItems: "center",
@@ -451,14 +389,23 @@ const styles = StyleSheet.create({
 	summaryLine: {
 		fontSize: 13,
 	},
-  amountContainer: {
+  amountContainer: { 
     marginLeft: 'auto',
-    paddingLeft: 10,
+    paddingLeft: 10, 
   },
-  invoiceAmount: {
+  invoiceAmount: { 
     fontSize: 16,
     fontWeight: '600',
   },
+	// timeAndArrowContainer: { 
+	// 	flexDirection: "row",
+	// 	alignItems: "center",
+	// 	marginLeft: "auto",
+	// },
+	// lastActionTime: { 
+	// 	fontSize: 12,
+	// 	marginRight: 8,
+	// },
 	placeholderText: {
 		fontSize: 16,
 		textAlign: "center",
@@ -470,13 +417,5 @@ const styles = StyleSheet.create({
   shineGradient: { 
     width: '100%',
     height: '100%',
-  },
-  sectionHeader: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    paddingVertical: 8,
-    paddingHorizontal: 16, 
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
 });
