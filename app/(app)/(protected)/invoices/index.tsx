@@ -5,7 +5,7 @@ import {
 	FileText,
 	ListFilter,
 } from "lucide-react-native"; 
-import React, { useState, useCallback, useEffect, useRef } from "react"; 
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
 	View,
 	Text,
@@ -19,7 +19,7 @@ import {
   ActivityIndicator, 
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
-import { BottomSheetModal } from "@gorhom/bottom-sheet"; 
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import InvoiceOverviewDatesSheet from './InvoiceOverviewDatesSheet';
 
 import { colors } from "@/constants/colors";
@@ -27,6 +27,108 @@ import { useTheme } from "@/context/theme-provider";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import type { Database } from "../../../../supabase/types/database.types"; 
+
+// Define filter options here to map type to label for initialization and sync
+const filterOptions = [
+  { label: "Today", type: "today" },
+  { label: "This Week", type: "this_week" },
+  { label: "This Month", type: "this_month" },
+  { label: "Last Month", type: "last_month" },
+  { label: "Last 3 Months", type: "last_3_months" },
+  { label: "Last 6 Months", type: "last_6_months" },
+  { label: "This Year", type: "this_year" },
+  { label: "Last Year", type: "last_year" },
+  { label: "All Time", type: "all_time" },
+];
+
+// --- Date Utility Functions for Filtering ---
+const getStartOfDay = (date: Date): Date => {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+};
+
+const getEndOfDay = (date: Date): Date => {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+};
+
+const getStartOfWeek = (date: Date): Date => { // Monday
+  const d = new Date(date);
+  const day = d.getDay(); // Sunday - Saturday : 0 - 6
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  return getStartOfDay(new Date(d.setDate(diff)));
+};
+
+const getEndOfWeek = (date: Date): Date => { // Sunday
+  const startOfWeek = getStartOfWeek(date);
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  return getEndOfDay(endOfWeek);
+};
+
+const getStartOfMonth = (date: Date): Date => {
+  return getStartOfDay(new Date(date.getFullYear(), date.getMonth(), 1));
+};
+
+const getEndOfMonth = (date: Date): Date => {
+  return getEndOfDay(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+};
+
+const getStartOfYear = (date: Date): Date => {
+  return getStartOfDay(new Date(date.getFullYear(), 0, 1));
+};
+
+const getEndOfYear = (date: Date): Date => {
+  return getEndOfDay(new Date(date.getFullYear(), 11, 31));
+};
+
+// Helper to format date to YYYY-MM-DDTHH:MM:SSZ for Supabase
+const toSupabaseISOString = (date: Date): string => {
+  return date.toISOString();
+};
+
+export const getFilterDateRange = (filterType: string): { startDate: string, endDate: string } | null => {
+  const now = new Date();
+  let startDateObj: Date;
+  let endDateObj: Date;
+
+  switch (filterType) {
+    case "this_week":
+      startDateObj = getStartOfWeek(now);
+      endDateObj = getEndOfWeek(now);
+      break;
+    case "this_month":
+      startDateObj = getStartOfMonth(now);
+      endDateObj = getEndOfMonth(now);
+      break;
+    case "last_month":
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      startDateObj = getStartOfMonth(lastMonthDate);
+      endDateObj = getEndOfMonth(lastMonthDate);
+      break;
+    case "last_3_months":
+      // From 3 months ago (start of that day) to today (end of day)
+      startDateObj = getStartOfDay(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
+      endDateObj = getEndOfDay(now);
+      break;
+    case "last_12_months":
+      // From 12 months ago (start of that day) to today (end of day)
+      startDateObj = getStartOfDay(new Date(now.getFullYear(), now.getMonth() - 12, now.getDate()));
+      endDateObj = getEndOfDay(now);
+      break;
+    case "this_year":
+      startDateObj = getStartOfYear(now);
+      endDateObj = getEndOfYear(now);
+      break;
+    case "last_year":
+      const lastYearDate = new Date(now.getFullYear() - 1, 0, 1); // Jan 1st of last year
+      startDateObj = getStartOfYear(lastYearDate);
+      endDateObj = getEndOfYear(lastYearDate);
+      break;
+    default:
+      return null; // No filter or unknown filter type, or handle as 'all time'
+  }
+  return { startDate: toSupabaseISOString(startDateObj), endDate: toSupabaseISOString(endDateObj) };
+};
+// --- End Date Utility Functions ---
 
 // Define real Invoice data structure
 interface ClientData {
@@ -41,7 +143,9 @@ interface InvoiceData {
 	total_amount: number | null;
 	status: string | null; // From DB: 'draft', 'sent', 'paid', 'overdue', 'cancelled'
 	invoice_date: string | null;
-  client: ClientData | null; // For joined client data
+  client_name: string | null;
+  client_email?: string;
+  client_avatar_url?: string;
   // We will format date and status for display
 }
 
@@ -86,7 +190,13 @@ export default function InvoiceDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
-  const [currentDateFilterType, setCurrentDateFilterType] = useState<string | undefined>("this_month"); // Default filter
+  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("this_month"); // Default filter type
+  const [currentFilterLabel, setCurrentFilterLabel] = useState<string>(
+    filterOptions.find(opt => opt.type === "this_month")?.label || "This Month" // Initialize label
+  );
+  const [totalInvoiced, setTotalInvoiced] = useState<number>(0); 
+  const [totalPaid, setTotalPaid] = useState<number>(0); 
+  const [totalOverdue, setTotalOverdue] = useState<number>(0); 
 
   // Ref for the new filter modal
   const filterModalRef = useRef<BottomSheetModal>(null);
@@ -106,63 +216,115 @@ export default function InvoiceDashboardScreen() {
   const handleApplyInvoiceFilters = (filterType: string, displayLabel: string) => {
     console.log(`Selected Filter Type: ${filterType}, Label: ${displayLabel}`);
     setCurrentDateFilterType(filterType);
-    // Here you would typically re-fetch or filter your invoices based on filterType
-    // For now, we just update the state and log it.
+    setCurrentFilterLabel(displayLabel); // Update label from modal
+    // fetchInvoices will be called by useEffect due to currentDateFilterType change
   };
 
-  const fetchInvoices = useCallback(async () => {
-    if (!supabase || !user) return;
+  const fetchInvoices = useCallback(async (filterTypeToApply?: string) => { 
+    if (!user?.id) {
+      setError("User not authenticated.");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
 
+    // --- TEMPORARY FLAG FOR TESTING --- 
+    const applyFilterLogic = true; // Set to false to revert to fetching all invoices
+    // --- END TEMPORARY FLAG ---
+
     try {
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('invoices')
         .select(`
           id,
           invoice_number,
           total_amount,
+          due_date,
           status,
-          invoice_date,
-          client:clients!client_id (
-            id,
-            name
-          )
+          created_at,
+          client_id, 
+          clients(*)
         `)
-        .eq('user_id', user.id)
-        .order('invoice_date', { ascending: false });
+        .eq('user_id', user.id);
 
-      if (fetchError) {
-        throw fetchError;
+      if (applyFilterLogic && filterTypeToApply) {
+        const dateRange = getFilterDateRange(filterTypeToApply);
+        if (dateRange) {
+          console.log(`Applying date filter for ${filterTypeToApply}:`, dateRange);
+          query = query.gte('created_at', dateRange.startDate);
+          query = query.lte('created_at', dateRange.endDate);
+        } else {
+          console.log(`No valid date range for ${filterTypeToApply}, fetching all (or as per default sort).`);
+        }
       }
-      // Re-add explicit mapping for client to satisfy TypeScript, even with !client_id hint
-      const mappedData = data
-        ? data.map((invoice: any) => ({
-            ...invoice,
-            client: invoice.client && Array.isArray(invoice.client) && invoice.client.length > 0 
-                    ? invoice.client[0] 
-                    : (invoice.client && !Array.isArray(invoice.client) ? invoice.client : null),
-          }))
-        : [];
-      setInvoices(mappedData as InvoiceData[] || []);
+
+      // Always apply ordering at the end
+      query = query.order('created_at', { ascending: false });
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) throw fetchError;
+
+      const formattedInvoices: InvoiceData[] = data.map((invoice: any) => ({
+        id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        client_name: invoice.clients?.name || 'N/A',
+        total_amount: invoice.total_amount,
+        invoice_date: invoice.due_date,
+        status: invoice.status,
+        client_email: invoice.clients?.email,
+        client_avatar_url: invoice.clients?.avatar_url,
+        // created_at: invoice.created_at, // Optional: if you need to display it
+      }));
+      setInvoices(formattedInvoices);
+
     } catch (e: any) {
-      console.error('Error fetching invoices:', e);
-      setError(e.message || 'Failed to fetch invoices.');
-      setInvoices([]); // Clear invoices on error
+      console.error("Error fetching invoices:", e);
+      setError(e.message || "Failed to fetch invoices");
     } finally {
       setLoading(false);
-      setIsRefreshing(false);
     }
-  }, [supabase, user]);
+  }, [supabase, user?.id]); // getFilterDateRange is stable, no need to add as dependency
 
   useEffect(() => {
-    fetchInvoices();
-  }, [fetchInvoices]);
+    if (user?.id) {
+      fetchInvoices(currentDateFilterType); // Pass the current filter type
+    }
+  }, [user?.id, fetchInvoices, currentDateFilterType]); // Added currentDateFilterType dependency
 
-	const onRefresh = useCallback(() => {
-		setIsRefreshing(true);
-		fetchInvoices();
-	}, [fetchInvoices]);
+  // Effect to synchronize label if filterType changes from other sources or on init
+  useEffect(() => {
+    const selectedOption = filterOptions.find(opt => opt.type === currentDateFilterType);
+    if (selectedOption && selectedOption.label !== currentFilterLabel) {
+      setCurrentFilterLabel(selectedOption.label);
+    }
+  }, [currentDateFilterType, currentFilterLabel]); // currentFilterLabel added to prevent loop if already correct
+
+  useEffect(() => { 
+    let invoiced = 0;
+    let paid = 0;
+    let overdue = 0;
+
+    invoices.forEach(invoice => {
+      const amount = invoice.total_amount || 0;
+      invoiced += amount; 
+      if (invoice.status === 'paid') {
+        paid += amount;
+      } else if (invoice.status === 'overdue') {
+        overdue += amount;
+      }
+    });
+
+    setTotalInvoiced(invoiced);
+    setTotalPaid(paid);
+    setTotalOverdue(overdue);
+  }, [invoices]);
+
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchInvoices(currentDateFilterType).finally(() => setIsRefreshing(false)); // Pass current filter type
+  }, [fetchInvoices, currentDateFilterType]);
 
 	const renderInvoiceItem = ({ item }: { item: InvoiceData }) => (
 		<TouchableOpacity
@@ -185,7 +347,7 @@ export default function InvoiceDashboardScreen() {
 			</View>
 			<View style={styles.invoiceDetails}>
 				<Text style={[styles.clientName, { color: themeColors.foreground }]}>
-					{item.client?.name || 'N/A Client'}
+					{item.client_name || 'N/A Client'}
 				</Text>
 				<Text
 					style={[styles.summaryLine, { color: themeColors.mutedForeground }]}
@@ -205,14 +367,7 @@ export default function InvoiceDashboardScreen() {
 	);
 
   // Summary Header Bar Component - Modified for single large box, full width, filter inside
-  const SummaryHeaderBar = () => {
-    // Dummy data for summary, updated to integers
-    const summaryData = {
-      invoiced: "$1,235",
-      paid: "$800",
-      overdue: "$150",
-    };
-
+  const SummaryHeaderBar = ({ invoicedAmount, paidAmount, overdueAmount }: { invoicedAmount: number, paidAmount: number, overdueAmount: number }) => { // MODIFIED to accept props
     // themeColors is available from the outer InvoiceDashboardScreen scope
     return (
       <View style={[styles.summaryBarContainer]}> 
@@ -220,17 +375,15 @@ export default function InvoiceDashboardScreen() {
           <View style={styles.summaryDataItemsWrapper}>
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Invoiced</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{summaryData.invoiced}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{`$${invoicedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
             </View>
-            <View style={[styles.verticalSeparator, { backgroundColor: themeColors.border }]} />
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Paid</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{summaryData.paid}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.statusPaid }]}>{`$${paidAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
             </View>
-            <View style={[styles.verticalSeparator, { backgroundColor: themeColors.border }]} />
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Overdue</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{summaryData.overdue}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.statusDue }]}>{`$${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
             </View>
           </View>
 
@@ -327,7 +480,16 @@ export default function InvoiceDashboardScreen() {
             />
           </View>
 
-          <SummaryHeaderBar />
+          <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} /> 
+
+          {/* Display Current Filter Label */} 
+          {invoices.length > 0 && !loading && (
+            <View style={styles.currentFilterDisplayContainer}>
+              <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
+                {currentFilterLabel}
+              </Text>
+            </View>
+          )}
 
           <FlatList
             data={invoices}
@@ -523,5 +685,15 @@ const styles = StyleSheet.create({
   shineGradient: { 
     width: '100%',
     height: '100%',
+  },
+  currentFilterDisplayContainer: { 
+    paddingHorizontal: 20, 
+    paddingBottom: 10,
+    paddingTop: 5, // Add some space above if needed
+  },
+  currentFilterDisplayText: { 
+    fontSize: 14,
+    fontWeight: '500',
+    // color is set dynamically
   },
 });
