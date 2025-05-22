@@ -335,7 +335,7 @@ export default function InvoiceDashboardScreen() {
 					borderBottomColor: themeColors.border,
 				},
 			]}
-			onPress={() => router.push(`/invoices/${item.id}` as any)} 
+			onPress={() => router.push(`/invoices/invoice-viewer?id=${item.id}` as any)} 
 		>
 			<View
 				style={[
