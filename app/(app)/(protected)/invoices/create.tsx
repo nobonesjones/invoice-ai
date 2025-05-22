@@ -48,6 +48,7 @@ interface InvoiceFormData {
   client_id: string; // Assuming client_id will be stored
   invoice_date: Date;
   due_date: Date | null;
+  due_date_option: string | null; // Added to store the selected due date option
   items: InvoiceLineItem[];
   po_number?: string; // Added for PO Number
   custom_headline?: string; // Added for Custom Headline
@@ -60,6 +61,7 @@ interface InvoiceFormData {
   payment_instructions_active_on_invoice: boolean;
   bank_account_active_on_invoice: boolean;
   paypal_active_on_invoice: boolean;
+  stripe_active_on_invoice: boolean; // Added for Stripe
 }
 
 interface InvoiceLineItem {
@@ -199,6 +201,7 @@ export default function CreateInvoiceScreen() {
       client_id: '', 
       invoice_date: new Date(),
       due_date: null, // Represents 'On receipt' or a specific date
+      due_date_option: 'due_on_receipt', // Default due date option
       items: [] as InvoiceLineItem[], // Explicitly type for clarity with SwipeListView
       po_number: '', // Initialize po_number
       custom_headline: '', // Initialize custom_headline
@@ -207,9 +210,11 @@ export default function CreateInvoiceScreen() {
       discountValue: 0,
       subTotalAmount: 0,
       totalAmount: 0,
-      payment_instructions_active_on_invoice: true,
+      // Add other fields as necessary, e.g., notes, discount, tax
+      payment_instructions_active_on_invoice: false,
       bank_account_active_on_invoice: false,
       paypal_active_on_invoice: false,
+      stripe_active_on_invoice: false, // Initialize in defaultValues for react-hook-form
     }
   });
 
@@ -352,7 +357,9 @@ export default function CreateInvoiceScreen() {
       console.log('[handleSaveInvoice] formData.invoice_number:', formData.invoice_number);
       console.log('[handleSaveInvoice] formData.invoice_date:', formData.invoice_date);
       console.log('[handleSaveInvoice] formData.due_date:', formData.due_date);
+      console.log('[handleSaveInvoice] formData.due_date_option:', formData.due_date_option);
       console.log('[handleSaveInvoice] formData.payment_instructions_active_on_invoice (for stripe_active):', formData.payment_instructions_active_on_invoice);
+      console.log('[handleSaveInvoice] formData.stripe_active_on_invoice (NEW):', formData.stripe_active_on_invoice); // Log new field
       console.log('[handleSaveInvoice] formData.bank_account_active_on_invoice:', formData.bank_account_active_on_invoice);
       console.log('[handleSaveInvoice] formData.paypal_active_on_invoice:', formData.paypal_active_on_invoice);
 
@@ -364,6 +371,7 @@ export default function CreateInvoiceScreen() {
         status: isMarkedAsPaid ? 'paid' : 'draft',
         invoice_date: formData.invoice_date instanceof Date ? formData.invoice_date.toISOString() : new Date(formData.invoice_date).toISOString(),
         due_date: formData.due_date ? (formData.due_date instanceof Date ? formData.due_date.toISOString() : new Date(formData.due_date).toISOString()) : null,
+        due_date_option: formData.due_date_option, // Save the selected due date option
         po_number: formData.po_number || null,
         custom_headline: formData.custom_headline || null,
         subtotal_amount: formData.subTotalAmount,
@@ -372,7 +380,7 @@ export default function CreateInvoiceScreen() {
         tax_percentage: formData.taxPercentage || 0,
         total_amount: formData.totalAmount,
         // notes: formData.notes || null, // Add 'notes' to InvoiceFormData if needed
-        stripe_active: formData.payment_instructions_active_on_invoice, // Renamed from payment_instructions_active
+        stripe_active: formData.stripe_active_on_invoice, // Corrected: Use the new dedicated field
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
       };
@@ -474,11 +482,12 @@ export default function CreateInvoiceScreen() {
     };
   };
 
-  const [invoiceDetails, setInvoiceDetails] = useState<any>(getInitialModalDetails()); // Initialize invoiceDetails state here
+  const [invoiceDetails, setInvoiceDetails] = useState<any>(getInitialModalDetails()); // Reverted to original initialization
 
   const watchedInvoiceNumber = watch('invoice_number');
   const watchedInvoiceDate = watch('invoice_date');
   const watchedDueDate = watch('due_date');
+  const watchedDueDateOption = watch('due_date_option');
   const watchedPoNumber = watch('po_number'); 
   const watchedCustomHeadline = watch('custom_headline'); 
   const taxPercentage = watch('taxPercentage');
@@ -515,6 +524,8 @@ export default function CreateInvoiceScreen() {
     // Ensure customDueDate is a Date object or null
     const customDueDate = updatedDetails.customDueDate ? new Date(updatedDetails.customDueDate) : null;
     setValue('due_date', customDueDate);
+    
+    setValue('due_date_option', updatedDetails.dueDateType); // Update due_date_option
     
     setValue('po_number', updatedDetails.poNumber || '');
     setValue('custom_headline', updatedDetails.customHeadline || '');
@@ -806,10 +817,15 @@ export default function CreateInvoiceScreen() {
       }
     }
 
-    setInvoiceDetails((prev: InvoiceFormData) => ({
-      ...prev,
-      [`${methodKey}_active_on_invoice`]: newValue,
-    }));
+    // Update react-hook-form state directly
+    const formKey = `${methodKey}_active_on_invoice` as keyof InvoiceFormData;
+    setValue(formKey, newValue, { shouldValidate: true, shouldDirty: true });
+
+    // // Original code that updated local state, now replaced by setValue above
+    // setInvoiceDetails((prev: InvoiceFormData) => ({
+    //   ...prev,
+    //   [`${methodKey}_active_on_invoice`]: newValue,
+    // }));
   };
 
   const iconStyle = {
@@ -999,9 +1015,9 @@ export default function CreateInvoiceScreen() {
             icon={CreditCard}
             themeColors={themeColors} 
             showSwitch={true}
-            switchValue={invoiceDetails.stripe_active_on_invoice}
+            switchValue={getValues('stripe_active_on_invoice')}
             onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
-            onPress={() => handlePaymentMethodToggle('stripe', !invoiceDetails.stripe_active_on_invoice)}
+            onPress={() => handlePaymentMethodToggle('stripe', !getValues('stripe_active_on_invoice'))}
           />
           <ActionRow
             label={
@@ -1013,18 +1029,18 @@ export default function CreateInvoiceScreen() {
             icon={Banknote} 
             themeColors={themeColors} 
             showSwitch={true}
-            switchValue={invoiceDetails.paypal_active_on_invoice}
+            switchValue={getValues('paypal_active_on_invoice')}
             onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
-            onPress={() => handlePaymentMethodToggle('paypal', !invoiceDetails.paypal_active_on_invoice)}
+            onPress={() => handlePaymentMethodToggle('paypal', !getValues('paypal_active_on_invoice'))}
           />
           <ActionRow
             label="Bank Transfer"
             icon={Landmark} 
             themeColors={themeColors} 
             showSwitch={true}
-            switchValue={invoiceDetails.bank_account_active_on_invoice}
+            switchValue={getValues('bank_account_active_on_invoice')}
             onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
-            onPress={() => handlePaymentMethodToggle('bank_account', !invoiceDetails.bank_account_active_on_invoice)}
+            onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active_on_invoice'))}
           />
         </FormSection>
 
