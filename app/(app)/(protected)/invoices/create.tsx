@@ -26,12 +26,12 @@ import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoi
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
 import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
-import DuplicateDiscountSheet, { DuplicateDiscountSheetRef, DiscountData } from './DuplicateDiscountSheet'; // Import new sheet
+import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import new sheet
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData } from './EditInvoiceTaxSheet'; // Changed TaxData to InvoiceTaxData to avoid naming conflict if TaxData is used elsewhere
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
 import { SwipeListView } from 'react-native-swipe-list-view'; // Added SwipeListView import
-import type { Database } from '../../../../types/database.types'; // Corrected path
+import type { Database } from '../../../../supabase/types/database.types'; // Corrected path
 import { Image } from 'react-native'; // Added Image import
 import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
 
@@ -71,7 +71,10 @@ interface InvoiceLineItem {
   description?: string | null; // Added/uncommented for item description
   quantity: number;
   unit_price: number;
-  total_price: number; // Calculated: quantity * unit_price
+  total_price: number; // Calculated: quantity * unit_price - discount
+  line_item_discount_type?: 'percentage' | 'fixed' | null;
+  line_item_discount_value?: number | null;
+  item_image_url?: string | null;
 }
 
 interface RecordedPayment {
@@ -415,7 +418,10 @@ export default function CreateInvoiceScreen() {
           item_description: item.description || null, // Now valid
           quantity: item.quantity,
           unit_price: item.unit_price, // Corrected from item.price
-          total_price: parseFloat((item.quantity * item.unit_price).toFixed(2)),
+          total_price: item.total_price, // This should now be the final price after line item discount
+          line_item_discount_type: item.line_item_discount_type || null,
+          line_item_discount_value: item.line_item_discount_value || null,
+          item_image_url: item.item_image_url || null,
         }));
 
         console.log('[handleSaveInvoice] lineItemsInsertData:', JSON.stringify(lineItemsInsertData, null, 2)); // Log data being sent to Supabase
@@ -553,18 +559,38 @@ export default function CreateInvoiceScreen() {
   const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
     console.log('Item data received in create.tsx:', itemDataFromSheet);
     
+    let itemTotalPrice = itemDataFromSheet.quantity * itemDataFromSheet.price;
+    // Apply line item discount if present
+    if (itemDataFromSheet.discountValue && itemDataFromSheet.discountValue > 0) { 
+      if (itemDataFromSheet.discountType === 'percentage') { 
+        const discountAmount = itemTotalPrice * (itemDataFromSheet.discountValue / 100); 
+        itemTotalPrice -= discountAmount;
+      } else if (itemDataFromSheet.discountType === 'fixed') { 
+        itemTotalPrice -= itemDataFromSheet.discountValue; 
+      }
+    }
+
     const newLineItem: InvoiceLineItem = {
       id: itemDataFromSheet.id, // This is the temporary inv_item_xxx ID
       user_saved_item_id: itemDataFromSheet.saved_item_db_id || null,
       item_name: itemDataFromSheet.itemName,
-      description: itemDataFromSheet.description, // Now valid
+      description: itemDataFromSheet.description, 
       quantity: itemDataFromSheet.quantity,
       unit_price: itemDataFromSheet.price,
-      total_price: itemDataFromSheet.quantity * itemDataFromSheet.price,
+      total_price: parseFloat(itemTotalPrice.toFixed(2)), // Ensure two decimal places
+      line_item_discount_type: itemDataFromSheet.discountType || null, 
+      line_item_discount_value: itemDataFromSheet.discountValue || null, 
+      item_image_url: itemDataFromSheet.imageUri || null, 
     };
 
-    setCurrentInvoiceLineItems(prevItems => [...prevItems, newLineItem]);
+    // Get current items from react-hook-form state
+    const currentFormItems = getValues('items') || [];
+    // Update react-hook-form state with the new item appended
+    setValue('items', [...currentFormItems, newLineItem], { shouldValidate: true, shouldDirty: true });
     
+    // The useEffect watching 'items' will update currentInvoiceLineItems for the UI
+    // setCurrentInvoiceLineItems(prevItems => [...prevItems, newLineItem]); // This line is removed
+
     // Dismiss the AddItemSheet (which might also dismiss AddNewItemFormSheet if it was presented from there)
     addItemSheetRef.current?.dismiss(); 
   };
@@ -667,30 +693,32 @@ export default function CreateInvoiceScreen() {
     setValue('taxPercentage', numericRateToApply, { shouldValidate: true, shouldDirty: true });
   }, [invoiceTaxRatePercent, globalTaxRatePercent, setValue]);
 
-  const duplicateDiscountSheetRef = useRef<DuplicateDiscountSheetRef>(null); // Ref for new sheet
+  const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for new sheet
   const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
   const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null); // Ref for new sheet
 
-  const handlePresentDuplicateDiscountSheet = () => {
+  const handlePresentSelectDiscountTypeSheet = () => {
     // Pass current discount values to pre-fill the modal if needed
     const currentDiscountType = getValues('discountType');
     const currentDiscountValue = getValues('discountValue');
-    duplicateDiscountSheetRef.current?.present(
+    selectDiscountTypeSheetRef.current?.present(
       currentDiscountType,
       currentDiscountValue
     );
   };
 
-  const handleSaveDuplicateDiscount = (data: DiscountData) => {
-    console.log('Duplicate Discount to save:', data);
+  const handleApplyDiscountFromSheet = (data: DiscountData) => {
+    console.log('Apply Discount from sheet:', data);
     // Update form values with data from discount sheet
+    const numericDiscountValue = data.discountValue ? parseFloat(data.discountValue.replace(',', '.')) : null;
+
     setValue('discountType', data.discountType, { shouldValidate: true, shouldDirty: true });
-    setValue('discountValue', data.discountValue, { shouldValidate: true, shouldDirty: true });
+    setValue('discountValue', numericDiscountValue, { shouldValidate: true, shouldDirty: true }); // Use parsed numeric value
     // The useEffect for total calculation will pick up these changes
   };
 
-  const handleDuplicateDiscountSheetClose = () => {
-    console.log("DuplicateDiscountSheet has been closed.");
+  const handleSelectDiscountTypeSheetClose = () => {
+    console.log("SelectDiscountTypeSheet has been closed.");
     // Add any other logic needed when the discount sheet is closed by the user
   };
 
@@ -979,7 +1007,7 @@ export default function CreateInvoiceScreen() {
                 ? `- $${displayDiscountAmount.toFixed(2)}` 
                 : '' // Empty if no discount applied
             }
-            onPress={handlePresentDuplicateDiscountSheet} 
+            onPress={handlePresentSelectDiscountTypeSheet} 
             icon={Percent} 
             themeColors={themeColors} 
             showChevron={!discountType} // Show chevron only if no discountType is set
@@ -1096,13 +1124,10 @@ export default function CreateInvoiceScreen() {
         onSave={handleSaveDetailsFromModal} // Handle save action
       />
 
-      <DuplicateDiscountSheet
-        ref={duplicateDiscountSheetRef}
-        onSave={handleSaveDuplicateDiscount}
-        onClose={handleDuplicateDiscountSheetClose}
-        // Pass initial values if needed, though the present method also takes them
-        // initialDiscountType={getValues('discountType')}
-        // initialDiscountValue={getValues('discountValue')}
+      <SelectDiscountTypeSheet
+        ref={selectDiscountTypeSheetRef}
+        onApply={handleApplyDiscountFromSheet}
+        onClose={handleSelectDiscountTypeSheetClose}
       />
 
       <EditInvoiceTaxSheet 
