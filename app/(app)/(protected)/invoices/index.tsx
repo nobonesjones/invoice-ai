@@ -5,7 +5,7 @@ import {
 	FileText,
 	ChevronRight,
 } from "lucide-react-native";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
 	View,
 	Text,
@@ -15,10 +15,13 @@ import {
 	FlatList,
 	TextInput,
 	RefreshControl,
+	Animated,
 } from "react-native";
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
+import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 
 // Define Invoice type
 interface Invoice {
@@ -100,6 +103,13 @@ export default function InvoiceDashboardScreen() {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
+
+	// Shine animation for Create New button
+	const createButtonShineX = useShineAnimation({
+		duration: 1000,
+		delay: 4000, // Slightly longer delay for this button
+		outputRange: [-150, 150] // Adjusted for potentially smaller button
+	});
 
 	// State for pull-to-refresh
 	const [isRefreshing, setIsRefreshing] = useState(false);
@@ -189,8 +199,20 @@ export default function InvoiceDashboardScreen() {
 							{ backgroundColor: themeColors.primary },
 						]}
 						onPress={() => router.push("/invoices/create")}
-						accessibilityLabel="Create new invoice"
 					>
+              <Animated.View 
+                style={[
+                  styles.shineOverlay, 
+                  { transform: [{ translateX: createButtonShineX }] }
+                ]}
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.3)', 'transparent']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.shineGradient} 
+                />
+              </Animated.View>
 						<Text
 							style={[
 								styles.headerButtonText,
@@ -333,6 +355,8 @@ const styles = StyleSheet.create({
 		paddingVertical: 8,
 		paddingHorizontal: 14,
 		borderRadius: 20,
+		overflow: 'hidden', 
+    position: 'relative', 
 	},
 	headerButtonText: {
 		fontSize: 14,
@@ -424,4 +448,12 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		textAlign: "center",
 	},
+  shineOverlay: { 
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1, 
+  },
+  shineGradient: { 
+    width: '100%',
+    height: '100%',
+  },
 });

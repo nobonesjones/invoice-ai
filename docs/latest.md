@@ -1,13 +1,29 @@
-Ok so we ar epopulationg the settings pages. 
+basically makign the invoice form save and then show on the invoices page; 
 
-we fixed the smooth slide transition to the account info, and i asked it to add blank pages to the rest of the items, but it fucked them up and they are going to the home page...need to ask it to remember why 
+Okay, here's a concise summary of where we are and what we'll be focusing on next:
 
-reason so we need to fix this below...
+Main Goal:
 
-"The redirection logic in your main app layout (app/_layout.tsx) likely needs to be updated. It might be incorrectly sending you to the home screen if it doesn't recognize these new settings pages as valid destinations when you're logged in.
+Successfully save complete invoice data, including all line items and correct payment option statuses, from the "Create Invoice" screen to your Supabase database.
+What We've Done / What's Working:
 
-We fixed a similar issue for "Account Details" by making that layout aware of it. We'll need to do the same for these new pages."
+The main invoice record (though with some field issues) is being created in the invoices table.
+The invoice_line_items table is set up in Supabase with RLS policies.
+The database column for Stripe payment was updated to stripe_active.
+We've refined the tab bar visibility logic to reduce flickering during navigation.
+Current Focus - Debugging Data Saving Issues in "Create Invoice":
 
-the next steps are. 
+Line Items Not Saving: It appears line items added in the form are not being included when the invoice is saved.
+Payment Option Toggles Not Working Correctly:
+Stripe (stripe_active) seems to default to true regardless of the switch.
+Bank Account (bank_account_active) and PayPal (paypal_active) are saving as false even when toggled on.
+Other Invoice Fields: We also need to verify and fix how invoice numbers and dates are saved.
+Next Steps (for the morning):
 
-fix the settings pages, get them openign nicely, but focus on the VAT pages and once sorted, we can have global settings to use in the invoice creation.. and proceed with that to finish the entire flow! 
+Inspect Form Controls: We need to look at the code in app/(app)/(protected)/invoices/create.tsx for:
+How the Switch components for Stripe, Bank Account, and PayPal are set up with react-hook-form.
+The defaultValues used when initializing the form.
+Line Item Form State: Figure out why the items array in the form data might be empty or not updating correctly when you add items.
+Essentially, we're diving into how the form in create.tsx handles its data, especially for the toggles and the list of items, to make sure it accurately sends everything to Supabase.
+
+Feedback submitted

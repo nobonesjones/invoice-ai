@@ -1,7 +1,7 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Search } from "lucide-react-native";
+import { Search, PlusCircle } from "lucide-react-native";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
 	View,
@@ -13,13 +13,16 @@ import {
 	ActivityIndicator,
 	Platform,
 	TouchableOpacity,
+	Animated,
 } from "react-native";
+import { LinearGradient } from 'expo-linear-gradient';
 
 import CreateNewClientSheet from "./CreateNewClientSheet";
 
 import CustomerListItem, { Customer } from "@/components/CustomerListItem";
 import { colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 
 export default function CustomersScreen() {
 	console.log("--- CustomersScreen Component Render ---");
@@ -108,6 +111,13 @@ export default function CustomersScreen() {
 		console.log("CustomersScreen: CreateNewClientSheet closed");
 	};
 
+  // Shine animation for Add Client button
+  const addClientButtonShineX = useShineAnimation({
+    duration: 1000,
+    delay: 3500, // Different delay for variety
+    outputRange: [-150, 150] 
+  });
+
 	const renderCustomerItem = ({ item }: { item: Customer }) => (
 		<CustomerListItem
 			customer={item}
@@ -139,7 +149,21 @@ export default function CustomersScreen() {
 						style={styles.addClientButton}
 						activeOpacity={0.7}
 					>
-						<Text style={styles.addClientButtonText}>+ Add Client</Text>
+            <Animated.View 
+              style={[
+                styles.shineOverlay, 
+                { transform: [{ translateX: addClientButtonShineX }] }
+              ]}
+            >
+              <LinearGradient
+                colors={['transparent', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.3)', 'transparent']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.shineGradient} 
+              />
+            </Animated.View>
+            <PlusCircle size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+						<Text style={styles.addClientButtonText}>Add Client</Text>
 					</TouchableOpacity>
 				</View>
 				<View style={styles.searchBarContainer}>
@@ -240,8 +264,12 @@ const styles = StyleSheet.create({
 	addClientButton: {
 		backgroundColor: colors.light.primary,
 		paddingHorizontal: 16,
-		paddingVertical: 10,
+		paddingVertical: 8,
 		borderRadius: 20,
+		flexDirection: 'row',
+		alignItems: 'center',
+		overflow: 'hidden',
+		position: 'relative',
 	},
 	addClientButtonText: {
 		color: "#FFFFFF",
@@ -265,4 +293,12 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		color: colors.light.destructive,
 	},
+  shineOverlay: { 
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1, 
+  },
+  shineGradient: { 
+    width: '100%',
+    height: '100%',
+  },
 });

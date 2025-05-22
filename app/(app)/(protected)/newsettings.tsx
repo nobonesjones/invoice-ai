@@ -1,10 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient'; 
 import {
   ChevronRight, Search, Zap, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
-  Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell
+  Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell,
+  Crown 
 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text'; 
@@ -12,12 +14,20 @@ import { useTheme } from '@/context/theme-provider';
 import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useSupabase } from '@/context/supabase-provider';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useShineAnimation } from '@/lib/hooks/useShineAnimation'; // Import the hook
 
 export default function NewSettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
+
+  // Use the custom hook for shine animation
+  const shineTranslateX = useShineAnimation({
+    duration: 1000,
+    delay: 3000,
+    outputRange: [-200, 200] // Default is already this, but explicit for clarity
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -75,6 +85,26 @@ export default function NewSettingsScreen() {
         >
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.foreground }]}>Settings</Text>
+            <TouchableOpacity 
+              style={[styles.upgradeButton, { backgroundColor: theme.gold }]} 
+              onPress={handleUpgradePress}
+            >
+              <Animated.View 
+                style={[
+                  styles.shineOverlay,
+                  { transform: [{ translateX: shineTranslateX }] }
+                ]}
+              >
+                <LinearGradient
+                  colors={['transparent', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.15)', 'transparent']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.shineGradient}
+                />
+              </Animated.View>
+              <Crown size={16} color={theme.goldContrastText} style={{ marginRight: 6 }} /> 
+              <Text style={[styles.upgradeButtonText, { color: theme.goldContrastText }]}>Upgrade</Text> 
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.searchBarContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -86,14 +116,7 @@ export default function NewSettingsScreen() {
             />
           </View>
 
-          <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
-            <SettingsListItem
-              icon={<Star color={theme.primary} size={24} />}
-              label="Upgrade"
-              onPress={handleUpgradePress}
-            />
-          </View>
-
+          <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>Account</Text>
           <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
             <SettingsListItem
               icon={<User color={theme.foreground} size={24} />}
@@ -191,7 +214,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 10,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 30,
@@ -252,5 +277,28 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  upgradeButton: { 
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    flexDirection: 'row', 
+    alignItems: 'center',   
+    overflow: 'hidden', // Important for containing the shine
+    position: 'relative', // Important for absolute positioning of shineOverlay
+    // backgroundColor will be set inline using theme.gold
+  },
+  upgradeButtonText: { 
+    fontSize: 14,
+    fontWeight: 'bold',
+    // color will be set inline using theme.goldContrastText
+  },
+  shineOverlay: { // Style for the animated shine view
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1, // Ensure it's on top of the background, but content can be on top of it if needed
+  },
+  shineGradient: { // Style for the gradient itself
+    width: '100%',
+    height: '100%',
   },
 });

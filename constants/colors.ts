@@ -24,6 +24,8 @@ export const colors = {
     statusPaid: "#2ECC71",
     statusDue: "#E74C3C",
     statusDraft: "#F39C12",
+    gold: "#FFC107", // Added for Upgrade button
+    goldContrastText: "#FFFFFF", // Changed to white for Upgrade button text/icon
   },
   dark: {
     background: "#000000", // True black background
@@ -50,5 +52,7 @@ export const colors = {
     statusPaid: "#2ECC71",
     statusDue: "#E74C3C",
     statusDraft: "#F39C12",
+    gold: "#FFC107", // Added for Upgrade button
+    goldContrastText: "#FFFFFF", // Changed to white for Upgrade button text/icon
   },
 };

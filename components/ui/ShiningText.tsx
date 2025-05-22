@@ -3,29 +3,26 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useRef, useEffect } from "react";
 import {
 	Animated,
-	Text,
-	StyleSheet,
 	View,
-	StyleProp,
-	TextStyle,
+	StyleSheet,
 	useColorScheme,
+	StyleProp,
+	ViewStyle,
 } from "react-native";
 
 import { useTheme } from "@/context/theme-provider";
 import { cn } from "@/lib/utils";
 
 interface ShiningTextProps {
-	text: string;
+	children: React.ReactNode;
 	className?: string;
-	style?: StyleProp<TextStyle>;
-	numberOfLines?: number;
+	style?: StyleProp<ViewStyle>;
 }
 
 const ShiningText: React.FC<ShiningTextProps> = ({
-	text,
+	children,
 	className,
 	style,
-	numberOfLines,
 }) => {
 	const animatedValue = useRef(new Animated.Value(0)).current;
 	const colorScheme = useColorScheme();
@@ -55,30 +52,19 @@ const ShiningText: React.FC<ShiningTextProps> = ({
 			? (["#FFFFFF", "#555555", "#FFFFFF"] as const) // Dark Mode: White -> Dark Gray -> White (darker shine)
 			: (["#000000", "#FFFFFF", "#000000"] as const); // Light Mode: Black -> Bright White -> Black
 
-	const textStyle = StyleSheet.flatten([styles.baseText, style]);
-
 	return (
 		<View style={styles.container}>
 			<MaskedView
 				style={styles.maskedView}
 				maskElement={
-					<Text
-						className={cn(className)}
-						style={textStyle}
-						numberOfLines={numberOfLines}
-					>
-						{text}
-					</Text>
+					<View className={cn(className)} style={style}>
+						{children}
+					</View>
 				}
 			>
-				<Text
-					className={cn(className)}
-					style={textStyle}
-					numberOfLines={numberOfLines}
-					aria-hidden
-				>
-					{text}
-				</Text>
+				<View className={cn(className)} style={style} aria-hidden>
+					{children}
+				</View>
 				<Animated.View
 					style={[styles.gradientContainer, { transform: [{ translateX }] }]}
 				>
@@ -101,9 +87,6 @@ const styles = StyleSheet.create({
 	maskedView: {
 		height: "auto",
 		alignSelf: "center",
-	},
-	baseText: {
-		backgroundColor: "transparent",
 	},
 	gradientContainer: {
 		...StyleSheet.absoluteFillObject,

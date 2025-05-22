@@ -66,10 +66,10 @@ interface InvoiceLineItem {
   id: string; // Unique ID for this line item instance on the invoice
   user_saved_item_id?: string | null; // Link to user_saved_items if it was saved
   item_name: string;
+  description?: string | null; // Added/uncommented for item description
   quantity: number;
   unit_price: number;
   total_price: number; // Calculated: quantity * unit_price
-  // description?: string | null; // Optional: if you want to display description
 }
 
 interface RecordedPayment {
@@ -176,12 +176,14 @@ export default function CreateInvoiceScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const router = useRouter();
-  const navigation = useNavigation();
+  const navigation = useNavigation(); // Get navigation object
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
   const { supabase, user } = useSupabase(); // Use Supabase context
 
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
+
+  const [isSavingInvoice, setIsSavingInvoice] = useState(false); // Loading state for save
 
   const {
     control,
@@ -257,13 +259,31 @@ export default function CreateInvoiceScreen() {
   }, [params.selectedClientId, params.selectedClientName]);
 
   useEffect(() => {
-    // Hide tab bar when this screen mounts
-    setIsTabBarVisible(false);
-    // Show tab bar when this screen unmounts
-    return () => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      console.log('[CreateInvoiceScreen] Focus event: Hiding tab bar');
+      setIsTabBarVisible(false);
+    });
+
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      console.log('[CreateInvoiceScreen] Blur event: Showing tab bar');
       setIsTabBarVisible(true);
+    });
+
+    // Initial hide if screen is focused on mount
+    if (navigation.isFocused()) {
+        console.log('[CreateInvoiceScreen] Initial focus: Hiding tab bar');
+        setIsTabBarVisible(false);
+    }
+
+    return () => {
+      console.log('[CreateInvoiceScreen] Unmounting: Ensuring tab bar is visible');
+      unsubscribeFocus();
+      unsubscribeBlur();
+      // Explicitly set to true on unmount as a safeguard, 
+      // though blur should ideally handle it before unmount.
+      setIsTabBarVisible(true); 
     };
-  }, [setIsTabBarVisible]);
+  }, [navigation, setIsTabBarVisible]);
 
   // --- Bottom Sheet Modal (Add Item) --- //
   const addItemSheetRef = useRef<AddItemSheetRef>(null);
@@ -319,8 +339,107 @@ export default function CreateInvoiceScreen() {
     });
   };
 
-  const handleSaveInvoice = () => {
-    console.log('Save Invoice');
+  const handleSaveInvoice = async (formData: InvoiceFormData) => {
+    if (!user || !supabase) {
+      Alert.alert('Error', 'User session or Supabase client not available.');
+      return;
+    }
+
+    setIsSavingInvoice(true);
+
+    try {
+      // Log critical form data fields before preparing invoiceInsertData
+      console.log('[handleSaveInvoice] formData.invoice_number:', formData.invoice_number);
+      console.log('[handleSaveInvoice] formData.invoice_date:', formData.invoice_date);
+      console.log('[handleSaveInvoice] formData.due_date:', formData.due_date);
+      console.log('[handleSaveInvoice] formData.payment_instructions_active_on_invoice (for stripe_active):', formData.payment_instructions_active_on_invoice);
+      console.log('[handleSaveInvoice] formData.bank_account_active_on_invoice:', formData.bank_account_active_on_invoice);
+      console.log('[handleSaveInvoice] formData.paypal_active_on_invoice:', formData.paypal_active_on_invoice);
+
+      // 1. Prepare main invoice data
+      const invoiceInsertData = {
+        user_id: user.id,
+        client_id: formData.client_id,
+        invoice_number: formData.invoice_number || `INV-${Date.now().toString().slice(-6)}`, // Basic auto-generation if empty
+        status: isMarkedAsPaid ? 'paid' : 'draft',
+        invoice_date: formData.invoice_date instanceof Date ? formData.invoice_date.toISOString() : new Date(formData.invoice_date).toISOString(),
+        due_date: formData.due_date ? (formData.due_date instanceof Date ? formData.due_date.toISOString() : new Date(formData.due_date).toISOString()) : null,
+        po_number: formData.po_number || null,
+        custom_headline: formData.custom_headline || null,
+        subtotal_amount: formData.subTotalAmount,
+        discount_type: formData.discountType || null,
+        discount_value: formData.discountValue || 0,
+        tax_percentage: formData.taxPercentage || 0,
+        total_amount: formData.totalAmount,
+        // notes: formData.notes || null, // Add 'notes' to InvoiceFormData if needed
+        stripe_active: formData.payment_instructions_active_on_invoice, // Renamed from payment_instructions_active
+        bank_account_active: formData.bank_account_active_on_invoice,
+        paypal_active: formData.paypal_active_on_invoice,
+      };
+
+      // 2. Insert into 'invoices' table
+      const { data: newInvoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert(invoiceInsertData)
+        .select()
+        .single();
+
+      if (invoiceError) {
+        console.error('Error saving invoice:', invoiceError);
+        Alert.alert('Error', `Failed to save invoice: ${invoiceError.message}`);
+        setIsSavingInvoice(false);
+        return;
+      }
+
+      if (!newInvoice) {
+        Alert.alert('Error', 'Failed to save invoice: No data returned after insert.');
+        setIsSavingInvoice(false);
+        return;
+      }
+
+      // 3. Prepare and insert line items
+      if (formData.items && formData.items.length > 0) {
+        console.log('[handleSaveInvoice] formData.items:', JSON.stringify(formData.items, null, 2)); // Log items from form
+        const lineItemsInsertData = formData.items.map(item => ({
+          invoice_id: newInvoice.id,
+          user_id: user.id,
+          item_name: item.item_name, // Corrected from item.name
+          item_description: item.description || null, // Now valid
+          quantity: item.quantity,
+          unit_price: item.unit_price, // Corrected from item.price
+          total_price: parseFloat((item.quantity * item.unit_price).toFixed(2)),
+        }));
+
+        console.log('[handleSaveInvoice] lineItemsInsertData:', JSON.stringify(lineItemsInsertData, null, 2)); // Log data being sent to Supabase
+
+        const { error: lineItemsError } = await supabase
+          .from('invoice_line_items')
+          .insert(lineItemsInsertData);
+
+        if (lineItemsError) {
+          console.error('Error saving line items:', lineItemsError);
+          Alert.alert('Error', `Invoice saved (ID: ${newInvoice.id}), but failed to save line items: ${lineItemsError.message}. Please edit the invoice to add items.`);
+          setIsSavingInvoice(false);
+          // Navigate to edit screen for the newInvoice.id or list screen
+          router.replace('/(tabs)/invoices' as any); // Changed path and method
+          return;
+        }
+      }
+
+      // 4. Success
+      Alert.alert('Success', 'Invoice saved successfully!');
+      reset(defaultValues); // Reset form to default values
+      setSelectedClientName(null); // Clear selected client name
+      // Any other state resets needed
+      
+      router.replace('/(tabs)/invoices' as any); // Changed path and method
+
+    } catch (error: any) {
+      console.error('Unexpected error saving invoice:', error);
+      Alert.alert('Error', `An unexpected error occurred: ${error.message}`);
+    } finally {
+      setIsSavingInvoice(false);
+    }
   };
 
   const handlePreviewInvoice = () => {
@@ -427,10 +546,10 @@ export default function CreateInvoiceScreen() {
       id: itemDataFromSheet.id, // This is the temporary inv_item_xxx ID
       user_saved_item_id: itemDataFromSheet.saved_item_db_id || null,
       item_name: itemDataFromSheet.itemName,
+      description: itemDataFromSheet.description, // Now valid
       quantity: itemDataFromSheet.quantity,
       unit_price: itemDataFromSheet.price,
       total_price: itemDataFromSheet.quantity * itemDataFromSheet.price,
-      // description: itemDataFromSheet.description, // Uncomment if needed for display
     };
 
     setCurrentInvoiceLineItems(prevItems => [...prevItems, newLineItem]);
@@ -931,8 +1050,8 @@ export default function CreateInvoiceScreen() {
       </ScrollView>
 
       {/* Full Width Save Button - Not in a separate container */}
-      <TouchableOpacity onPress={handleSaveInvoice} style={styles.bottomSaveButton} disabled={!isSaveEnabled}>
-        <Text style={styles.bottomSaveButtonText}>Save Invoice</Text>
+      <TouchableOpacity onPress={handleSubmit(handleSaveInvoice)} style={[styles.bottomSaveButton, isSavingInvoice && styles.disabledButton]} disabled={isSavingInvoice}>
+        <Text style={styles.bottomSaveButtonText}>{isSavingInvoice ? 'Saving...' : 'Save Invoice'}</Text>
       </TouchableOpacity>
 
       {/* Add Item Bottom Sheet Modal */}
@@ -1451,6 +1570,9 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       fontSize: 13,
       color: themeColors.mutedForeground,
       marginTop: 2,
+    },
+    disabledButton: {
+      opacity: 0.5,
     },
   });
 }

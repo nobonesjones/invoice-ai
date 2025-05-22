@@ -25,6 +25,7 @@ import {
   X as XIcon,
   Paypal,
   Landmark,
+  CheckCircle,
 } from 'lucide-react-native';
 import {
   BottomSheetModal,
@@ -64,8 +65,10 @@ const getStyles = (theme: any) =>
       paddingBottom: 30,
     },
     sectionCard: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: 10,
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 8,
       marginBottom: 20,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
@@ -262,14 +265,14 @@ const getStyles = (theme: any) =>
     },
     logoRowContainer: {
       flexDirection: 'row',
-      justifyContent: 'space-around',
+      justifyContent: 'center',
       alignItems: 'center',
       marginVertical: 20,
       paddingHorizontal: 10,
     },
     paymentMethodIconStyle: {
-      width: 50,
-      height: 32,
+      width: 63, // Changed from 50
+      height: 40, // Changed from 32
       resizeMode: 'contain',
       marginHorizontal: 5,
     },
@@ -279,6 +282,43 @@ const getStyles = (theme: any) =>
       textAlign: 'center',
       marginHorizontal: 16,
       marginBottom: 25,
+    },
+    positiveBulletsContainer: {
+      marginTop: 15,
+      marginBottom: 20,
+      paddingHorizontal: 8,
+    },
+    bulletItem: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    bulletIcon: {
+      marginRight: 10,
+      marginTop: 2,
+    },
+    bulletText: {
+      fontSize: 15,
+      color: theme.foreground,
+      flexShrink: 1,
+      lineHeight: 20,
+    },
+    importantStepsContainer: {
+      marginTop: 10,
+      marginBottom: 25,
+      paddingHorizontal: 8,
+    },
+    importantStepsTitle: {
+      fontSize: 17,
+      fontWeight: 'bold',
+      color: theme.foreground,
+      marginBottom: 12,
+    },
+    importantStepText: {
+      fontSize: 15,
+      color: theme.foreground,
+      marginBottom: 10,
+      lineHeight: 22,
     },
     connectButton: {
       backgroundColor: theme.primary,
@@ -350,8 +390,8 @@ export default function PaymentOptionsScreen() {
     { name: 'GooglePay', source: require('../../assets/googlepayicon.png') },
   ];
 
-  const payPalSnapPoints = useMemo(() => ['50%', '75%'], []);
-  const stripeSnapPoints = useMemo(() => ['70%'], []);
+  const payPalSnapPoints = useMemo(() => ['50%', '65%'], []);
+  const stripeSnapPoints = useMemo(() => ['90%'], []); // Changed from 85% to 90%
   const bankTransferSnapPoints = useMemo(() => ['60%', '80%'], []);
 
   const openPayPalModal = useCallback(async () => {
@@ -862,7 +902,7 @@ export default function PaymentOptionsScreen() {
 
               {isPayPalEnabled && (
                 <View style={[styles.sectionCard, styles.emailInputCard]}>
-                  <Text style={[styles.inputLabel, { color: theme.foreground, marginBottom: 8 }]}>PayPal Email:</Text>
+                  <Text style={[styles.inputLabel, { color: theme.foreground, marginBottom: 8, fontWeight: 'bold' }]}>PayPal Email</Text>
                   <BottomSheetTextInput
                     style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
                     placeholder="Enter your PayPal email address"
@@ -916,21 +956,6 @@ export default function PaymentOptionsScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.modalInnerContent}>
-              <View style={[styles.sectionCard, styles.toggleCard]}>
-                <View style={[styles.inputRow, styles.lastInputRow]}> 
-                  <Text style={styles.label}>Enable Stripe</Text>
-                  <Switch
-                    key={`stripe-${isStripeEnabled.toString()}`}
-                    trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
-                    thumbColor={isStripeEnabled ? theme.primary : theme.card}
-                    ios_backgroundColor={theme.muted}
-                    onValueChange={handleStripeToggle}
-                    value={isStripeEnabled}
-                    disabled={isLoadingStripeSettings}
-                  />
-                </View>
-              </View>
-
               <View style={styles.logoRowContainer}>
                 {paymentIcons.map((icon) => (
                   <Image
@@ -941,9 +966,27 @@ export default function PaymentOptionsScreen() {
                 ))}
               </View>
 
-              <Text style={styles.stripeModalHelperText}>
-                Get paid faster by accepting credit, debit, and wallet payments using Stripe.
-              </Text>
+              <View style={styles.positiveBulletsContainer}>
+                <View style={styles.bulletItem}>
+                  <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
+                  <Text style={styles.bulletText}>Customers pay 5 times faster with card payments</Text>
+                </View>
+                <View style={styles.bulletItem}>
+                  <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
+                  <Text style={styles.bulletText}>Easily send card payment links in a flash</Text>
+                </View>
+                <View style={styles.bulletItem}>
+                  <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
+                  <Text style={styles.bulletText}>Fast and easy setup</Text>
+                </View>
+              </View>
+
+              <View style={styles.importantStepsContainer}>
+                <Text style={styles.importantStepsTitle}>Important Steps</Text>
+                <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: '#000000' }}>15 minutes</Text></Text>
+                <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: '#000000' }}>daily or weekly</Text>, first one takes seven days.</Text>
+                <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: '#000000' }}>most competitive</Text> in the world.</Text>
+              </View>
 
               {!isStripeEnabled && (
                 <TouchableOpacity
