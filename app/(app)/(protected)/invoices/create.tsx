@@ -31,7 +31,7 @@ import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData 
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
 import { SwipeListView } from 'react-native-swipe-list-view'; // Added SwipeListView import
-import type { Database } from '../../../../supabase/types/database.types'; // Corrected path
+import type { Database } from '../../../../types/database.types'; // Corrected path again
 import { Image } from 'react-native'; // Added Image import
 import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
 
@@ -434,19 +434,26 @@ export default function CreateInvoiceScreen() {
           console.error('Error saving line items:', lineItemsError);
           Alert.alert('Error', `Invoice saved (ID: ${newInvoice.id}), but failed to save line items: ${lineItemsError.message}. Please edit the invoice to add items.`);
           setIsSavingInvoice(false);
-          // Navigate to edit screen for the newInvoice.id or list screen
-          router.replace('/(tabs)/invoices' as any); // Changed path and method
+          // Navigate to the invoice dashboard
+          router.replace('/(app)/(protected)/invoices/'); 
           return;
         }
       }
 
-      // 4. Success
-      Alert.alert('Success', 'Invoice saved successfully!');
+      // 4. Success - Clear form and navigate to viewer
+      console.log('Invoice saved successfully! Navigating to viewer with ID:', newInvoice.id);
       reset(defaultValues); // Reset form to default values
       setSelectedClientName(null); // Clear selected client name
       // Any other state resets needed
       
-      router.replace('/(tabs)/invoices' as any); // Changed path and method
+      router.replace({
+        pathname: '/(app)/(protected)/invoices/invoice-viewer',
+        params: { id: newInvoice.id, from: 'save' },
+      });
+
+      // Delay setting isSavingInvoice to false to allow navigation to complete
+      // and prevent potential UI flicker or premature interaction on the new screen.
+      setTimeout(() => setIsSavingInvoice(false), 500);
 
     } catch (error: any) {
       console.error('Unexpected error saving invoice:', error);
@@ -457,7 +464,11 @@ export default function CreateInvoiceScreen() {
   };
 
   const handlePreviewInvoice = () => {
-    console.log('Preview Invoice');
+    // For now, just navigate to the viewer. Data passing will be handled later.
+    router.push({
+      pathname: '/(app)/(protected)/invoices/invoice-viewer',
+      params: { from: 'create' }, // Indicate navigation source
+    });
   };
 
   useLayoutEffect(() => {

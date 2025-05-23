@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Edit3, MoreHorizontal, Clock, Send, Maximize } from 'lucide-react-native'; 
+import { ArrowLeft, Edit3, MoreHorizontal, Clock, Send, Maximize, ChevronLeft, History } from 'lucide-react-native'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
@@ -37,17 +37,50 @@ const mockInvoiceData: DisplayInvoice = {
   due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
 };
 
-export default function InvoiceViewerScreen() {
+function InvoiceViewerScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams<{ id: string; from?: string }>(); 
   const { setIsTabBarVisible } = useTabBarVisibility();
 
   const [invoice, setInvoice] = useState<DisplayInvoice | null>(mockInvoiceData); 
   const [isPreviewMode, setIsPreviewMode] = useState(true); // Assume preview mode for now
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const invoiceStatus = invoice?.status?.toLowerCase() || 'draft';
+  const isSentStatus = ['sent', 'paid', 'viewed', 'overdue'].includes(invoiceStatus);
+  
+  const addAlpha = (color: string, opacity: number) => {
+    const _opacity = Math.round(Math.min(Math.max(opacity || 1, 0), 1) * 255);
+    if (color.startsWith('#') && (color.length === 7 || color.length === 4)) { // Check if it's a hex color
+      return color + _opacity.toString(16).padStart(2, '0').toUpperCase();
+    }
+    // For named colors or other formats, opacity might not be directly applicable this way
+    // Consider returning an rgba string or handling based on theme structure if not hex
+    console.warn(`addAlpha: Color ${color} is not a standard hex color. Opacity may not apply correctly.`);
+    return color; // Return original color if not hex, or handle as rgba
+  };
+
+  const statusDisplayColor = isSentStatus 
+    ? addAlpha(themeColors.success, 0.7) 
+    : addAlpha(themeColors.mutedForeground, 0.7);
+  
+  const statusDisplayText = isSentStatus ? 'Sent' : 'Not Sent';
+  
+  const handleCustomBack = () => {
+    // If the viewer was opened from the create screen (preview flow), simply go back.
+    // This will use the default stack pop animation (slide right).
+    if (params.from === 'create') {
+      router.back();
+    // If the viewer was opened after saving an invoice, replace with dashboard.
+    } else if (params.from === 'save') {
+      router.replace('/(app)/(protected)/invoices/');
+    } else {
+      router.back(); // Default behavior for other cases (e.g., from dashboard list)
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -123,16 +156,20 @@ export default function InvoiceViewerScreen() {
     }
   };
 
+  const handleViewHistory = () => {
+    Alert.alert('History', 'History functionality coming soon!');
+  };
+
   if (loading && !invoice) {
-    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}><View style={styles.centered}><Text>Loading...</Text></View></SafeAreaView>;
+    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}><View style={styles.centered}><Text>Loading...</Text></View></SafeAreaView>;
   }
 
   if (error) {
-    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}><View style={styles.centered}><Text>Error: {error}</Text></View></SafeAreaView>;
+    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}><View style={styles.centered}><Text>Error: {error}</Text></View></SafeAreaView>;
   }
 
   if (!invoice) {
-    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}><View style={styles.centered}><Text>No invoice data found.</Text></View></SafeAreaView>;
+    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}><View style={styles.centered}><Text>No invoice data found.</Text></View></SafeAreaView>;
   }
 
   const primaryButtonText = 
@@ -143,57 +180,56 @@ export default function InvoiceViewerScreen() {
   const showPaidToggle = ['sent', 'paid', 'overdue'].includes(invoice.status);
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
       <Stack.Screen 
         options={{
           headerShown: false,
         }}
       />
       {/* New Top Section */}
-      <View style={[styles.newTopSectionContainer, { borderBottomColor: themeColors.border, backgroundColor: '#FFFFFF' }]}>
-        {/* Row 1: Back Button */}
+      <View style={[
+        styles.newTopSectionContainer,
+        { 
+          backgroundColor: themeColors.card, // Apply theme-dependent background inline
+          borderBottomColor: themeColors.border // Apply theme-dependent border color inline
+        }
+      ]}>
+        {/* Top Row: Back Button and Status Indicator */}
         <View style={styles.topRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButtonContainer}>
-            <ArrowLeft size={24} color={themeColors.foreground} />
+          <TouchableOpacity onPress={handleCustomBack} style={styles.headerLeftContainer}>
+            <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
             <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Row 2: Invoice Number and Total Amount */}
-        <View style={styles.invoiceNumberAndTotalRow}>
-          <Text style={[styles.invoiceNumberDisplay, { color: themeColors.foreground }]}>
-            {invoice.invoice_number}
-          </Text>
-          <Text style={[styles.invoiceTotalDisplay, { color: themeColors.foreground }]}>
-            {`$${invoice.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          </Text>
-        </View>
-        <View style={styles.clientAndStatusRow}>
-          <Text style={[styles.clientNameDisplay, { color: themeColors.mutedForeground }]}>
-            {invoice.client_name}
-          </Text>
-          <View style={styles.statusToggleContainer}>
-            <Switch
-              trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
-              thumbColor={invoice.status === 'paid' ? themeColors.primary : themeColors.card}
-              ios_backgroundColor={themeColors.muted}
-              onValueChange={(isPaid) => {
-                setInvoice(prev => prev ? { ...prev, status: isPaid ? 'paid' : 'draft' } : null);
-              }}
-              value={invoice.status === 'paid'}
-              style={styles.statusSwitch}
-            />
-            <Text style={[styles.statusToggleValue, { color: invoice.status === 'paid' ? themeColors.primary : themeColors.foreground }]}>
-              {invoice.status === 'paid' ? 'Paid' : 'Unpaid'}
+          
+          <View style={styles.statusIndicatorContainer}>
+            <Text style={[styles.statusLabelText, { color: themeColors.mutedForeground }]}>Status: </Text>
+            <Text style={[styles.statusValueText, { color: statusDisplayColor }]}>
+              {statusDisplayText}
             </Text>
           </View>
         </View>
 
+        {/* Second Row: Action Buttons (Centered) */}
+        <View style={styles.actionButtonsRow}>
+          <TouchableOpacity style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} onPress={handleEdit}>
+            <Edit3 size={18} color={themeColors.foreground} />
+            <Text style={[styles.actionButtonText, { color: themeColors.foreground }]}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: 8 }]} onPress={handleViewHistory}>
+            <History size={18} color={themeColors.foreground} />
+            <Text style={[styles.actionButtonText, { color: themeColors.foreground }]}>History</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: 8 }]} onPress={handleMoreOptions}>
+            <MoreHorizontal size={18} color={themeColors.foreground} />
+            <Text style={[styles.actionButtonText, { color: themeColors.foreground }]}>More</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView 
-        style={{ flex: 1 }} // Added flex: 1 here
-        contentContainerStyle={styles.scrollContentContainer} // Ensure this has flexGrow: 1
+        style={styles.scrollView} 
+        contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border /* Changed to border for a slightly darker background */ }]}
+        showsVerticalScrollIndicator={false}
       >
         {/* Invoice Preview (Main Body) */}
         <View style={[styles.previewContainer, { backgroundColor: themeColors.card, shadowColor: '#000' }]}>
@@ -209,55 +245,36 @@ export default function InvoiceViewerScreen() {
 
       {/* Action Bar (Bottom Section) */}
       <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: '#FFFFFF' }]}>
-        <View style={styles.secondaryActionsRow}>
-          <TouchableOpacity 
-            style={[styles.secondaryActionButton, {
-              backgroundColor: themeColors.card, 
-              borderColor: themeColors.border,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-              borderRadius: 6,
-            }]} 
-            onPress={() => Alert.alert('Edit', 'Edit functionality coming soon!')}
-          >
-            <Edit3 size={20} color={themeColors.foreground} />
-            <Text style={[styles.secondaryActionText, { color: themeColors.foreground }]}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.secondaryActionButton, {
-              backgroundColor: themeColors.card, 
-              borderColor: themeColors.border,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-              borderRadius: 6,
-            }]} 
-            onPress={() => Alert.alert('History', 'History functionality coming soon!')}
-          >
-            <Clock size={20} color={themeColors.foreground} />
-            <Text style={[styles.secondaryActionText, { color: themeColors.foreground }]}>History</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.secondaryActionButton, {
-              backgroundColor: themeColors.card, 
-              borderColor: themeColors.border,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-              borderRadius: 6,
-            }]} 
-            onPress={() => Alert.alert('More', 'More options functionality coming soon!')}
-          >
-            <MoreHorizontal size={20} color={themeColors.foreground} />
-            <Text style={[styles.secondaryActionText, { color: themeColors.foreground }]}>More</Text>
-          </TouchableOpacity>
+        {/* Invoice Number/Total and Client/Status moved here */}
+        <View style={styles.invoiceDetailsBottomContainer}>
+          <View style={styles.invoiceNumberAndTotalRow}>
+            <Text style={[styles.invoiceNumberDisplay, { color: themeColors.foreground }]}>
+              {invoice.invoice_number}
+            </Text>
+            <Text style={[styles.invoiceTotalDisplay, { color: themeColors.foreground }]}>
+              {`$${invoice.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </Text>
+          </View>
+          <View style={styles.clientAndStatusRow}>
+            <Text style={[styles.clientNameDisplay, { color: themeColors.mutedForeground }]}>
+              {invoice.client_name}
+            </Text>
+            <View style={styles.statusToggleContainer}>
+              <Switch
+                trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
+                thumbColor={invoice.status === 'paid' ? themeColors.primary : themeColors.card}
+                ios_backgroundColor={themeColors.muted}
+                onValueChange={(isPaid) => {
+                  setInvoice(prev => prev ? { ...prev, status: isPaid ? 'paid' : 'draft' } : null);
+                }}
+                value={invoice.status === 'paid'}
+                style={styles.statusSwitch}
+              />
+              <Text style={[styles.statusToggleValue, { color: invoice.status === 'paid' ? themeColors.primary : themeColors.foreground }]}>
+                {invoice.status === 'paid' ? 'Paid' : 'Unpaid'}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <TouchableOpacity 
@@ -286,26 +303,85 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  newTopSectionContainer: {
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: { 
+    flexGrow: 1,
+    paddingHorizontal: 0, 
+    paddingBottom: 20, 
+  },
+  newTopSectionContainer: { // Static styles for the new top section
     paddingHorizontal: 16,
-    paddingTop: 16, 
-    paddingBottom: 12,
+    paddingTop: Platform.OS === 'ios' ? 0 : 0, // Reduced to 0 for a more compact header
+    paddingBottom: 12, // Space below the content of the header
     borderBottomWidth: StyleSheet.hairlineWidth,
+    // backgroundColor and borderBottomColor moved to inline style
+    // Add shadow for iOS
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.5,
+    elevation: 3,           // Standard elevation for cards
   },
   topRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'space-between', 
+    width: '100%',
   },
-  backButtonContainer: { 
+  headerLeftContainer: {
+    flex: 1, 
+    flexDirection: 'row', // To align icon and text horizontally
+    alignItems: 'center', 
+    paddingVertical: 8, 
+  },
+  backButtonText: { // Added style for the 'Back' text
+    fontSize: 17,
+    marginLeft: 6,
+  },
+  statusIndicatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 4, 
+    paddingVertical: 8, // Match back button's vertical padding
   },
-  backButtonText: {
-    fontSize: 16,
-    marginLeft: 6,
+  statusLabelText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  statusValueText: {
+    fontSize: 15,
+    fontWeight: '600', 
+  },
+  actionButtonsRow: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 10, 
+    marginBottom: 8, 
+    // paddingHorizontal: 8, // Removed to allow buttons to use full width
+  },
+  actionButton: {
+    flex: 1, // Make buttons share width equally
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', // Center content within the button
+    paddingVertical: 10,
+    paddingHorizontal: 12, 
+    borderRadius: 8,       
+    borderWidth: StyleSheet.hairlineWidth,
+    // borderColor: themeColors.border, // Moved to inline style to fix lint error
+    // backgroundColor will be themeColors.card (white/dark card)
+    shadowColor: '#000', // Shadow for iOS
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.1,                  
+    shadowRadius: 3,                   
+    elevation: 3, // Elevation for Android
+  },
+  actionButtonText: {
+    fontSize: 15,
+    marginLeft: 8, // Space between icon and text
+    fontWeight: '500',
+    // color will be themeColors.primary
   },
   invoiceNumberAndTotalRow: {
     flexDirection: 'row',
@@ -320,7 +396,6 @@ const styles = StyleSheet.create({
   invoiceTotalDisplay: { 
     fontSize: 16, 
     fontWeight: 'bold', 
-    marginLeft: 8, 
   },
   clientNameDisplay: { 
     fontSize: 14, 
@@ -342,11 +417,6 @@ const styles = StyleSheet.create({
   statusToggleValue: { 
     fontSize: 14,
     fontWeight: '500',
-  },
-  scrollContentContainer: {
-    padding: 16,
-    paddingBottom: 16,
-    flexGrow: 1, 
   },
   previewContainer: {
     flex: 1, 
@@ -387,27 +457,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  secondaryActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around', 
-    alignItems: 'center',
-    marginBottom: 16, 
-  },
-  secondaryActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12, 
-    paddingVertical: 8,    
-    borderRadius: 6,       
-    borderWidth: StyleSheet.hairlineWidth, 
-    // backgroundColor, borderColor, shadowColor will be applied inline
-    shadowOffset: { width: 0, height: 1 }, 
-    shadowOpacity: 0.1,                  
-    shadowRadius: 2,                   
-    elevation: 2,                      
-  },
-  secondaryActionText: {
-    fontSize: 15,
-    marginLeft: 6,
+  invoiceDetailsBottomContainer: { // Container for invoice details in the bottom bar
+    marginBottom: 16, // Space above the Send Invoice button
   },
 });
+
+export default InvoiceViewerScreen;
