@@ -16,8 +16,8 @@ export const colors = {
     accent: "hsl(240, 4.8%, 95.9%)",
     accentForeground: "hsl(240, 5.9%, 10%)",
     iconAccent: "#4A4A4A", // Dark Gray for icons/accents
-    destructive: "hsl(0, 84.2%, 60.2%)",
-    destructiveForeground: "hsl(0, 0%, 98%)",
+    destructive: "#FF7979", // New HEX value: light, somewhat desaturated red
+    destructiveForeground: "hsl(0, 0%, 98%)", // Note: This is very light, might need adjustment if used directly for text on light red
     border: "hsl(240, 5.9%, 90%)",
     input: "hsl(240, 5.9%, 90%)",
     ring: "hsl(240, 5.9%, 10%)",
@@ -44,7 +44,7 @@ export const colors = {
     accent: "#1C1C1E", // Dark gray for accent elements
     accentForeground: "hsl(0, 0%, 98%)",
     iconAccent: "#A0A0A0", // Lighter Gray for icons/accents in dark mode
-    destructive: "hsl(0, 72%, 51%)",
+    destructive: "#E57373", // New HEX value: moderately desaturated red for dark theme
     destructiveForeground: "hsl(0, 0%, 98%)",
     border: "#1C1C1E", // Dark gray for borders
     input: "#1C1C1E", // Dark gray for input backgrounds

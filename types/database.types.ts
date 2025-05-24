@@ -117,37 +117,173 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_line_items: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_id: string
+          item_description: string | null
+          item_image_url: string | null
+          item_name: string
+          line_item_discount_type: string | null
+          line_item_discount_value: number | null
+          quantity: number
+          total_price: number
+          unit_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_id: string
+          item_description?: string | null
+          item_image_url?: string | null
+          item_name: string
+          line_item_discount_type?: string | null
+          line_item_discount_value?: number | null
+          quantity?: number
+          total_price?: number
+          unit_price?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          item_description?: string | null
+          item_image_url?: string | null
+          item_name?: string
+          line_item_discount_type?: string | null
+          line_item_discount_value?: number | null
+          quantity?: number
+          total_price?: number
+          unit_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          bank_account_active: boolean
+          client_id: string
+          created_at: string
+          custom_headline: string | null
+          discount_type: string | null
+          discount_value: number
+          due_date: string | null
+          due_date_option: string | null
+          id: string
+          invoice_date: string
+          invoice_number: string
+          notes: string | null
+          paypal_active: boolean
+          po_number: string | null
+          status: string
+          stripe_active: boolean
+          subtotal_amount: number
+          tax_percentage: number
+          total_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bank_account_active?: boolean
+          client_id: string
+          created_at?: string
+          custom_headline?: string | null
+          discount_type?: string | null
+          discount_value?: number
+          due_date?: string | null
+          due_date_option?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_number: string
+          notes?: string | null
+          paypal_active?: boolean
+          po_number?: string | null
+          status?: string
+          stripe_active?: boolean
+          subtotal_amount?: number
+          tax_percentage?: number
+          total_amount?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bank_account_active?: boolean
+          client_id?: string
+          created_at?: string
+          custom_headline?: string | null
+          discount_type?: string | null
+          discount_value?: number
+          due_date?: string | null
+          due_date_option?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_number?: string
+          notes?: string | null
+          paypal_active?: boolean
+          po_number?: string | null
+          status?: string
+          stripe_active?: boolean
+          subtotal_amount?: number
+          tax_percentage?: number
+          total_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_invoices_client_id"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_options: {
         Row: {
           bank_details: string | null
-          bank_transfer_enabled: boolean | null
+          bank_transfer_enabled: boolean
           created_at: string | null
           id: string
           paypal_email: string | null
-          paypal_enabled: boolean | null
-          stripe_enabled: boolean | null
+          paypal_enabled: boolean
+          stripe_enabled: boolean
           updated_at: string | null
           user_id: string
         }
         Insert: {
           bank_details?: string | null
-          bank_transfer_enabled?: boolean | null
+          bank_transfer_enabled?: boolean
           created_at?: string | null
           id?: string
           paypal_email?: string | null
-          paypal_enabled?: boolean | null
-          stripe_enabled?: boolean | null
+          paypal_enabled?: boolean
+          stripe_enabled?: boolean
           updated_at?: string | null
           user_id: string
         }
         Update: {
           bank_details?: string | null
-          bank_transfer_enabled?: boolean | null
+          bank_transfer_enabled?: boolean
           created_at?: string | null
           id?: string
           paypal_email?: string | null
-          paypal_enabled?: boolean | null
-          stripe_enabled?: boolean | null
+          paypal_enabled?: boolean
+          stripe_enabled?: boolean
           updated_at?: string | null
           user_id?: string
         }

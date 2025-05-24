@@ -57,7 +57,8 @@ interface InvoiceFormData {
   discountValue?: number | null;
   subTotalAmount?: number;
   totalAmount?: number;
-  // Add other fields as necessary, e.g., notes, discount, tax
+  notes?: string; // Added notes field
+  // Add other fields as necessary, e.g., discount, tax
   payment_instructions_active_on_invoice: boolean;
   bank_account_active_on_invoice: boolean;
   paypal_active_on_invoice: boolean;
@@ -177,6 +178,30 @@ const formatFriendlyDate = (date: Date | null | undefined): string => {
   return `${day}${daySuffix} ${month} ${year}`;
 };
 
+// Define calculateGrandTotal if it's not already defined elsewhere
+// This is a simplified version based on the parameters used.
+// Ensure this matches your actual calculation logic if it's more complex.
+const calculateGrandTotal = (
+  subtotal: number,
+  discountType: 'percentage' | 'fixed' | null | undefined,
+  discountValue: number | null | undefined,
+  taxPercentage: number | null | undefined
+): number => {
+  let discountedSubtotal = subtotal;
+  if (discountType && discountValue) {
+    if (discountType === 'percentage') {
+      discountedSubtotal = subtotal - (subtotal * (discountValue / 100));
+    } else if (discountType === 'fixed') {
+      discountedSubtotal = subtotal - discountValue;
+    }
+  }
+  let totalWithTax = discountedSubtotal;
+  if (taxPercentage) {
+    totalWithTax = discountedSubtotal + (discountedSubtotal * (taxPercentage / 100));
+  }
+  return parseFloat(totalWithTax.toFixed(2)); // Ensure two decimal places
+};
+
 export default function CreateInvoiceScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
@@ -213,6 +238,7 @@ export default function CreateInvoiceScreen() {
       discountValue: 0,
       subTotalAmount: 0,
       totalAmount: 0,
+      notes: '', // Initialize notes
       // Add other fields as necessary, e.g., notes, discount, tax
       payment_instructions_active_on_invoice: false,
       bank_account_active_on_invoice: false,
@@ -247,7 +273,7 @@ export default function CreateInvoiceScreen() {
   };
 
   // --- Selected Client State --- //
-  const [selectedClientName, setSelectedClientName] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<ClientType | null>(null);
 
   // --- Item State for Modal --- //
   const [itemName, setItemName] = useState('');
@@ -260,7 +286,7 @@ export default function CreateInvoiceScreen() {
 
   useEffect(() => {
     if (params.selectedClientId && params.selectedClientName) {
-      setSelectedClientName(params.selectedClientName);
+      setSelectedClient({ id: params.selectedClientId, name: params.selectedClientName });
       // Optional: Clear params from URL after processing to avoid re-triggering if user navigates away and back
       // router.setParams({ selectedClientId: undefined, selectedClientName: undefined });
     }
@@ -330,7 +356,7 @@ export default function CreateInvoiceScreen() {
 
   const handleClientSelect = useCallback((client: ClientType) => {
     setValue('client_id', client.id, { shouldValidate: true });
-    setSelectedClientName(client.name);
+    setSelectedClient(client);
     // You might want to trigger form validation or other actions here
     console.log('Selected client:', client);
     newClientSheetRef.current?.dismiss(); // Dismiss the sheet after selection
@@ -382,7 +408,7 @@ export default function CreateInvoiceScreen() {
         discount_value: formData.discountValue || 0,
         tax_percentage: formData.taxPercentage || 0,
         total_amount: formData.totalAmount,
-        // notes: formData.notes || null, // Add 'notes' to InvoiceFormData if needed
+        notes: formData.notes || null, // Add 'notes' to InvoiceFormData if needed
         stripe_active: formData.stripe_active_on_invoice, // Corrected: Use the new dedicated field
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
@@ -443,7 +469,7 @@ export default function CreateInvoiceScreen() {
       // 4. Success - Clear form and navigate to viewer
       console.log('Invoice saved successfully! Navigating to viewer with ID:', newInvoice.id);
       reset(defaultValues); // Reset form to default values
-      setSelectedClientName(null); // Clear selected client name
+      setSelectedClient(null); // Clear selected client
       // Any other state resets needed
       
       router.replace({
@@ -464,10 +490,60 @@ export default function CreateInvoiceScreen() {
   };
 
   const handlePreviewInvoice = () => {
-    // For now, just navigate to the viewer. Data passing will be handled later.
+    const currentFormData = getValues();
+    const calculatedSubTotal = currentInvoiceLineItems.reduce((sum, item) => sum + item.total_price, 0);
+    const calculatedTotal = calculateGrandTotal(
+      calculatedSubTotal,
+      currentFormData.discountType,
+      currentFormData.discountValue,
+      currentFormData.taxPercentage
+    );
+
+    const previewDataForViewer = {
+      id: `temp-preview-${Date.now()}`, // Temporary ID for preview context
+      invoice_number: currentFormData.invoice_number || 'INV-PREVIEW',
+      client_id: selectedClient?.id || null,
+      client_name: selectedClient?.name || 'N/A',
+      issue_date: currentFormData.invoice_date ? currentFormData.invoice_date.toISOString() : new Date().toISOString(),
+      due_date: currentFormData.due_date ? currentFormData.due_date.toISOString() : null,
+      status: 'draft', // Preview status is always draft
+      line_items: currentInvoiceLineItems,
+      total: calculatedTotal,
+      subtotal: calculatedSubTotal,
+      discount_type: currentFormData.discountType || null,
+      discount_amount: currentFormData.discountValue || null,
+      tax_percentage: currentFormData.taxPercentage || null,
+      notes: currentFormData.notes || '',
+      po_number: currentFormData.po_number || '',
+      custom_headline: currentFormData.custom_headline || '',
+      payment_instructions_active_on_invoice: currentFormData.payment_instructions_active_on_invoice || false,
+      bank_account_active_on_invoice: currentFormData.bank_account_active_on_invoice || false,
+      paypal_active_on_invoice: currentFormData.paypal_active_on_invoice || false,
+      stripe_active_on_invoice: currentFormData.stripe_active_on_invoice || false,
+      // Ensure all fields InvoiceViewerScreen might expect from an InvoiceRow are present or handled
+      // For example, if InvoiceRow has created_at, user_id, etc., they can be null or defaults for preview
+      created_at: new Date().toISOString(),
+      user_id: null, // Or a dummy user ID if needed by viewer logic not related to DB security
+      currency: 'USD', // Assuming a default or get from form if available
+      paid_amount: 0,
+      balance_due: calculatedTotal,
+      payment_method: null,
+      payment_date: null,
+      is_recurring: false,
+      recurring_interval: null,
+      recurring_end_date: null,
+      template_id: null,
+      last_sent_at: null,
+      viewed_at: null,
+      payment_terms: currentFormData.due_date_option || null,
+    };
+
     router.push({
-      pathname: '/(app)/(protected)/invoices/invoice-viewer',
-      params: { from: 'create' }, // Indicate navigation source
+      pathname: '/invoices/invoice-viewer',
+      params: {
+        previewInvoiceData: JSON.stringify(previewDataForViewer),
+        fromScreen: 'create_preview',
+      },
     });
   };
 
@@ -936,9 +1012,9 @@ export default function CreateInvoiceScreen() {
 
         {/* Client Section */}
         <FormSection title="CLIENT" themeColors={themeColors}>
-          {selectedClientName ? (
+          {selectedClient ? (
             <View style={styles.selectedClientContainer}>
-              <Text style={styles.selectedClientName}>{selectedClientName}</Text>
+              <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
               <TouchableOpacity onPress={openNewClientSelectionSheet}>
                 <Text style={styles.changeClientText}>Change</Text>
               </TouchableOpacity>

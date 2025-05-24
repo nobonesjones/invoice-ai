@@ -9,79 +9,55 @@ import {
   Platform,
   Switch,
   Alert,
+  ActivityIndicator,
+  ViewStyle,
+  TextStyle, // Added TextStyle
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Edit3, MoreHorizontal, Clock, Send, Maximize, ChevronLeft, History } from 'lucide-react-native'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useSupabase } from '@/context/supabase-provider'; 
+// import { useAuth } from '@/context/AuthContext'; // Temporarily commented out
+import type { Database, Json } from '../../../../types/database.types'; // Import Json type
 
-// Define the type for the invoice data this screen will display
-type DisplayInvoice = {
-  id: string;
-  invoice_number: string;
-  client_name: string;
-  total_amount: number;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  due_date: string; 
-  // Add other fields if needed by preview section later
-};
+// Define types for Supabase table rows using direct access
+type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
+type ClientRow = Database['public']['Tables']['clients']['Row'];
 
-// Mock data for initial UI development
-const mockInvoiceData: DisplayInvoice = {
-  id: 'mock123',
-  invoice_number: 'INV2024-001',
-  client_name: 'Ben Kenobi',
-  total_amount: 25000.00,
-  status: 'draft', // Initial state for testing actions
-  due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
+// Define the type for the preview data passed from create.tsx
+// This should align with the structure of previewDataForViewer
+type PreviewInvoiceDataType = Omit<InvoiceRow, 'line_items' | 'client_id' | 'user_id' | 'created_at' | 'updated_at' | 'due_date' | 'issue_date'> & {
+  id: string; // Can be temp ID
+  client_name?: string | null; // Client name directly
+  client_id?: string | null;
+  line_items: any[]; // Or a more specific type if InvoiceLineItem from create.tsx is imported
+  issue_date: string; // ISO string
+  due_date: string | null; // ISO string or null
+  created_at?: string; // ISO string
+  user_id?: string | null;
+  total: number; // Added from previewDataForViewer
+  subtotal: number; // Added from previewDataForViewer
+  // Add any other fields from previewDataForViewer that are not directly in InvoiceRow or need type adjustment
 };
 
 function InvoiceViewerScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; from?: string }>(); 
+  const params = useLocalSearchParams<{ id?: string; from?: string; previewInvoiceData?: string; fromScreen?: string }>(); 
   const { setIsTabBarVisible } = useTabBarVisibility();
+  const { supabase } = useSupabase(); 
+  // const { user } = useAuth(); // Temporarily commented out
 
-  const [invoice, setInvoice] = useState<DisplayInvoice | null>(mockInvoiceData); 
-  const [isPreviewMode, setIsPreviewMode] = useState(true); // Assume preview mode for now
-  const [loading, setLoading] = useState(false);
+  const [invoice, setInvoice] = useState<InvoiceRow | null>(null);
+  const [clientName, setClientName] = useState<string | null>(null);
+  const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); // New state for preview mode
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const invoiceStatus = invoice?.status?.toLowerCase() || 'draft';
-  const isSentStatus = ['sent', 'paid', 'viewed', 'overdue'].includes(invoiceStatus);
-  
-  const addAlpha = (color: string, opacity: number) => {
-    const _opacity = Math.round(Math.min(Math.max(opacity || 1, 0), 1) * 255);
-    if (color.startsWith('#') && (color.length === 7 || color.length === 4)) { // Check if it's a hex color
-      return color + _opacity.toString(16).padStart(2, '0').toUpperCase();
-    }
-    // For named colors or other formats, opacity might not be directly applicable this way
-    // Consider returning an rgba string or handling based on theme structure if not hex
-    console.warn(`addAlpha: Color ${color} is not a standard hex color. Opacity may not apply correctly.`);
-    return color; // Return original color if not hex, or handle as rgba
-  };
-
-  const statusDisplayColor = isSentStatus 
-    ? addAlpha(themeColors.success, 0.7) 
-    : addAlpha(themeColors.mutedForeground, 0.7);
-  
-  const statusDisplayText = isSentStatus ? 'Sent' : 'Not Sent';
-  
-  const handleCustomBack = () => {
-    // If the viewer was opened from the create screen (preview flow), simply go back.
-    // This will use the default stack pop animation (slide right).
-    if (params.from === 'create') {
-      router.back();
-    // If the viewer was opened after saving an invoice, replace with dashboard.
-    } else if (params.from === 'save') {
-      router.replace('/(app)/(protected)/invoices/');
-    } else {
-      router.back(); // Default behavior for other cases (e.g., from dashboard list)
-    }
-  };
-
+  // Restore useFocusEffect for tab bar visibility
   useFocusEffect(
     useCallback(() => {
       setIsTabBarVisible(false); 
@@ -91,56 +67,206 @@ function InvoiceViewerScreen() {
     }, [setIsTabBarVisible])
   );
 
-  const getStatusBadgeStyle = (status: DisplayInvoice['status']) => {
-    let backgroundColor = themeColors.muted;
-    let textColor = themeColors.mutedForeground;
-
-    switch (status) {
-      case 'draft':
-        backgroundColor = themeColors.muted; // Gray
-        textColor = themeColors.foreground;
-        break;
-      case 'sent':
-        backgroundColor = themeColors.primary; // Fallback from info
-        textColor = themeColors.primaryForeground; // Fallback from infoForeground
-        break;
-      case 'paid':
-        backgroundColor = themeColors.statusPaid; // Green
-        textColor = themeColors.primaryForeground; // White text on green
-        break;
-      case 'overdue':
-        backgroundColor = themeColors.statusDue; // Red
-        textColor = themeColors.primaryForeground; // White text on red
-        break;
-      case 'cancelled':
-        backgroundColor = themeColors.destructive; 
-        textColor = themeColors.destructiveForeground;
-        break;
-      default:
-        break;
+  // Restore handleCustomBack function
+  const handleCustomBack = () => {
+    if (isPreviewingFromCreate || params.fromScreen === 'create_preview') {
+      router.back(); // Go back to create screen
+    } else if (params.from === 'create') {
+      router.back(); // Go back if came from create screen (after save)
+    } else if (params.from === 'save') {
+      router.replace('/(app)/(protected)/invoices/'); 
+    } else {
+      router.back(); 
     }
-    return { backgroundColor, textColor };
   };
 
-  const handlePrimaryAction = () => {
-    if (!invoice) return;
-    if (invoice.status === 'draft') {
-      Alert.alert('Send Invoice', 'Sending invoice...'); // Placeholder
-    } else if (invoice.status === 'sent' || invoice.status === 'overdue') {
-      Alert.alert('Mark as Paid', 'Marking invoice as paid...'); // Placeholder
+  useEffect(() => {
+    if (params.previewInvoiceData && params.fromScreen === 'create_preview') {
+      try {
+        const parsedPreviewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceDataType;
+        
+        // Transform/map previewData to fit InvoiceRow structure for the 'invoice' state
+        // Many fields will map directly. Ensure line_items is handled correctly.
+        const invoiceForState: InvoiceRow = {
+          ...parsedPreviewData, // Spread most fields
+          id: parsedPreviewData.id, // Already a string
+          client_id: parsedPreviewData.client_id || null,
+          // 'line_items' in InvoiceRow is Json | null. We have an array.
+          // For display, we can use parsedPreviewData.line_items directly if rendering logic adapts,
+          // or stringify if InvoiceRow strictly expects a JSON string for this field when not null.
+          // For now, let's assume rendering logic can handle an array directly if invoice.line_items is one.
+          // If invoice.line_items is used as JSON string elsewhere, this needs care.
+          line_items: parsedPreviewData.line_items as Json, // Cast, assuming rendering handles array
+          // Ensure date strings are directly usable or convert if InvoiceRow expects Date objects (it expects strings from DB)
+          issue_date: parsedPreviewData.issue_date, 
+          due_date: parsedPreviewData.due_date,
+          created_at: parsedPreviewData.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(), // For preview, updated_at can be now
+          user_id: parsedPreviewData.user_id || '', // Assuming user_id in InvoiceRow is string
+          // Map other fields as necessary, ensuring type compatibility
+          total_amount: parsedPreviewData.total, // Renamed in previewData
+          subtotal_amount: parsedPreviewData.subtotal, // Renamed in previewData
+        } as InvoiceRow; // Use 'as InvoiceRow' carefully, ensure all required fields are present
+
+        setInvoice(invoiceForState);
+        setClientName(parsedPreviewData.client_name || 'N/A');
+        setIsPreviewingFromCreate(true);
+        setLoading(false);
+        setError(null);
+      } catch (e) {
+        console.error('Failed to parse preview data:', e);
+        setError('Failed to load preview. Please try again.');
+        setLoading(false);
+      }
+      return; // Exit early, no need to fetch from DB
     }
+
+    // Existing logic for fetching from Supabase if not in preview mode
+    setIsPreviewingFromCreate(false);
+    // if (!params.id || !supabase || !user) { // Temporarily removed user check
+    if (!params.id || !supabase) { 
+      setError('Missing invoice ID or Supabase client.'); // Temporarily removed user session from error
+      setLoading(false);
+      return;
+    }
+
+    const fetchInvoiceData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // const { data: { user: currentUser } } = await supabase.auth.getUser(); // Temporarily commented out
+        // if (!currentUser) { // Temporarily commented out
+        //   setError('User not authenticated.'); // Temporarily commented out
+        //   setLoading(false); // Temporarily commented out
+        //   return; // Temporarily commented out
+        // } // Temporarily commented out
+
+        const { data: invoiceData, error: invoiceError } = await supabase
+          .from('invoices')
+          .select('*, clients(*)') // Fetch client data directly
+          .eq('id', params.id as string)
+          // .eq('user_id', currentUser.id) // Temporarily commented out user_id filter
+          .single();
+
+        if (invoiceError) throw invoiceError;
+        if (!invoiceData) throw new Error('Invoice not found.');
+
+        // The client data is now part of invoiceData.clients
+        const clientInfo = invoiceData.clients as ClientRow | null; 
+
+        setInvoice(invoiceData as InvoiceRow);
+        setClientName(clientInfo?.name || 'N/A');
+
+      } catch (err: any) {
+        console.error('Error fetching invoice:', err);
+        setError(err.message || 'Failed to fetch invoice data.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInvoiceData();
+  }, [params.id, params.previewInvoiceData, params.fromScreen, supabase]); // Added supabase to dependency array, removed user
+
+  // Hide tab bar when this screen is focused
+  useEffect(() => {
+    setIsTabBarVisible(false);
+    // Restore tab bar visibility when the screen is unfocused
+    return () => setIsTabBarVisible(true);
+  }, [setIsTabBarVisible]);
+
+  const addAlpha = (color: string, opacity: number) => {
+    // Add a check to ensure color is a string and valid hex
+    if (typeof color !== 'string' || !color.startsWith('#') || (color.length !== 7 && color.length !== 4)) {
+      console.warn(`addAlpha: Color "${color}" is not a valid hex string. Opacity may not apply correctly.`);
+      return color; // Return original color or a default if it's invalid
+    }
+    const _opacity = Math.round(Math.min(Math.max(opacity || 1, 0), 1) * 255);
+    let hexOpacity = _opacity.toString(16).toUpperCase();
+    if (hexOpacity.length === 1) {
+      hexOpacity = '0' + hexOpacity;
+    }
+    return color.slice(0, 7) + hexOpacity; // Ensure base color is 6-digit hex for consistency
+  };
+
+  interface StatusStyles {
+    badgeStyle: ViewStyle;
+    textStyle: TextStyle;
+  }
+
+  const getStatusBadgeStyle = (status?: string | null): StatusStyles => {
+    const badgeStyle: ViewStyle = {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: themeColors.border,      // Default
+      backgroundColor: themeColors.card,    // Default
+    };
+    const textStyle: TextStyle = {
+      fontSize: 12,
+      fontWeight: '500',
+      color: themeColors.foreground, // Default
+    };
+
+    switch (status?.toLowerCase() || 'draft') {
+      case 'draft':
+        badgeStyle.borderColor = addAlpha(themeColors.destructive, 0.40);
+        badgeStyle.backgroundColor = addAlpha(themeColors.destructive, 0.10);
+        textStyle.color = themeColors.destructive;
+        break;
+      case 'sent':
+      case 'viewed':
+        badgeStyle.borderColor = addAlpha(themeColors.statusPaid, 0.7);
+        badgeStyle.backgroundColor = addAlpha(themeColors.statusPaid, 0.15); 
+        textStyle.color = themeColors.statusPaid;
+        break;
+      case 'paid':
+        badgeStyle.borderColor = themeColors.statusPaid;
+        badgeStyle.backgroundColor = addAlpha(themeColors.statusPaid, 0.15); 
+        textStyle.color = themeColors.statusPaid;
+        break;
+      case 'overdue':
+        badgeStyle.borderColor = themeColors.statusDue; 
+        badgeStyle.backgroundColor = addAlpha(themeColors.statusDue, 0.15);
+        textStyle.color = themeColors.statusDue; // Changed to themeColors.statusDue for consistency
+        break;
+      case 'cancelled':
+        badgeStyle.borderColor = themeColors.destructive; 
+        badgeStyle.backgroundColor = addAlpha(themeColors.destructive, 0.15);
+        textStyle.color = themeColors.destructive; // Changed to themeColors.destructive
+        break;
+      default:
+        // Defaults already applied
+        break;
+    }
+    return { badgeStyle, textStyle };
+  };
+
+  const invoiceStatus = invoice?.status?.toLowerCase() || 'draft';
+  const statusStyle = getStatusBadgeStyle(invoice?.status);
+  
+  const handlePrimaryAction = () => {
+    if (isPreviewingFromCreate) return; // Disable in preview mode
+    if (!invoice) return;
+    console.log('Primary action pressed for invoice:', invoice.id);
   };
 
   const handleEdit = () => {
-    Alert.alert('Coming Soon', 'Edit functionality will be available soon.');
+    if (isPreviewingFromCreate) return; // Disable in preview mode
+    if (invoice && invoice.id) {
+      router.push(`/invoices/create?id=${invoice.id}`);
+    } else {
+      console.warn('Edit pressed but no invoice ID found');
+      // Optionally, show an alert to the user
+      Alert.alert('Error', 'Cannot edit invoice without a valid ID.');
+    }
   };
 
   const handleTogglePaid = (isPaid: boolean) => {
-    if (!invoice) return;
-    // Placeholder logic for toggling paid status
-    const newStatus = isPaid ? 'paid' : (new Date(invoice.due_date) < new Date() && invoice.status !== 'draft' ? 'overdue' : 'sent');
-    setInvoice({ ...invoice, status: newStatus as DisplayInvoice['status'] });
-    Alert.alert('Status Updated', `Invoice marked as ${newStatus}.`);
+    if (invoice) {
+      Alert.alert('Status Update', `Invoice marked as ${isPaid ? 'Paid' : 'Not Paid (Sent)'}. (DB update pending)`);
+    }
   };
 
   const handleMoreOptions = () => {
@@ -150,9 +276,9 @@ function InvoiceViewerScreen() {
   const handleSendInvoice = () => {
     if (!invoice) return;
     if (invoice.status === 'draft') {
-      Alert.alert('Send Invoice', 'Sending invoice...'); // Placeholder
+      Alert.alert('Send Invoice', 'Sending invoice...'); 
     } else if (invoice.status === 'sent' || invoice.status === 'overdue') {
-      Alert.alert('Resend Invoice', 'Resending invoice...'); // Placeholder
+      Alert.alert('Resend Invoice', 'Resending invoice...'); 
     }
   };
 
@@ -160,25 +286,48 @@ function InvoiceViewerScreen() {
     Alert.alert('History', 'History functionality coming soon!');
   };
 
-  if (loading && !invoice) {
-    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}><View style={styles.centered}><Text>Loading...</Text></View></SafeAreaView>;
+  const isSentStatus = ['sent', 'paid', 'viewed', 'overdue'].includes(invoiceStatus);
+  
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
+        <ActivityIndicator size="large" color={themeColors.primary} />
+        <Text style={{ color: themeColors.foreground, marginTop: 10 }}>Loading Invoice...</Text>
+      </SafeAreaView>
+    );
   }
 
   if (error) {
-    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}><View style={styles.centered}><Text>Error: {error}</Text></View></SafeAreaView>;
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
+        <Text style={{ color: themeColors.destructive, marginBottom: 10 }}>Error: {error}</Text>
+        <TouchableOpacity onPress={handleCustomBack} style={styles.actionButton}>
+          <ArrowLeft size={20} color={themeColors.primary} />
+          <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
   }
 
   if (!invoice) {
-    return <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}><View style={styles.centered}><Text>No invoice data found.</Text></View></SafeAreaView>;
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
+        <Text style={{ color: themeColors.foreground }}>Invoice not found.</Text>
+        <TouchableOpacity onPress={handleCustomBack} style={[styles.actionButton, { marginTop: 10}]}>
+          <ArrowLeft size={20} color={themeColors.primary} />
+          <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
   }
 
   const primaryButtonText = 
     invoice.status === 'draft' ? 'Send Invoice' :
     (invoice.status === 'sent' || invoice.status === 'overdue') ? 'Mark as Paid' :
-    null; // No primary button if already paid or cancelled
+    null; 
 
   const showPaidToggle = ['sent', 'paid', 'overdue'].includes(invoice.status);
-
+  
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
       <Stack.Screen 
@@ -190,8 +339,8 @@ function InvoiceViewerScreen() {
       <View style={[
         styles.newTopSectionContainer,
         { 
-          backgroundColor: themeColors.card, // Apply theme-dependent background inline
-          borderBottomColor: themeColors.border // Apply theme-dependent border color inline
+          backgroundColor: themeColors.card, 
+          borderBottomColor: themeColors.border 
         }
       ]}>
         {/* Top Row: Back Button and Status Indicator */}
@@ -201,27 +350,33 @@ function InvoiceViewerScreen() {
             <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
           </TouchableOpacity>
           
+          {/* Updated Status Display Structure - Label Removed */}
           <View style={styles.statusIndicatorContainer}>
-            <Text style={[styles.statusLabelText, { color: themeColors.mutedForeground }]}>Status: </Text>
-            <Text style={[styles.statusValueText, { color: statusDisplayColor }]}>
-              {statusDisplayText}
-            </Text>
+            <View style={[{ backgroundColor: statusStyle.badgeStyle.backgroundColor, borderColor: statusStyle.badgeStyle.borderColor, borderWidth: statusStyle.badgeStyle.borderWidth, paddingVertical: statusStyle.badgeStyle.paddingVertical, paddingHorizontal: statusStyle.badgeStyle.paddingHorizontal, borderRadius: statusStyle.badgeStyle.borderRadius }]}>
+              <Text style={[styles.statusValueText, statusStyle.textStyle]}>
+                {invoiceStatus === 'draft' ? 'Not Sent' : (invoiceStatus.charAt(0).toUpperCase() + invoiceStatus.slice(1))}
+              </Text>
+            </View>
           </View>
         </View>
 
         {/* Second Row: Action Buttons (Centered) */}
         <View style={styles.actionButtonsRow}>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} onPress={handleEdit}>
-            <Edit3 size={18} color={themeColors.foreground} />
-            <Text style={[styles.actionButtonText, { color: themeColors.foreground }]}>Edit</Text>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
+            onPress={handleEdit} 
+            disabled={isPreviewingFromCreate}
+          >
+            <Edit3 size={20} color={isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary} />
+            <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>Edit</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: 8 }]} onPress={handleViewHistory}>
-            <History size={18} color={themeColors.foreground} />
-            <Text style={[styles.actionButtonText, { color: themeColors.foreground }]}>History</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: 8 }]} onPress={handleMoreOptions}>
-            <MoreHorizontal size={18} color={themeColors.foreground} />
-            <Text style={[styles.actionButtonText, { color: themeColors.foreground }]}>More</Text>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: 10 }, isPreviewingFromCreate && styles.disabledButton]} 
+            onPress={handleMoreOptions} 
+            disabled={isPreviewingFromCreate} // Or conditionally disable if 'More Options' leads to destructive actions
+          >
+            <MoreHorizontal size={20} color={isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary} />
+            <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>More</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -236,7 +391,7 @@ function InvoiceViewerScreen() {
           <Text style={{ color: themeColors.mutedForeground, textAlign: 'center' }}>Invoice Preview Area</Text>
           <TouchableOpacity 
             style={styles.expandPreviewIcon} 
-            onPress={() => Alert.alert('Expand', 'Expand preview functionality coming soon!')} // Placeholder action
+            onPress={() => Alert.alert('Expand', 'Expand preview functionality coming soon!')} 
           >
             <Maximize size={20} color={themeColors.mutedForeground} /> 
           </TouchableOpacity>
@@ -257,7 +412,7 @@ function InvoiceViewerScreen() {
           </View>
           <View style={styles.clientAndStatusRow}>
             <Text style={[styles.clientNameDisplay, { color: themeColors.mutedForeground }]}>
-              {invoice.client_name}
+              {clientName}
             </Text>
             <View style={styles.statusToggleContainer}>
               <Switch
@@ -265,7 +420,7 @@ function InvoiceViewerScreen() {
                 thumbColor={invoice.status === 'paid' ? themeColors.primary : themeColors.card}
                 ios_backgroundColor={themeColors.muted}
                 onValueChange={(isPaid) => {
-                  setInvoice(prev => prev ? { ...prev, status: isPaid ? 'paid' : 'draft' } : null);
+                  handleTogglePaid(isPaid);
                 }}
                 value={invoice.status === 'paid'}
                 style={styles.statusSwitch}
@@ -280,7 +435,7 @@ function InvoiceViewerScreen() {
         <TouchableOpacity 
           style={[styles.primaryButton, { backgroundColor: themeColors.primary }]} 
           onPress={handleSendInvoice}
-          disabled={invoice.status === 'paid' || invoice.status === 'draft'} // Example disable logic
+          disabled={invoice.status === 'paid' || invoice.status === 'draft'} 
         >
           <Send size={20} color={themeColors.primaryForeground} style={{ marginRight: 8 }}/>
           <Text style={[styles.primaryButtonText, { color: themeColors.primaryForeground }]}>
@@ -311,17 +466,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0, 
     paddingBottom: 20, 
   },
-  newTopSectionContainer: { // Static styles for the new top section
+  newTopSectionContainer: { 
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 0 : 0, // Reduced to 0 for a more compact header
-    paddingBottom: 12, // Space below the content of the header
+    paddingTop: Platform.OS === 'ios' ? 0 : 0, 
+    paddingBottom: 12, 
     borderBottomWidth: StyleSheet.hairlineWidth,
     // backgroundColor and borderBottomColor moved to inline style
     // Add shadow for iOS
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.5,
-    elevation: 3,           // Standard elevation for cards
+    elevation: 3,           
   },
   topRow: {
     flexDirection: 'row',
@@ -331,57 +486,55 @@ const styles = StyleSheet.create({
   },
   headerLeftContainer: {
     flex: 1, 
-    flexDirection: 'row', // To align icon and text horizontally
+    flexDirection: 'row', 
     alignItems: 'center', 
     paddingVertical: 8, 
   },
-  backButtonText: { // Added style for the 'Back' text
+  backButtonText: { 
     fontSize: 17,
     marginLeft: 6,
   },
   statusIndicatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8, // Match back button's vertical padding
+    marginLeft: 'auto', // Pushes it to the right of the back button
   },
   statusLabelText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
+    // color is now set inline using themeColors.mutedForeground
   },
   statusValueText: {
-    fontSize: 15,
-    fontWeight: '600', 
+    fontSize: 14,
+    fontWeight: '600',
+    // color is now set inline using statusStyle.textColor
   },
   actionButtonsRow: { 
     flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    marginTop: 10, 
-    marginBottom: 8, 
-    // paddingHorizontal: 8, // Removed to allow buttons to use full width
+    justifyContent: 'center', 
+    marginTop: 20,
+    marginBottom: 10, 
   },
   actionButton: {
-    flex: 1, // Make buttons share width equally
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Center content within the button
+    paddingHorizontal: 15,
     paddingVertical: 10,
-    paddingHorizontal: 12, 
-    borderRadius: 8,       
-    borderWidth: StyleSheet.hairlineWidth,
-    // borderColor: themeColors.border, // Moved to inline style to fix lint error
-    // backgroundColor will be themeColors.card (white/dark card)
-    shadowColor: '#000', // Shadow for iOS
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.1,                  
-    shadowRadius: 3,                   
-    elevation: 3, // Elevation for Android
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4, // Deeper shadow
+    },
+    shadowOpacity: 0.30, // More visible opacity
+    shadowRadius: 4.65, // Blur radius
+    elevation: 8, // Elevation for Android
   },
   actionButtonText: {
-    fontSize: 15,
-    marginLeft: 8, // Space between icon and text
-    fontWeight: '500',
-    // color will be themeColors.primary
+    marginLeft: 8,
+    fontSize: 14, // Slightly larger font
+    color: '#000000', // Black text
+    fontWeight: 'bold', // Bold text
   },
   invoiceNumberAndTotalRow: {
     flexDirection: 'row',
@@ -425,12 +578,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     margin: 16,
     padding: 16,
-    // backgroundColor will be set inline with themeColors.card
-    // shadowColor will be set inline
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.5,
-    elevation: 3,           // Standard elevation for cards
+    elevation: 3,           
   },
   expandPreviewIcon: {
     position: 'absolute',
@@ -457,8 +608,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  invoiceDetailsBottomContainer: { // Container for invoice details in the bottom bar
-    marginBottom: 16, // Space above the Send Invoice button
+  invoiceDetailsBottomContainer: { 
+    marginBottom: 16, 
+  },
+  disabledButton: {
+    opacity: 0.5, // Style for disabled buttons
   },
 });
 
