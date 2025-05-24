@@ -20,27 +20,50 @@ import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useSupabase } from '@/context/supabase-provider'; 
 // import { useAuth } from '@/context/AuthContext'; // Temporarily commented out
-import type { Database, Json } from '../../../../types/database.types'; // Import Json type
+import type { Database, Json, Tables } from '../../../../types/database.types'; // Import Json type and Tables
+import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; // Updated import
 
 // Define types for Supabase table rows using direct access
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
 
-// Define the type for the preview data passed from create.tsx
-// This should align with the structure of previewDataForViewer
-type PreviewInvoiceDataType = Omit<InvoiceRow, 'line_items' | 'client_id' | 'user_id' | 'created_at' | 'updated_at' | 'due_date' | 'issue_date'> & {
-  id: string; // Can be temp ID
-  client_name?: string | null; // Client name directly
-  client_id?: string | null;
-  line_items: any[]; // Or a more specific type if InvoiceLineItem from create.tsx is imported
-  issue_date: string; // ISO string
-  due_date: string | null; // ISO string or null
-  created_at?: string; // ISO string
-  user_id?: string | null;
-  total: number; // Added from previewDataForViewer
-  subtotal: number; // Added from previewDataForViewer
-  // Add any other fields from previewDataForViewer that are not directly in InvoiceRow or need type adjustment
-};
+// Define PreviewLineItem based on InvoiceLineItem from create.tsx
+interface PreviewLineItem {
+  id: string; 
+  user_saved_item_id?: string | null;
+  item_name: string;
+  description?: string | null; 
+  quantity: number;
+  unit_price: number; // Matches create.tsx
+  total_price: number;
+  line_item_discount_type?: 'percentage' | 'fixed' | null;
+  line_item_discount_value?: number | null;
+  item_image_url?: string | null;
+}
+
+// Define PreviewInvoiceData based on InvoiceFormData from create.tsx
+interface PreviewInvoiceData {
+  invoice_number: string;
+  client_id: string | null; // client_id is string in InvoiceFormData, but can be null if not selected
+  clientName?: string; // Passed separately or resolved if client_id exists
+  invoice_date: string; // Dates are passed as strings in JSON
+  due_date: string | null; // Dates are passed as strings in JSON
+  due_date_option: string | null;
+  items: PreviewLineItem[];
+  po_number?: string;
+  custom_headline?: string;
+  taxPercentage?: number | null;
+  discountType?: 'percentage' | 'fixed' | null;
+  discountValue?: number | null;
+  subTotalAmount?: number; // Matches create.tsx (subTotalAmount)
+  totalAmount?: number;    // Matches create.tsx (totalAmount)
+  notes?: string;
+  payment_instructions_active_on_invoice?: boolean; // Added from InvoiceFormData
+  bank_account_active_on_invoice?: boolean;     // Added from InvoiceFormData
+  paypal_active_on_invoice?: boolean;         // Added from InvoiceFormData
+  stripe_active_on_invoice?: boolean;           // Added from InvoiceFormData
+  currency: string; // Assuming currency is passed, if not, it needs to be sourced
+}
 
 function InvoiceViewerScreen() {
   const { isLightMode } = useTheme();
@@ -51,9 +74,10 @@ function InvoiceViewerScreen() {
   const { supabase } = useSupabase(); 
   // const { user } = useAuth(); // Temporarily commented out
 
-  const [invoice, setInvoice] = useState<InvoiceRow | null>(null);
+  const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null); // Updated type
   const [clientName, setClientName] = useState<string | null>(null);
   const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); // New state for preview mode
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null); // Added for template
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,41 +105,76 @@ function InvoiceViewerScreen() {
   };
 
   useEffect(() => {
-    if (params.previewInvoiceData && params.fromScreen === 'create_preview') {
-      try {
-        const parsedPreviewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceDataType;
-        
-        // Transform/map previewData to fit InvoiceRow structure for the 'invoice' state
-        // Many fields will map directly. Ensure line_items is handled correctly.
-        const invoiceForState: InvoiceRow = {
-          ...parsedPreviewData, // Spread most fields
-          id: parsedPreviewData.id, // Already a string
-          client_id: parsedPreviewData.client_id || null,
-          // 'line_items' in InvoiceRow is Json | null. We have an array.
-          // For display, we can use parsedPreviewData.line_items directly if rendering logic adapts,
-          // or stringify if InvoiceRow strictly expects a JSON string for this field when not null.
-          // For now, let's assume rendering logic can handle an array directly if invoice.line_items is one.
-          // If invoice.line_items is used as JSON string elsewhere, this needs care.
-          line_items: parsedPreviewData.line_items as Json, // Cast, assuming rendering handles array
-          // Ensure date strings are directly usable or convert if InvoiceRow expects Date objects (it expects strings from DB)
-          issue_date: parsedPreviewData.issue_date, 
-          due_date: parsedPreviewData.due_date,
-          created_at: parsedPreviewData.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(), // For preview, updated_at can be now
-          user_id: parsedPreviewData.user_id || '', // Assuming user_id in InvoiceRow is string
-          // Map other fields as necessary, ensuring type compatibility
-          total_amount: parsedPreviewData.total, // Renamed in previewData
-          subtotal_amount: parsedPreviewData.subtotal, // Renamed in previewData
-        } as InvoiceRow; // Use 'as InvoiceRow' carefully, ensure all required fields are present
+    console.log('[EFFECT START] InvoiceViewerScreen useEffect triggered.');
+    console.log(`[EFFECT PARAMS] from: ${params.from}, id: ${params.id}, previewData present: ${!!params.previewInvoiceData}`);
 
-        setInvoice(invoiceForState);
-        setClientName(parsedPreviewData.client_name || 'N/A');
+    // Simulate auth for preview if needed, or ensure it's handled if useAuth is re-enabled
+    // For now, auth remains null as per declaration if not fetched and set.
+
+    if (params.from === 'create' && params.previewInvoiceData) {
+      console.log('[EFFECT BRANCH] Preview mode detected.');
+      try {
+        const previewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceData;
+        console.log('[EFFECT PREVIEW_DATA] Parsed previewData:', JSON.stringify(previewData, null, 2));
+        console.log('[EFFECT PREVIEW_DATA ITEMS] previewData.items:', JSON.stringify(previewData.items, null, 2));
+
+        setIsPreviewingFromCreate(true);
+
+        const transformedInvoice = {
+          id: `preview-${Date.now()}`,
+          user_id: '', // Will be set by RLS or on save
+          client_id: previewData.client_id ?? null,
+          invoice_number: previewData.invoice_number,
+          status: 'draft', // Preview is always a draft initially
+          invoice_date: previewData.invoice_date,
+          due_date: previewData.due_date ?? null,
+          subtotal_amount: previewData.subTotalAmount ?? 0, 
+          discount_type: previewData.discountType ?? null,
+          discount_value: previewData.discountValue ?? null, // Handles undefined by making it null
+          tax_percentage: previewData.taxPercentage ?? null, // Handles undefined by making it null
+          total_amount: previewData.totalAmount ?? 0, 
+          notes: previewData.notes ?? null,
+          po_number: previewData.po_number ?? null,
+          custom_headline: previewData.custom_headline ?? null,
+          due_date_option: previewData.due_date_option ?? null, 
+          // Boolean flags - ensure they are booleans or null, and match InvoiceForTemplate fields
+          payment_instructions_active: previewData.payment_instructions_active_on_invoice ?? null,
+          bank_account_active: previewData.bank_account_active_on_invoice ?? null,
+          paypal_active: previewData.paypal_active_on_invoice ?? null,
+          stripe_active: previewData.stripe_active_on_invoice ?? null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          stripe_payment_intent_id: null,
+          currency: previewData.currency, // Ensure currency is passed in previewData
+          invoice_line_items: Array.isArray(previewData.items) ? previewData.items.map((item: PreviewLineItem) => ({
+            // Map PreviewLineItem to Tables<'invoice_line_items'> structure
+            id: item.id || `preview-item-${Date.now()}-${Math.random()}`,
+            invoice_id: '', // Will be set when invoice is saved
+            user_id: '', // Will be set by RLS or on save
+            user_saved_item_id: item.user_saved_item_id || null,
+            item_name: item.item_name,
+            item_description: item.description || null,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.total_price,
+            line_item_discount_type: item.line_item_discount_type || null,
+            line_item_discount_value: item.line_item_discount_value || null,
+            item_image_url: item.item_image_url || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })) : [], // Default to empty array if previewData.items is not an array
+        } as InvoiceForTemplate; // Explicit cast here
+
+        console.log('[EFFECT TRANSFORMED LINE_ITEMS] transformedInvoice.invoice_line_items:', JSON.stringify(transformedInvoice.invoice_line_items, null, 2));
+        setInvoice(transformedInvoice);
+        // If clientName is part of previewData, use it, otherwise it needs to be fetched or handled
+        setClientName(previewData.clientName || 'Preview Client'); 
         setIsPreviewingFromCreate(true);
         setLoading(false);
         setError(null);
       } catch (e) {
-        console.error('Failed to parse preview data:', e);
-        setError('Failed to load preview. Please try again.');
+        console.error('[EFFECT ERROR] Error processing preview data:', e);
+        setError('Error processing preview data.');
         setLoading(false);
       }
       return; // Exit early, no need to fetch from DB
@@ -131,6 +190,7 @@ function InvoiceViewerScreen() {
     }
 
     const fetchInvoiceData = async () => {
+      console.log('[fetchInvoiceData] Called');
       setLoading(true);
       setError(null);
       try {
@@ -141,24 +201,54 @@ function InvoiceViewerScreen() {
         //   return; // Temporarily commented out
         // } // Temporarily commented out
 
+        if (!params.id) {
+          console.error('[fetchInvoiceData] No invoice ID provided.');
+          setError('No invoice ID provided.');
+          setLoading(false);
+          return;
+        }
+        console.log(`[fetchInvoiceData] Fetching invoice with ID: ${params.id}`);
+
         const { data: invoiceData, error: invoiceError } = await supabase
           .from('invoices')
-          .select('*, clients(*)') // Fetch client data directly
-          .eq('id', params.id as string)
-          // .eq('user_id', currentUser.id) // Temporarily commented out user_id filter
+          .select(`
+            *,
+            clients ( name ),
+            invoice_line_items ( * )
+          `)
+          .eq('id', params.id)
           .single();
 
+        console.log('[fetchInvoiceData] Raw invoiceData from Supabase:', JSON.stringify(invoiceData, null, 2));
+        console.log('[fetchInvoiceData] Supabase invoiceError:', JSON.stringify(invoiceError, null, 2));
+
         if (invoiceError) throw invoiceError;
-        if (!invoiceData) throw new Error('Invoice not found.');
 
-        // The client data is now part of invoiceData.clients
-        const clientInfo = invoiceData.clients as ClientRow | null; 
+        if (invoiceData) {
+          console.log('[fetchInvoiceData] invoiceData.clients:', JSON.stringify(invoiceData.clients, null, 2));
+          console.log('[fetchInvoiceData] invoiceData.invoice_line_items from Supabase:', JSON.stringify(invoiceData.invoice_line_items, null, 2));
 
-        setInvoice(invoiceData as InvoiceRow);
-        setClientName(clientInfo?.name || 'N/A');
+          const client = invoiceData.clients as { name: string } | null;
+          setClientName(client?.name || 'Client Not Found');
 
+          const fetchedInvoiceForTemplate: InvoiceForTemplate = {
+            ...invoiceData,
+            invoice_line_items: Array.isArray(invoiceData.invoice_line_items) 
+              ? invoiceData.invoice_line_items 
+              : [],
+            currency: invoiceData.currency || businessSettings?.currency_code || 'USD', // Ensure currency
+          };
+          
+          console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
+          console.log('[fetchInvoiceData] fetchedInvoiceForTemplate.invoice_line_items:', JSON.stringify(fetchedInvoiceForTemplate.invoice_line_items, null, 2));
+
+          setInvoice(fetchedInvoiceForTemplate);
+        } else {
+          console.log('[fetchInvoiceData] No invoiceData returned from Supabase.');
+          setError('Invoice not found.');
+        }
       } catch (err: any) {
-        console.error('Error fetching invoice:', err);
+        console.error('[fetchInvoiceData] Error fetching invoice data:', err);
         setError(err.message || 'Failed to fetch invoice data.');
       } finally {
         setLoading(false);
@@ -290,46 +380,43 @@ function InvoiceViewerScreen() {
   
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={themeColors.primary} />
-        <Text style={{ color: themeColors.foreground, marginTop: 10 }}>Loading Invoice...</Text>
       </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
-        <Text style={{ color: themeColors.destructive, marginBottom: 10 }}>Error: {error}</Text>
-        <TouchableOpacity onPress={handleCustomBack} style={styles.actionButton}>
-          <ArrowLeft size={20} color={themeColors.primary} />
-          <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Go Back</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={styles.centeredMessageContainer}>
+          <Text style={[styles.errorText, { color: themeColors.destructive }]}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: themeColors.primary }]} 
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.buttonText, { color: themeColors.primaryForeground }]}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
   if (!invoice) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
-        <Text style={{ color: themeColors.foreground }}>Invoice not found.</Text>
-        <TouchableOpacity onPress={handleCustomBack} style={[styles.actionButton, { marginTop: 10}]}>
-          <ArrowLeft size={20} color={themeColors.primary} />
-          <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Go Back</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={styles.centeredMessageContainer}>
+          <Text style={[styles.errorText, { color: themeColors.foreground }]}>No invoice data found.</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
-  const primaryButtonText = 
-    invoice.status === 'draft' ? 'Send Invoice' :
-    (invoice.status === 'sent' || invoice.status === 'overdue') ? 'Mark as Paid' :
-    null; 
+  // Existing summary cards and other UI elements will remain above this
+  // For Checkpoint 1, we render InvoiceTemplateOne below everything else in the ScrollView
 
-  const showPaidToggle = ['sent', 'paid', 'overdue'].includes(invoice.status);
-  
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card /* Make top status bar area white */ }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card }]}>
       <Stack.Screen 
         options={{
           headerShown: false,
@@ -371,7 +458,15 @@ function InvoiceViewerScreen() {
             <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: 10 }, isPreviewingFromCreate && styles.disabledButton]} 
+            style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
+            onPress={handleViewHistory}
+            disabled={isPreviewingFromCreate}
+          >
+            <History size={20} color={isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary} />
+            <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>History</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
             onPress={handleMoreOptions} 
             disabled={isPreviewingFromCreate} // Or conditionally disable if 'More Options' leads to destructive actions
           >
@@ -383,23 +478,22 @@ function InvoiceViewerScreen() {
 
       <ScrollView 
         style={styles.scrollView} 
-        contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border /* Changed to border for a slightly darker background */ }]}
+        contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border, paddingTop: 0, paddingBottom: 200 }]} // Ensure enough space for the bottom action bar and template
         showsVerticalScrollIndicator={false}
       >
-        {/* Invoice Preview (Main Body) */}
-        <View style={[styles.previewContainer, { backgroundColor: themeColors.card, shadowColor: '#000' }]}>
-          <Text style={{ color: themeColors.mutedForeground, textAlign: 'center' }}>Invoice Preview Area</Text>
-          <TouchableOpacity 
-            style={styles.expandPreviewIcon} 
-            onPress={() => Alert.alert('Expand', 'Expand preview functionality coming soon!')} 
-          >
-            <Maximize size={20} color={themeColors.mutedForeground} /> 
-          </TouchableOpacity>
-        </View>
+        {invoice && (
+          <View style={{ alignItems: 'center' }}>
+            <InvoiceTemplateOne 
+              invoice={invoice}
+              clientName={clientName} 
+              businessSettings={businessSettings} 
+            />
+          </View>
+        )}
       </ScrollView>
 
       {/* Action Bar (Bottom Section) */}
-      <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: '#FFFFFF' }]}>
+      <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>
         {/* Invoice Number/Total and Client/Status moved here */}
         <View style={styles.invoiceDetailsBottomContainer}>
           <View style={styles.invoiceNumberAndTotalRow}>
@@ -453,7 +547,12 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  centered: {
+  container: { 
+    flex: 1,
+    padding: 16,
+    paddingHorizontal: 16, 
+  },
+  centered: { 
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -464,7 +563,8 @@ const styles = StyleSheet.create({
   scrollViewContent: { 
     flexGrow: 1,
     paddingHorizontal: 0, 
-    paddingBottom: 20, 
+    paddingTop: 0, 
+    paddingBottom: 200, 
   },
   newTopSectionContainer: { 
     paddingHorizontal: 16,
@@ -512,7 +612,7 @@ const styles = StyleSheet.create({
   actionButtonsRow: { 
     flexDirection: 'row',
     justifyContent: 'center', 
-    marginTop: 20,
+    marginTop: 10, // Changed from 20 to 10
     marginBottom: 10, 
   },
   actionButton: {
@@ -521,6 +621,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
+    alignItems: 'center', // Keep this to vertically align icon and text
+    justifyContent: 'center', // Add this to horizontally center content in button
+    width: 120, // Add fixed width
+    marginHorizontal: 5, // Add horizontal margin for spacing
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -571,23 +675,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  previewContainer: {
-    flex: 1, 
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-    margin: 16,
-    padding: 16,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.5,
-    elevation: 3,           
-  },
-  expandPreviewIcon: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-  },
   actionBarContainer: {
     position: 'absolute',
     bottom: 0,
@@ -613,6 +700,28 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5, // Style for disabled buttons
+  },
+  centeredMessageContainer: { // For centering error/loading messages
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: { // For error messages
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  button: { // General button style for 'Go Back' etc.
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: { // Text for general buttons
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 
