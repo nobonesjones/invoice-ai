@@ -899,7 +899,7 @@ export default function CreateInvoiceScreen() {
           <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
         </Text>
         <Text style={styles.invoiceItemTotalText}>
-          {getCurrencySymbol(currencyCode)}{item.total_price.toFixed(2)}
+          {getCurrencySymbol(currencyCode)}{Number(item.total_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
       </View>
     );
@@ -1104,7 +1104,7 @@ export default function CreateInvoiceScreen() {
         <FormSection title="SUMMARY" themeColors={themeColors}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryText}>{getCurrencySymbol(currencyCode)}{displaySubtotal.toFixed(2)}</Text>
+            <Text style={styles.summaryText}>{getCurrencySymbol(currencyCode)}{Number(displaySubtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
           </View>
           <ActionRow 
             label={
@@ -1118,7 +1118,7 @@ export default function CreateInvoiceScreen() {
             }
             value={
               displayDiscountAmount > 0 
-                ? `- ${getCurrencySymbol(currencyCode)}{displayDiscountAmount.toFixed(2)}` 
+                ? `- ${getCurrencySymbol(currencyCode)}${Number(displayDiscountAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
                 : '' // Empty if no discount applied
             }
             onPress={handlePresentSelectDiscountTypeSheet} 
@@ -1138,7 +1138,7 @@ export default function CreateInvoiceScreen() {
                     )}
                   </View>
                 }
-                value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${displayTaxAmount.toFixed(2)}` : `${getCurrencySymbol(currencyCode)}0.00`}
+                value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
                 icon={Percent}
                 themeColors={themeColors}
                 onPress={handlePresentEditInvoiceTaxSheet}
@@ -1148,7 +1148,7 @@ export default function CreateInvoiceScreen() {
           )}
           <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>{getCurrencySymbol(currencyCode)}{displayInvoiceTotal.toFixed(2)}</Text>
+            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>{getCurrencySymbol(currencyCode)}{Number(displayInvoiceTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
           </View>
         </FormSection>
 

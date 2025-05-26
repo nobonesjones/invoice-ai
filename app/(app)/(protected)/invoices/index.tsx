@@ -180,11 +180,48 @@ const formatDisplayDate = (dateString: string | null): string => {
   }
 };
 
+// Currency symbol mapping function
+const getCurrencySymbol = (code: string) => {
+  const mapping: Record<string, string> = {
+    GBP: '£',
+    USD: '$',
+    EUR: '€',
+    AUD: 'A$',
+    CAD: 'C$',
+    JPY: '¥',
+    INR: '₹',
+    // Add more as needed
+  };
+  if (!code) return '$';
+  const normalized = code.split(' ')[0];
+  return mapping[normalized] || '$';
+};
+
 export default function InvoiceDashboardScreen() {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
   const { supabase, user } = useSupabase();
+
+  // Fetch business settings for currency code
+  useEffect(() => {
+    const fetchBusinessSettings = async () => {
+      if (!user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from('business_settings')
+          .select('currency_code')
+          .eq('user_id', user.id)
+          .single();
+        if (!error && data && data.currency_code) {
+          setCurrencyCode(data.currency_code);
+        }
+      } catch (e) {
+        // fallback to USD
+      }
+    };
+    fetchBusinessSettings();
+  }, [user?.id, supabase]);
 
   const [invoices, setInvoices] = useState<InvoiceData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,6 +234,7 @@ export default function InvoiceDashboardScreen() {
   const [totalInvoiced, setTotalInvoiced] = useState<number>(0); 
   const [totalPaid, setTotalPaid] = useState<number>(0); 
   const [totalOverdue, setTotalOverdue] = useState<number>(0); 
+  const [currencyCode, setCurrencyCode] = useState<string>('USD'); // Default to USD
 
   // Ref for the new filter modal
   const filterModalRef = useRef<BottomSheetModal>(null);
@@ -360,7 +398,7 @@ export default function InvoiceDashboardScreen() {
 			</View>
       <View style={styles.amountContainer}> 
         <Text style={[styles.invoiceAmount, { color: themeColors.foreground }]}>
-          {item.total_amount !== null ? `$${item.total_amount.toFixed(2)}` : '$0.00'}
+          {item.total_amount !== null ? `${getCurrencySymbol(currencyCode)}${item.total_amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : `${getCurrencySymbol(currencyCode)}0`}
         </Text>
       </View>
 		</TouchableOpacity>
@@ -375,11 +413,11 @@ export default function InvoiceDashboardScreen() {
           <View style={styles.summaryDataItemsWrapper}>
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Invoiced</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{`$${invoicedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.foreground }]}>{`${getCurrencySymbol(currencyCode)}${invoicedAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}</Text>
             </View>
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Paid</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.statusPaid }]}>{`$${paidAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.statusPaid }]}>{`${getCurrencySymbol(currencyCode)}${paidAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}</Text>
             </View>
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Overdue</Text>
