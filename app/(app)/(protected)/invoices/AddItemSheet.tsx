@@ -6,6 +6,23 @@ import { colors } from '@/constants/colors';
 import { PlusCircle, Search, X } from 'lucide-react-native';
 import AddNewItemFormSheet, { AddNewItemFormSheetRef, NewItemData } from './AddNewItemFormSheet';
 
+// Currency symbol mapping function (copied from create.tsx)
+const getCurrencySymbol = (code: string) => {
+  const mapping: Record<string, string> = {
+    GBP: '£',
+    USD: '$',
+    EUR: '€',
+    AUD: 'A$',
+    CAD: 'C$',
+    JPY: '¥',
+    INR: '₹',
+    // Add more as needed
+  };
+  if (!code) return '$';
+  const normalized = code.split(' ')[0];
+  return mapping[normalized] || '$';
+};
+
 // --- Supabase Integration --- 
 import { supabase } from '../../../../lib/supabase'; 
 // --- End Supabase Integration ---
@@ -21,6 +38,7 @@ export interface DisplayableSavedItem {
 // Define the props for this component
 export interface AddItemSheetProps {
   onItemFromFormSaved?: (itemData: NewItemData) => void; // Callback when an item is added
+  currencyCode?: string; // Pass currency code from parent for correct symbol
 }
 
 // Define the type for the ref
@@ -30,6 +48,8 @@ export interface AddItemSheetRef {
 }
 
 const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref) => {
+  // Use currencyCode prop, fallback to USD if not provided
+  const currencyCode = props.currencyCode || 'USD';
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
@@ -129,6 +149,13 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
     if (props.onItemFromFormSaved) {
       props.onItemFromFormSaved(itemData);
     }
+    // Refresh the saved items list after adding a new item
+    fetchSavedItems();
+    // Optionally, update the filtered list if search is active
+    setFilteredSavedItems((prev) => {
+      if (!searchQuery) return savedItems;
+      return savedItems.filter((item) => item.itemName.toLowerCase().includes(searchQuery.toLowerCase()));
+    });
     // Optionally dismiss AddItemSheet as well, or let create.tsx decide
     // bottomSheetModalRef.current?.dismiss();
   };
@@ -342,7 +369,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
                   <Text style={styles.savedItemName}>{item.itemName}</Text>
                   {item.description && <Text style={styles.savedItemDescription}>{item.description}</Text>}
                 </View>
-                <Text style={styles.savedItemPrice}>${item.price.toFixed(2)}</Text>
+                <Text style={styles.savedItemPrice}>{getCurrencySymbol(currencyCode)}{item.price.toFixed(2)}</Text>
               </View>
             </TouchableOpacity>
           )}

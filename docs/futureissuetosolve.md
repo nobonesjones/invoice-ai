@@ -1,4 +1,19 @@
-solve this issue at a later date...we need to plan it before in details. 
+solve this issue at a later date...we need to plan it before in details. whent rying to add commas intot he values . 
+
+Error Overview:
+The error was a JSX syntax error:
+
+CopyInsert
+Expected corresponding JSX closing tag for <View>.
+This happened because the renderVisibleItem function accidentally had duplicate returns and fragments, which broke the normal React requirement that every JSX block must return a single parent element. As a result, the code failed to compile.
+
+How we could have foreseen this:
+
+By carefully reviewing the function after edits, especially when copy-pasting or merging blocks, to ensure only one return and one parent element.
+Running a quick format/lint (or IDE auto-format) would have highlighted the duplicate/stray fragments and returns.
+Noticing that the function body had both a return and a stray block with another return (a common merge/copy-paste pitfall).
+Summary:
+This type of error is best avoided by always checking for a single return and a single parent JSX element in every React component or render function after making structural changes.
 
 Here’s a concise overview of the main issues we’ve faced on the create.tsx (Create Invoice) page, with examples of what we’ve fixed:
 

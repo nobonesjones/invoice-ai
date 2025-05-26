@@ -35,6 +35,24 @@ import type { Database } from '../../../../types/database.types'; // Corrected p
 import { Image } from 'react-native'; // Added Image import
 import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
 
+// Currency symbol mapping function
+const getCurrencySymbol = (code: string) => {
+  const mapping: Record<string, string> = {
+    GBP: '£',
+    USD: '$',
+    EUR: '€',
+    AUD: 'A$',
+    CAD: 'C$',
+    JPY: '¥',
+    INR: '₹',
+    // Add more as needed
+  };
+  // Accept both 'GBP' and 'GBP - British Pound' style codes
+  if (!code) return '$';
+  const normalized = code.split(' ')[0];
+  return mapping[normalized] || '$';
+};
+
 // Define data structures for the form
 
 
@@ -881,7 +899,7 @@ export default function CreateInvoiceScreen() {
           <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
         </Text>
         <Text style={styles.invoiceItemTotalText}>
-          ${item.total_price.toFixed(2)}
+          {getCurrencySymbol(currencyCode)}{item.total_price.toFixed(2)}
         </Text>
       </View>
     );
@@ -1086,7 +1104,7 @@ export default function CreateInvoiceScreen() {
         <FormSection title="SUMMARY" themeColors={themeColors}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryText}>${displaySubtotal.toFixed(2)}</Text>
+            <Text style={styles.summaryText}>{getCurrencySymbol(currencyCode)}{displaySubtotal.toFixed(2)}</Text>
           </View>
           <ActionRow 
             label={
@@ -1100,7 +1118,7 @@ export default function CreateInvoiceScreen() {
             }
             value={
               displayDiscountAmount > 0 
-                ? `- $${displayDiscountAmount.toFixed(2)}` 
+                ? `- ${getCurrencySymbol(currencyCode)}{displayDiscountAmount.toFixed(2)}` 
                 : '' // Empty if no discount applied
             }
             onPress={handlePresentSelectDiscountTypeSheet} 
@@ -1120,8 +1138,8 @@ export default function CreateInvoiceScreen() {
                     )}
                   </View>
                 }
-                value={`$${displayTaxAmount > 0 ? displayTaxAmount.toFixed(2) : '0.00'}`}
-                icon={Percent} 
+                value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${displayTaxAmount.toFixed(2)}` : `${getCurrencySymbol(currencyCode)}0.00`}
+                icon={Percent}
                 themeColors={themeColors}
                 onPress={handlePresentEditInvoiceTaxSheet}
                 showChevron={true}
@@ -1130,7 +1148,7 @@ export default function CreateInvoiceScreen() {
           )}
           <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
             <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>${displayInvoiceTotal.toFixed(2)}</Text>
+            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>{getCurrencySymbol(currencyCode)}{displayInvoiceTotal.toFixed(2)}</Text>
           </View>
         </FormSection>
 
@@ -1204,7 +1222,8 @@ export default function CreateInvoiceScreen() {
       {/* Add Item Bottom Sheet Modal */}
       <AddItemSheet 
         ref={addItemSheetRef} 
-        onItemFromFormSaved={handleItemFromSheetSaved} // Pass the callback here
+        onItemFromFormSaved={handleItemFromSheetSaved}
+        currencyCode={currencyCode}
       />
 
       <NewClientSelectionSheet
