@@ -175,7 +175,7 @@ function InvoiceViewerScreen() {
     try {
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('invoices')
-        .select('*, clients(*), invoice_line_items(*)') // Changed clients(name) to clients(*)
+        .select('*, clients(id, name, email, phone, address_client, user_id, avatar_url, created_at, updated_at, notes), invoice_line_items(*)') 
         .eq('id', invoiceId)
         .single();
 

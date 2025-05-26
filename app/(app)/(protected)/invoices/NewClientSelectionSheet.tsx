@@ -34,17 +34,10 @@ import { supabase } from "@/config/supabase"; // Assuming your Supabase client i
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 import CreateNewClientSheet, { CreateNewClientSheetRef } from "../customers/CreateNewClientSheet";
-import type { Client } from "../customers/CreateNewClientSheet";
 import { useRef } from "react";
+import { Tables } from '../../../../types/database.types';
 
-export interface Client {
-	id: string;
-	name: string;
-	email?: string | null;
-	phone?: string | null;
-	avatar_url?: string | null;
-	// Add other fields from your clients table as needed
-}
+type Client = Tables<'clients'>;
 
 interface NewClientSelectionSheetProps {
 	onClientSelect: (client: Client) => void;
@@ -74,7 +67,7 @@ const NewClientSelectionSheet = forwardRef<
 		try {
 			const { data, error: fetchError } = await supabase
 				.from("clients")
-				.select("id, name, email, phone, avatar_url")
+				.select("*")
 				.order("name", { ascending: true });
 
 			if (fetchError) throw fetchError;

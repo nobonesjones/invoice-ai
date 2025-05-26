@@ -25,16 +25,9 @@ import {
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 import { supabase } from "@/lib/supabase";
+import { Tables } from '../../../../types/database.types';
 
-export interface Client {
-	id: string;
-	name: string;
-	email?: string | null;
-	phone?: string | null;
-	avatar_url?: string | null;
-	user_id: string;
-	address_client?: string | null;
-}
+type Client = Tables<'clients'>;
 
 // Define a specific type for the ref handle
 export interface CreateNewClientSheetRef {

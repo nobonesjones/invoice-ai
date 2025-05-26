@@ -105,12 +105,7 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
     headerText: 'black',
   };
 
-  console.log('[InvoiceTemplateOne] Business Settings Prop:', JSON.stringify(businessSettings, null, 2));
-  console.log('[InvoiceTemplateOne] Due Date Debug:', { due_date_option: invoice?.due_date_option, due_date: invoice?.due_date });
-  console.log('InvoiceTemplateOne - invoice.invoice_line_items:', JSON.stringify(invoice?.invoice_line_items, null, 2));
-
   if (!invoice) {
-    console.log('[InvoiceTemplateOne] invoice prop is null or undefined!');
     return (
       <View style={[styles.container, { borderColor: 'red', minHeight: 200 }]}> 
         <Text style={{ color: 'red', fontWeight: 'bold' }}>No invoice data found. (invoice is null)</Text>
@@ -174,20 +169,14 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
 
         <View style={styles.metaRight}> 
           {/* Client Information (Bill To) */}
-          <Text style={styles.label}>Bill To:</Text>
-          <Text style={styles.clientNameText}>{clientName || invoice.clients?.name || 'N/A'}</Text>
-          {invoice.clients?.email && <Text style={styles.text}>{invoice.clients.email}</Text>}
-          {invoice.clients?.phone && <Text style={styles.text}>{invoice.clients.phone}</Text>}
-          {invoice.clients?.address_line1 && <Text style={styles.text}>{invoice.clients.address_line1}</Text>}
-          {invoice.clients?.address_line2 && <Text style={styles.text}>{invoice.clients.address_line2}</Text>}
-          {(invoice.clients?.city || invoice.clients?.state_province_region || invoice.clients?.postal_zip_code) && (
-            <Text style={styles.text}>
-              {invoice.clients.city ? `${invoice.clients.city}, ` : ''}
-              {invoice.clients.state_province_region ? `${invoice.clients.state_province_region} ` : ''}
-              {invoice.clients.postal_zip_code || ''}
-            </Text>
+          <Text style={[styles.label, { textAlign: 'right' }]}>Bill To:</Text>
+          <Text style={[styles.clientNameText, { textAlign: 'right' }]}>{invoice.clients?.name || clientName || 'N/A'}</Text>
+          {/* TODO: Regenerate Supabase types. Using 'as any' as a temporary workaround because TS types are outdated. */} 
+          {(invoice.clients as any)?.address_client && (
+            <Text style={[styles.text, { textAlign: 'right' }]}>{(invoice.clients as any).address_client}</Text>
           )}
-          {invoice.clients?.country && <Text style={styles.text}>{invoice.clients.country}</Text>}
+          {invoice.clients?.email && <Text style={[styles.text, { textAlign: 'right' }]}>{invoice.clients.email}</Text>}
+          {invoice.clients?.phone && <Text style={[styles.text, { textAlign: 'right' }]}>{invoice.clients.phone}</Text>}
         </View>
       </View>
 
@@ -359,7 +348,7 @@ const styles = StyleSheet.create({
   },
   metaRight: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-end', // Reverted to 'flex-end' to align the block to the right
   },
   label: {
     fontSize: 8, 
@@ -371,6 +360,8 @@ const styles = StyleSheet.create({
     fontSize: 9, 
     color: 'black',
     lineHeight: 11, // Reduced from 14
+    paddingLeft: 0, // Ensure no unintended left padding
+    marginLeft: 0,  // Ensure no unintended left margin
   },
   clientNameText: {
     fontSize: 10, 
