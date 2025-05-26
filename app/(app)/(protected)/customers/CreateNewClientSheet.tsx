@@ -44,7 +44,7 @@ export interface CreateNewClientSheetRef {
 
 interface CreateNewClientSheetProps {
 	onClose?: () => void;
-	onClientAdded?: () => void;
+	onClientAdded?: (client: Client) => void;
 }
 
 const CreateNewClientSheet = forwardRef<
@@ -115,9 +115,11 @@ const CreateNewClientSheet = forwardRef<
 				address_client: address.trim() || null,
 				user_id: user.id,
 			};
-			const { error: insertError } = await supabase
+			const { data: inserted, error: insertError } = await supabase
 				.from("clients")
-				.insert([clientData]);
+				.insert([clientData])
+				.select()
+				.single();
 			if (insertError) {
 				Alert.alert("Error", `Could not save client. ${insertError.message}`);
 			} else {
@@ -126,7 +128,7 @@ const CreateNewClientSheet = forwardRef<
 				setEmail("");
 				setPhone("");
 				setAddress("");
-				if (onClientAdded) onClientAdded();
+				if (onClientAdded && inserted) onClientAdded(inserted);
 				internalClose();
 			}
 		} catch (error: any) {

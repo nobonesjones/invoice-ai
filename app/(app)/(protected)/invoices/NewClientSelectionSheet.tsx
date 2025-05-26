@@ -33,6 +33,9 @@ import {
 import { supabase } from "@/config/supabase"; // Assuming your Supabase client is exported from here
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
+import CreateNewClientSheet, { CreateNewClientSheetRef } from "../customers/CreateNewClientSheet";
+import type { Client } from "../customers/CreateNewClientSheet";
+import { useRef } from "react";
 
 export interface Client {
 	id: string;
@@ -52,6 +55,7 @@ const NewClientSelectionSheet = forwardRef<
 	BottomSheetModal,
 	NewClientSelectionSheetProps
 >(({ onClientSelect, onClose }, ref) => {
+	const createNewClientSheetRef = useRef<CreateNewClientSheetRef>(null);
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const styles = getStyles(themeColors);
@@ -212,7 +216,7 @@ const NewClientSelectionSheet = forwardRef<
 				</TouchableOpacity>
 				<TouchableOpacity
 					style={styles.actionButton}
-					onPress={() => console.log("Create new client pressed")}
+					onPress={() => createNewClientSheetRef.current?.present()}
 				>
 					<UserPlus
 						size={20}
@@ -221,6 +225,18 @@ const NewClientSelectionSheet = forwardRef<
 					/>
 					<Text style={styles.actionButtonText}>Create New Client</Text>
 				</TouchableOpacity>
+
+				{/* Create New Client Sheet Modal */}
+				<CreateNewClientSheet
+					ref={createNewClientSheetRef}
+					onClose={() => {}}
+					onClientAdded={async (newClient: Client) => {
+						await fetchClients();
+						// Try to find in the freshly fetched list
+						const found = filteredClients.find(c => c.id === newClient.id) || newClient;
+						handleSelectClient(found);
+					}}
+				/>
 			</View>
 
 			<BottomSheetFlatList
