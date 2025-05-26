@@ -1,11 +1,40 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import type { Tables } from '../../../../types/database.types'; // Adjust path as needed
+import { Tables } from '../../../../types/database.types'; // Corrected import path
+import { format } from 'date-fns';
 
-// Define the structure of the invoice data more precisely for the template
-export interface InvoiceForTemplate extends Tables<'invoices'> {
+// Define InvoiceForTemplate by explicitly listing properties
+// This gives more control than Omit if type conflicts are occurring
+export interface InvoiceForTemplate {
+  // Properties from Tables<'invoices'>
+  id: Tables<'invoices'>['id'];
+  user_id: Tables<'invoices'>['user_id'];
+  client_id: Tables<'invoices'>['client_id'];
+  invoice_number: Tables<'invoices'>['invoice_number'];
+  status: Tables<'invoices'>['status'];
+  invoice_date: Tables<'invoices'>['invoice_date'];
+  due_date: Tables<'invoices'>['due_date'];
+  due_date_option: Tables<'invoices'>['due_date_option'];
+  po_number: Tables<'invoices'>['po_number'];
+  custom_headline: Tables<'invoices'>['custom_headline'];
+  subtotal_amount: Tables<'invoices'>['subtotal_amount'];
+  discount_type: Tables<'invoices'>['discount_type'];
+  discount_value: Tables<'invoices'>['discount_value'];
+  tax_percentage: Tables<'invoices'>['tax_percentage'];
+  total_amount: Tables<'invoices'>['total_amount'];
+  notes: Tables<'invoices'>['notes'];
+  stripe_active: Tables<'invoices'>['stripe_active'];
+  bank_account_active: Tables<'invoices'>['bank_account_active'];
+  paypal_active: Tables<'invoices'>['paypal_active'];
+  created_at: Tables<'invoices'>['created_at'];
+  updated_at: Tables<'invoices'>['updated_at'];
+  clients: Tables<'clients'> | null; // Corrected type for clients relation
+
+  // Overridden or new properties for the template
   invoice_line_items: Tables<'invoice_line_items'>[];
-  currency: string; // Ensure currency is present and not optional
+  currency: string; // Strictly string
+  currency_symbol: string;
+  invoice_tax_label: string; // New property
 }
 
 // Change to a direct type alias for simplicity and to avoid extension conflicts
@@ -37,6 +66,30 @@ const formatCurrency = (amount: number | null | undefined, currencyCode: string 
   return `${symbol}${amount.toFixed(2)}`;
 };
 
+const formatDueDateDisplay = (option: string | null | undefined, dateString: string | null | undefined): string => {
+  const friendlyOptions: { [key: string]: string } = {
+    'on_receipt': 'On receipt',
+    'net_7': 'In 7 days',
+    'net_14': 'In 14 days',
+    'net_30': 'In 30 days',
+  };
+
+  if (option && friendlyOptions[option]) {
+    return friendlyOptions[option];
+  }
+
+  // If option is not a recognized key, or is null/empty,
+  // then we assume a specific date was set (or should be used as fallback).
+  if (dateString) {
+    return formatDate(dateString); // formatDate already handles "20th June 2025" style and N/A for null
+  }
+  
+  // If option was provided but wasn't a known key and there's no dateString fallback
+  if (option) return option; // Display the custom/unmapped option as is
+
+  return 'N/A'; // Default fallback if neither option nor dateString yields a value
+};
+
 const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({ 
   invoice,
   clientName,
@@ -44,13 +97,17 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
 }) => {
   // Default theme for now if not passed
   const colors = {
-    text: '#333',
-    mutedText: '#777',
+    text: 'black',
+    mutedText: 'black',
     border: '#eee',
     primary: '#007bff',
     highlightBackground: '#f0f8ff',
-    headerText: '#000',
+    headerText: 'black',
   };
+
+  console.log('[InvoiceTemplateOne] Business Settings Prop:', JSON.stringify(businessSettings, null, 2));
+  console.log('[InvoiceTemplateOne] Due Date Debug:', { due_date_option: invoice?.due_date_option, due_date: invoice?.due_date });
+  console.log('InvoiceTemplateOne - invoice.invoice_line_items:', JSON.stringify(invoice?.invoice_line_items, null, 2));
 
   if (!invoice) {
     console.log('[InvoiceTemplateOne] invoice prop is null or undefined!');
@@ -61,7 +118,24 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
     );
   }
 
-  console.log('InvoiceTemplateOne - invoice.invoice_line_items:', JSON.stringify(invoice.invoice_line_items, null, 2));
+  // Calculate actual discount amount
+  let calculatedDiscountValue = 0;
+
+  if (invoice && invoice.discount_value != null && invoice.discount_value > 0 && invoice.subtotal_amount != null) {
+    if (invoice.discount_type === 'percentage') {
+      calculatedDiscountValue = (invoice.subtotal_amount * invoice.discount_value) / 100;
+    } else if (invoice.discount_type === 'fixed') {
+      calculatedDiscountValue = invoice.discount_value;
+    }
+  }
+
+  // Calculate tax amount if applicable
+  let taxAmount = 0;
+  if (invoice && invoice.tax_percentage != null && invoice.tax_percentage > 0 && invoice.subtotal_amount != null) {
+    // Calculate tax on subtotal after discount
+    const amountBeforeTax = invoice.subtotal_amount - calculatedDiscountValue;
+    taxAmount = (amountBeforeTax * invoice.tax_percentage) / 100;
+  }
 
   return (
     <View style={[styles.container, { borderColor: colors.border }]}>
@@ -75,23 +149,45 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
           )}
         </View>
         <View style={styles.headerRight}>
-          <Text style={[styles.invoiceLabel, { color: colors.headerText }]}>INVOICE</Text>
-          <Text style={styles.headerTextDetail}>Date: {formatDate(invoice.invoice_date)}</Text>
-          <Text style={styles.headerTextDetail}>Due: {formatDate(invoice.due_date)}</Text> {/* Added Due Date */}
+          <Text style={styles.invoiceLabel}>INVOICE</Text>
+          <Text style={[styles.text, { marginTop: 4 }]}>Ref: {invoice.invoice_number || 'N/A'}</Text>
+          <Text style={styles.text}>Date: {formatDate(invoice.invoice_date)}</Text>
+          <Text style={styles.text}>
+            Due: {formatDueDateDisplay(invoice.due_date_option, invoice.due_date)}
+          </Text>
         </View>
       </View>
 
       {/* 2. Recipient & 3. Invoice Number Section */}
       <View style={styles.metaSection}>
-        <View style={styles.metaLeft}> {/* Invoice Number Section */}
-          <Text style={styles.text}>{invoice.invoice_number || 'N/A'}</Text>
+        <View style={styles.metaLeft}> 
+          {/* Business Information (From) */}
+          <Text style={styles.label}>From:</Text>
+          {businessSettings?.business_name && (
+            <Text style={styles.businessNameText}>{businessSettings.business_name}</Text>
+          )}
+          {businessSettings?.business_address && (
+            <Text style={styles.text}>{businessSettings.business_address}</Text>
+          )}
+          {/* You can add more business details here if needed, like email/phone */}
         </View>
-        <View style={styles.metaRight}> {/* Recipient Section */}
-          <Text style={styles.clientNameText}>To : {clientName || 'N/A'}</Text>
-          {/* Placeholder for client address - to be added later */}
-          <Text style={styles.textPlaceholder}>Client Company Name</Text>
-          <Text style={styles.textPlaceholder}>Client Address Line 1</Text>
-          <Text style={styles.textPlaceholder}>Client City, Country</Text>
+
+        <View style={styles.metaRight}> 
+          {/* Client Information (Bill To) */}
+          <Text style={styles.label}>Bill To:</Text>
+          <Text style={styles.clientNameText}>{clientName || invoice.clients?.name || 'N/A'}</Text>
+          {invoice.clients?.email && <Text style={styles.text}>{invoice.clients.email}</Text>}
+          {invoice.clients?.phone && <Text style={styles.text}>{invoice.clients.phone}</Text>}
+          {invoice.clients?.address_line1 && <Text style={styles.text}>{invoice.clients.address_line1}</Text>}
+          {invoice.clients?.address_line2 && <Text style={styles.text}>{invoice.clients.address_line2}</Text>}
+          {(invoice.clients?.city || invoice.clients?.state_province_region || invoice.clients?.postal_zip_code) && (
+            <Text style={styles.text}>
+              {invoice.clients.city ? `${invoice.clients.city}, ` : ''}
+              {invoice.clients.state_province_region ? `${invoice.clients.state_province_region} ` : ''}
+              {invoice.clients.postal_zip_code || ''}
+            </Text>
+          )}
+          {invoice.clients?.country && <Text style={styles.text}>{invoice.clients.country}</Text>}
         </View>
       </View>
 
@@ -99,37 +195,31 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
       <View style={styles.itemTableSection}>
         {/* Table Header */}
         <View style={styles.tableRowHeader}>
-          <Text style={[styles.tableHeader, styles.qtyCol]}>QTY</Text>
-          <Text style={[styles.tableHeader, styles.descCol]}>DESCRIPTION</Text>
-          <Text style={[styles.tableHeader, styles.priceCol]}>PRICE</Text>
-          <Text style={[styles.tableHeader, styles.totalCol]}>TOTAL</Text>
+          <View style={styles.qtyCol}><Text style={[styles.tableHeader, { textAlign: 'center' }]}>QTY</Text></View>
+          <View style={styles.descCol}><Text style={styles.tableHeader}>DESCRIPTION</Text></View>
+          <View style={styles.priceCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>PRICE</Text></View>
+          <View style={styles.totalCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>TOTAL</Text></View>
         </View>
 
         {/* Table Body - Dynamically generated item rows */}
         {invoice.invoice_line_items && invoice.invoice_line_items.length > 0 ? (
           invoice.invoice_line_items.map((item, index) => (
             <View key={item.id || `item-${index}`} style={styles.tableRow}>
-              <View style={[styles.tableCell, styles.qtyCol]}>
-                <Text style={styles.text}>{item.quantity}</Text>
-              </View>
-              <View style={[styles.tableCell, styles.descCol]}>
-                <Text style={styles.text}>{item.item_name}</Text>
+              <View style={styles.qtyCol}><Text style={[styles.lineItemCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
+              <View style={styles.descCol}>
+                <Text style={styles.lineItemCellText}>{item.item_name}</Text>
                 {item.item_description && (
                   <Text style={styles.itemSubtitle}>{item.item_description}</Text>
                 )}
               </View>
-              <View style={[styles.tableCell, styles.priceCol]}>
-                <Text style={styles.text}>{formatCurrency(item.unit_price, invoice.currency)}</Text>
-              </View>
-              <View style={[styles.tableCell, styles.totalCol]}>
-                <Text style={styles.text}>{formatCurrency(item.total_price, invoice.currency)}</Text>
-              </View>
+              <View style={styles.priceCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{formatCurrency(item.unit_price, invoice.currency)}</Text></View>
+              <View style={styles.totalCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{formatCurrency(item.total_price, invoice.currency)}</Text></View>
             </View>
           ))
         ) : (
           <View style={styles.tableRow}>
-            <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontStyle: 'italic', paddingVertical: 10 }]}>
-              No line items to display.
+            <Text style={{ flex: 1, textAlign: 'center', paddingVertical: 10, fontStyle: 'italic', color: 'black' }}>
+              No line items.
             </Text>
           </View>
         )}
@@ -139,46 +229,56 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
       <View style={styles.footerSection}>
         <View style={styles.footerLeft}>
           <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Payment Method</Text> {/* Reverted header text, kept new style */}
-            <Text style={styles.paymentTermsBody}>
-              {/* {businessSettings?.payment_methods || 'Bank Transfer, PayPal'} */}
-              Details to be added from Business Settings {/* Reverted to placeholder */}
-            </Text>
+            <Text style={styles.paymentTermsHeader}>Payment Method</Text> 
+            <Text style={styles.paymentTermsBody}>Details to be added from Business Settings</Text>
           </View>
           <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Terms & Conditions</Text> {/* Reverted header text, kept new style */}
-            <Text style={styles.paymentTermsBody}>
-              {/* {businessSettings?.terms_conditions || 'Payment due within 30 days.'} */}
-              Details to be added from Business Settings {/* Reverted to placeholder */}
-            </Text>
+            <Text style={styles.paymentTermsHeader}>Terms & Conditions</Text> 
+            <Text style={styles.paymentTermsBody}>Details to be added from Business Settings</Text>
           </View>
         </View>
         <View style={styles.footerRight}>
           <View style={styles.totalsBlock}>
             <View style={styles.totalLine}>
-              <Text style={styles.label}>SUBTOTAL</Text>
-              <Text style={styles.text}>{formatCurrency(invoice.subtotal_amount, invoice.currency)}</Text>
+              <Text style={styles.label}>Subtotal</Text>
+              <Text style={styles.totalsValueText}>
+                {formatCurrency(invoice.subtotal_amount, invoice.currency_symbol)}
+              </Text>
             </View>
-            {(invoice.discount_value ?? 0) > 0 && (
+
+            {/* Discount - displays only if there's a calculated discount value */}
+            {calculatedDiscountValue > 0 && (
               <View style={styles.totalLine}>
-                <Text style={styles.text}>Discount {invoice.discount_type ? `(${invoice.discount_type})` : ''}</Text>
-                <Text style={styles.text}>-{formatCurrency(invoice.discount_value, invoice.currency)}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.label}>Discount </Text>
+                  {invoice.discount_type === 'percentage' && invoice.discount_value != null && (
+                    <Text style={styles.discountPercentageText}>({invoice.discount_value}%)</Text>
+                  )}
+                </View>
+                <Text style={styles.totalsValueText}>
+                  - {formatCurrency(calculatedDiscountValue, invoice.currency_symbol)}
+                </Text>
               </View>
             )}
-            <View style={styles.totalLine}>
-              <Text style={styles.text}>Tax ({invoice.tax_percentage ?? 0}%)</Text>
-              <Text style={styles.text}>
-                {formatCurrency(
-                  ((invoice.subtotal_amount ?? 0) - (invoice.discount_value ?? 0)) * (invoice.tax_percentage ?? 0) / 100,
-                  invoice.currency
-                )}
-              </Text>
-            </View>
-            <View style={[styles.totalLine, styles.grandTotalLine, { backgroundColor: colors.highlightBackground }]}>
-              <Text style={[styles.grandTotalText, { color: colors.primary }]}>GRAND TOTAL</Text>
-              <Text style={[styles.grandTotalText, { color: colors.primary }]}>
-                {formatCurrency(invoice.total_amount, invoice.currency)}
-              </Text>
+
+            {/* Tax - displays only if there's a tax percentage */}
+            {invoice.tax_percentage != null && invoice.tax_percentage > 0 && (
+              <View style={styles.totalLine}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.label}>{invoice.invoice_tax_label || 'Tax'} </Text>
+                  {invoice.tax_percentage != null && (
+                    <Text style={styles.discountPercentageText}>({invoice.tax_percentage}%)</Text>
+                  )}
+                </View>
+                <Text style={styles.totalsValueText}>
+                  {formatCurrency(taxAmount, invoice.currency_symbol)}
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.totalLine, styles.grandTotalLine]}>
+              <Text style={{ fontSize: 8, fontWeight: 'bold', color: styles.label.color /* Using color from styles.label */ }}>GRAND TOTAL</Text> 
+              <Text style={styles.grandTotalText}>{formatCurrency(invoice.total_amount, invoice.currency_symbol)}</Text>
             </View>
           </View>
         </View>
@@ -192,25 +292,23 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     maxWidth: 370,
-    padding: 16,
-    backgroundColor: '#fff', // Reverted from '#ffe6f0' (pink debug)
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    borderRadius: 16,
-    marginVertical: 16,
-    minHeight: 300,
-    // Card shadow (iOS + Android)
+    padding: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    margin: 10, // Added margin for better visual separation if scaled in viewer
+    height: 600, // Reduced height further
   },
   textPlaceholder: { // Added for placeholder client address lines
     fontSize: 6,
-    color: '#aaa',
+    color: 'black',
     fontStyle: 'italic',
-    lineHeight: 9,
+    lineHeight: 10,
   },
   // Header Section
   headerSection: {
@@ -218,7 +316,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 20,
     alignItems: 'flex-start',
-    // Removed backgroundColor: '#e6ffe6' (green debug)
   },
   headerLeft: {},
   logo: {
@@ -226,9 +323,9 @@ const styles = StyleSheet.create({
     height: 50,
   },
   logoPlaceholder: {
-    fontSize: 16,
+    fontSize: 10, 
     fontWeight: 'bold',
-    color: '#ccc',
+    color: 'black',
     width: 100,
     height: 50,
     textAlign: 'center',
@@ -240,12 +337,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   invoiceLabel: {
-    fontSize: 20,
+    fontSize: 16, 
     fontWeight: 'bold',
+    color: 'black',
   },
   headerTextDetail: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 9, 
+    marginTop: 2, // Reduced from 4 for tighter spacing
+    color: 'black',
   },
   // Meta Section (Recipient & Invoice No.)
   metaSection: {
@@ -254,7 +353,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderColor: '#eee',
     paddingVertical: 10,
-    // Removed backgroundColor: '#e6f0ff' (blue debug)
   },
   metaLeft: {
     flex: 1,
@@ -264,26 +362,31 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   label: {
-    fontSize: 11,
+    fontSize: 8, 
     fontWeight: 'bold',
-    color: '#555',
+    color: 'black',
     marginBottom: 2,
   },
   text: {
-    fontSize: 11,
-    color: '#333',
-    lineHeight: 17,
+    fontSize: 9, 
+    color: 'black',
+    lineHeight: 11, // Reduced from 14
   },
   clientNameText: {
-    fontSize: 12,
+    fontSize: 10, 
     fontWeight: 'bold',
-    color: '#333',
+    color: 'black',
     marginBottom: 2,
+  },
+  businessNameText: { 
+    fontSize: 10, 
+    fontWeight: 'bold',
+    color: 'black', 
+    marginBottom: 1, // Reduced from 2
   },
   // Item Table Section
   itemTableSection: {
     marginBottom: 20,
-    // Removed backgroundColor: '#fff3e6' (orange debug)
   },
   tableRowHeader: {
     flexDirection: 'row',
@@ -300,24 +403,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tableHeader: {
-    fontSize: 10,
+    fontSize: 7, 
     fontWeight: 'bold',
-    color: '#555',
-    textAlign: 'left',
+    color: 'black',
+    textAlign: 'left', 
   },
   tableCell: {
-    // This style is applied to View components that act as cells.
-    // It should not contain text-specific styles like fontSize or color.
-    // Flex, padding, etc., are handled by qtyCol, descCol, priceCol, totalCol.
   },
-  qtyCol: { flex: 1, paddingHorizontal: 5, textAlign: 'center' }, // textAlign here is for the Text inside
+  qtyCol: { flex: 1, paddingHorizontal: 5, textAlign: 'center' }, 
   descCol: { flex: 4, paddingHorizontal: 5 },
   priceCol: { flex: 2, paddingHorizontal: 5, textAlign: 'right' },
   totalCol: { flex: 2, paddingHorizontal: 5, textAlign: 'right' },
   itemSubtitle: {
-    fontSize: 9,
-    color: '#777',
+    fontSize: 6, 
+    color: 'black',
     marginTop: 2,
+  },
+  lineItemCellText: { 
+    fontSize: 7, 
+    color: 'black',
   },
   // Footer Section
   footerSection: {
@@ -329,7 +433,7 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
   },
   footerLeft: {
-    flex: 1.5, // Takes more space
+    flex: 1.5, 
   },
   footerRight: {
     flex: 1,
@@ -339,20 +443,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   placeholderText: {
-    fontSize: 11,
-    color: '#777',
+    fontSize: 9, 
+    color: 'black',
     fontStyle: 'italic',
     marginTop: 2,
   },
   paymentTermsHeader: {
     fontSize: 8,
     fontWeight: 'bold',
-    color: '#555',
+    color: 'black',
     marginBottom: 2,
   },
   paymentTermsBody: {
     fontSize: 8,
-    color: '#777',
+    color: 'black',
     fontStyle: 'italic',
     marginTop: 2,
   },
@@ -360,18 +464,39 @@ const styles = StyleSheet.create({
   totalLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 3,
+    width: '100%', // Ensure the line takes full available width in its container
   },
   grandTotalLine: {
-    marginTop: 5,
+    marginTop: 20, // Increased from 5
     paddingVertical: 8,
-    paddingHorizontal: 10, // Added padding for highlight
-    borderTopWidth: 2, // Make grand total separator more prominent
+    paddingHorizontal: 10, 
+    borderTopWidth: 2, 
     borderColor: '#333',
   },
   grandTotalText: {
-    fontSize: 13,
+    fontSize: 8, 
     fontWeight: 'bold',
+    textAlign: 'right',
+    color: 'black',
+  },
+  totalsValueText: { 
+    fontSize: 8,
+    color: 'black',
+    textAlign: 'right',
+  },
+  companyName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'black',
+    marginBottom: 5,
+  },
+  discountPercentageText: { // New style for the smaller percentage text
+    fontSize: 6,
+    color: 'black', // Assuming styles.label.color is 'black'
+    fontWeight: 'normal', // Making it normal weight to be less prominent
+    marginLeft: 2, // Add a little space after 'Discount '
   },
 });
 

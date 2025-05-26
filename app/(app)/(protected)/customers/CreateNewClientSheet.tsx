@@ -33,6 +33,7 @@ export interface Client {
 	phone?: string | null;
 	avatar_url?: string | null;
 	user_id: string;
+	address_client?: string | null;
 }
 
 // Define a specific type for the ref handle
@@ -58,9 +59,10 @@ const CreateNewClientSheet = forwardRef<
 	const [fullName, setFullName] = useState("");
 	const [email, setEmail] = useState("");
 	const [phone, setPhone] = useState("");
+	const [address, setAddress] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 
-	const snapPoints = useMemo(() => ["60%", "85%"], []);
+	const snapPoints = useMemo(() => ["70%", "90%"], []);
 
 	React.useImperativeHandle(ref, () => ({
 		present: () => bottomSheetModalRef.current?.present(),
@@ -110,6 +112,7 @@ const CreateNewClientSheet = forwardRef<
 				name: fullName.trim(),
 				email: email.trim() || null,
 				phone: phone.trim() || null,
+				address_client: address.trim() || null,
 				user_id: user.id,
 			};
 			const { error: insertError } = await supabase
@@ -122,6 +125,7 @@ const CreateNewClientSheet = forwardRef<
 				setFullName("");
 				setEmail("");
 				setPhone("");
+				setAddress("");
 				if (onClientAdded) onClientAdded();
 				internalClose();
 			}
@@ -200,16 +204,16 @@ const CreateNewClientSheet = forwardRef<
 		},
 		inputRow: {
 			flexDirection: "row",
-			alignItems: "center",
-			paddingVertical: Platform.OS === "ios" ? 14 : 13,
+			alignItems: "flex-start",
+			paddingVertical: Platform.OS === "ios" ? 16 : 14,
 			paddingHorizontal: 15,
 			borderBottomWidth: StyleSheet.hairlineWidth,
 			borderBottomColor: themeColors.border,
 		},
 		inputRow_last: {
 			flexDirection: "row",
-			alignItems: "center",
-			paddingVertical: Platform.OS === "ios" ? 14 : 13,
+			alignItems: "flex-start",
+			paddingVertical: Platform.OS === "ios" ? 16 : 14,
 			paddingHorizontal: 15,
 		},
 		inputLabelText: {
@@ -232,9 +236,15 @@ const CreateNewClientSheet = forwardRef<
 		textInputStyled: {
 			fontSize: 16,
 			color: themeColors.foreground,
-			paddingVertical: 0,
+			paddingVertical: Platform.OS === "ios" ? 2 : 0,
 			backgroundColor: "transparent",
 			flex: 1,
+		},
+		addressTextInput: {
+			minHeight: Platform.OS === 'ios' ? 70 : 60,
+			paddingTop: Platform.OS === 'ios' ? 8 : 6,
+			paddingBottom: Platform.OS === 'ios' ? 8 : 6,
+			textAlignVertical: 'top',
 		},
 		saveButton: {
 			backgroundColor: themeColors.primary,
@@ -327,7 +337,7 @@ const CreateNewClientSheet = forwardRef<
 						</View>
 					</View>
 
-					<View style={styles.inputRow_last}>
+					<View style={styles.inputRow}>
 						<Text style={styles.inputLabelText}>Phone</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
@@ -337,6 +347,25 @@ const CreateNewClientSheet = forwardRef<
 								value={phone}
 								onChangeText={setPhone}
 								keyboardType="phone-pad"
+								editable={!isLoading}
+							/>
+						</View>
+					</View>
+
+					<View style={styles.inputRow_last}>
+						<Text style={styles.inputLabelText}>Address</Text>
+						<View style={styles.inputValueArea}>
+							<BottomSheetTextInput
+								style={[styles.textInputStyled, styles.addressTextInput]}
+								placeholder="e.g. 123 Main St, Anytown, USA 12345"
+								placeholderTextColor={themeColors.mutedForeground}
+								value={address}
+								onChangeText={setAddress}
+								multiline={true}
+								numberOfLines={3}
+								textAlignVertical="top"
+								returnKeyType="default"
+								blurOnSubmit={false}
 								editable={!isLoading}
 							/>
 						</View>

@@ -36,6 +36,8 @@ import { Image } from 'react-native'; // Added Image import
 import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
 
 // Define data structures for the form
+
+
 interface InvoiceItem {
   name: string;
   quantity: number;
@@ -53,6 +55,7 @@ interface InvoiceFormData {
   po_number?: string; // Added for PO Number
   custom_headline?: string; // Added for Custom Headline
   taxPercentage?: number | null;
+  invoice_tax_label?: string | null; // Added for specific tax label
   discountType?: 'percentage' | 'fixed' | null; // Made more specific
   discountValue?: number | null;
   subTotalAmount?: number;
@@ -203,6 +206,8 @@ const calculateGrandTotal = (
 };
 
 export default function CreateInvoiceScreen() {
+  // Add state for currency code INSIDE the component
+  const [currencyCode, setCurrencyCode] = useState<string>('USD');
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const router = useRouter();
@@ -234,6 +239,7 @@ export default function CreateInvoiceScreen() {
       po_number: '', // Initialize po_number
       custom_headline: '', // Initialize custom_headline
       taxPercentage: 0,
+      invoice_tax_label: 'Tax', // Initialize invoice_tax_label
       discountType: null, // Changed from '' to null
       discountValue: 0,
       subTotalAmount: 0,
@@ -407,6 +413,7 @@ export default function CreateInvoiceScreen() {
         discount_type: formData.discountType || null,
         discount_value: formData.discountValue || 0,
         tax_percentage: formData.taxPercentage || 0,
+        invoice_tax_label: formData.invoice_tax_label || 'Tax', // Save the tax label
         total_amount: formData.totalAmount,
         notes: formData.notes || null, // Add 'notes' to InvoiceFormData if needed
         stripe_active: formData.stripe_active_on_invoice, // Corrected: Use the new dedicated field
@@ -513,6 +520,7 @@ export default function CreateInvoiceScreen() {
       discount_type: currentFormData.discountType || null,
       discount_amount: currentFormData.discountValue || null,
       tax_percentage: currentFormData.taxPercentage || null,
+      invoice_tax_label: currentFormData.invoice_tax_label || 'Tax', // Include tax label
       notes: currentFormData.notes || '',
       po_number: currentFormData.po_number || '',
       custom_headline: currentFormData.custom_headline || '',
@@ -583,9 +591,9 @@ export default function CreateInvoiceScreen() {
   const watchedDueDateOption = watch('due_date_option');
   const watchedPoNumber = watch('po_number'); 
   const watchedCustomHeadline = watch('custom_headline'); 
-  const taxPercentage = watch('taxPercentage');
-  const discountType = watch('discountType');
-  const discountValue = watch('discountValue');
+  const watchedTaxPercentage = watch('taxPercentage');
+  const watchedDiscountType = watch('discountType');
+  const watchedDiscountValue = watch('discountValue');
 
   const watchedItems = watch('items'); // Watch the items array
   const [currentInvoiceLineItems, setCurrentInvoiceLineItems] = useState<InvoiceLineItem[]>([]);
@@ -700,19 +708,19 @@ export default function CreateInvoiceScreen() {
     const subTotal = displaySubtotal;
 
     let discountAmountApplied = 0;
-    if (discountType && typeof discountValue === 'number' && discountValue > 0) {
-      if (discountType === 'percentage') {
-        discountAmountApplied = subTotal * (discountValue / 100);
+    if (watchedDiscountType && typeof watchedDiscountValue === 'number' && watchedDiscountValue > 0) {
+      if (watchedDiscountType === 'percentage') {
+        discountAmountApplied = subTotal * (watchedDiscountValue / 100);
       } else { // Fixed amount
-        discountAmountApplied = discountValue;
+        discountAmountApplied = watchedDiscountValue;
       }
     }
 
     const amountAfterDiscount = subTotal - discountAmountApplied;
 
     let taxAmountCalculated = 0;
-    if (typeof taxPercentage === 'number' && taxPercentage > 0) {
-      taxAmountCalculated = amountAfterDiscount * (taxPercentage / 100);
+    if (typeof watchedTaxPercentage === 'number' && watchedTaxPercentage > 0) {
+      taxAmountCalculated = amountAfterDiscount * (watchedTaxPercentage / 100);
     }
 
     const finalTotal = amountAfterDiscount + taxAmountCalculated;
@@ -722,7 +730,7 @@ export default function CreateInvoiceScreen() {
     setDisplayInvoiceTotal(finalTotal);
     setValue('totalAmount', finalTotal > 0 ? finalTotal : 0, { shouldValidate: true, shouldDirty: true }); // Ensure total isn't negative
 
-  }, [displaySubtotal, taxPercentage, discountType, discountValue, setValue]);
+  }, [displaySubtotal, watchedTaxPercentage, watchedDiscountType, watchedDiscountValue, setValue]);
 
   // State for global tax settings
   const [globalTaxRatePercent, setGlobalTaxRatePercent] = useState<number | null>(null);
@@ -730,8 +738,8 @@ export default function CreateInvoiceScreen() {
   const [isLoadingTaxSettings, setIsLoadingTaxSettings] = useState<boolean>(true);
 
   // State for invoice-specific tax override
-  const [invoiceTaxName, setInvoiceTaxName] = useState<string | null>(null);
-  const [invoiceTaxRatePercent, setInvoiceTaxRatePercent] = useState<number | null>(null);
+  const [invoiceTaxLabel, setInvoiceTaxLabel] = useState<string | null>('Tax'); // State for tax label
+  const [taxPercentage, setTaxPercentage] = useState<number | null>(null); // Primary state for tax percentage
 
   // Effect to fetch global tax settings
   useEffect(() => {
@@ -745,7 +753,7 @@ export default function CreateInvoiceScreen() {
       try {
         const { data, error } = await supabase
           .from('business_settings')
-          .select('default_tax_rate, tax_name')
+          .select('default_tax_rate, tax_name, currency_code')
           .eq('user_id', user.id)
           .single();
 
@@ -761,6 +769,8 @@ export default function CreateInvoiceScreen() {
           } else {
             setGlobalTaxRatePercent(null);
           }
+          setInvoiceTaxLabel(data.tax_name || 'Tax'); // Set invoiceTaxLabel
+          setCurrencyCode(data.currency_code || 'USD'); // Store currency code in state
         }
         setIsLoadingTaxSettings(false);
       } catch (e) {
@@ -774,11 +784,11 @@ export default function CreateInvoiceScreen() {
 
   // EFFECT: Synchronize global/invoice-specific tax rates with the form's taxPercentage
   useEffect(() => {
-    const rateToApply = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
+    const rateToApply = taxPercentage !== null ? taxPercentage : globalTaxRatePercent;
     // Ensure rateToApply is a number before setting it, default to 0 otherwise
     const numericRateToApply = (typeof rateToApply === 'number' && !isNaN(rateToApply)) ? rateToApply : 0;
     setValue('taxPercentage', numericRateToApply, { shouldValidate: true, shouldDirty: true });
-  }, [invoiceTaxRatePercent, globalTaxRatePercent, setValue]);
+  }, [taxPercentage, globalTaxRatePercent, setValue]);
 
   const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for new sheet
   const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
@@ -812,17 +822,16 @@ export default function CreateInvoiceScreen() {
   const handlePresentEditInvoiceTaxSheet = () => {
     // For now, present with null/undefined as the EditInvoiceTaxSheet expects discount-like props
     // This will be updated when EditInvoiceTaxSheet is refactored for tax name and rate
-    const initialName = invoiceTaxName !== null ? invoiceTaxName : globalTaxName;
-    const initialRate = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
+    const initialName = invoiceTaxLabel !== null ? invoiceTaxLabel : globalTaxName;
+    const initialRate = taxPercentage !== null ? taxPercentage : globalTaxRatePercent;
     editInvoiceTaxSheetRef.current?.present(initialName, initialRate);
   };
 
-  const handleSaveInvoiceTax = (data: InvoiceTaxData) => {
-    // Logic to update invoice-specific tax will be added here
-    console.log('Invoice tax to be saved:', data); 
-    setInvoiceTaxName(data.taxName);
-    const rate = parseFloat(data.taxRate);
-    setInvoiceTaxRatePercent(isNaN(rate) ? null : rate);
+  const handleEditTaxSheetSave = (data: InvoiceTaxData) => {
+    // InvoiceTaxData from EditInvoiceTaxSheet.tsx has taxName and taxRate (string)
+    setInvoiceTaxLabel(data.taxName || 'Tax'); // Update the main tax label state
+    const rate = parseFloat(data.taxRate.replace(',', '.')); // Ensure comma is handled
+    setTaxPercentage(isNaN(rate) ? null : rate); // Update the main tax percentage state
   };
 
   const handleMakePaymentSheetSave = (data: PaymentData) => {
@@ -842,8 +851,8 @@ export default function CreateInvoiceScreen() {
   };
 
   // Compute displayed tax values, prioritizing invoice-specific, then global
-  const displayTaxName = invoiceTaxName !== null ? invoiceTaxName : globalTaxName;
-  const displayTaxRatePercent = invoiceTaxRatePercent !== null ? invoiceTaxRatePercent : globalTaxRatePercent;
+  const displayTaxName = invoiceTaxLabel !== null ? invoiceTaxLabel : globalTaxName;
+  const displayTaxRatePercent = taxPercentage !== null ? taxPercentage : globalTaxRatePercent;
 
   const handleRemoveItem = (itemId: string) => {
     console.log('[handleRemoveItem] Attempting to remove itemId:', itemId);
@@ -1081,11 +1090,11 @@ export default function CreateInvoiceScreen() {
           </View>
           <ActionRow 
             label={
-              discountType === 'percentage' && discountValue && discountValue > 0 
-                ? `Discount ${discountValue}%` 
-                : discountType === 'fixed' && discountValue && discountValue > 0
+              watchedDiscountType === 'percentage' && watchedDiscountValue && watchedDiscountValue > 0 
+                ? `Discount ${watchedDiscountValue}%` 
+                : watchedDiscountType === 'fixed' && watchedDiscountValue && watchedDiscountValue > 0
                   ? 'Discount'
-                  : discountType // If a type is set but value might be 0 or null
+                  : watchedDiscountType // If a type is set but value might be 0 or null
                     ? 'Edit Discount'
                     : 'Add Discount' // Cleaner prompt
             }
@@ -1097,13 +1106,20 @@ export default function CreateInvoiceScreen() {
             onPress={handlePresentSelectDiscountTypeSheet} 
             icon={Percent} 
             themeColors={themeColors} 
-            showChevron={!discountType} // Show chevron only if no discountType is set
+            showChevron={!watchedDiscountType} // Show chevron only if no discountType is set
           />
           {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
             <>
               <View style={styles.separator} />
               <ActionRow
-                label={`${displayTaxName ? `${displayTaxName} ` : ''}${displayTaxRatePercent !== null ? displayTaxRatePercent.toFixed(2) : '0.00'}%`}
+                label={
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
+                    {watchedTaxPercentage !== null && (
+                      <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
+                    )}
+                  </View>
+                }
                 value={`$${displayTaxAmount > 0 ? displayTaxAmount.toFixed(2) : '0.00'}`}
                 icon={Percent} 
                 themeColors={themeColors}
@@ -1219,7 +1235,7 @@ export default function CreateInvoiceScreen() {
 
       <EditInvoiceTaxSheet 
         ref={editInvoiceTaxSheetRef}
-        onSave={handleSaveInvoiceTax} // Placeholder save handler
+        onSave={handleEditTaxSheetSave} // Placeholder save handler
         onClose={() => console.log('Edit invoice tax sheet closed')}
       />
 
@@ -1701,6 +1717,17 @@ const getStyles = (themeColors: ThemeColorPalette) => {
     },
     disabledButton: {
       opacity: 0.5,
+    },
+    labelStyle: { // Add this style for the main label part
+      fontSize: 16,
+      color: themeColors.foreground,
+      fontWeight: '500',
+    },
+    taxPercentageStyle: { // Add this style for the percentage part
+      fontSize: 16, // Or a different size if you want it smaller/larger
+      color: themeColors.mutedForeground, // Example: a muted color
+      fontWeight: 'normal',
+      marginLeft: 2,
     },
   });
 }
