@@ -18,6 +18,7 @@ import { useTheme } from '@/context/theme-provider';
 import { useSupabase } from '@/context/supabase-provider';
 import { Text } from '@/components/ui/text';
 import { ChevronLeft, UploadCloud } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system';
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
@@ -155,10 +156,11 @@ export default function BusinessInformationScreen() {
   const router = useRouter();
   const { theme, isLightMode } = useTheme();
   const styles = getStyles(theme);
-  const { supabase, user } = useSupabase();
+  const { supabase, session } = useSupabase();
   const navigation = useNavigation();
 
   const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [publicLogoUrl, setPublicLogoUrl] = useState<string | null>(null); 
   const [businessName, setBusinessName] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
   const [businessEmail, setBusinessEmail] = useState('');
@@ -166,19 +168,21 @@ export default function BusinessInformationScreen() {
   const [website, setWebsite] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [settingsId, setSettingsId] = useState<string | null>(null); // To store the ID of the existing settings record
+  const [settingsId, setSettingsId] = useState<string | null>(null); 
 
-  const fetchBusinessInfo = useCallback(async () => {
-    if (!user || !supabase) return;
+  console.log('BusinessInformationScreen rendering with logoUri:', logoUri);
+
+  const fetchBusinessInfo = useCallback(async (): Promise<void> => {
+    if (!session || !supabase) return;
     setInitialLoading(true);
     try {
       const { data, error } = await supabase
         .from('business_settings')
         .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle(); // Use maybeSingle to not error if no row exists
+        .eq('user_id', session.user.id)
+        .maybeSingle(); 
 
-      if (error && error.code !== 'PGRST116') { // PGRST116: no rows found, which is fine
+      if (error && error.code !== 'PGRST116') { 
         throw error;
       }
 
@@ -197,9 +201,8 @@ export default function BusinessInformationScreen() {
     } finally {
       setInitialLoading(false);
     }
-  }, [user, supabase]);
+  }, [session, supabase]);
 
-  // Fetch data when the screen comes into focus and when user/supabase changes
   useFocusEffect(
     useCallback(() => {
       fetchBusinessInfo();
@@ -214,7 +217,7 @@ export default function BusinessInformationScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Reverted to original due to lint error
+      mediaTypes: ['images'], 
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -226,7 +229,7 @@ export default function BusinessInformationScreen() {
   };
 
   const handleSaveChanges = async () => {
-    if (!user) {
+    if (!session) {
       Alert.alert('Error', 'You must be logged in to save settings.');
       return;
     }
@@ -234,48 +237,57 @@ export default function BusinessInformationScreen() {
     console.log('handleSaveChanges: Starting. Current settingsId:', settingsId);
 
     try {
-      let publicLogoUrl = logoUri; // Assume it might be an existing URL or null
+      let publicLogoUrl = logoUri; 
       console.log('handleSaveChanges: Initial publicLogoUrl:', publicLogoUrl);
 
-      if (logoUri && logoUri.startsWith('file://')) { // A new logo was picked
-        console.log('handleSaveChanges: New logo picked, URI:', logoUri);
-        const fileExt = logoUri.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
-        console.log('handleSaveChanges: Uploading logo with filePath:', filePath);
+      if (logoUri && logoUri.startsWith('file://')) { 
+        console.log('handleSaveChanges: New logo picked, preparing to upload via Edge Function. URI:', logoUri);
+        const localUri = logoUri;
+        const filename = localUri.split('/').pop() || `logo-${Date.now()}`;
+        let fileType = 'image/jpeg';
+        if (filename.endsWith('.png')) {
+          fileType = 'image/png';
+        } else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+          fileType = 'image/jpeg';
+        }
 
-        const response = await fetch(logoUri);
-        const blob = await response.blob();
+        const base64 = await FileSystem.readAsStringAsync(localUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
 
-        console.log('handleSaveChanges: Extracted fileExt:', fileExt);
-        console.log('handleSaveChanges: Blob details - Size:', blob.size, 'Type:', blob.type);
+        if (!base64 || base64.length === 0) {
+          Alert.alert('Error', 'Selected file is empty or could not be read.');
+          setLoading(false);
+          return;
+        }
 
-        // Create FormData and append the blob
-        const formData = new FormData();
-        formData.append('file', blob, fileName); // Use 'file' as key, pass fileName
+        console.log('handleSaveChanges: Calling Edge Function upload-logo');
+        const edgeFunctionUrl = 'https://wzpuzqzsjdizmpiobsuo.functions.supabase.co/upload-logo'; 
+        const response = await fetch(edgeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileName: filename,
+            fileType: fileType,
+            base64: base64,
+          }),
+        });
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('businesslogos')
-          .upload(filePath, formData, { // Pass formData instead of blob directly
-            // contentType removed as FormData handles its own, and blob has a type
-            upsert: true,
-          });
-        
-        console.log('handleSaveChanges: Logo uploadData:', uploadData);
-        console.log('handleSaveChanges: Logo uploadError:', uploadError);
+        const result = await response.json();
 
-        if (uploadError) throw uploadError;
+        if (!response.ok || result.error) {
+          console.error('handleSaveChanges: Edge Function error response:', result);
+          throw new Error(result.error || 'Failed to upload logo via Edge Function.');
+        }
 
-        const { data: urlData } = supabase.storage
-          .from('businesslogos')
-          .getPublicUrl(filePath);
-        
-        publicLogoUrl = urlData.publicUrl;
-        console.log('handleSaveChanges: New publicLogoUrl after upload:', publicLogoUrl);
+        publicLogoUrl = result.url;
+        console.log('handleSaveChanges: New publicLogoUrl after Edge Function upload:', publicLogoUrl);
       }
 
       const updates = {
-        user_id: user.id,
+        user_id: session.user.id,
         business_name: businessName,
         business_address: businessAddress,
         business_email: businessEmail,
@@ -321,26 +333,27 @@ export default function BusinessInformationScreen() {
         throw responseError;
       }
 
-      Alert.alert('Success', 'Business information saved successfully!');
-      console.log('handleSaveChanges: Save successful alert shown.');
-
       if (responseData) {
+        console.log('handleSaveChanges: Full responseData from DB:', JSON.stringify(responseData, null, 2));
+        console.log('handleSaveChanges: Attempting to set logoUri from responseData.business_logo_url:', responseData.business_logo_url);
+        // setCurrentSettings(responseData); 
+        // Update logoUri for preview from the successfully saved data
+        setLogoUri(responseData.business_logo_url || null); 
+                                        
+        Alert.alert('Success', 'Business information saved successfully!');
+        setSettingsId(responseData.id); 
         console.log('handleSaveChanges: Updating settingsId from responseData.id:', responseData.id);
-        setSettingsId(responseData.id);
-      } else {
-        console.log('handleSaveChanges: responseData was null or undefined after save operation.');
       }
 
     } catch (error: any) {
-      console.error('handleSaveChanges: Error caught in try-catch block:', JSON.stringify(error, null, 2));
-      Alert.alert('Error', error.message || 'Failed to save business information.');
+      console.error('handleSaveChanges: Error caught in try-catch block:', error, JSON.stringify(error, null, 2));
+      Alert.alert('Error', error?.message || 'Failed to save business information.');
     } finally {
       setLoading(false);
       console.log('handleSaveChanges: Finished.');
     }
   };
 
-  // Header configuration
   useEffect(() => {
     navigation.setOptions({
       header: () => (
@@ -351,7 +364,7 @@ export default function BusinessInformationScreen() {
           <Text style={[styles.headerTitle, {color: theme.foreground}]}>Business Information</Text>
         </View>
       ),
-      headerShown: true, // Ensure header is shown
+      headerShown: true, 
     });
   }, [navigation, router, theme, styles]);
 
@@ -372,10 +385,21 @@ export default function BusinessInformationScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.sectionContainer}>
-          {/* Logo Picker */}
           <TouchableOpacity onPress={handleImagePick} style={styles.logoPickerRow}>
             {logoUri ? (
-              <Image source={{ uri: logoUri }} style={styles.logoImagePreview} />
+              <Image
+                source={{ uri: logoUri ? `${logoUri}?t=${Date.now()}` : undefined }}
+                style={styles.logoImagePreview} 
+                onLoadStart={() => {
+                  console.log('[ImageComponent] Load STARTING for URI:', logoUri);
+                }}
+                onLoad={(event) => {
+                  console.log('[ImageComponent] Load SUCCESS for URI:', logoUri);
+                }}
+                onError={(error) => {
+                  console.error('[ImageComponent] Load FAILED for URI:', logoUri, 'Error:', error.nativeEvent.error);
+                }}
+              />
             ) : (
               <View style={styles.logoPlaceholder}>
                 <UploadCloud size={24} color={theme.mutedForeground} />
@@ -385,10 +409,8 @@ export default function BusinessInformationScreen() {
               <Text style={styles.logoPickerLabel}>Business Logo</Text>
               <Text style={styles.logoPickerSubtext}>Tap to upload or change logo</Text>
             </View>
-            {/* Optional: Add a small icon like ChevronRight here if desired */}
           </TouchableOpacity>
 
-          {/* Business Name */}
           <View style={styles.inputRow}>
             <Text style={styles.label}>Business Name</Text>
             <TextInput
@@ -400,11 +422,10 @@ export default function BusinessInformationScreen() {
             />
           </View>
 
-          {/* Business Address - Multiline */}
           <View style={[styles.multilineInputContainer, styles.inputRow, {flexDirection: 'column', alignItems: 'flex-start'}]}>
             <Text style={[styles.label, {marginBottom: 8}]}>Business Address</Text>
             <TextInput
-              style={[styles.multilineInput, { width: '100%'}] } // Ensure it takes full width
+              style={[styles.multilineInput, { width: '100%'}] } 
               value={businessAddress}
               onChangeText={setBusinessAddress}
               placeholder="Enter full business address"
@@ -414,7 +435,6 @@ export default function BusinessInformationScreen() {
             />
           </View>
 
-          {/* Business Email */}
           <View style={styles.inputRow}>
             <Text style={styles.label}>Email</Text>
             <TextInput
@@ -428,7 +448,6 @@ export default function BusinessInformationScreen() {
             />
           </View>
 
-          {/* Phone Number */}
           <View style={styles.inputRow}>
             <Text style={styles.label}>Phone</Text>
             <TextInput
@@ -441,7 +460,6 @@ export default function BusinessInformationScreen() {
             />
           </View>
 
-          {/* Website/Social Link */}
           <View style={[styles.inputRow, styles.lastInputRow]}>
             <Text style={styles.label}>Website/Social</Text>
             <TextInput
@@ -458,7 +476,6 @@ export default function BusinessInformationScreen() {
 
       </ScrollView>
 
-      {/* Sticky Save Button */}
       <View style={styles.stickyButtonContainer}>
         <TouchableOpacity onPress={handleSaveChanges} style={styles.saveButton} disabled={loading}>
           {loading ? (

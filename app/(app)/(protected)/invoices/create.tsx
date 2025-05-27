@@ -34,6 +34,7 @@ import { SwipeListView } from 'react-native-swipe-list-view'; // Added SwipeList
 import type { Database } from '../../../../types/database.types'; // Corrected path again
 import { Image } from 'react-native'; // Added Image import
 import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
+import { KeyboardAvoidingView } from 'react-native';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -232,6 +233,7 @@ export default function CreateInvoiceScreen() {
   const navigation = useNavigation(); // Get navigation object
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
   const { supabase, user } = useSupabase(); // Use Supabase context
+  const { invoiceId } = useLocalSearchParams<{ invoiceId?: string }>(); // Moved to top level
 
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
@@ -982,290 +984,325 @@ export default function CreateInvoiceScreen() {
     marginLeft: 2, // Reduced margin for the Mastercard icon to bring it closer to Visa
   };
 
+  const [defaultNotesFetched, setDefaultNotesFetched] = useState(false); // New state
+
+  useEffect(() => {
+    if (!invoiceId && !defaultNotesFetched && !getValues('notes') && user && supabase) {
+      const fetchDefaultNotes = async () => {
+        try {
+          console.log('[CreateInvoiceScreen] Fetching default notes for user:', user.id);
+          const { data: paymentOptionsData, error: paymentOptionsError } = await supabase
+            .from('payment_options')
+            .select('invoice_terms_notes')
+            .eq('user_id', user.id)
+            .single();
+
+          if (paymentOptionsError && paymentOptionsError.code !== 'PGRST116') {
+            console.error('Error fetching default notes:', paymentOptionsError.message);
+          } else if (paymentOptionsData && paymentOptionsData.invoice_terms_notes) {
+            console.log('[CreateInvoiceScreen] Default notes fetched:', paymentOptionsData.invoice_terms_notes);
+            setValue('notes', paymentOptionsData.invoice_terms_notes || '');
+          }
+        } catch (e: any) {
+          console.error('Exception fetching default notes:', e.message);
+        } finally {
+          setDefaultNotesFetched(true);
+        }
+      };
+      fetchDefaultNotes();
+    }
+  }, [user, supabase, invoiceId, defaultNotesFetched, setValue, getValues]); // Corrected dependency array
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
-      <Stack.Screen
-        options={{
-          headerTitle: '', 
-          headerTitleAlign: 'left', 
-          headerBackTitle: 'Back', 
-          headerTitleStyle: { 
-            fontFamily: 'Inter-Bold', 
-            fontSize: 20,
-            color: themeColors.foreground, 
-          },
-          headerStyle: {
-            backgroundColor: themeColors.card,
-            ...(Platform.OS === 'ios' ? {
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.10, 
-              shadowRadius: 2.00,
-            } : {
-              elevation: 2, // Android shadow
-            }),
-          }, 
-          headerTintColor: '#000000', 
-          headerShadowVisible: false, // Keep this false to use our custom shadow from headerStyle
-        }}
-      />
-      <ScrollView 
-        style={[styles.container, { backgroundColor: screenBackgroundColor }]}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* --- NEW DETAILS SECTION --- */}
-        <TouchableOpacity onPress={openEditInvoiceDetailsModal} activeOpacity={0.7}>
-          <View style={styles.newDetailsSectionContainer}>
-            <View style={styles.detailsRow1}>
-              <View style={styles.invoiceNumberEditContainer}>
-                <Text style={[styles.invoiceNumberDisplay, { color: themeColors.foreground }]}>
-                  {watchedInvoiceNumber || `INV001`}
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // Adjust offset if header is present
+    >
+      <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
+        <Stack.Screen
+          options={{
+            headerTitle: '', 
+            headerTitleAlign: 'left', 
+            headerBackTitle: 'Back', 
+            headerTitleStyle: { 
+              fontFamily: 'Inter-Bold', 
+              fontSize: 20,
+              color: themeColors.foreground, 
+            },
+            headerStyle: {
+              backgroundColor: themeColors.card,
+              ...(Platform.OS === 'ios' ? {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.10, 
+                shadowRadius: 2.00,
+              } : {
+                elevation: 2, // Android shadow
+              }),
+            }, 
+            headerTintColor: '#000000', 
+            headerShadowVisible: false, // Keep this false to use our custom shadow from headerStyle
+          }}
+        />
+        <ScrollView 
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 20 }} // Add some padding at the bottom
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* --- NEW DETAILS SECTION --- */}
+          <TouchableOpacity onPress={openEditInvoiceDetailsModal} activeOpacity={0.7}>
+            <View style={styles.newDetailsSectionContainer}>
+              <View style={styles.detailsRow1}>
+                <View style={styles.invoiceNumberEditContainer}>
+                  <Text style={[styles.invoiceNumberDisplay, { color: themeColors.foreground }]}>
+                    {watchedInvoiceNumber || `INV001`}
+                  </Text>
+                </View>
+                <Text style={{ color: themeColors.foreground, fontWeight: 'bold' }}>
+                  {`${invoiceDetails?.dueDateDisplayLabel || 'Set Due Date'}`}
                 </Text>
               </View>
-              <Text style={{ color: themeColors.foreground, fontWeight: 'bold' }}>
-                {`${invoiceDetails?.dueDateDisplayLabel || 'Set Due Date'}`}
-              </Text>
+              <View style={styles.detailsRow2}>
+                <Text style={[styles.subLabel, { color: themeColors.mutedForeground }]}>Creation Date</Text>
+                <Text style={[styles.dateDisplay, { color: themeColors.mutedForeground, fontWeight: 'normal' }]}>
+                  {formatFriendlyDate(watchedInvoiceDate)}
+                </Text>
+              </View>
             </View>
-            <View style={styles.detailsRow2}>
-              <Text style={[styles.subLabel, { color: themeColors.mutedForeground }]}>Creation Date</Text>
-              <Text style={[styles.dateDisplay, { color: themeColors.mutedForeground, fontWeight: 'normal' }]}>
-                {formatFriendlyDate(watchedInvoiceDate)}
-              </Text>
-            </View>
-          </View>
 
-        </TouchableOpacity>
+          </TouchableOpacity>
 
-        {/* Client Section */}
-        <FormSection title="CLIENT" themeColors={themeColors}>
-          {selectedClient ? (
-            <View style={styles.selectedClientContainer}>
-              <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
-              <TouchableOpacity onPress={openNewClientSelectionSheet}>
-                <Text style={styles.changeClientText}>Change</Text>
+          {/* Client Section */}
+          <FormSection title="CLIENT" themeColors={themeColors}>
+            {selectedClient ? (
+              <View style={styles.selectedClientContainer}>
+                <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                <TouchableOpacity onPress={openNewClientSelectionSheet}>
+                  <Text style={styles.changeClientText}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={openNewClientSelectionSheet} style={styles.clientSelector}>
+                <PlusCircle size={22} color={themeColors.primary} />
+                <Text style={styles.clientSelectorText}>Add Client</Text>
               </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={openNewClientSelectionSheet} style={styles.clientSelector}>
-              <PlusCircle size={22} color={themeColors.primary} />
-              <Text style={styles.clientSelectorText}>Add Client</Text>
-            </TouchableOpacity>
-          )}
-        </FormSection>
+            )}
+          </FormSection>
 
-        {/* Items Section */}
-        <FormSection title="ITEMS" themeColors={themeColors} noPadding={currentInvoiceLineItems.length > 0}> 
-          {currentInvoiceLineItems.length === 0 ? (
-            <View style={{ alignItems: 'center', paddingVertical: 16 }}> 
+          {/* Items Section */}
+          <FormSection title="ITEMS" themeColors={themeColors} noPadding={currentInvoiceLineItems.length > 0}> 
+            {currentInvoiceLineItems.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 16 }}> 
+                <TouchableOpacity 
+                  style={styles.addItemButtonInline} 
+                  onPress={() => addItemSheetRef.current?.present()}
+                >
+                  <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
+                  <Text style={styles.addItemButtonText}>Add Item or Service</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <SwipeListView
+                data={currentInvoiceLineItems}
+                renderItem={renderVisibleItem}
+                renderHiddenItem={renderHiddenItem}
+                rightOpenValue={-110} // Width of the remove button area
+                disableRightSwipe
+                keyExtractor={(item) => item.id}
+                style={[
+                  styles.swipeListStyle, 
+                  currentInvoiceLineItems.length > 0 && {
+                    borderRadius: 10,
+                    backgroundColor: themeColors.card // SwipeListView acts as the card background
+                  }
+                ]}
+                contentContainerStyle={styles.swipeListContentContainer}
+                useNativeDriver={false} // Recommended for SwipeListView if issues occur with animations
+                closeOnRowPress={true}
+                closeOnScroll={true}
+                closeOnRowBeginSwipe={true}
+              />
+            )}
+            {/* Always show 'Add Item or Service' button below the list if items exist */}
+            {currentInvoiceLineItems.length > 0 && (
               <TouchableOpacity 
-                style={styles.addItemButtonInline} 
+                style={styles.addItemButtonFullWidth} 
                 onPress={() => addItemSheetRef.current?.present()}
               >
                 <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
-                <Text style={styles.addItemButtonText}>Add Item or Service</Text>
+                <Text style={styles.addItemButtonText}>Add Another Item or Service</Text>
               </TouchableOpacity>
+            )}
+          </FormSection>
+
+          {/* Payment Details Section */}
+          <FormSection title="SUMMARY" themeColors={themeColors}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryText}>{getCurrencySymbol(currencyCode)}{Number(displaySubtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
             </View>
-          ) : (
-            <SwipeListView
-              data={currentInvoiceLineItems}
-              renderItem={renderVisibleItem}
-              renderHiddenItem={renderHiddenItem}
-              rightOpenValue={-110} // Width of the remove button area
-              disableRightSwipe
-              keyExtractor={(item) => item.id}
-              style={[
-                styles.swipeListStyle, 
-                currentInvoiceLineItems.length > 0 && {
-                  borderRadius: 10,
-                  backgroundColor: themeColors.card // SwipeListView acts as the card background
-                }
-              ]}
-              contentContainerStyle={styles.swipeListContentContainer}
-              useNativeDriver={false} // Recommended for SwipeListView if issues occur with animations
-              closeOnRowPress={true}
-              closeOnScroll={true}
-              closeOnRowBeginSwipe={true}
+            <ActionRow 
+              label={
+                watchedDiscountType === 'percentage' && watchedDiscountValue && watchedDiscountValue > 0 
+                  ? `Discount ${watchedDiscountValue}%` 
+                  : watchedDiscountType === 'fixed' && watchedDiscountValue && watchedDiscountValue > 0
+                    ? 'Discount'
+                    : watchedDiscountType // If a type is set but value might be 0 or null
+                      ? 'Edit Discount'
+                      : 'Add Discount' // Cleaner prompt
+              }
+              value={
+                displayDiscountAmount > 0 
+                  ? `- ${getCurrencySymbol(currencyCode)}${Number(displayDiscountAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                  : '' // Empty if no discount applied
+              }
+              onPress={handlePresentSelectDiscountTypeSheet} 
+              icon={Percent} 
+              themeColors={themeColors} 
+              showChevron={!watchedDiscountType} // Show chevron only if no discountType is set
             />
-          )}
-          {/* Always show 'Add Item or Service' button below the list if items exist */}
-          {currentInvoiceLineItems.length > 0 && (
-            <TouchableOpacity 
-              style={styles.addItemButtonFullWidth} 
-              onPress={() => addItemSheetRef.current?.present()}
-            >
-              <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
-              <Text style={styles.addItemButtonText}>Add Another Item or Service</Text>
-            </TouchableOpacity>
-          )}
-        </FormSection>
+            {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
+              <>
+                <View style={styles.separator} />
+                <ActionRow
+                  label={
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                      <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
+                      {watchedTaxPercentage !== null && (
+                        <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
+                      )}
+                    </View>
+                  }
+                  value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
+                  icon={Percent}
+                  themeColors={themeColors}
+                  onPress={handlePresentEditInvoiceTaxSheet}
+                  showChevron={true}
+                />
+              </>
+            )}
+            <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
+              <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
+              <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>{getCurrencySymbol(currencyCode)}{Number(displayInvoiceTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+            </View>
+          </FormSection>
 
-        {/* Payment Details Section */}
-        <FormSection title="SUMMARY" themeColors={themeColors}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryText}>{getCurrencySymbol(currencyCode)}{Number(displaySubtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-          </View>
-          <ActionRow 
-            label={
-              watchedDiscountType === 'percentage' && watchedDiscountValue && watchedDiscountValue > 0 
-                ? `Discount ${watchedDiscountValue}%` 
-                : watchedDiscountType === 'fixed' && watchedDiscountValue && watchedDiscountValue > 0
-                  ? 'Discount'
-                  : watchedDiscountType // If a type is set but value might be 0 or null
-                    ? 'Edit Discount'
-                    : 'Add Discount' // Cleaner prompt
-            }
-            value={
-              displayDiscountAmount > 0 
-                ? `- ${getCurrencySymbol(currencyCode)}${Number(displayDiscountAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                : '' // Empty if no discount applied
-            }
-            onPress={handlePresentSelectDiscountTypeSheet} 
-            icon={Percent} 
-            themeColors={themeColors} 
-            showChevron={!watchedDiscountType} // Show chevron only if no discountType is set
-          />
-          {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
-            <>
-              <View style={styles.separator} />
-              <ActionRow
-                label={
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                    <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
-                    {watchedTaxPercentage !== null && (
-                      <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
-                    )}
-                  </View>
-                }
-                value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
-                icon={Percent}
-                themeColors={themeColors}
-                onPress={handlePresentEditInvoiceTaxSheet}
-                showChevron={true}
-              />
-            </>
-          )}
-          <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
-            <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
-            <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>{getCurrencySymbol(currencyCode)}{Number(displayInvoiceTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-          </View>
-        </FormSection>
+          <FormSection title="PAYMENT METHODS" themeColors={themeColors}>
+            <ActionRow
+              label={
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ color: themeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
+                  <Image source={require('../../../../assets/visaicon.png')} style={iconStyle} />
+                  <Image source={require('../../../../assets/mastercardicon.png')} style={mastercardSpecificStyle} />
+                </View>
+              }
+              icon={CreditCard}
+              themeColors={themeColors} 
+              showSwitch={true}
+              switchValue={getValues('stripe_active_on_invoice')}
+              onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
+              onPress={() => handlePaymentMethodToggle('stripe', !getValues('stripe_active_on_invoice'))}
+            />
+            <ActionRow
+              label={
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ color: themeColors.foreground, fontSize: 16 }}>PayPal</Text>
+                  <Image source={require('../../../../assets/paypalicon.png')} style={iconStyle} />
+                </View>
+              }
+              icon={Banknote} 
+              themeColors={themeColors} 
+              showSwitch={true}
+              switchValue={getValues('paypal_active_on_invoice')}
+              onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
+              onPress={() => handlePaymentMethodToggle('paypal', !getValues('paypal_active_on_invoice'))}
+            />
+            <ActionRow
+              label="Bank Transfer"
+              icon={Landmark} 
+              themeColors={themeColors} 
+              showSwitch={true}
+              switchValue={getValues('bank_account_active_on_invoice')}
+              onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
+              onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active_on_invoice'))}
+            />
+          </FormSection>
 
-        <FormSection title="PAYMENT METHODS" themeColors={themeColors}>
-          <ActionRow
-            label={
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: themeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
-                <Image source={require('../../../../assets/visaicon.png')} style={iconStyle} />
-                <Image source={require('../../../../assets/mastercardicon.png')} style={mastercardSpecificStyle} />
-              </View>
-            }
-            icon={CreditCard}
-            themeColors={themeColors} 
-            showSwitch={true}
-            switchValue={getValues('stripe_active_on_invoice')}
-            onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
-            onPress={() => handlePaymentMethodToggle('stripe', !getValues('stripe_active_on_invoice'))}
-          />
-          <ActionRow
-            label={
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: themeColors.foreground, fontSize: 16 }}>PayPal</Text>
-                <Image source={require('../../../../assets/paypalicon.png')} style={iconStyle} />
-              </View>
-            }
-            icon={Banknote} 
-            themeColors={themeColors} 
-            showSwitch={true}
-            switchValue={getValues('paypal_active_on_invoice')}
-            onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
-            onPress={() => handlePaymentMethodToggle('paypal', !getValues('paypal_active_on_invoice'))}
-          />
-          <ActionRow
-            label="Bank Transfer"
-            icon={Landmark} 
-            themeColors={themeColors} 
-            showSwitch={true}
-            switchValue={getValues('bank_account_active_on_invoice')}
-            onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
-            onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active_on_invoice'))}
-          />
-        </FormSection>
+          <FormSection title="OTHER SETTINGS" themeColors={themeColors}>
+            <ActionRow
+              label="Add images & PDFs (0)"
+              onPress={() => console.log('Add Attachments pressed')} 
+              icon={Paperclip}
+              themeColors={themeColors} 
+              showChevron={false} // This is more of an action button
+            />
+            <TextInput
+              style={styles.notesInput}
+              placeholder="Comments will appear at the bottom of your invoice"
+              placeholderTextColor={themeColors.mutedForeground}
+              multiline
+              value={watch('notes') || ''}
+              onChangeText={(text) => setValue('notes', text)}
+              textAlignVertical="top"
+            />
+          </FormSection>
 
-        <FormSection title="OTHER SETTINGS" themeColors={themeColors}>
-          <ActionRow
-            label="Add images & PDFs (0)"
-            onPress={() => console.log('Add Attachments pressed')} 
-            icon={Paperclip}
-            themeColors={themeColors} 
-            showChevron={false} // This is more of an action button
-          />
-          <TextInput
-            style={styles.notesInput}
-            placeholder="Comments will appear at the bottom of your invoice"
-            placeholderTextColor={themeColors.mutedForeground}
-            multiline
-            value=""
-            onChangeText={() => {}}
-            textAlignVertical="top"
-          />
-        </FormSection>
+        </ScrollView>
 
-      </ScrollView>
+        {/* Full Width Save Button - Not in a separate container */}
+        <TouchableOpacity onPress={handleSubmit(handleSaveInvoice)} style={[styles.bottomSaveButton, isSavingInvoice && styles.disabledButton]} disabled={isSavingInvoice}>
+          <Text style={styles.bottomSaveButtonText}>{isSavingInvoice ? 'Saving...' : 'Save Invoice'}</Text>
+        </TouchableOpacity>
 
-      {/* Full Width Save Button - Not in a separate container */}
-      <TouchableOpacity onPress={handleSubmit(handleSaveInvoice)} style={[styles.bottomSaveButton, isSavingInvoice && styles.disabledButton]} disabled={isSavingInvoice}>
-        <Text style={styles.bottomSaveButtonText}>{isSavingInvoice ? 'Saving...' : 'Save Invoice'}</Text>
-      </TouchableOpacity>
+        {/* Add Item Bottom Sheet Modal */}
+        <AddItemSheet 
+          ref={addItemSheetRef} 
+          onItemFromFormSaved={handleItemFromSheetSaved}
+          currencyCode={currencyCode}
+        />
 
-      {/* Add Item Bottom Sheet Modal */}
-      <AddItemSheet 
-        ref={addItemSheetRef} 
-        onItemFromFormSaved={handleItemFromSheetSaved}
-        currencyCode={currencyCode}
-      />
+        <NewClientSelectionSheet
+          ref={newClientSheetRef}
+          onClientSelect={handleClientSelect}
+          onClose={() => console.log('New client sheet closed')}
+        />
 
-      <NewClientSelectionSheet
-        ref={newClientSheetRef}
-        onClientSelect={handleClientSelect}
-        onClose={() => console.log('New client sheet closed')}
-      />
+        <DateTimePickerModal
+          isVisible={isDatePickerVisible}
+          mode="date"
+          onConfirm={handleConfirmDate}
+          onCancel={hideDatePicker}
+          date={invoiceDate || new Date()} // Set initial date for the picker
+        />
 
-      <DateTimePickerModal
-        isVisible={isDatePickerVisible}
-        mode="date"
-        onConfirm={handleConfirmDate}
-        onCancel={hideDatePicker}
-        date={invoiceDate || new Date()} // Set initial date for the picker
-      />
+        <EditInvoiceDetailsSheet
+          ref={editInvoiceDetailsSheetRef}
+          initialDetails={getInitialModalDetails()} // Pass current details
+          onSave={handleSaveDetailsFromModal} // Handle save action
+        />
 
-      <EditInvoiceDetailsSheet
-        ref={editInvoiceDetailsSheetRef}
-        initialDetails={getInitialModalDetails()} // Pass current details
-        onSave={handleSaveDetailsFromModal} // Handle save action
-      />
+        <SelectDiscountTypeSheet
+          ref={selectDiscountTypeSheetRef}
+          onApply={handleApplyDiscountFromSheet}
+          onClose={handleSelectDiscountTypeSheetClose}
+        />
 
-      <SelectDiscountTypeSheet
-        ref={selectDiscountTypeSheetRef}
-        onApply={handleApplyDiscountFromSheet}
-        onClose={handleSelectDiscountTypeSheetClose}
-      />
+        <EditInvoiceTaxSheet 
+          ref={editInvoiceTaxSheetRef}
+          onSave={handleEditTaxSheetSave} // Placeholder save handler
+          onClose={() => console.log('Edit invoice tax sheet closed')}
+        />
 
-      <EditInvoiceTaxSheet 
-        ref={editInvoiceTaxSheetRef}
-        onSave={handleEditTaxSheetSave} // Placeholder save handler
-        onClose={() => console.log('Edit invoice tax sheet closed')}
-      />
-
-      <MakePaymentSheet 
-        ref={makePaymentSheetRef}
-        onSave={handleMakePaymentSheetSave}
-        onClose={handleMakePaymentSheetClose}
-        invoiceTotal={0} // Provide initial dummy value
-        previouslyPaidAmount={0} // Provide initial dummy value
-      />
-    </SafeAreaView>
+        <MakePaymentSheet 
+          ref={makePaymentSheetRef}
+          onSave={handleMakePaymentSheetSave}
+          onClose={handleMakePaymentSheetClose}
+          invoiceTotal={0} // Provide initial dummy value
+          previouslyPaidAmount={0} // Provide initial dummy value
+        />
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1623,7 +1660,7 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       borderRadius: 12, // Consistent app border radius
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 0, // Hug the bottom of the SafeAreaView content area
+      marginBottom: 32, // Changed from 16 to move the button up further
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.15,

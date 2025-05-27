@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef, useState } from 'react';
+import React, { useMemo, useCallback, useRef, useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -13,6 +13,7 @@ import {
   Image,
   TextInput as RNTextInput,
   useColorScheme,
+  KeyboardAvoidingView, // Added
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
@@ -23,7 +24,7 @@ import {
   Info,
   Settings,
   X as XIcon,
-  Paypal,
+  PayPal, // Corrected from Paypal
   Landmark,
   CheckCircle,
 } from 'lucide-react-native';
@@ -51,6 +52,7 @@ interface PaymentOption {
   stripe_enabled: boolean;
   bank_transfer_enabled: boolean;
   bank_details: string | null;
+  invoice_terms_notes?: string | null;
 }
 
 const getStyles = (theme: any) =>
@@ -63,6 +65,7 @@ const getStyles = (theme: any) =>
       paddingHorizontal: 16,
       paddingTop: 0,
       paddingBottom: 30,
+      marginBottom: 20, // Add some padding at the bottom of scroll content
     },
     sectionCard: {
       backgroundColor: theme.card,
@@ -164,7 +167,7 @@ const getStyles = (theme: any) =>
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: Platform.OS === 'ios' ? 32 : 20,
-      backgroundColor: '#F9FAFB',
+      backgroundColor: theme.card,
     },
     modalHeader: {
       flexDirection: 'row',
@@ -190,7 +193,7 @@ const getStyles = (theme: any) =>
       backgroundColor: theme.mutedForeground,
     },
     modalBackground: {
-      backgroundColor: '#F9FAFB',
+      backgroundColor: theme.card,
     },
     inputRow: {
       flexDirection: 'row',
@@ -235,27 +238,43 @@ const getStyles = (theme: any) =>
       opacity: 0.5,
     },
     saveButtonContainer: {
-      padding: 16,
-      paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-      backgroundColor: theme.card,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border,
+      marginTop: 16,      // Added for spacing above the button
+      marginBottom: Platform.OS === 'ios' ? 0 : 16, // Space below, adjust for keyboard if needed
+      // Horizontal padding is handled by modalInnerContent
     },
     saveButton: {
       backgroundColor: theme.primary,
-      borderRadius: 10,
-      paddingVertical: 16,
+      paddingVertical: 15,
+      borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
+      // marginHorizontal is not needed here as modalInnerContent provides padding
     },
     saveButtonText: {
       color: theme.primaryForeground,
       fontSize: 16,
       fontWeight: 'bold',
     },
-    disabledButton: {
-      backgroundColor: theme.muted,
-      opacity: 0.7,
+    // New styles for global save button
+    bottomButtonContainer: {
+      paddingHorizontal: 16,
+      paddingBottom: Platform.OS === 'ios' ? 34 : 16, // For home indicator
+      paddingTop: 10,
+      backgroundColor: theme.background, // Match screen background
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+    },
+    globalSaveButton: {
+      backgroundColor: theme.primary, // Assuming theme.primary is the desired green
+      paddingVertical: 14,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    globalSaveButtonText: {
+      color: theme.primaryForeground, // Assuming this is white or a contrasting color for primary bg
+      fontSize: 16,
+      fontWeight: 'bold',
     },
     listItemIconStyle: {
       width: 24,
@@ -271,8 +290,8 @@ const getStyles = (theme: any) =>
       paddingHorizontal: 10,
     },
     paymentMethodIconStyle: {
-      width: 63, // Changed from 50
-      height: 40, // Changed from 32
+      width: 63,
+      height: 40,
       resizeMode: 'contain',
       marginHorizontal: 5,
     },
@@ -343,13 +362,17 @@ const getStyles = (theme: any) =>
       fontSize: 15,
       fontWeight: '500',
     },
+    disabledButton: { // Added missing style
+      backgroundColor: theme.muted, // Or theme.disabled, theme.border, etc.
+      opacity: 0.7,
+    }
   });
 
 export default function PaymentOptionsScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const colorScheme = useColorScheme(); // Get current color scheme
-  const isLightMode = colorScheme === 'light'; // Determine if it's light mode
+  const colorScheme = useColorScheme();
+  const isLightMode = colorScheme === 'light';
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { user, supabase } = useSupabase();
@@ -357,6 +380,7 @@ export default function PaymentOptionsScreen() {
   const paypalBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const stripeBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const bankTransferBottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const bankTransferScrollViewRef = useRef<BottomSheetScrollView>(null); // Ref for Bank Transfer scroll view
 
   const [isPayPalEnabled, setIsPayPalEnabled] = useState(false);
   const [paypalEmail, setPayPalEmail] = useState('');
@@ -382,6 +406,17 @@ export default function PaymentOptionsScreen() {
   const [isLoadingBankTransferSettings, setIsLoadingBankTransferSettings] = useState(false);
   const [isBankTransferActiveOnScreen, setIsBankTransferActiveOnScreen] = useState(false);
 
+  const [invoiceTermsNotes, setInvoiceTermsNotes] = useState<string>('');
+  const [initialInvoiceTermsNotes, setInitialInvoiceTermsNotes] = useState<string>('');
+  const [isLoadingInvoiceTermsNotes, setIsLoadingInvoiceTermsNotes] = useState<boolean>(false);
+
+  const defaultPayPalSnapPoints = useMemo(() => ['50%', '65%'], []);
+  const keyboardActivePayPalSnapPoints = useMemo(() => ['75%', '90%'], []); // Taller when keyboard is active
+  const [currentPayPalSnapPoints, setCurrentPayPalSnapPoints] = useState(defaultPayPalSnapPoints);
+
+  // State to track if bank transfer modal is the one currently focused for keyboard events
+  const [isBankTransferModalFocused, setIsBankTransferModalFocused] = useState(false);
+
   const paymentIcons = [
     { name: 'Visa', source: require('../../assets/visaicon.png') },
     { name: 'Mastercard', source: require('../../assets/mastercardicon.png') },
@@ -390,12 +425,42 @@ export default function PaymentOptionsScreen() {
     { name: 'GooglePay', source: require('../../assets/googlepayicon.png') },
   ];
 
-  const payPalSnapPoints = useMemo(() => ['50%', '65%'], []);
-  const stripeSnapPoints = useMemo(() => ['90%'], []); // Changed from 85% to 90%
+  const stripeSnapPoints = useMemo(() => ['90%'], []);
   const bankTransferSnapPoints = useMemo(() => ['60%', '80%'], []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        // Handle PayPal modal snap points
+        setCurrentPayPalSnapPoints(keyboardActivePayPalSnapPoints);
+
+        // Handle Bank Transfer modal scroll
+        if (isBankTransferModalFocused) {
+          // Add a slight delay to ensure layout is complete after keyboard is up
+          setTimeout(() => {
+            bankTransferScrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setCurrentPayPalSnapPoints(defaultPayPalSnapPoints);
+        // No specific action needed for bank transfer modal on keyboard hide for now
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [keyboardActivePayPalSnapPoints, defaultPayPalSnapPoints, isPayPalEnabled, isBankTransferModalFocused]);
 
   const openPayPalModal = useCallback(async () => {
     if (!user) return;
+    setIsBankTransferModalFocused(false); // Ensure other modals don't trigger bank scroll
     setIsLoadingSettings(true);
     paypalBottomSheetModalRef.current?.present();
 
@@ -592,7 +657,7 @@ export default function PaymentOptionsScreen() {
 
   const openBankTransferModal = useCallback(async () => {
     if (!user) return;
-    Keyboard.dismiss();
+    setIsBankTransferModalFocused(true); // Set focus for keyboard listener
     setIsLoadingBankTransferSettings(true);
     bankTransferBottomSheetModalRef.current?.present();
 
@@ -629,6 +694,7 @@ export default function PaymentOptionsScreen() {
 
   const closeBankTransferModal = useCallback(() => {
     bankTransferBottomSheetModalRef.current?.dismiss();
+    setIsBankTransferModalFocused(false); // Clear focus
   }, []);
 
   const handleBankTransferToggle = (newValue: boolean) => {
@@ -698,6 +764,57 @@ export default function PaymentOptionsScreen() {
     Alert.alert("Connect with Stripe", "This will open the Stripe connection flow. (Not yet implemented)");
   };
 
+  const handleSaveInvoiceTermsNotes = async () => {
+    if (!user) {
+      Alert.alert('Error', 'User not found. Please try again.');
+      return;
+    }
+    if (isLoadingInvoiceTermsNotes) return;
+
+    Keyboard.dismiss();
+    setIsLoadingInvoiceTermsNotes(true);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const { data: existingData, error: fetchExistingError } = await supabase
+        .from('payment_options')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (fetchExistingError && fetchExistingError.code !== 'PGRST116') {
+        throw fetchExistingError;
+      }
+
+      const upsertData: Partial<PaymentOption> & { user_id: string } = {
+        user_id: user.id,
+        invoice_terms_notes: invoiceTermsNotes,
+      };
+      if (existingData?.id) {
+        upsertData.id = existingData.id;
+      }
+
+      const { data: updateData, error: updateError } = await supabase
+        .from('payment_options')
+        .upsert(upsertData)
+        .select('id, invoice_terms_notes')
+        .single();
+
+      if (updateError) throw updateError;
+
+      if (updateData) {
+        setInitialInvoiceTermsNotes(updateData.invoice_terms_notes || '');
+        setInvoiceTermsNotes(updateData.invoice_terms_notes || ''); // Ensure consistency if DB transforms value
+        Alert.alert('Success', 'Invoice terms and notes saved successfully.');
+      }
+    } catch (error: any) {
+      console.error('Error saving invoice terms & notes:', error);
+      Alert.alert('Error', error.message || 'Failed to save invoice terms and notes.');
+    } finally {
+      setIsLoadingInvoiceTermsNotes(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       setIsTabBarVisible(true);
@@ -713,7 +830,7 @@ export default function PaymentOptionsScreen() {
         try {
           const { data, error } = await supabase
             .from('payment_options')
-            .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, id')
+            .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, invoice_terms_notes, id')
             .eq('user_id', user.id)
             .single();
 
@@ -726,6 +843,8 @@ export default function PaymentOptionsScreen() {
             setIsPayPalActiveOnScreen(data.paypal_enabled);
             setIsStripeActiveOnScreen(data.stripe_enabled);
             setIsBankTransferActiveOnScreen(data.bank_transfer_enabled);
+            setInvoiceTermsNotes(data.invoice_terms_notes || '');
+            setInitialInvoiceTermsNotes(data.invoice_terms_notes || '');
             if (!paymentOptionsId && data.id) setPaymentOptionsId(data.id);
           } else {
             setIsPayPalActiveOnScreen(false);
@@ -784,322 +903,368 @@ export default function PaymentOptionsScreen() {
   return (
     <BottomSheetModalProvider>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <Stack.Screen 
-          options={{
-            headerTitle: 'Payment Options',
-            headerShown: true,
-            headerStyle: { 
-              backgroundColor: theme.card,
-            },
-            headerTitleStyle: [styles.headerTitleStyle, { color: theme.foreground }],
-            headerLeft: () => <HeaderLeft />,
-            headerShadowVisible: false, // To match previous appearance
-            animation: 'slide_from_right', // Optional: restore animation if desired
-          }}
-        />
-        <ScrollView 
-          contentContainerStyle={styles.scrollContentContainer}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? (64 + 20) : 0} // Adjust if header height is different or not needed
         >
-          <Text style={styles.sectionTitle}>Online payments</Text>
-          <View style={styles.sectionCard}>
-            <SettingsListItem
-              icon={<Image source={require('../../assets/stripeicon.png')} style={styles.listItemIconStyle} />}
-              label="Stripe Payments"
-              onPress={handleStripePress}
-              rightContent={
-                isLoadingScreenStatus ? (
-                  <ActivityIndicator size="small" color={theme.mutedForeground} />
-                ) : (
-                  <Text style={{ color: isStripeActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isStripeActiveOnScreen ? 'bold' : 'normal' }}>
-                    {isStripeActiveOnScreen ? 'On' : 'Off'}
-                  </Text>
-                )
-              }
-            />
-            <SettingsListItem
-              icon={<Image source={require('../../assets/paypalicon.png')} style={styles.listItemIconStyle} />}
-              label="PayPal Payments"
-              onPress={handlePayPalPress}
-              rightContent={
-                isLoadingScreenStatus ? (
-                  <ActivityIndicator size="small" color={theme.mutedForeground} />
-                ) : (
-                  <Text style={{ color: isPayPalActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isPayPalActiveOnScreen ? 'bold' : 'normal' }}>
-                    {isPayPalActiveOnScreen ? 'On' : 'Off'}
-                  </Text>
-                )
-              }
-            />
-          </View>
-
-          <Text style={styles.sectionTitle}>Bank Payments</Text>
-          <View style={styles.sectionCard}>
-            <SettingsListItem
-              icon={<Landmark size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
-              label="Bank Transfers"
-              onPress={handleBankTransferPress} 
-              rightContent={
-                isLoadingScreenStatus ? (
-                  <ActivityIndicator size="small" color={theme.mutedForeground} />
-                ) : (
-                  <Text style={{ color: isBankTransferActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isBankTransferActiveOnScreen ? 'bold' : 'normal' }}>
-                    {isBankTransferActiveOnScreen ? 'On' : 'Off'}
-                  </Text>
-                )
-              }
-            />
-          </View>
-
-          <Text style={styles.sectionTitle}>Payment Instructions</Text>
-          <View style={styles.helperTextContainer}>
-            <Text style={styles.helperText}>
-              Add your preferred payment details below. Bank account info, Venmo, Zelle, Cash App, etc. Anything else customers need to know.
-            </Text>
-            <Text style={styles.helperSubtext}>
-              These instructions will be added to every invoice and estimate.
-            </Text>
-          </View>
-        </ScrollView>
-
-        {/* PayPal Modal */}
-        <BottomSheetModal
-          ref={paypalBottomSheetModalRef}
-          index={0}
-          snapPoints={payPalSnapPoints}
-          onChange={handleSheetChanges} 
-          backdropComponent={renderBackdrop}
-          handleIndicatorStyle={styles.handleIndicator}
-          backgroundStyle={styles.modalBackground}
-          keyboardBehavior="interactive"
-        >
-          <BottomSheetScrollView
-            contentContainerStyle={styles.modalContentContainer}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Activate PayPal Payments</Text>
-              <TouchableOpacity onPress={closePayPalModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <XIcon size={24} color={theme.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalInnerContent}>
-              <View style={[styles.sectionCard, styles.toggleCard]}>
-                <View style={[styles.inputRow, styles.lastInputRow]}>
-                  <Text style={styles.label}>Enable PayPal</Text>
-                  <Switch
-                    key={`paypal-${isPayPalEnabled.toString()}`}
-                    trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
-                    thumbColor={isPayPalEnabled ? theme.primary : theme.card}
-                    ios_backgroundColor={theme.muted}
-                    onValueChange={handlePayPalToggle}
-                    value={isPayPalEnabled}
-                    disabled={isLoadingSettings}
-                  />
-                </View>
-              </View>
-
-              {isPayPalEnabled && (
-                <View style={[styles.sectionCard, styles.emailInputCard]}>
-                  <Text style={[styles.inputLabel, { color: theme.foreground, marginBottom: 8, fontWeight: 'bold' }]}>PayPal Email</Text>
-                  <BottomSheetTextInput
-                    style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
-                    placeholder="Enter your PayPal email address"
-                    placeholderTextColor={theme.mutedForeground}
-                    value={paypalEmail}
-                    onChangeText={handleEmailChange}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    editable={!isLoadingSettings}
-                  />
-                </View>
-              )}
-
-              {settingsChanged && (
-                <View style={styles.saveButtonContainer}>
-                  <TouchableOpacity
-                    style={[styles.saveButton, isLoadingSettings && styles.disabledButton]}
-                    onPress={handleSavePayPalEmail}
-                    disabled={isLoadingSettings || !settingsChanged} 
-                  >
-                    {isLoadingSettings ? (
-                      <ActivityIndicator size="small" color={theme.primaryForeground} />
-                    ) : (
-                      <Text style={styles.saveButtonText}>Save PayPal Settings</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </BottomSheetScrollView>
-        </BottomSheetModal>
-
-        {/* Stripe Modal */}
-        <BottomSheetModal
-          ref={stripeBottomSheetModalRef}
-          index={0}
-          snapPoints={stripeSnapPoints} 
-          onChange={handleSheetChanges} 
-          backdropComponent={renderBackdrop}
-          handleIndicatorStyle={styles.handleIndicator}
-          backgroundStyle={styles.modalBackground}
-        >
-          <BottomSheetScrollView
-            contentContainerStyle={styles.modalContentContainer}
+          <Stack.Screen 
+            options={{
+              headerTitle: () => (
+                <Text style={[styles.headerTitleStyle, { color: theme.foreground }]}>
+                  Payment Options
+                </Text>
+              ),
+              headerShown: true,
+              headerStyle: { 
+                backgroundColor: theme.card,
+              },
+              headerLeft: () => <HeaderLeft />,
+              headerShadowVisible: false, // To match previous appearance
+              animation: 'slide_from_right', // Optional: restore animation if desired
+            }}
+          />
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollContentContainer}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Activate Stripe Payments</Text>
-              <TouchableOpacity onPress={closeStripeModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <XIcon size={24} color={theme.mutedForeground} />
-              </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Online payments</Text>
+            <View style={styles.sectionCard}>
+              <SettingsListItem
+                icon={<Image source={require('../../assets/stripeicon.png')} style={styles.listItemIconStyle} />}
+                label="Stripe Payments"
+                onPress={handleStripePress}
+                rightContent={
+                  isLoadingScreenStatus ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{ color: isStripeActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isStripeActiveOnScreen ? 'bold' : 'normal' }}>
+                      {isStripeActiveOnScreen ? 'On' : 'Off'}
+                    </Text>
+                  )
+                }
+              />
+              <SettingsListItem
+                icon={<Image source={require('../../assets/paypalicon.png')} style={styles.listItemIconStyle} />}
+                label="PayPal Payments"
+                onPress={handlePayPalPress}
+                rightContent={
+                  isLoadingScreenStatus ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{ color: isPayPalActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isPayPalActiveOnScreen ? 'bold' : 'normal' }}>
+                      {isPayPalActiveOnScreen ? 'On' : 'Off'}
+                    </Text>
+                  )
+                }
+              />
             </View>
-            <View style={styles.modalInnerContent}>
-              <View style={styles.logoRowContainer}>
-                {paymentIcons.map((icon) => (
-                  <Image
-                    key={icon.name}
-                    source={icon.source}
-                    style={styles.paymentMethodIconStyle}
-                  />
-                ))}
-              </View>
 
-              <View style={styles.positiveBulletsContainer}>
-                <View style={styles.bulletItem}>
-                  <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                  <Text style={styles.bulletText}>Customers pay 5 times faster with card payments</Text>
-                </View>
-                <View style={styles.bulletItem}>
-                  <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                  <Text style={styles.bulletText}>Easily send card payment links in a flash</Text>
-                </View>
-                <View style={styles.bulletItem}>
-                  <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                  <Text style={styles.bulletText}>Fast and easy setup</Text>
-                </View>
-              </View>
+            <Text style={styles.sectionTitle}>Bank Payments</Text>
+            <View style={styles.sectionCard}>
+              <SettingsListItem
+                icon={<Landmark size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
+                label="Bank Transfers"
+                onPress={handleBankTransferPress} 
+                rightContent={
+                  isLoadingScreenStatus ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{ color: isBankTransferActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isBankTransferActiveOnScreen ? 'bold' : 'normal' }}>
+                      {isBankTransferActiveOnScreen ? 'On' : 'Off'}
+                    </Text>
+                  )
+                }
+              />
+            </View>
 
-              <View style={styles.importantStepsContainer}>
-                <Text style={styles.importantStepsTitle}>Important Steps</Text>
-                <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: '#000000' }}>15 minutes</Text></Text>
-                <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: '#000000' }}>daily or weekly</Text>, first one takes seven days.</Text>
-                <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: '#000000' }}>most competitive</Text> in the world.</Text>
-              </View>
+            <View style={[styles.sectionCard, { marginTop: 20, paddingHorizontal: 0 /* Reset padding for inner content */ }]}>
+              <Text style={[styles.inputLabel, { marginLeft: 16, marginRight: 16, marginBottom: 10, marginTop: 0 /* Reset from sectionCard paddingVertical */ }]}>
+                Payment Instructions & Notes
+              </Text>
+              <RNTextInput
+                style={[
+                  styles.multilineInputStyle, 
+                  { 
+                    marginHorizontal: 16, 
+                    marginBottom: (invoiceTermsNotes !== initialInvoiceTermsNotes) ? 10 : 16, // Adjust bottom margin if save button is visible
+                    backgroundColor: theme.input, 
+                    borderColor: theme.border 
+                  }
+                ]}
+                value={invoiceTermsNotes}
+                onChangeText={setInvoiceTermsNotes}
+                placeholder="Add your preferred payment details below. Bank account info, Venmo, Zelle, Cash App, etc. Anything else customers need to know. These instructions will be added to every invoice and estimate."
+                multiline
+                numberOfLines={5}
+                editable={!isLoadingInvoiceTermsNotes}
+                placeholderTextColor={theme.mutedForeground}
+              />
+            </View>
 
-              {!isStripeEnabled && (
-                <TouchableOpacity
-                  style={[styles.connectButton, { backgroundColor: theme.primary }]} 
-                  onPress={openStripeConnectionModal}
-                >
-                  <Text style={styles.connectButtonText}>Connect with Stripe</Text>
+          </ScrollView>
+
+          {/* PayPal Modal */}
+          <BottomSheetModal
+            ref={paypalBottomSheetModalRef}
+            index={0}
+            snapPoints={currentPayPalSnapPoints} // Use dynamic snap points
+            onChange={handleSheetChanges} 
+            backdropComponent={renderBackdrop}
+            handleIndicatorStyle={styles.handleIndicator}
+            backgroundStyle={styles.modalBackground}
+            keyboardBehavior="interactive"
+          >
+            <BottomSheetScrollView
+              contentContainerStyle={styles.modalContentContainer}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Activate PayPal Payments</Text>
+                <TouchableOpacity onPress={closePayPalModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <XIcon size={24} color={theme.mutedForeground} />
                 </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={styles.moreInfoButton}
-                onPress={() => Linking.openURL('https://stripe.com').catch(err => console.error('Failed to open URL:', err))}
-              >
-                <Text style={styles.moreInfoButtonText}>More about Stripe</Text>
-              </TouchableOpacity>
-              
-              {stripeSettingsChanged && (
-                <View style={styles.saveButtonContainer}>
-                  <TouchableOpacity
-                    style={[styles.saveButton, isLoadingStripeSettings && styles.disabledButton]}
-                    onPress={handleSaveStripeSettings}
-                    disabled={isLoadingStripeSettings || !stripeSettingsChanged}
-                  >
-                    {isLoadingStripeSettings ? (
-                      <ActivityIndicator size="small" color={theme.primaryForeground} />
-                    ) : (
-                      <Text style={styles.saveButtonText}>Save Stripe Settings</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </BottomSheetScrollView>
-        </BottomSheetModal>
-
-        {/* Bank Transfer Modal */}
-        <BottomSheetModal
-          ref={bankTransferBottomSheetModalRef}
-          index={0}
-          snapPoints={bankTransferSnapPoints}
-          onChange={handleSheetChanges}
-          backdropComponent={renderBackdrop}
-          handleIndicatorStyle={styles.handleIndicator}
-          backgroundStyle={styles.modalBackground}
-          keyboardBehavior="interactive"
-        >
-          <BottomSheetScrollView
-            contentContainerStyle={styles.modalContentContainer}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Activate Bank Transfers</Text>
-              <TouchableOpacity onPress={closeBankTransferModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <XIcon size={24} color={theme.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalInnerContent}>
-              <View style={[styles.sectionCard, styles.toggleCard]}>
-                <View style={[styles.inputRow, styles.lastInputRow]}>
-                  <Text style={styles.label}>Enable Bank Transfers</Text>
-                  <Switch
-                    key={`bank-${isBankTransferEnabled.toString()}`}
-                    trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
-                    thumbColor={isBankTransferEnabled ? theme.primary : theme.card}
-                    ios_backgroundColor={theme.muted}
-                    onValueChange={handleBankTransferToggle}
-                    value={isBankTransferEnabled}
-                    disabled={isLoadingBankTransferSettings}
-                  />
-                </View>
               </View>
-
-              {isBankTransferEnabled && (
-                <View style={[styles.sectionCard, styles.emailInputCard]}> 
-                  <View style={[styles.inputRow]}> 
-                    <Text style={styles.label}>Bank Account Details</Text>
-                  </View>
-                  <BottomSheetTextInput
-                    style={[styles.multilineInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
-                    value={bankDetails}
-                    onChangeText={handleBankDetailsChange}
-                    placeholder="Enter your bank name, account number, sort code/routing number, IBAN, SWIFT/BIC, etc."
-                    multiline
-                    numberOfLines={5} 
-                    editable={!isLoadingBankTransferSettings}
-                  />
-                  <View style={styles.infoTextContainer}>
-                    <Text style={styles.infoText}>Provide clear instructions for customers to make a bank transfer.</Text>
+              <View style={styles.modalInnerContent}>
+                <View style={[styles.sectionCard, styles.toggleCard]}>
+                  <View style={[styles.inputRow, styles.lastInputRow]}>
+                    <Text style={styles.label}>Enable PayPal</Text>
+                    <Switch
+                      key={`paypal-${isPayPalEnabled.toString()}`}
+                      trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
+                      thumbColor={isPayPalEnabled ? theme.primary : theme.card}
+                      ios_backgroundColor={theme.muted}
+                      onValueChange={handlePayPalToggle}
+                      value={isPayPalEnabled}
+                      disabled={isLoadingSettings}
+                    />
                   </View>
                 </View>
-              )}
 
-              {bankTransferSettingsChanged && (
-                <View style={styles.saveButtonContainer}>
+                {isPayPalEnabled && (
+                  <View style={[styles.sectionCard, styles.emailInputCard]}>
+                    <Text style={[styles.inputLabel, { color: theme.foreground, marginBottom: 8, fontWeight: 'bold' }]}>PayPal Email</Text>
+                    <BottomSheetTextInput
+                      style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
+                      placeholder="Enter your PayPal email address"
+                      placeholderTextColor={theme.mutedForeground}
+                      value={paypalEmail}
+                      onChangeText={handleEmailChange}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      editable={!isLoadingSettings}
+                    />
+                  </View>
+                )}
+
+                {settingsChanged && (
+                  <View style={styles.saveButtonContainer}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, isLoadingSettings && styles.disabledButton]}
+                      onPress={handleSavePayPalEmail}
+                      disabled={isLoadingSettings || !settingsChanged} 
+                    >
+                      {isLoadingSettings ? (
+                        <ActivityIndicator size="small" color={theme.primaryForeground} />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save PayPal Settings</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </BottomSheetScrollView>
+          </BottomSheetModal>
+
+          {/* Stripe Modal */}
+          <BottomSheetModal
+            ref={stripeBottomSheetModalRef}
+            index={0}
+            snapPoints={stripeSnapPoints} 
+            onChange={handleSheetChanges} 
+            backdropComponent={renderBackdrop}
+            handleIndicatorStyle={styles.handleIndicator}
+            backgroundStyle={styles.modalBackground}
+          >
+            <BottomSheetScrollView
+              contentContainerStyle={styles.modalContentContainer}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Activate Stripe Payments</Text>
+                <TouchableOpacity onPress={closeStripeModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <XIcon size={24} color={theme.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalInnerContent}>
+                <View style={styles.logoRowContainer}>
+                  {paymentIcons.map((icon) => (
+                    <Image
+                      key={icon.name}
+                      source={icon.source}
+                      style={styles.paymentMethodIconStyle}
+                    />
+                  ))}
+                </View>
+
+                <View style={styles.positiveBulletsContainer}>
+                  <View style={styles.bulletItem}>
+                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={styles.bulletText}>Customers pay 5 times faster with card payments</Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={styles.bulletText}>Easily send card payment links in a flash</Text>
+                  </View>
+                  <View style={styles.bulletItem}>
+                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={styles.bulletText}>Fast and easy setup</Text>
+                  </View>
+                </View>
+
+                <View style={styles.importantStepsContainer}>
+                  <Text style={styles.importantStepsTitle}>Important Steps</Text>
+                  <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: '#000000' }}>15 minutes</Text></Text>
+                  <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: '#000000' }}>daily or weekly</Text>, first one takes seven days.</Text>
+                  <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: '#000000' }}>most competitive</Text> in the world.</Text>
+                </View>
+
+                {!isStripeEnabled && (
                   <TouchableOpacity
-                    style={[styles.saveButton, isLoadingBankTransferSettings && styles.disabledButton]}
-                    onPress={handleSaveBankTransferSettings}
-                    disabled={isLoadingBankTransferSettings || !bankTransferSettingsChanged}
+                    style={[styles.connectButton, { backgroundColor: theme.primary }]} 
+                    onPress={openStripeConnectionModal}
                   >
-                    {isLoadingBankTransferSettings ? (
-                      <ActivityIndicator size="small" color={theme.primaryForeground} />
-                    ) : (
-                      <Text style={styles.saveButtonText}>Save Bank Settings</Text>
-                    )}
+                    <Text style={styles.connectButtonText}>Connect with Stripe</Text>
                   </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </BottomSheetScrollView>
-        </BottomSheetModal>
+                )}
 
+                <TouchableOpacity
+                  style={styles.moreInfoButton}
+                  onPress={() => Linking.openURL('https://stripe.com').catch(err => console.error('Failed to open URL:', err))}
+                >
+                  <Text style={styles.moreInfoButtonText}>More about Stripe</Text>
+                </TouchableOpacity>
+                
+                {stripeSettingsChanged && (
+                  <View style={styles.saveButtonContainer}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, isLoadingStripeSettings && styles.disabledButton]}
+                      onPress={handleSaveStripeSettings}
+                      disabled={isLoadingStripeSettings || !stripeSettingsChanged}
+                    >
+                      {isLoadingStripeSettings ? (
+                        <ActivityIndicator size="small" color={theme.primaryForeground} />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save Stripe Settings</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </BottomSheetScrollView>
+          </BottomSheetModal>
+
+          {/* Bank Transfer Modal */}
+          <BottomSheetModal
+            ref={bankTransferBottomSheetModalRef}
+            index={0}
+            snapPoints={bankTransferSnapPoints}
+            onChange={(index) => {
+              handleSheetChanges(index); // Existing handler
+              if (index === -1) { // Modal dismissed
+                setIsBankTransferModalFocused(false);
+              }
+            }}
+            backdropComponent={renderBackdrop}
+            handleIndicatorStyle={styles.handleIndicator}
+            backgroundStyle={styles.modalBackground}
+            keyboardBehavior="interactive"
+          >
+            <BottomSheetScrollView
+              ref={bankTransferScrollViewRef} // Assign ref here
+              contentContainerStyle={styles.modalContentContainer}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Activate Bank Transfers</Text>
+                <TouchableOpacity onPress={closeBankTransferModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <XIcon size={24} color={theme.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalInnerContent}>
+                <View style={[styles.sectionCard, styles.toggleCard]}>
+                  <View style={[styles.inputRow, styles.lastInputRow]}>
+                    <Text style={styles.label}>Enable Bank Transfers</Text>
+                    <Switch
+                      key={`bank-${isBankTransferEnabled.toString()}`}
+                      trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
+                      thumbColor={isBankTransferEnabled ? theme.primary : theme.card}
+                      ios_backgroundColor={theme.muted}
+                      onValueChange={handleBankTransferToggle}
+                      value={isBankTransferEnabled}
+                      disabled={isLoadingBankTransferSettings}
+                    />
+                  </View>
+                </View>
+
+                {isBankTransferEnabled && (
+                  <View style={[styles.sectionCard, styles.emailInputCard]}> 
+                    <View style={[styles.inputRow]}> 
+                      <Text style={styles.label}>Bank Account Details</Text>
+                    </View>
+                    <BottomSheetTextInput
+                      style={[styles.multilineInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
+                      value={bankDetails}
+                      onChangeText={handleBankDetailsChange}
+                      placeholder="Enter your bank name, account number, sort code/routing number, IBAN, SWIFT/BIC, etc."
+                      multiline
+                      numberOfLines={5} 
+                      editable={!isLoadingBankTransferSettings}
+                    />
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoText}>Provide clear instructions for customers to make a bank transfer.</Text>
+                    </View>
+                  </View>
+                )}
+
+                {bankTransferSettingsChanged && (
+                  <View style={styles.saveButtonContainer}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, isLoadingBankTransferSettings && styles.disabledButton]}
+                      onPress={handleSaveBankTransferSettings}
+                      disabled={isLoadingBankTransferSettings || !bankTransferSettingsChanged}
+                    >
+                      {isLoadingBankTransferSettings ? (
+                        <ActivityIndicator size="small" color={theme.primaryForeground} />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save Bank Settings</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </BottomSheetScrollView>
+          </BottomSheetModal>
+
+          {(invoiceTermsNotes !== initialInvoiceTermsNotes) && (
+            <View style={styles.bottomButtonContainer}>
+              <TouchableOpacity
+                style={[styles.globalSaveButton, isLoadingInvoiceTermsNotes && styles.disabledButton]} // Ensure disabledButton style works well
+                onPress={handleSaveInvoiceTermsNotes}
+                disabled={isLoadingInvoiceTermsNotes}
+              >
+                {isLoadingInvoiceTermsNotes ? (
+                  <ActivityIndicator size="small" color={styles.globalSaveButtonText.color} />
+                ) : (
+                  <Text style={styles.globalSaveButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </BottomSheetModalProvider>
   );

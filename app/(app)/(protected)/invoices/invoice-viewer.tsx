@@ -21,6 +21,7 @@ import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Database, Json, Tables } from '../../../../types/database.types'; 
 import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
+import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader'; // Import the skeleton loader
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
@@ -70,11 +71,12 @@ function InvoiceViewerScreen() {
   const { supabase } = useSupabase(); 
 
   const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null); 
-  const [clientName, setClientName] = useState<string | null>(null);
+  const [client, setClient] = useState<ClientRow | null>(null);
   const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); 
   const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadingBusiness, setLoadingBusiness] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,57 +99,210 @@ function InvoiceViewerScreen() {
     }
   };
 
-  const fetchBusinessSettings = async (userIdToFetch?: string) => {
-    console.log(`[fetchBusinessSettings] Called. Fetching for userId: ${userIdToFetch || 'current user'}`);
-    let targetUserId = userIdToFetch;
-
-    if (!targetUserId) {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        console.error('[fetchBusinessSettings] Error fetching current user or user not found:', userError?.message);
-        setError('Could not identify user for business settings.');
-        return;
-      }
-      targetUserId = user.id;
-      console.log(`[fetchBusinessSettings] Current user ID fetched: ${targetUserId}`);
-    }
-
-    if (!targetUserId) {
-      console.error('[fetchBusinessSettings] No targetUserId available to fetch settings.');
-      setError('User ID missing for fetching business settings.');
+  const fetchBusinessSettings = async (userId: string) => {
+    console.log('[fetchBusinessSettings] Function called with userId:', userId); // LOG B
+    if (!userId) {
+      console.error('[fetchBusinessSettings] No userId provided.');
+      setLoadingBusiness(false);
       return;
     }
 
     try {
-      const { data: settingsData, error: settingsError } = await supabase
+      const { data, error: settingsError } = await supabase
         .from('business_settings')
         .select('*')
-        .eq('user_id', targetUserId)
+        .eq('user_id', userId)
         .single(); 
 
-      if (settingsError) {
-        console.error('[fetchBusinessSettings] Error fetching business settings:', settingsError.message);
-        if (settingsError.code === 'PGRST116') { 
-          console.warn('[fetchBusinessSettings] No business settings found for this user.');
-          setError('No business settings found.'); 
-        } else {
-          setError('Failed to load business settings.');
-        }
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        console.error('[fetchBusinessSettings] Error fetching base business settings:', settingsError);
+        setError('Failed to load business settings.');
         setBusinessSettings(null); 
-      } else if (settingsData) {
-        console.log('[fetchBusinessSettings] Business settings fetched successfully:', settingsData);
-        setBusinessSettings(settingsData as BusinessSettingsRow);
       } else {
-        console.warn('[fetchBusinessSettings] No business settings data returned, though no error reported.');
-        setBusinessSettings(null);
+        console.log('[fetchBusinessSettings] Raw data from business_settings table:', data);
+        // 'data' here is the result from business_settings query
+        if (data) {
+          // Now fetch payment_options for the same user
+          const { data: paymentOpts, error: paymentOptsError } = await supabase
+            .from('payment_options') 
+            .select('*')
+            .eq('user_id', userId) 
+            .single();
+
+          console.log('[fetchBusinessSettings] Raw data from payment_options table:', paymentOpts);
+
+          if (paymentOptsError && paymentOptsError.code !== 'PGRST116') {
+            console.error('[fetchBusinessSettings] Error fetching payment options:', paymentOptsError);
+            // Continue with base settings even if payment options fail, or handle error as preferred
+          }
+
+          // Merge paymentOpts into the base business settings data.
+          // If paymentOpts is null (not found or error), it won't add/overwrite properties from 'data'.
+          const combinedSettings = { ...data, ...(paymentOpts || {}) };
+          console.log('[fetchBusinessSettings] Combined settings before setBusinessSettings:', combinedSettings);
+          setBusinessSettings(combinedSettings as BusinessSettingsRow); 
+        } else {
+          // No base business_settings found (PGRST116 or data was null from first query)
+          console.log('[fetchBusinessSettings] No base business settings found for this user. Setting to null.');
+          setBusinessSettings(null);
+        }
       }
     } catch (e: any) {
       console.error('[fetchBusinessSettings] Exception fetching business settings:', e.message);
       setError('An unexpected error occurred while fetching business settings.');
       setBusinessSettings(null);
+    } finally {
+      setLoadingBusiness(false);
     }
   };
-  
+
+  const fetchInvoiceData = async (invoiceId: string): Promise<InvoiceForTemplate | null> => {
+    setLoading(true);
+    try {
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          clients (*),
+          invoice_line_items (*)
+        `)
+        .eq('id', invoiceId)
+        .single();
+
+      if (invoiceError) {
+        console.error('[fetchInvoiceData] Supabase invoiceError:', invoiceError);
+        setError('Failed to load invoice data.');
+        setInvoice(null);
+        setLoading(false);
+        return null;
+      }
+
+      if (!invoiceData) {
+        setError('Invoice not found.');
+        setInvoice(null);
+        setLoading(false);
+        return null;
+      }
+      
+      console.log('[fetchInvoiceData] Raw invoiceData from Supabase:', invoiceData);
+      console.log('[fetchInvoiceData] invoiceData.clients:', invoiceData.clients);
+      console.log('[fetchInvoiceData] invoiceData.invoice_line_items from Supabase:', invoiceData.invoice_line_items);
+
+      // Fetch business_settings specifically for currency information for this invoice instance
+      // This does NOT set the main businessSettings state used for payment methods display.
+      const { data: businessDataForCurrency, error: businessError } = await supabase
+        .from('business_settings')
+        .select('currency_iso_code, currency_symbol') // Only select what's needed here
+        .eq('user_id', invoiceData.user_id)
+        .single();
+
+      if (businessError && businessError.code !== 'PGRST116') { // PGRST116: no rows found, which is okay if settings don't exist yet
+        console.error('[fetchInvoiceData] Error fetching business_settings for currency:', businessError);
+      }
+
+      const fetchedInvoiceForTemplate: InvoiceForTemplate = {
+        ...invoiceData,
+        invoice_number: invoiceData.invoice_number ?? '', // Address lint error b5b84349-0dc3-4fbe-9c3d-20066c10aacc
+        clients: invoiceData.clients as ClientRow, 
+        invoice_line_items: invoiceData.invoice_line_items as Tables['invoice_line_items'][],
+        currency: businessDataForCurrency?.currency_iso_code || 'USD', // Default if not found
+        currency_symbol: businessDataForCurrency?.currency_symbol || getCurrencySymbol(businessDataForCurrency?.currency_iso_code || 'USD'),
+      };
+      
+      console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
+      setInvoice(fetchedInvoiceForTemplate);
+      if (invoiceData.clients) {
+        setClient(invoiceData.clients as ClientRow);
+      }
+      setError(null);
+      return fetchedInvoiceForTemplate;
+    } catch (e: any) {
+      console.error('[fetchInvoiceData] Exception:', e.message);
+      setError('An unexpected error occurred while fetching invoice data.');
+      setInvoice(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log(`[EFFECT START] InvoiceViewerScreen useEffect triggered.`);
+    console.log(`[EFFECT PARAMS] from: ${params.from}, id: ${params.id}, previewData present: ${!!params.previewInvoiceData}`);
+    setLoading(true); // Start loading
+
+    const processData = async () => {
+      if (params.from === 'create' && params.previewInvoiceData) {
+        console.log('[EFFECT] Processing preview data...');
+        setIsPreviewingFromCreate(true);
+        try {
+          const previewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceData;
+          console.log('[EFFECT PREVIEW DATA] Parsed previewData:', JSON.stringify(previewData, null, 2));
+
+          const previewInvoiceForTemplate: InvoiceForTemplate = {
+            id: `preview-${Date.now()}`,
+            user_id: '', 
+            client_id: previewData.client_id || null,
+            invoice_number: previewData.invoice_number ?? '', 
+            status: 'draft', 
+            invoice_date: previewData.invoice_date,
+            due_date: previewData.due_date || null,
+            due_date_option: previewData.due_date_option || null,
+            po_number: previewData.po_number || null,
+            custom_headline: previewData.custom_headline || null,
+            subtotal_amount: previewData.subTotalAmount || 0,
+            discount_type: previewData.discountType || null,
+            discount_value: previewData.discountValue || 0,
+            tax_percentage: previewData.taxPercentage || 0,
+            total_amount: previewData.totalAmount || 0,
+            notes: previewData.notes || null,
+            stripe_active: previewData.stripe_active_on_invoice || false,
+            bank_account_active: previewData.bank_account_active_on_invoice || false,
+            paypal_active: previewData.paypal_active_on_invoice || false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            invoice_line_items: (previewData.items || []).map((item, index) => ({
+              ...item,
+              id: item.id || `temp-preview-${index}`,
+              user_id: '', 
+              item_description: item.description || null,
+              line_item_discount_type: item.line_item_discount_type || null,
+              line_item_discount_value: item.line_item_discount_value || null,
+              item_image_url: item.item_image_url || null,
+              user_saved_item_id: item.user_saved_item_id || null,
+              created_at: new Date().toISOString(), 
+              updated_at: new Date().toISOString(), 
+              invoice_id: '', 
+            })),
+            currency: previewData.currency || 'USD',
+            currency_symbol: getCurrencySymbol(previewData.currency || 'USD'),
+          };
+          console.log('[EFFECT TRANSFORMED INVOICE] transformedInvoice:', JSON.stringify(previewInvoiceForTemplate, null, 2));
+          setInvoice(previewInvoiceForTemplate);
+          setError(null);
+        } catch (e) {
+          console.error("[EFFECT ERROR] Error processing preview data:", e);
+          setError('Error processing preview data.');
+        }
+      } else if (params.id) {
+        console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchInvoiceData with invoiceId:', params.id); 
+        fetchInvoiceData(params.id).then((fetchedInvoice) => {
+          if (fetchedInvoice && fetchedInvoice.user_id) {
+            const targetUserId = fetchedInvoice.user_id;
+            console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchBusinessSettings with targetUserId (from fetched invoiceData):', targetUserId); // LOG A
+            if (targetUserId) fetchBusinessSettings(targetUserId); // This calls the main fetchBusinessSettings
+          }
+        });
+      } else {
+        console.warn("[EFFECT] No invoice ID and no preview data. Cannot load invoice.");
+        setError('No invoice specified.');
+      }
+      setLoading(false); // End loading after processing
+    };
+
+    processData();
+  }, [params.id, params.previewInvoiceData, params.from, supabase]);
+
   const getCurrencySymbol = (currencyCode: string): string => {
     // Handles both codes and full names from the DB, e.g. 'GBP - British Pound'
     if (!currencyCode) return '$';
@@ -167,146 +322,6 @@ function InvoiceViewerScreen() {
     if (mapping[code]) return mapping[code];
     return '$'; // Default fallback
   };
-
-  const fetchInvoiceData = async (invoiceId: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { data: invoiceData, error: invoiceError } = await supabase
-        .from('invoices')
-        .select('*, clients(id, name, email, phone, address_client, user_id, avatar_url, created_at, updated_at, notes), invoice_line_items(*)') 
-        .eq('id', invoiceId)
-        .single();
-
-      console.log('[fetchInvoiceData] Raw invoiceData from Supabase:', JSON.stringify(invoiceData, null, 2));
-      console.log('[fetchInvoiceData] Supabase invoiceError:', invoiceError);
-
-      if (invoiceError) {
-        throw invoiceError;
-      }
-
-      if (!invoiceData) {
-        throw new Error('Invoice not found.');
-      }
-
-      console.log('[fetchInvoiceData] invoiceData.clients:', invoiceData.clients);
-      console.log('[fetchInvoiceData] invoiceData.invoice_line_items from Supabase:', invoiceData.invoice_line_items);
-
-      const { data: businessData, error: businessError } = await supabase
-        .from('business_settings')
-        .select('*')
-        .eq('user_id', invoiceData.user_id) 
-        .single();
-
-      if (businessError) {
-        console.error('[fetchInvoiceData] Error fetching business settings:', businessError);
-        // Decide if this is a critical error or if you can proceed without business settings
-      }
-      setBusinessSettings(businessData);
-
-      // Construct the InvoiceForTemplate object
-      const symbol = businessData?.currency_code ? getCurrencySymbol(businessData.currency_code) : '$';
-      const fetchedInvoiceForTemplate: InvoiceForTemplate = {
-        ...(invoiceData as any), // Cast to any to handle potential type discrepancies temporarily
-        clients: invoiceData.clients as ClientRow, // Ensure clients is correctly typed
-        invoice_line_items: invoiceData.invoice_line_items as Tables<'invoice_line_items'>[],
-        currency: symbol,
-        currency_symbol: symbol,
-      };
-      
-      console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
-
-      setInvoice(fetchedInvoiceForTemplate);
-      setClientName(fetchedInvoiceForTemplate.clients?.name || 'N/A');
-
-    } catch (e: any) {
-      console.error('[fetchInvoiceData] Error fetching invoice data:', e);
-      setError(e.message || 'Failed to fetch invoice details.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    console.log(`[EFFECT START] InvoiceViewerScreen useEffect triggered.`);
-    console.log(`[EFFECT PARAMS] from: ${params.from}, id: ${params.id}, previewData present: ${!!params.previewInvoiceData}`);
-    setLoading(true); // Start loading
-
-    const processData = async () => {
-      if (params.from === 'create' && params.previewInvoiceData) {
-        console.log('[EFFECT] Processing preview data...');
-        setIsPreviewingFromCreate(true);
-        try {
-          const previewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceData;
-          console.log('[EFFECT PREVIEW DATA] Parsed previewData:', JSON.stringify(previewData, null, 2));
-
-          await fetchBusinessSettings(); // Fetch for current user
-
-          const transformedItems = (previewData.items || []).map((item, index) => ({
-            ...item,
-            id: item.id || `temp-preview-${index}`,
-            user_id: '', 
-            item_description: item.description || null,
-            line_item_discount_type: item.line_item_discount_type || null,
-            line_item_discount_value: item.line_item_discount_value || null,
-            item_image_url: item.item_image_url || null,
-            user_saved_item_id: item.user_saved_item_id || null,
-            created_at: new Date().toISOString(), 
-            updated_at: new Date().toISOString(), 
-            invoice_id: '', 
-          }));
-
-          // Resolve currency code for preview
-          const baseCurrencyForPreview = previewData.currency || businessSettings?.currency_code;
-          const finalCurrencyForPreview: string = baseCurrencyForPreview ?? 'USD';
-
-          const transformedInvoice: InvoiceForTemplate = {
-            id: `preview-${Date.now()}`,
-            user_id: '', 
-            client_id: previewData.client_id || null,
-            invoice_number: previewData.invoice_number ? previewData.invoice_number : '', // Ensure a string using ternary
-            status: 'draft', 
-            invoice_date: previewData.invoice_date,
-            due_date: previewData.due_date || null,
-            due_date_option: previewData.due_date_option || null,
-            po_number: previewData.po_number || null,
-            custom_headline: previewData.custom_headline || null,
-            subtotal_amount: previewData.subTotalAmount || 0,
-            discount_type: previewData.discountType || null,
-            discount_value: previewData.discountValue || 0,
-            tax_percentage: previewData.taxPercentage || 0,
-            total_amount: previewData.totalAmount || 0,
-            notes: previewData.notes || null,
-            stripe_active: previewData.stripe_active_on_invoice || false,
-            bank_account_active: previewData.bank_account_active_on_invoice || false,
-            paypal_active: previewData.paypal_active_on_invoice || false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            invoice_line_items: transformedItems,
-            currency: finalCurrencyForPreview as string, // Added 'as string' assertion
-            currency_symbol: getCurrencySymbol(finalCurrencyForPreview),
-            clients: null, // No direct client object in preview, clientName is separate
-          };
-          console.log('[EFFECT TRANSFORMED INVOICE] transformedInvoice:', JSON.stringify(transformedInvoice, null, 2));
-          setInvoice(transformedInvoice);
-          setClientName(previewData.clientName || 'N/A'); 
-          setError(null);
-        } catch (e) {
-          console.error("[EFFECT ERROR] Error processing preview data:", e);
-          setError('Error processing preview data.');
-        }
-      } else if (params.id) {
-        await fetchInvoiceData(params.id); 
-      } else {
-        console.warn("[EFFECT] No invoice ID and no preview data. Cannot load invoice.");
-        setError('No invoice specified.');
-      }
-      setLoading(false); // End loading after processing
-    };
-
-    processData();
-  }, [params.id, params.previewInvoiceData, params.from, supabase]);
 
   const addAlpha = (color: string, opacity: number): string => {
     if (typeof color !== 'string' || !color.startsWith('#') || (color.length !== 7 && color.length !== 4)) {
@@ -416,46 +431,6 @@ function InvoiceViewerScreen() {
     Alert.alert('History', 'History functionality coming soon!');
   };
   
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={themeColors.primary} />
-      </SafeAreaView>
-    );
-  }
-
-  if (error) {
-    return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card, justifyContent: 'center', alignItems: 'center' }]}>
-        <View style={styles.centeredMessageContainer}>
-          <Text style={[styles.errorText, { color: themeColors.destructive }]}>{error}</Text>
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: themeColors.primary }]} 
-            onPress={handleCustomBack} // Use the restored handleCustomBack
-          >
-            <Text style={[styles.buttonText, { color: themeColors.primaryForeground }]}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!invoice) {
-    return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card, justifyContent: 'center', alignItems: 'center' }]}>
-        <View style={styles.centeredMessageContainer}>
-          <Text style={[styles.errorText, { color: themeColors.foreground }]}>No invoice data found.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Log the invoice and client data before rendering the template
-  // This log is crucial for debugging the client address issue.
-  // We expect invoice to be non-null here due to the checks above.
-  console.log('[InvoiceViewerScreen] Full invoice object being passed to template:', JSON.stringify(invoice, null, 2));
-  console.log('[InvoiceViewerScreen] Client data from invoice.clients:', JSON.stringify(invoice.clients, null, 2));
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card }]}>
       <Stack.Screen 
@@ -518,13 +493,27 @@ function InvoiceViewerScreen() {
         contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border, paddingTop: 0, paddingBottom: 200 }]} 
         showsVerticalScrollIndicator={false}
       >
-        {invoice && (
+        {loading || loadingBusiness ? (
+          <View style={{ alignItems: 'center', paddingTop: 20 }}> 
+            <InvoiceSkeletonLoader />
+          </View>
+        ) : error ? (
+          <View style={[styles.centered, { paddingTop: 50, paddingBottom: 50 }]}>
+            <Text style={{ color: themeColors.notification }}>Error: {error}</Text>
+            {/* Optionally, add a retry button here */}
+          </View>
+        ) : invoice && businessSettings ? (
           <View style={{ alignItems: 'center' }}>
             <InvoiceTemplateOne 
               invoice={invoice}
-              clientName={clientName}
+              clientName={client?.name}
               businessSettings={businessSettings} 
             />
+          </View>
+        ) : (
+          // Fallback if no invoice, no error, and not loading - should ideally not be reached in normal flow
+          <View style={[styles.centered, { paddingTop: 50, paddingBottom: 50 }]}>
+            <Text style={{ color: themeColors.mutedForeground }}>No invoice data available.</Text>
           </View>
         )}
       </ScrollView>
@@ -533,29 +522,29 @@ function InvoiceViewerScreen() {
         <View style={styles.invoiceDetailsBottomContainer}>
           <View style={styles.invoiceNumberAndTotalRow}>
             <Text style={[styles.invoiceNumberDisplay, { color: themeColors.foreground }]}>
-              {invoice.invoice_number}
+              {invoice?.invoice_number}
             </Text>
             <Text style={[styles.invoiceTotalDisplay, { color: themeColors.foreground }]}>
-              {`${invoice.currency_symbol}${(invoice.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {`${invoice?.currency_symbol}${(invoice?.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </Text>
           </View>
           <View style={styles.clientAndStatusRow}>
             <Text style={[styles.clientNameDisplay, { color: themeColors.mutedForeground }]}>
-              {clientName}
+              {client?.name}
             </Text>
             <View style={styles.statusToggleContainer}>
               <Switch
                 trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
-                thumbColor={invoice.status === 'paid' ? themeColors.primary : themeColors.card}
+                thumbColor={invoice?.status === 'paid' ? themeColors.primary : themeColors.card}
                 ios_backgroundColor={themeColors.muted}
                 onValueChange={(isPaid) => {
                   handleTogglePaid(isPaid);
                 }}
-                value={invoice.status === 'paid'}
+                value={invoice?.status === 'paid'}
                 style={styles.statusSwitch}
               />
-              <Text style={[styles.statusToggleValue, { color: invoice.status === 'paid' ? themeColors.primary : themeColors.foreground }]}>
-                {invoice.status === 'paid' ? 'Paid' : 'Unpaid'}
+              <Text style={[styles.statusToggleValue, { color: invoice?.status === 'paid' ? themeColors.primary : themeColors.foreground }]}>
+                {invoice?.status === 'paid' ? 'Paid' : 'Unpaid'}
               </Text>
             </View>
           </View>
@@ -565,18 +554,18 @@ function InvoiceViewerScreen() {
           style={[
             styles.primaryButton,
             {
-              backgroundColor: invoice.status === 'paid' ? themeColors.muted : themeColors.primary,
-              opacity: invoice.status === 'paid' ? 0.5 : 1, // Explicitly set opacity
+              backgroundColor: invoice?.status === 'paid' ? themeColors.muted : themeColors.primary,
+              opacity: invoice?.status === 'paid' ? 0.5 : 1, // Explicitly set opacity
             },
           ]}
           onPress={handleSendInvoice}
-          disabled={invoice.status === 'paid'} // Disable button if paid
+          disabled={invoice?.status === 'paid'} // Disable button if paid
         >
           <Send size={20} color={themeColors.primaryForeground} style={{ marginRight: 8 }}/>
           <Text style={[styles.primaryButtonText, { color: themeColors.primaryForeground }]}>
-            {invoice.status === 'draft' ? 'Send Invoice' : 
-             invoice.status === 'sent' || invoice.status === 'overdue' ? 'Resend Invoice' : 
-             invoice.status === 'paid' ? 'Invoice Paid' : 'Send Invoice'}
+            {invoice?.status === 'draft' ? 'Send Invoice' : 
+             invoice?.status === 'sent' || invoice?.status === 'overdue' ? 'Resend Invoice' : 
+             invoice?.status === 'paid' ? 'Invoice Paid' : 'Send Invoice'}
           </Text>
         </TouchableOpacity>
       </View>

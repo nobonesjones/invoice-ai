@@ -218,12 +218,54 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
       <View style={styles.footerSection}>
         <View style={styles.footerLeft}>
           <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Payment Method</Text> 
-            <Text style={styles.paymentTermsBody}>Details to be added from Business Settings</Text>
+            <Text style={styles.paymentTermsHeader}>Terms, Instructions & Notes</Text>
+            <Text style={styles.paymentTermsBody}>{invoice?.notes || 'No terms specified.'}</Text>
           </View>
           <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Terms & Conditions</Text> 
-            <Text style={styles.paymentTermsBody}>Details to be added from Business Settings</Text>
+            <Text style={styles.paymentTermsHeader}>Payment Method</Text>
+            {/* TODO: Regenerate Supabase types. Using 'as any' for businessSettings as TS types are outdated for payment fields. */}
+            {(() => {
+  // DEBUG: Log payment method flags
+  console.log('[InvoiceTemplateOne] Payment flags:', {
+    paypal_active: invoice?.paypal_active,
+    stripe_active: invoice?.stripe_active,
+    bank_account_active: invoice?.bank_account_active,
+  });
+  const paypalEnabled = Boolean(invoice?.paypal_active);
+  const stripeEnabled = Boolean(invoice?.stripe_active);
+  const bankEnabled = Boolean(invoice?.bank_account_active);
+
+  return (
+    <>
+      {!(paypalEnabled || stripeEnabled || bankEnabled) ? (
+        <Text style={styles.placeholderText}>Details to be added from Business Settings</Text>
+      ) : null}
+
+      {paypalEnabled && (businessSettings as any)?.paypal_email && (
+        <Text style={[styles.text, { marginTop: 4 }]}> 
+          <Text style={{ fontWeight: 'bold' }}>PayPal:</Text> {(businessSettings as any).paypal_email}
+        </Text>
+      )}
+
+      {stripeEnabled && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={styles.text}>
+            <Text style={{ fontWeight: 'bold' }}>Pay Online:</Text> {/* TODO: Replace with dynamic Stripe payment link if available */} 
+            www.stripepaymentlink.com
+          </Text>
+        </View>
+      )}
+
+      {bankEnabled && (businessSettings as any)?.bank_details && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={[styles.text, { fontWeight: 'bold' }]}>Bank Transfer</Text>
+          <Text style={styles.text}>{(businessSettings as any).bank_details}</Text>
+        </View>
+      )}
+    </>
+  );
+})()}
+
           </View>
         </View>
         <View style={styles.footerRight}>
@@ -310,6 +352,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 100,
     height: 50,
+    marginLeft: -10, // Added to shift left
   },
   logoPlaceholder: {
     fontSize: 10, 
@@ -357,7 +400,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   text: {
-    fontSize: 9, 
+    fontSize: 8, 
     color: 'black',
     lineHeight: 11, // Reduced from 14
     paddingLeft: 0, // Ensure no unintended left padding
