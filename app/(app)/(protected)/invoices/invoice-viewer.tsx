@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import { useSupabase } from '@/context/supabase-provider';
 import type { Database, Json, Tables } from '../../../../types/database.types'; 
 import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader'; // Import the skeleton loader
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { Mail, Link, FileText, X as XIcon } from 'lucide-react-native';
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
@@ -66,17 +68,67 @@ function InvoiceViewerScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; from?: string; previewInvoiceData?: string; fromScreen?: string }>(); 
+  const params = useLocalSearchParams<{ id?: string; from?: string; previewInvoiceData?: string; fromScreen?: string; }>();
+  const invoiceId = params.id;
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { supabase } = useSupabase(); 
 
-  const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null); 
-  const [client, setClient] = useState<ClientRow | null>(null);
+  const [invoice, setInvoice] = useState<Database['public']['Tables']['invoices']['Row'] | null>(null);
+  const [client, setClient] = useState<Database['public']['Tables']['clients']['Row'] | null>(null);
+  const [business, setBusiness] = useState<Database['public']['Tables']['business_settings']['Row'] | null>(null);
   const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); 
   const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadingBusiness, setLoadingBusiness] = useState(true);
+
+  const [showShareOptions, setShowShareOptions] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Ref for the Send Invoice Modal
+  const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
+
+  // Snap points for the Send Invoice Modal
+  const sendInvoiceSnapPoints = useMemo(() => ['35%'], []); // Adjust as needed
+
+  // Callback to open the Send Invoice Modal
+  const handleOpenSendModal = useCallback(() => {
+    sendInvoiceModalRef.current?.present();
+  }, []);
+
+  // Callback to close the Send Invoice Modal
+  const handleCloseSendModal = useCallback(() => {
+    sendInvoiceModalRef.current?.dismiss();
+  }, []);
+
+  // Placeholder actions for modal options
+  const handleSendByEmail = () => {
+    console.log('Send by Email selected');
+    handleCloseSendModal();
+  };
+
+  const handleSendLink = () => {
+    console.log('Send Link selected');
+    handleCloseSendModal();
+  };
+
+  const handleSendPDF = () => {
+    console.log('Send PDF selected');
+    handleCloseSendModal();
+  };
+
+  // Custom backdrop for the modal
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5} // Standard dimming
+      />
+    ),
+    []
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -156,7 +208,7 @@ function InvoiceViewerScreen() {
     }
   };
 
-  const fetchInvoiceData = async (invoiceId: string): Promise<InvoiceForTemplate | null> => {
+  const fetchInvoiceData = async (invoiceId: string): Promise<Database['public']['Tables']['invoices']['Row'] | null> => {
     setLoading(true);
     try {
       const { data: invoiceData, error: invoiceError } = await supabase
@@ -200,13 +252,13 @@ function InvoiceViewerScreen() {
         console.error('[fetchInvoiceData] Error fetching business_settings for currency:', businessError);
       }
 
-      const fetchedInvoiceForTemplate: InvoiceForTemplate = {
+      const fetchedInvoiceForTemplate: Database['public']['Tables']['invoices']['Row'] = {
         ...invoiceData,
         invoice_number: invoiceData.invoice_number ?? '', // Address lint error b5b84349-0dc3-4fbe-9c3d-20066c10aacc
         clients: invoiceData.clients as ClientRow, 
-        invoice_line_items: invoiceData.invoice_line_items as Tables['invoice_line_items'][],
+        invoice_line_items: invoiceData.invoice_line_items as Database['public']['Tables']['invoice_line_items']['Row'][],
         currency: businessDataForCurrency?.currency_iso_code || 'USD', // Default if not found
-        currency_symbol: businessDataForCurrency?.currency_symbol || getCurrencySymbol(businessDataForCurrency?.currency_iso_code || 'USD'),
+        currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_iso_code || 'USD'),
       };
       
       console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
@@ -239,7 +291,7 @@ function InvoiceViewerScreen() {
           const previewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceData;
           console.log('[EFFECT PREVIEW DATA] Parsed previewData:', JSON.stringify(previewData, null, 2));
 
-          const previewInvoiceForTemplate: InvoiceForTemplate = {
+          const previewInvoiceForTemplate: Database['public']['Tables']['invoices']['Row'] = {
             id: `preview-${Date.now()}`,
             user_id: '', 
             client_id: previewData.client_id || null,
@@ -431,6 +483,222 @@ function InvoiceViewerScreen() {
     Alert.alert('History', 'History functionality coming soon!');
   };
   
+  const getStyles = (themeColors: any) => StyleSheet.create({
+    safeArea: {
+      flex: 1,
+    },
+    container: { 
+      flex: 1,
+      padding: 16,
+      paddingHorizontal: 16, 
+    },
+    centered: { 
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollViewContent: { 
+      flexGrow: 1,
+      paddingHorizontal: 0, 
+      paddingTop: 0, 
+      paddingBottom: 200, 
+    },
+    newTopSectionContainer: { 
+      paddingHorizontal: 16,
+      paddingTop: Platform.OS === 'ios' ? 0 : 0, 
+      paddingBottom: 12, 
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3.5,
+      elevation: 3,           
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between', 
+      width: '100%',
+    },
+    headerLeftContainer: {
+      flex: 1, 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      paddingVertical: 8, 
+    },
+    backButtonText: { 
+      fontSize: 17,
+      marginLeft: 6,
+    },
+    statusIndicatorContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: 'auto', 
+    },
+    statusLabelText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    statusValueText: {
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    actionButtonsRow: { 
+      flexDirection: 'row',
+      justifyContent: 'center', 
+      marginTop: 10, 
+      marginBottom: 10, 
+    },
+    actionButton: {
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      flexDirection: 'row',
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      width: 120, 
+      marginHorizontal: 5, 
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 4, 
+      },
+      shadowOpacity: 0.30, 
+      shadowRadius: 4.65, 
+      elevation: 8, 
+    },
+    actionButtonText: {
+      marginLeft: 8,
+      fontSize: 14, 
+      color: '#000000', 
+      fontWeight: 'bold', 
+    },
+    invoiceNumberAndTotalRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start', 
+      marginBottom: 0, 
+    },
+    invoiceNumberDisplay: {
+      fontSize: 22, 
+      fontWeight: 'bold',
+    },
+    invoiceTotalDisplay: { 
+      fontSize: 16, 
+      fontWeight: 'bold', 
+    },
+    clientNameDisplay: { 
+      fontSize: 14, 
+    },
+    clientAndStatusRow: { 
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 8, 
+    },
+    statusToggleContainer: { 
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    statusSwitch: { 
+      transform: Platform.OS === 'ios' ? [{ scaleX: 0.8 }, { scaleY: 0.8 }] : [], 
+      marginRight: 8,
+    },
+    statusToggleValue: { 
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    actionBarContainer: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      padding: 16,
+      paddingBottom: Platform.OS === 'ios' ? 32 : 16, 
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    primaryButton: {
+      paddingVertical: 16,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row', 
+    },
+    primaryButtonText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    invoiceDetailsBottomContainer: { 
+      marginBottom: 16, 
+    },
+    disabledButton: {
+      opacity: 0.5, 
+    },
+    centeredMessageContainer: { 
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    errorText: { 
+      fontSize: 16,
+      textAlign: 'center',
+      marginBottom: 10,
+    },
+    button: { 
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    buttonText: { 
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    modalContentContainer: {
+      flex: 1,
+      // backgroundColor: theme.card, // Handled by backgroundStyle on BottomSheetModal
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12, 
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: themeColors.border,
+      backgroundColor: themeColors.card, // Ensure header has bg for consistency
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: themeColors.foreground,
+    },
+    modalOptionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16, // Increased padding for better touch
+      paddingHorizontal: 16,
+    },
+    modalOptionIcon: {
+      marginRight: 16, // Increased spacing
+    },
+    modalOptionText: {
+      fontSize: 16,
+      color: themeColors.foreground,
+    },
+    modalSeparator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: themeColors.border,
+      marginLeft: 16, // Indent separator if desired, or remove for full width
+    },
+  });
+
+  const styles = getStyles(themeColors);
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card }]}>
       <Stack.Screen 
@@ -499,7 +767,7 @@ function InvoiceViewerScreen() {
           </View>
         ) : error ? (
           <View style={[styles.centered, { paddingTop: 50, paddingBottom: 50 }]}>
-            <Text style={{ color: themeColors.notification }}>Error: {error}</Text>
+            <Text style={{ color: themeColors.primary }}>Error: {error}</Text>
             {/* Optionally, add a retry button here */}
           </View>
         ) : invoice && businessSettings ? (
@@ -508,6 +776,15 @@ function InvoiceViewerScreen() {
               invoice={invoice}
               clientName={client?.name}
               businessSettings={businessSettings} 
+              businessAddress={{
+                address: business?.business_address || '',
+                city: '', 
+                country: '', 
+              }}
+              paymentTerms={invoice?.payment_terms ?? null}
+              invoiceDate={invoice?.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString() : 'N/A'}
+              dueDate={invoice?.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}
+              items={invoice?.items ? invoice.items as any[] : []} // Assuming items structure matches
             />
           </View>
         ) : (
@@ -558,7 +835,7 @@ function InvoiceViewerScreen() {
               opacity: invoice?.status === 'paid' ? 0.5 : 1, // Explicitly set opacity
             },
           ]}
-          onPress={handleSendInvoice}
+          onPress={handleOpenSendModal} // Updated to open the modal
           disabled={invoice?.status === 'paid'} // Disable button if paid
         >
           <Send size={20} color={themeColors.primaryForeground} style={{ marginRight: 8 }}/>
@@ -569,186 +846,47 @@ function InvoiceViewerScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Send Invoice Modal */}
+      <BottomSheetModal
+        ref={sendInvoiceModalRef}
+        index={0}
+        snapPoints={sendInvoiceSnapPoints}
+        backdropComponent={renderBackdrop}
+        handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }} // Style grabber
+        backgroundStyle={{ backgroundColor: themeColors.card }} // Modal background
+        onDismiss={() => console.log('Send Invoice Modal Dismissed')}
+      >
+        <BottomSheetView style={styles.modalContentContainer}> 
+          {/* Modal Header */}
+          <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
+            <Text style={[styles.modalTitle, { flex: 1, textAlign: 'center' }]}>Send Invoice</Text>
+            <TouchableOpacity onPress={handleCloseSendModal} style={{ padding: 4 }}>
+              <XIcon size={24} color={themeColors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Modal Options */}
+          <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendByEmail}>
+            <Mail size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+            <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Send by Email</Text>
+          </TouchableOpacity>
+          <View style={[styles.modalSeparator, { backgroundColor: themeColors.border }]} />
+
+          <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendLink}>
+            <Link size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+            <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Send Link</Text>
+          </TouchableOpacity>
+          <View style={[styles.modalSeparator, { backgroundColor: themeColors.border }]} />
+
+          <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendPDF}>
+            <FileText size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+            <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Send PDF</Text>
+          </TouchableOpacity>
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  container: { 
-    flex: 1,
-    padding: 16,
-    paddingHorizontal: 16, 
-  },
-  centered: { 
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollViewContent: { 
-    flexGrow: 1,
-    paddingHorizontal: 0, 
-    paddingTop: 0, 
-    paddingBottom: 200, 
-  },
-  newTopSectionContainer: { 
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 0 : 0, 
-    paddingBottom: 12, 
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.5,
-    elevation: 3,           
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between', 
-    width: '100%',
-  },
-  headerLeftContainer: {
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingVertical: 8, 
-  },
-  backButtonText: { 
-    fontSize: 17,
-    marginLeft: 6,
-  },
-  statusIndicatorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 'auto', 
-  },
-  statusLabelText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  statusValueText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionButtonsRow: { 
-    flexDirection: 'row',
-    justifyContent: 'center', 
-    marginTop: 10, 
-    marginBottom: 10, 
-  },
-  actionButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    width: 120, 
-    marginHorizontal: 5, 
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4, 
-    },
-    shadowOpacity: 0.30, 
-    shadowRadius: 4.65, 
-    elevation: 8, 
-  },
-  actionButtonText: {
-    marginLeft: 8,
-    fontSize: 14, 
-    color: '#000000', 
-    fontWeight: 'bold', 
-  },
-  invoiceNumberAndTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start', 
-    marginBottom: 0, 
-  },
-  invoiceNumberDisplay: {
-    fontSize: 22, 
-    fontWeight: 'bold',
-  },
-  invoiceTotalDisplay: { 
-    fontSize: 16, 
-    fontWeight: 'bold', 
-  },
-  clientNameDisplay: { 
-    fontSize: 14, 
-  },
-  clientAndStatusRow: { 
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8, 
-  },
-  statusToggleContainer: { 
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusSwitch: { 
-    transform: Platform.OS === 'ios' ? [{ scaleX: 0.8 }, { scaleY: 0.8 }] : [], 
-    marginRight: 8,
-  },
-  statusToggleValue: { 
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  actionBarContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16, 
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  primaryButton: {
-    paddingVertical: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row', 
-  },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  invoiceDetailsBottomContainer: { 
-    marginBottom: 16, 
-  },
-  disabledButton: {
-    opacity: 0.5, 
-  },
-  centeredMessageContainer: { 
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: { 
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  button: { 
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: { 
-    fontSize: 16,
-    fontWeight: '500',
-  },
-});
 
 export default InvoiceViewerScreen;
