@@ -11,7 +11,7 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import { View, Text, Pressable, Platform } from "react-native";
-import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"; // Added import
+// import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"; // Added import
 
 import { supabase } from "@/config/supabase";
 import { colors } from "@/constants/colors";
@@ -41,14 +41,25 @@ export default function ProtectedLayout() {
 	const { isTabBarVisible } = useTabBarVisibility();
 
 	return (
-    <BottomSheetModalProvider> {/* Added Provider here */}
+    // <BottomSheetModalProvider> {/* Added Provider here */}
       <Tabs
-        screenOptions={{
+        screenOptions={{ // screenOptions can be an object or a function
           headerShown: false,
-          // These are not strictly needed with a fully custom tabBar, but good for reference
-          // tabBarActiveTintColor: theme.primary,
-          // tabBarInactiveTintColor: theme.mutedForeground,
-          tabBarStyle: { height: 0, borderTopWidth: 0 }, // Hides default chrome
+          tabBarStyle: !isTabBarVisible 
+            ? { display: 'none', height: 0, overflow: 'hidden' } 
+            : { 
+                height: 86, // Match custom tab bar height
+                backgroundColor: theme.background, // Match custom tab bar background
+                borderTopColor: theme.border, // Match custom tab bar top border
+                borderTopWidth: 1, // As per custom tab bar's View
+                 // iOS Shadow (matching custom View)
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: -1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+                // Android Shadow (matching custom View)
+                elevation: 5,
+              },
         }}
         tabBar={({ state, descriptors, navigation }) => {
           // If context dictates tab bar is hidden, return null immediately
@@ -205,6 +216,6 @@ export default function ProtectedLayout() {
         {/* Hidden screens, not part of the tab bar */}
         <Tabs.Screen name="profile" options={{ tabBarButton: () => null }} />
       </Tabs>
-    </BottomSheetModalProvider> // Added Provider here
+    // </BottomSheetModalProvider> // Added Provider here
 	);
 }

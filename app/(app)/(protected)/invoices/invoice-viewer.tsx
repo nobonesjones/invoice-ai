@@ -13,7 +13,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import { ArrowLeft, Edit3, MoreHorizontal, Clock, Send, Maximize, ChevronLeft, History } from 'lucide-react-native'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
@@ -24,9 +24,13 @@ import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './I
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader'; // Import the skeleton loader
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { Mail, Link, FileText, X as XIcon } from 'lucide-react-native';
+import RNHTMLtoPDF from 'react-native-html-to-pdf'; // Added import
+import Share from 'react-native-share'; // Added import
+import { generateInvoiceHtml } from '../../../utils/generateInvoiceHtml'; // Corrected import path
+
+type ClientRow = Tables<'clients'>;
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
-type ClientRow = Database['public']['Tables']['clients']['Row'];
 
 interface PreviewLineItem {
   id: string; 
@@ -64,24 +68,36 @@ interface PreviewInvoiceData {
   currency: string; 
 }
 
+interface PdfInvoiceData {
+  invoice: InvoiceForTemplate & { payment_terms?: string };
+  businessSettings: BusinessSettingsRow;
+}
+
+const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: BusinessSettingsRow): PdfInvoiceData => {
+  const htmlInvoiceData: InvoiceForTemplate & { payment_terms?: string } = {
+    ...invoiceData, 
+    payment_terms: 'Payment due upon receipt.', 
+  };
+
+  return {
+    invoice: htmlInvoiceData,
+    businessSettings: businessSettingsData,
+  };
+};
+
 function InvoiceViewerScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; from?: string; previewInvoiceData?: string; fromScreen?: string; }>();
-  const invoiceId = params.id;
-  const { setIsTabBarVisible } = useTabBarVisibility();
+  const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
   const { supabase } = useSupabase(); 
 
-  const [invoice, setInvoice] = useState<Database['public']['Tables']['invoices']['Row'] | null>(null);
-  const [client, setClient] = useState<Database['public']['Tables']['clients']['Row'] | null>(null);
-  const [business, setBusiness] = useState<Database['public']['Tables']['business_settings']['Row'] | null>(null);
-  const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); 
-  const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null); 
-  const [loading, setLoading] = useState(true);
+  const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null);
+  const [client, setClient] = useState<ClientRow | null>(null);
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingBusiness, setLoadingBusiness] = useState(true);
-
+  const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); 
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -89,9 +105,20 @@ function InvoiceViewerScreen() {
   const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
 
   // Snap points for the Send Invoice Modal
-  const sendInvoiceSnapPoints = useMemo(() => ['35%'], []); // Adjust as needed
+  const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []); // Adjust as needed
 
-  // Callback to open the Send Invoice Modal
+  const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
+
+  // Use useLayoutEffect to control tab bar visibility via context to run earlier
+  useLayoutEffect(() => {
+    console.log('[InvoiceViewerScreen] LayoutEffect: Hiding tab bar.');
+    setIsTabBarVisible(false); // Hide tab bar
+    return () => {
+      console.log('[InvoiceViewerScreen] LayoutEffect cleanup: Showing tab bar.');
+      setIsTabBarVisible(true); // Show tab bar when screen is unfocused/unmounted
+    };
+  }, [setIsTabBarVisible]); // Dependency array ensures it runs on mount/unmount and when setIsTabBarVisible changes (which it shouldn't)
+
   const handleOpenSendModal = useCallback(() => {
     sendInvoiceModalRef.current?.present();
   }, []);
@@ -112,8 +139,28 @@ function InvoiceViewerScreen() {
     handleCloseSendModal();
   };
 
-  const handleSendPDF = () => {
-    console.log('Send PDF selected');
+  const handleSendPDF = async () => {
+    if (!invoice || !businessSettings) {
+      Alert.alert('Error', 'Invoice or business data not loaded.');
+      handleCloseSendModal();
+      return;
+    }
+
+    const dataForHtml = preparePdfData(invoice, businessSettings);
+
+    try {
+      const html = generateInvoiceHtml(dataForHtml); 
+      const pdfOptions = {
+        html,
+        fileName: `Invoice-${invoice.invoice_number || 'details'}`,
+        directory: 'Invoices',
+      };
+      const file = await RNHTMLtoPDF.convert(pdfOptions);
+      await Share.open({ url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, title: 'Share Invoice PDF' });
+    } catch (error: any) { 
+      console.error('Error in handleSendPDF:', error);
+      Alert.alert('PDF Error', `Failed: ${error.message}`);
+    }
     handleCloseSendModal();
   };
 
@@ -130,32 +177,26 @@ function InvoiceViewerScreen() {
     []
   );
 
+  const navigation = useNavigation(); // Added
+
   useFocusEffect(
     useCallback(() => {
-      setIsTabBarVisible(false); 
+      setIsLoading(true); 
       return () => {
-        setIsTabBarVisible(true); 
+        setIsLoading(false); 
       };
-    }, [setIsTabBarVisible])
+    }, [])
   );
 
   const handleCustomBack = () => {
-    console.log('[handleCustomBack] Called. fromScreen:', params.fromScreen);
-    const fromScreen = params.fromScreen as string | undefined;
-    if (fromScreen === 'DashboardScreen' || fromScreen === 'InvoicesListScreen') {
-      router.replace(`/(app)/(protected)/${fromScreen.replace('Screen', '').toLowerCase()}` as any); // Use 'as any' to bypass strict type checking for dynamic routes
-    } else if (params.from === 'create') {
-      router.back(); 
-    } else {
-      router.replace('/(app)/(protected)/dashboard' as any); // Default fallback, 'as any' for type checking
-    }
+    console.log('[handleCustomBack] Called.');
+    router.back(); 
   };
 
   const fetchBusinessSettings = async (userId: string) => {
-    console.log('[fetchBusinessSettings] Function called with userId:', userId); // LOG B
+    console.log('[fetchBusinessSettings] Function called with userId:', userId); 
     if (!userId) {
       console.error('[fetchBusinessSettings] No userId provided.');
-      setLoadingBusiness(false);
       return;
     }
 
@@ -203,13 +244,11 @@ function InvoiceViewerScreen() {
       console.error('[fetchBusinessSettings] Exception fetching business settings:', e.message);
       setError('An unexpected error occurred while fetching business settings.');
       setBusinessSettings(null);
-    } finally {
-      setLoadingBusiness(false);
     }
   };
 
   const fetchInvoiceData = async (invoiceId: string): Promise<Database['public']['Tables']['invoices']['Row'] | null> => {
-    setLoading(true);
+    setIsLoading(true);
     try {
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('invoices')
@@ -225,14 +264,14 @@ function InvoiceViewerScreen() {
         console.error('[fetchInvoiceData] Supabase invoiceError:', invoiceError);
         setError('Failed to load invoice data.');
         setInvoice(null);
-        setLoading(false);
+        setIsLoading(false);
         return null;
       }
 
       if (!invoiceData) {
         setError('Invoice not found.');
         setInvoice(null);
-        setLoading(false);
+        setIsLoading(false);
         return null;
       }
       
@@ -244,7 +283,7 @@ function InvoiceViewerScreen() {
       // This does NOT set the main businessSettings state used for payment methods display.
       const { data: businessDataForCurrency, error: businessError } = await supabase
         .from('business_settings')
-        .select('currency_iso_code, currency_symbol') // Only select what's needed here
+        .select('currency_code') // Only select currency_code
         .eq('user_id', invoiceData.user_id)
         .single();
 
@@ -252,13 +291,16 @@ function InvoiceViewerScreen() {
         console.error('[fetchInvoiceData] Error fetching business_settings for currency:', businessError);
       }
 
-      const fetchedInvoiceForTemplate: Database['public']['Tables']['invoices']['Row'] = {
+      // Explicitly type as InvoiceForTemplate
+      const fetchedInvoiceForTemplate: InvoiceForTemplate = {
         ...invoiceData,
-        invoice_number: invoiceData.invoice_number ?? '', // Address lint error b5b84349-0dc3-4fbe-9c3d-20066c10aacc
-        clients: invoiceData.clients as ClientRow, 
-        invoice_line_items: invoiceData.invoice_line_items as Database['public']['Tables']['invoice_line_items']['Row'][],
-        currency: businessDataForCurrency?.currency_iso_code || 'USD', // Default if not found
-        currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_iso_code || 'USD'),
+        invoice_number: invoiceData.invoice_number ?? '', 
+        clients: invoiceData.clients as Tables<'clients'> | null, // Align with InvoiceForTemplate type
+        invoice_line_items: invoiceData.invoice_line_items as Tables<'invoice_line_items'>[], // Align with InvoiceForTemplate type
+        currency: businessDataForCurrency?.currency_code || 'USD', 
+        currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_code || 'USD'),
+        // Add missing invoice_tax_label, ensuring it's a string
+        invoice_tax_label: invoiceData.invoice_tax_label || 'Tax', 
       };
       
       console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
@@ -267,93 +309,41 @@ function InvoiceViewerScreen() {
         setClient(invoiceData.clients as ClientRow);
       }
       setError(null);
+      setIsLoading(false);
       return fetchedInvoiceForTemplate;
     } catch (e: any) {
       console.error('[fetchInvoiceData] Exception:', e.message);
       setError('An unexpected error occurred while fetching invoice data.');
       setInvoice(null);
+      setIsLoading(false);
       return null;
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     console.log(`[EFFECT START] InvoiceViewerScreen useEffect triggered.`);
-    console.log(`[EFFECT PARAMS] from: ${params.from}, id: ${params.id}, previewData present: ${!!params.previewInvoiceData}`);
-    setLoading(true); // Start loading
+    console.log(`[EFFECT PARAMS] id: ${invoiceId}`);
+    setIsLoading(true); // Start loading
 
     const processData = async () => {
-      if (params.from === 'create' && params.previewInvoiceData) {
-        console.log('[EFFECT] Processing preview data...');
-        setIsPreviewingFromCreate(true);
-        try {
-          const previewData = JSON.parse(params.previewInvoiceData) as PreviewInvoiceData;
-          console.log('[EFFECT PREVIEW DATA] Parsed previewData:', JSON.stringify(previewData, null, 2));
-
-          const previewInvoiceForTemplate: Database['public']['Tables']['invoices']['Row'] = {
-            id: `preview-${Date.now()}`,
-            user_id: '', 
-            client_id: previewData.client_id || null,
-            invoice_number: previewData.invoice_number ?? '', 
-            status: 'draft', 
-            invoice_date: previewData.invoice_date,
-            due_date: previewData.due_date || null,
-            due_date_option: previewData.due_date_option || null,
-            po_number: previewData.po_number || null,
-            custom_headline: previewData.custom_headline || null,
-            subtotal_amount: previewData.subTotalAmount || 0,
-            discount_type: previewData.discountType || null,
-            discount_value: previewData.discountValue || 0,
-            tax_percentage: previewData.taxPercentage || 0,
-            total_amount: previewData.totalAmount || 0,
-            notes: previewData.notes || null,
-            stripe_active: previewData.stripe_active_on_invoice || false,
-            bank_account_active: previewData.bank_account_active_on_invoice || false,
-            paypal_active: previewData.paypal_active_on_invoice || false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            invoice_line_items: (previewData.items || []).map((item, index) => ({
-              ...item,
-              id: item.id || `temp-preview-${index}`,
-              user_id: '', 
-              item_description: item.description || null,
-              line_item_discount_type: item.line_item_discount_type || null,
-              line_item_discount_value: item.line_item_discount_value || null,
-              item_image_url: item.item_image_url || null,
-              user_saved_item_id: item.user_saved_item_id || null,
-              created_at: new Date().toISOString(), 
-              updated_at: new Date().toISOString(), 
-              invoice_id: '', 
-            })),
-            currency: previewData.currency || 'USD',
-            currency_symbol: getCurrencySymbol(previewData.currency || 'USD'),
-          };
-          console.log('[EFFECT TRANSFORMED INVOICE] transformedInvoice:', JSON.stringify(previewInvoiceForTemplate, null, 2));
-          setInvoice(previewInvoiceForTemplate);
-          setError(null);
-        } catch (e) {
-          console.error("[EFFECT ERROR] Error processing preview data:", e);
-          setError('Error processing preview data.');
-        }
-      } else if (params.id) {
-        console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchInvoiceData with invoiceId:', params.id); 
-        fetchInvoiceData(params.id).then((fetchedInvoice) => {
+      if (invoiceId) {
+        console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchInvoiceData with invoiceId:', invoiceId); 
+        fetchInvoiceData(invoiceId).then((fetchedInvoice) => {
           if (fetchedInvoice && fetchedInvoice.user_id) {
             const targetUserId = fetchedInvoice.user_id;
-            console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchBusinessSettings with targetUserId (from fetched invoiceData):', targetUserId); // LOG A
+            console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchBusinessSettings with targetUserId (from fetched invoiceData):', targetUserId); 
             if (targetUserId) fetchBusinessSettings(targetUserId); // This calls the main fetchBusinessSettings
           }
         });
       } else {
-        console.warn("[EFFECT] No invoice ID and no preview data. Cannot load invoice.");
+        console.warn("[EFFECT] No invoice ID. Cannot load invoice.");
         setError('No invoice specified.');
       }
-      setLoading(false); // End loading after processing
+      setIsLoading(false); // End loading after processing
     };
 
     processData();
-  }, [params.id, params.previewInvoiceData, params.from, supabase]);
+  }, [invoiceId, supabase]);
 
   const getCurrencySymbol = (currencyCode: string): string => {
     // Handles both codes and full names from the DB, e.g. 'GBP - British Pound'
@@ -761,35 +751,24 @@ function InvoiceViewerScreen() {
         contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border, paddingTop: 0, paddingBottom: 200 }]} 
         showsVerticalScrollIndicator={false}
       >
-        {loading || loadingBusiness ? (
+        {isLoading ? (
           <View style={{ alignItems: 'center', paddingTop: 20 }}> 
             <InvoiceSkeletonLoader />
           </View>
         ) : error ? (
-          <View style={[styles.centered, { paddingTop: 50, paddingBottom: 50 }]}>
-            <Text style={{ color: themeColors.primary }}>Error: {error}</Text>
-            {/* Optionally, add a retry button here */}
+          <View style={styles.centeredMessageContainer}>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
-        ) : invoice && businessSettings ? (
-          <View style={{ alignItems: 'center' }}>
-            <InvoiceTemplateOne 
-              invoice={invoice}
-              clientName={client?.name}
-              businessSettings={businessSettings} 
-              businessAddress={{
-                address: business?.business_address || '',
-                city: '', 
-                country: '', 
-              }}
-              paymentTerms={invoice?.payment_terms ?? null}
-              invoiceDate={invoice?.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString() : 'N/A'}
-              dueDate={invoice?.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}
-              items={invoice?.items ? invoice.items as any[] : []} // Assuming items structure matches
+        ) : invoice ? (
+          <View style={{ flex: 1 }}>
+            <InvoiceTemplateOne
+              invoice={invoice} // invoice is InvoiceForTemplate | null
+              clientName={client?.name || invoice.clients?.name || 'N/A'} // Get client name from client state or embedded in invoice
+              businessSettings={businessSettings} // businessSettings is BusinessSettingsRow | null
             />
           </View>
         ) : (
-          // Fallback if no invoice, no error, and not loading - should ideally not be reached in normal flow
-          <View style={[styles.centered, { paddingTop: 50, paddingBottom: 50 }]}>
+          <View style={styles.centeredMessageContainer}>
             <Text style={{ color: themeColors.mutedForeground }}>No invoice data available.</Text>
           </View>
         )}

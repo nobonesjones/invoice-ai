@@ -1,4 +1,4 @@
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useFocusEffect } from "expo-router";
 import {
 	PlusCircle,
 	Search as SearchIcon,
@@ -203,26 +203,6 @@ export default function InvoiceDashboardScreen() {
 	const router = useRouter();
   const { supabase, user } = useSupabase();
 
-  // Fetch business settings for currency code
-  useEffect(() => {
-    const fetchBusinessSettings = async () => {
-      if (!user?.id) return;
-      try {
-        const { data, error } = await supabase
-          .from('business_settings')
-          .select('currency_code')
-          .eq('user_id', user.id)
-          .single();
-        if (!error && data && data.currency_code) {
-          setCurrencyCode(data.currency_code);
-        }
-      } catch (e) {
-        // fallback to USD
-      }
-    };
-    fetchBusinessSettings();
-  }, [user?.id, supabase]);
-
   const [invoices, setInvoices] = useState<InvoiceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -258,18 +238,35 @@ export default function InvoiceDashboardScreen() {
     // fetchInvoices will be called by useEffect due to currentDateFilterType change
   };
 
-  const fetchInvoices = useCallback(async (filterTypeToApply?: string) => { 
+  const fetchBusinessSettings = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('business_settings')
+        .select('currency_code')
+        .eq('user_id', user.id)
+        .single();
+      if (!error && data && data.currency_code) {
+        setCurrencyCode(data.currency_code);
+      }
+    } catch (e) {
+      // fallback to USD
+    }
+  }, [user?.id, supabase]);
+
+  const loadInvoicesAndSummary = useCallback(async (isPullToRefresh = false) => {
     if (!user?.id) {
       setError("User not authenticated.");
       setLoading(false);
+      if (isPullToRefresh) setIsRefreshing(false);
       return;
     }
-    setLoading(true);
-    setError(null);
 
-    // --- TEMPORARY FLAG FOR TESTING --- 
-    const applyFilterLogic = true; // Set to false to revert to fetching all invoices
-    // --- END TEMPORARY FLAG ---
+    if (!isPullToRefresh) {
+      setLoading(true); // Show loader for initial load or filter/search change
+    } else {
+      setIsRefreshing(true); // Show pull-to-refresh indicator
+    }
 
     try {
       let query = supabase
@@ -286,15 +283,10 @@ export default function InvoiceDashboardScreen() {
         `)
         .eq('user_id', user.id);
 
-      if (applyFilterLogic && filterTypeToApply) {
-        const dateRange = getFilterDateRange(filterTypeToApply);
-        if (dateRange) {
-          console.log(`Applying date filter for ${filterTypeToApply}:`, dateRange);
-          query = query.gte('created_at', dateRange.startDate);
-          query = query.lte('created_at', dateRange.endDate);
-        } else {
-          console.log(`No valid date range for ${filterTypeToApply}, fetching all (or as per default sort).`);
-        }
+      const dateRange = getFilterDateRange(currentDateFilterType);
+      if (dateRange) {
+        query = query.gte('created_at', dateRange.startDate);
+        query = query.lte('created_at', dateRange.endDate);
       }
 
       // Always apply ordering at the end
@@ -317,52 +309,51 @@ export default function InvoiceDashboardScreen() {
       }));
       setInvoices(formattedInvoices);
 
+      let invoiced = 0;
+      let paid = 0;
+      let overdue = 0;
+
+      formattedInvoices.forEach(invoice => {
+        const amount = invoice.total_amount || 0;
+        invoiced += amount; 
+        if (invoice.status === 'paid') {
+          paid += amount;
+        } else if (invoice.status === 'overdue') {
+          overdue += amount;
+        }
+      });
+
+      setTotalInvoiced(invoiced);
+      setTotalPaid(paid);
+      setTotalOverdue(overdue);
     } catch (e: any) {
       console.error("Error fetching invoices:", e);
       setError(e.message || "Failed to fetch invoices");
     } finally {
       setLoading(false);
+      if (isPullToRefresh) setIsRefreshing(false);
     }
-  }, [supabase, user?.id]); // getFilterDateRange is stable, no need to add as dependency
+  }, [supabase, user?.id, currentDateFilterType]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchInvoices(currentDateFilterType); // Pass the current filter type
-    }
-  }, [user?.id, fetchInvoices, currentDateFilterType]); // Added currentDateFilterType dependency
+    fetchBusinessSettings();
+    loadInvoicesAndSummary();
+  }, [fetchBusinessSettings, loadInvoicesAndSummary]);
 
-  // Effect to synchronize label if filterType changes from other sources or on init
-  useEffect(() => {
-    const selectedOption = filterOptions.find(opt => opt.type === currentDateFilterType);
-    if (selectedOption && selectedOption.label !== currentFilterLabel) {
-      setCurrentFilterLabel(selectedOption.label);
-    }
-  }, [currentDateFilterType, currentFilterLabel]); // currentFilterLabel added to prevent loop if already correct
-
-  useEffect(() => { 
-    let invoiced = 0;
-    let paid = 0;
-    let overdue = 0;
-
-    invoices.forEach(invoice => {
-      const amount = invoice.total_amount || 0;
-      invoiced += amount; 
-      if (invoice.status === 'paid') {
-        paid += amount;
-      } else if (invoice.status === 'overdue') {
-        overdue += amount;
-      }
-    });
-
-    setTotalInvoiced(invoiced);
-    setTotalPaid(paid);
-    setTotalOverdue(overdue);
-  }, [invoices]);
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[InvoiceDashboardScreen] Screen focused, reloading data.');
+      fetchBusinessSettings();
+      loadInvoicesAndSummary(); // Call the consolidated function
+      return () => {
+        console.log('[InvoiceDashboardScreen] Screen unfocused.');
+      };
+    }, [fetchBusinessSettings, loadInvoicesAndSummary])
+  );
 
   const onRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    fetchInvoices(currentDateFilterType).finally(() => setIsRefreshing(false)); // Pass current filter type
-  }, [fetchInvoices, currentDateFilterType]);
+    loadInvoicesAndSummary(true); // Pass true to indicate it's a pull-to-refresh
+  }, [loadInvoicesAndSummary]);
 
 	const renderInvoiceItem = ({ item }: { item: InvoiceData }) => (
 		<TouchableOpacity
@@ -448,7 +439,7 @@ export default function InvoiceDashboardScreen() {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Text style={{ color: themeColors.destructive, marginBottom: 10 }}>Error: {error}</Text>
-          <TouchableOpacity onPress={fetchInvoices} style={[styles.headerButton, { backgroundColor: themeColors.primary }]}>
+          <TouchableOpacity onPress={() => loadInvoicesAndSummary()} style={[styles.headerButton, { backgroundColor: themeColors.primary }]}>
             <Text style={[styles.headerButtonText, { color: themeColors.primaryForeground }]}>Retry</Text>
           </TouchableOpacity>
         </View>

@@ -35,6 +35,7 @@ export interface InvoiceForTemplate {
   currency: string; // Strictly string
   currency_symbol: string;
   invoice_tax_label: string; // New property
+  payment_terms?: string; // Added payment_terms
 }
 
 // Change to a direct type alias for simplicity and to avoid extension conflicts
@@ -56,14 +57,6 @@ const formatDate = (dateString: string | null | undefined) => {
   } catch (e) {
     return dateString; // Fallback to original string if parsing fails
   }
-};
-
-const formatCurrency = (amount: number | null | undefined, currencyCode: string | null | undefined = 'USD') => {
-  if (amount == null) return 'N/A';
-  // Basic currency formatting, can be enhanced with Intl.NumberFormat for proper symbols
-  const symbols: { [key: string]: string } = { USD: '$', EUR: '€', GBP: '£' };
-  const symbol = symbols[currencyCode || 'USD'] || (currencyCode ? currencyCode + ' ' : '$');
-  return `${symbol}${amount.toFixed(2)}`;
 };
 
 const formatDueDateDisplay = (option: string | null | undefined, dateString: string | null | undefined): string => {
@@ -90,6 +83,26 @@ const formatDueDateDisplay = (option: string | null | undefined, dateString: str
   return 'N/A'; // Default fallback if neither option nor dateString yields a value
 };
 
+const calculateDiscountAmount = (invoice: InvoiceForTemplate) => {
+  if (invoice && invoice.discount_value != null && invoice.discount_value > 0 && invoice.subtotal_amount != null) {
+    if (invoice.discount_type === 'percentage') {
+      return (invoice.subtotal_amount * invoice.discount_value) / 100;
+    } else if (invoice.discount_type === 'fixed') {
+      return invoice.discount_value;
+    }
+  }
+  return 0;
+};
+
+const calculateTaxAmount = (invoice: InvoiceForTemplate) => {
+  if (invoice && invoice.tax_percentage != null && invoice.tax_percentage > 0 && invoice.subtotal_amount != null) {
+    // Calculate tax on subtotal after discount
+    const amountBeforeTax = invoice.subtotal_amount - calculateDiscountAmount(invoice);
+    return (amountBeforeTax * invoice.tax_percentage) / 100;
+  }
+  return 0;
+};
+
 const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({ 
   invoice,
   clientName,
@@ -111,25 +124,6 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
         <Text style={{ color: 'red', fontWeight: 'bold' }}>No invoice data found. (invoice is null)</Text>
       </View>
     );
-  }
-
-  // Calculate actual discount amount
-  let calculatedDiscountValue = 0;
-
-  if (invoice && invoice.discount_value != null && invoice.discount_value > 0 && invoice.subtotal_amount != null) {
-    if (invoice.discount_type === 'percentage') {
-      calculatedDiscountValue = (invoice.subtotal_amount * invoice.discount_value) / 100;
-    } else if (invoice.discount_type === 'fixed') {
-      calculatedDiscountValue = invoice.discount_value;
-    }
-  }
-
-  // Calculate tax amount if applicable
-  let taxAmount = 0;
-  if (invoice && invoice.tax_percentage != null && invoice.tax_percentage > 0 && invoice.subtotal_amount != null) {
-    // Calculate tax on subtotal after discount
-    const amountBeforeTax = invoice.subtotal_amount - calculatedDiscountValue;
-    taxAmount = (amountBeforeTax * invoice.tax_percentage) / 100;
   }
 
   return (
@@ -191,7 +185,7 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
         </View>
 
         {/* Table Body - Dynamically generated item rows */}
-        {invoice.invoice_line_items && invoice.invoice_line_items.length > 0 ? (
+        {invoice?.invoice_line_items && invoice.invoice_line_items.length > 0 ? (
           invoice.invoice_line_items.map((item, index) => (
             <View key={item.id || `item-${index}`} style={styles.tableRow}>
               <View style={styles.qtyCol}><Text style={[styles.lineItemCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
@@ -201,8 +195,8 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
                   <Text style={styles.itemSubtitle}>{item.item_description}</Text>
                 )}
               </View>
-              <View style={styles.priceCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{formatCurrency(item.unit_price, invoice.currency)}</Text></View>
-              <View style={styles.totalCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{formatCurrency(item.total_price, invoice.currency)}</Text></View>
+              <View style={styles.priceCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{invoice.currency_symbol}{item.unit_price?.toFixed(2) ?? '0.00'}</Text></View>
+              <View style={styles.totalCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{invoice.currency_symbol}{item.total_price?.toFixed(2) ?? '0.00'}</Text></View>
             </View>
           ))
         ) : (
@@ -221,95 +215,36 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
             <Text style={styles.paymentTermsHeader}>Terms, Instructions & Notes</Text>
             <Text style={styles.paymentTermsBody}>{invoice?.notes || 'No terms specified.'}</Text>
           </View>
+          {invoice?.payment_terms && (
           <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Payment Method</Text>
-            {/* TODO: Regenerate Supabase types. Using 'as any' for businessSettings as TS types are outdated for payment fields. */}
-            {(() => {
-  // DEBUG: Log payment method flags
-  console.log('[InvoiceTemplateOne] Payment flags:', {
-    paypal_active: invoice?.paypal_active,
-    stripe_active: invoice?.stripe_active,
-    bank_account_active: invoice?.bank_account_active,
-  });
-  const paypalEnabled = Boolean(invoice?.paypal_active);
-  const stripeEnabled = Boolean(invoice?.stripe_active);
-  const bankEnabled = Boolean(invoice?.bank_account_active);
-
-  return (
-    <>
-      {!(paypalEnabled || stripeEnabled || bankEnabled) ? (
-        <Text style={styles.placeholderText}>Details to be added from Business Settings</Text>
-      ) : null}
-
-      {paypalEnabled && (businessSettings as any)?.paypal_email && (
-        <Text style={[styles.text, { marginTop: 4 }]}> 
-          <Text style={{ fontWeight: 'bold' }}>PayPal:</Text> {(businessSettings as any).paypal_email}
-        </Text>
-      )}
-
-      {stripeEnabled && (
-        <View style={{ marginTop: 4 }}>
-          <Text style={styles.text}>
-            <Text style={{ fontWeight: 'bold' }}>Pay Online:</Text> {/* TODO: Replace with dynamic Stripe payment link if available */} 
-            www.stripepaymentlink.com
-          </Text>
-        </View>
-      )}
-
-      {bankEnabled && (businessSettings as any)?.bank_details && (
-        <View style={{ marginTop: 4 }}>
-          <Text style={[styles.text, { fontWeight: 'bold' }]}>Bank Transfer</Text>
-          <Text style={styles.text}>{(businessSettings as any).bank_details}</Text>
-        </View>
-      )}
-    </>
-  );
-})()}
-
+            <Text style={styles.paymentTermsHeader}>Payment Terms</Text>
+            <Text style={styles.paymentTermsBody}>{invoice.payment_terms}</Text>
           </View>
+          )}
         </View>
         <View style={styles.footerRight}>
           <View style={styles.totalsBlock}>
             <View style={styles.totalLine}>
-              <Text style={styles.label}>Subtotal</Text>
-              <Text style={styles.totalsValueText}>
-                {formatCurrency(invoice.subtotal_amount, invoice.currency_symbol)}
-              </Text>
+              <Text style={styles.label}>Subtotal:</Text>
+              <Text style={styles.totalsValueText}>{invoice.currency_symbol}{invoice.subtotal_amount?.toFixed(2) ?? '0.00'}</Text>
             </View>
-
-            {/* Discount - displays only if there's a calculated discount value */}
-            {calculatedDiscountValue > 0 && (
+            {invoice.discount_value != null && invoice.discount_value > 0 && (
               <View style={styles.totalLine}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.label}>Discount </Text>
-                  {invoice.discount_type === 'percentage' && invoice.discount_value != null && (
-                    <Text style={styles.discountPercentageText}>({invoice.discount_value}%)</Text>
-                  )}
-                </View>
-                <Text style={styles.totalsValueText}>
-                  - {formatCurrency(calculatedDiscountValue, invoice.currency_symbol)}
+                <Text style={styles.label}>
+                  Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
                 </Text>
+                <Text style={styles.totalsValueText}>-{invoice.currency_symbol}{calculateDiscountAmount(invoice).toFixed(2)}</Text>
               </View>
             )}
-
-            {/* Tax - displays only if there's a tax percentage */}
             {invoice.tax_percentage != null && invoice.tax_percentage > 0 && (
               <View style={styles.totalLine}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.label}>{invoice.invoice_tax_label || 'Tax'} </Text>
-                  {invoice.tax_percentage != null && (
-                    <Text style={styles.discountPercentageText}>({invoice.tax_percentage}%)</Text>
-                  )}
-                </View>
-                <Text style={styles.totalsValueText}>
-                  {formatCurrency(taxAmount, invoice.currency_symbol)}
-                </Text>
+                <Text style={styles.label}>{invoice.invoice_tax_label || 'Tax'} ({invoice.tax_percentage}%):</Text>
+                <Text style={styles.totalsValueText}>{invoice.currency_symbol}{calculateTaxAmount(invoice).toFixed(2)}</Text>
               </View>
             )}
-
             <View style={[styles.totalLine, styles.grandTotalLine]}>
-              <Text style={{ fontSize: 8, fontWeight: 'bold', color: styles.label.color /* Using color from styles.label */ }}>GRAND TOTAL</Text> 
-              <Text style={styles.grandTotalText}>{formatCurrency(invoice.total_amount, invoice.currency_symbol)}</Text>
+              <Text style={styles.grandTotalText}>Total:</Text>
+              <Text style={styles.grandTotalText}>{invoice.currency_symbol}{invoice.total_amount?.toFixed(2) ?? '0.00'}</Text>
             </View>
           </View>
         </View>

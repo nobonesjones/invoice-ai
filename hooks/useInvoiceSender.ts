@@ -1,0 +1,80 @@
+import { useState } from 'react';
+import { Alert, Platform } from 'react-native';
+import RNHTMLtoPDF from 'react-native-html-to-pdf';
+import Share from 'react-native-share';
+import { generateInvoiceHtml, PdfInvoiceData } from '../app/utils/generateInvoiceHtml'; // Adjusted path
+import { InvoiceForTemplate, BusinessSettingsRow } from '../app/(app)/(protected)/invoices/InvoiceTemplateOne'; // Adjusted path
+
+interface UseInvoiceSenderProps {
+  invoice: InvoiceForTemplate | null;
+  businessSettings: BusinessSettingsRow | null;
+}
+
+interface UseInvoiceSenderReturn {
+  sendInvoicePdf: () => Promise<void>;
+  isSending: boolean;
+  error: string | null;
+}
+
+const useInvoiceSender = ({ invoice, businessSettings }: UseInvoiceSenderProps): UseInvoiceSenderReturn => {
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // preparePdfData function will be moved here
+  const preparePdfData = (currentInvoice: InvoiceForTemplate, currentBusinessSettings: BusinessSettingsRow): PdfInvoiceData => {
+    // This logic will be moved from invoice-viewer.tsx
+    return {
+      invoice: {
+        ...currentInvoice,
+        // Ensure all PdfInvoice fields are mapped correctly
+        // For example, if PdfInvoice expects 'clients' as an object but InvoiceForTemplate has it nested,
+        // adjust here. Based on current types, it should be mostly direct.
+      },
+      businessSettings: currentBusinessSettings,
+    };
+  };
+
+  const sendInvoicePdf = async () => {
+    if (!invoice || !businessSettings) {
+      Alert.alert('Error', 'Invoice data or business settings are missing.');
+      return;
+    }
+
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const dataForHtml = preparePdfData(invoice, businessSettings);
+      const htmlContent = generateInvoiceHtml(dataForHtml);
+
+      const options = {
+        html: htmlContent,
+        fileName: `Invoice_${invoice.invoice_number || 'details'}`,
+        directory: Platform.OS === 'android' ? 'Downloads' : 'Documents', // iOS needs 'Documents' or similar, Android 'Downloads'
+        base64: true,
+      };
+
+      const pdf = await RNHTMLtoPDF.convert(options);
+
+      const shareOptions = {
+        title: `Invoice ${invoice.invoice_number}`,
+        message: `Here is your invoice: ${invoice.invoice_number}`,
+        url: Platform.OS === 'android' ? `file://${pdf.filePath}` : pdf.filePath, // For Android, prefix with file://
+        type: 'application/pdf',
+        subject: `Invoice ${invoice.invoice_number}`,
+      };
+
+      await Share.open(shareOptions);
+    } catch (e: any) {
+      console.error('Failed to send PDF:', e);
+      Alert.alert('Error', `Failed to generate or share PDF. ${e.message || ''}`);
+      setError(e.message || 'Failed to send PDF.');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return { sendInvoicePdf, isSending, error };
+};
+
+export default useInvoiceSender;
