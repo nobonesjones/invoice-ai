@@ -26,7 +26,7 @@ import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomShee
 import { Mail, Link, FileText, X as XIcon } from 'lucide-react-native';
 import RNHTMLtoPDF from 'react-native-html-to-pdf'; // Added import
 import Share from 'react-native-share'; // Added import
-import { generateInvoiceHtml } from '../../../utils/generateInvoiceHtml'; // Corrected import path
+import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml'; // Updated function and file name
 
 type ClientRow = Tables<'clients'>;
 
@@ -149,11 +149,18 @@ function InvoiceViewerScreen() {
     const dataForHtml = preparePdfData(invoice, businessSettings);
 
     try {
-      const html = generateInvoiceHtml(dataForHtml); 
+      const html = generateInvoiceTemplateOneHtml(dataForHtml); 
       const pdfOptions = {
         html,
         fileName: `Invoice-${invoice.invoice_number || 'details'}`,
         directory: 'Invoices',
+        width: 595, // A4 width in points
+        height: 842, // A4 height in points
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        bgColor: '#FFFFFF',
       };
       const file = await RNHTMLtoPDF.convert(pdfOptions);
       await Share.open({ url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, title: 'Share Invoice PDF' });

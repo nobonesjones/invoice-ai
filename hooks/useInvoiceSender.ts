@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import Share from 'react-native-share';
-import { generateInvoiceHtml, PdfInvoiceData } from '../app/utils/generateInvoiceHtml'; // Adjusted path
+import { generateInvoiceTemplateOneHtml, PdfInvoiceData } from '../app/utils/generateInvoiceTemplateOneHtml'; // Updated function and file name
 import { InvoiceForTemplate, BusinessSettingsRow } from '../app/(app)/(protected)/invoices/InvoiceTemplateOne'; // Adjusted path
 
 interface UseInvoiceSenderProps {
@@ -45,13 +45,20 @@ const useInvoiceSender = ({ invoice, businessSettings }: UseInvoiceSenderProps):
 
     try {
       const dataForHtml = preparePdfData(invoice, businessSettings);
-      const htmlContent = generateInvoiceHtml(dataForHtml);
+      const htmlContent = generateInvoiceTemplateOneHtml(dataForHtml);
 
       const options = {
         html: htmlContent,
         fileName: `Invoice_${invoice.invoice_number || 'details'}`,
         directory: Platform.OS === 'android' ? 'Downloads' : 'Documents', // iOS needs 'Documents' or similar, Android 'Downloads'
         base64: true,
+        width: 595, // A4 width in points (8.27 inches * 72 points/inch)
+        height: 842, // A4 height in points (11.69 inches * 72 points/inch)
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        bgColor: '#FFFFFF',
       };
 
       const pdf = await RNHTMLtoPDF.convert(options);
