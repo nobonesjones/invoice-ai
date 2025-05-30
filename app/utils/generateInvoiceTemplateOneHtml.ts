@@ -106,9 +106,9 @@ const calculateTaxAmount = (invoice: PdfInvoice): number => {
 };
 
 // Base64 encoded images for payment logos - These should be replaced with actual base64 data
-const VISA_LOGO_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="; // Placeholder
-const MASTERCARD_LOGO_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="; // Placeholder
-const PAYPAL_LOGO_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="; // Placeholder
+const VISA_LOGO_URL = "https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/visaicon.png";
+const MASTERCARD_LOGO_URL = "https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/mastercardicon.png";
+const PAYPAL_LOGO_URL = "https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/paypalicon.png";
 
 export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => {
   if (!data.invoice || !data.businessSettings) {
@@ -168,18 +168,18 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       text-align: right;
     }
     .header-left img { 
-      max-width: 100px;
-      max-height: 50px;
+      max-width: 210px;
+      max-height: 105px;
       margin-bottom: 5mm;
     }
     .logo-placeholder {
-      font-size: 12px; 
+      font-size: 25px; 
       font-weight: bold;
       color: #000;
-      width: 100px;
-      height: 50px;
+      width: 210px;
+      height: 105px;
       text-align: center;
-      line-height: 50px;
+      line-height: 105px;
       border: 1px solid #ddd;
       margin-bottom: 5mm;
     }
@@ -191,7 +191,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
     }
     .header-right p { 
       margin: 1mm 0; 
-      font-size: 10px; 
+      font-size: 11px; 
       color: #000;
       line-height: 1.3;
     }
@@ -210,26 +210,26 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       text-align: right; 
     }
     .address-block-title { 
-      font-size: 9px; 
+      font-size: 10px; 
       font-weight: bold; 
       color: #666; 
       margin-bottom: 2mm; 
       text-transform: uppercase;
     }
     .address-name { 
-      font-size: 11px; 
+      font-size: 12px; 
       font-weight: bold; 
       color: #000; 
       margin-bottom: 1mm; 
     }
     .business-name { 
-      font-size: 11px; 
+      font-size: 12px; 
       font-weight: bold; 
       color: #000; 
       margin-bottom: 1mm; 
     }
     .address-line { 
-      font-size: 9px; 
+      font-size: 10px; 
       color: #000; 
       line-height: 1.3; 
       margin: 0 0 1mm 0; 
@@ -244,7 +244,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       border-bottom: 1px solid #eee;
     }
     .custom-headline p { 
-      font-size: 12px; 
+      font-size: 13px; 
       font-weight: bold; 
       margin: 0; 
       color: #000;
@@ -261,7 +261,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
     .line-items th { 
       background-color: rgba(76, 175, 80, 0.15) !important;
       padding: 2mm 1.5mm; 
-      font-size: 8px;
+      font-size: 9px;
       font-weight: bold;
       color: #000;
       text-align: left;
@@ -270,7 +270,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
     .line-items td { 
       padding: 2mm 1.5mm; 
       border-bottom: 1px solid #eee;
-      font-size: 9px;
+      font-size: 10px;
       color: #000;
       vertical-align: top;
     }
@@ -294,7 +294,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       text-align: right; 
     }
     .line-items .item-description-pdf { 
-      font-size: 8px; 
+      font-size: 9px; 
       color: #666; 
       margin-top: 1mm; 
       display: block; 
@@ -321,7 +321,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       text-transform: uppercase;
     }
     .notes-and-terms-section p { 
-      font-size: 8px; 
+      font-size: 10px; 
       margin: 0 0 2mm 0; 
       color: #666; 
       line-height: 1.3;
@@ -336,7 +336,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       margin-bottom: 3mm; 
     }
     .payment-method-item p { 
-      font-size: 8px; 
+      font-size: 10px; 
       margin: 0 0 1mm 0; 
       color: #666; 
     }
@@ -357,7 +357,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       object-fit: contain;
     }
     .payment-method-text {
-      font-size: 8px;
+      font-size: 10px;
       color: #000;
       font-weight: 500;
     }
@@ -371,12 +371,12 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       border-bottom: 1px solid #f5f5f5;
     }
     .totals-section-html .total-line-label { 
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 500;
       color: #000;
     }
     .totals-section-html .total-line-value { 
-      font-size: 9px;
+      font-size: 10px;
       color: #000;
       text-align: right;
       font-weight: 500;
@@ -391,7 +391,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
     }
     .grand-total-row .grand-total-label,
     .grand-total-row .grand-total-value { 
-      font-size: 10px;
+      font-size: 11px;
       font-weight: bold;
       color: #000;
     }
@@ -437,8 +437,8 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
         <div class="payment-method-item">
           <div class="logo-container">
             <span class="payment-method-text"><strong>Pay Online</strong></span>
-            <img src="data:image/png;base64,${VISA_LOGO_BASE64}" alt="Visa" />
-            <img src="data:image/png;base64,${MASTERCARD_LOGO_BASE64}" alt="Mastercard" />
+            <img src="${VISA_LOGO_URL}" alt="Visa" />
+            <img src="${MASTERCARD_LOGO_URL}" alt="Mastercard" />
           </div>
           <p>www.stripelink.com</p>
         </div>`;
@@ -450,7 +450,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
         <div class="payment-method-item">
           <div class="logo-container">
             <span class="payment-method-text"><strong>Pay with PayPal</strong></span>
-            <img src="data:image/png;base64,${PAYPAL_LOGO_BASE64}" alt="PayPal" />
+            <img src="${PAYPAL_LOGO_URL}" alt="PayPal" />
           </div>
           <p>${paymentOptions?.paypal_email || 'nobones@gmail.com'}</p>
         </div>`;
