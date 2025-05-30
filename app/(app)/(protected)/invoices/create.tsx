@@ -1,3 +1,32 @@
+/**
+ * CreateInvoiceScreen - Unified Invoice Creation and Editing
+ * 
+ * This screen handles both creating new invoices and editing existing ones
+ * based on the presence of an 'id' parameter in the route.
+ * 
+ * USAGE:
+ * - Create mode: /invoices/create
+ * - Edit mode: /invoices/create?id=invoice_id
+ * 
+ * FEATURES:
+ * - Automatic mode detection based on URL parameters
+ * - Complete form population from database in edit mode
+ * - Smart save logic (INSERT vs UPDATE operations)
+ * - Line items management (create/update/delete)
+ * - Loading and error states for edit mode
+ * - Consistent UX between create and edit flows
+ * 
+ * IMPLEMENTATION PHASES COMPLETED:
+ * ✅ Phase 1: Preparation & Analysis
+ * ✅ Phase 2: Edit Mode Detection  
+ * ✅ Phase 3: Data Loading & Population
+ * ✅ Phase 4: Form Behavior Updates
+ * ✅ Phase 5: Navigation & UI Updates
+ * ✅ Phase 6: Route Migration
+ * ✅ Phase 7: Testing & Cleanup
+ * ✅ Phase 8: Documentation & Polish
+ */
+
 import React, { useState, useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
 import {
   View,
@@ -233,7 +262,22 @@ export default function CreateInvoiceScreen() {
   const navigation = useNavigation(); // Get navigation object
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
   const { supabase, user } = useSupabase(); // Use Supabase context
-  const { invoiceId } = useLocalSearchParams<{ invoiceId?: string }>(); // Moved to top level
+  
+  // Updated parameter handling to support both edit and create modes
+  const params = useLocalSearchParams<{ 
+    id?: string; // For edit mode (e.g., /invoices/create?id=123)
+    invoiceId?: string; // Legacy support 
+    selectedClientId?: string; 
+    selectedClientName?: string;
+  }>();
+  
+  // Edit mode detection - prioritize 'id' over 'invoiceId' with safer checking
+  const editInvoiceId = params?.id || params?.invoiceId || null;
+  const isEditMode = Boolean(editInvoiceId);
+  
+  // Loading states for edit mode
+  const [isLoadingInvoice, setIsLoadingInvoice] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
 
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
@@ -307,16 +351,79 @@ export default function CreateInvoiceScreen() {
   const [itemPrice, setItemPrice] = useState('');
   const [itemDescription, setItemDescription] = useState('');
 
-  // --- Navigation and Params --- //
-  const params = useLocalSearchParams<{ selectedClientId?: string; selectedClientName?: string }>();
-
+  // Edit mode detection and logging
   useEffect(() => {
-    if (params.selectedClientId && params.selectedClientName) {
+    console.log('[CreateInvoiceScreen] Mode detection:');
+    console.log('  - isEditMode:', isEditMode);
+    console.log('  - editInvoiceId:', editInvoiceId);
+    console.log('  - params?.id:', params?.id);
+    console.log('  - params?.invoiceId:', params?.invoiceId);
+    
+    if (isEditMode && editInvoiceId) {
+      console.log('[CreateInvoiceScreen] Edit mode detected - will load invoice:', editInvoiceId);
+      loadInvoiceForEdit(editInvoiceId);
+    } else {
+      console.log('[CreateInvoiceScreen] Create mode - starting with empty form');
+    }
+  }, [isEditMode, editInvoiceId, params?.id, params?.invoiceId]);
+
+  // Function to load existing invoice data for editing
+  const loadInvoiceForEdit = async (invoiceId: string) => {
+    if (!supabase || !user) {
+      setLoadingError('Database connection not available');
+      return;
+    }
+
+    console.log('[loadInvoiceForEdit] Starting to load invoice:', invoiceId);
+    setIsLoadingInvoice(true);
+    setLoadingError(null);
+
+    try {
+      // Fetch invoice with related data
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          clients(*),
+          invoice_line_items(*)
+        `)
+        .eq('id', invoiceId)
+        .eq('user_id', user.id) // Security: ensure user owns this invoice
+        .single();
+
+      if (invoiceError) {
+        console.error('[loadInvoiceForEdit] Error fetching invoice:', invoiceError);
+        setLoadingError(`Failed to load invoice: ${invoiceError.message}`);
+        return;
+      }
+
+      if (!invoiceData) {
+        console.error('[loadInvoiceForEdit] No invoice data returned');
+        setLoadingError('Invoice not found');
+        return;
+      }
+
+      console.log('[loadInvoiceForEdit] Invoice data loaded:', invoiceData);
+      
+      // Transform and populate form data
+      await populateFormWithInvoiceData(invoiceData);
+      
+    } catch (error: any) {
+      console.error('[loadInvoiceForEdit] Unexpected error:', error);
+      setLoadingError(`Unexpected error: ${error.message}`);
+    } finally {
+      setIsLoadingInvoice(false);
+    }
+  };
+
+  // Handle client selection from navigation params
+  useEffect(() => {
+    if (params?.selectedClientId && params?.selectedClientName) {
       setSelectedClient({ id: params.selectedClientId, name: params.selectedClientName });
       // Optional: Clear params from URL after processing to avoid re-triggering if user navigates away and back
       // router.setParams({ selectedClientId: undefined, selectedClientName: undefined });
     }
-  }, [params.selectedClientId, params.selectedClientName]);
+  }, [params?.selectedClientId, params?.selectedClientName]);
 
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
@@ -408,104 +515,102 @@ export default function CreateInvoiceScreen() {
     setIsSavingInvoice(true);
 
     try {
-      // Log critical form data fields before preparing invoiceInsertData
+      console.log(`[handleSaveInvoice] ${isEditMode ? 'UPDATE' : 'CREATE'} mode - Processing invoice`);
       console.log('[handleSaveInvoice] formData.invoice_number:', formData.invoice_number);
       console.log('[handleSaveInvoice] formData.invoice_date:', formData.invoice_date);
       console.log('[handleSaveInvoice] formData.due_date:', formData.due_date);
       console.log('[handleSaveInvoice] formData.due_date_option:', formData.due_date_option);
-      console.log('[handleSaveInvoice] formData.payment_instructions_active_on_invoice (for stripe_active):', formData.payment_instructions_active_on_invoice);
-      console.log('[handleSaveInvoice] formData.stripe_active_on_invoice (NEW):', formData.stripe_active_on_invoice); // Log new field
-      console.log('[handleSaveInvoice] formData.bank_account_active_on_invoice:', formData.bank_account_active_on_invoice);
-      console.log('[handleSaveInvoice] formData.paypal_active_on_invoice:', formData.paypal_active_on_invoice);
 
       // 1. Prepare main invoice data
-      const invoiceInsertData = {
+      const invoiceData = {
         user_id: user.id,
         client_id: formData.client_id,
-        invoice_number: formData.invoice_number || `INV-${Date.now().toString().slice(-6)}`, // Basic auto-generation if empty
+        invoice_number: formData.invoice_number || `INV-${Date.now().toString().slice(-6)}`,
         status: isMarkedAsPaid ? 'paid' : 'draft',
         invoice_date: formData.invoice_date instanceof Date ? formData.invoice_date.toISOString() : new Date(formData.invoice_date).toISOString(),
         due_date: formData.due_date ? (formData.due_date instanceof Date ? formData.due_date.toISOString() : new Date(formData.due_date).toISOString()) : null,
-        due_date_option: formData.due_date_option, // Save the selected due date option
+        due_date_option: formData.due_date_option,
         po_number: formData.po_number || null,
         custom_headline: formData.custom_headline || null,
         subtotal_amount: formData.subTotalAmount,
         discount_type: formData.discountType || null,
         discount_value: formData.discountValue || 0,
         tax_percentage: formData.taxPercentage || 0,
-        invoice_tax_label: formData.invoice_tax_label || 'Tax', // Save the tax label
+        invoice_tax_label: formData.invoice_tax_label || 'Tax',
         total_amount: formData.totalAmount,
-        notes: formData.notes || null, // Add 'notes' to InvoiceFormData if needed
-        stripe_active: formData.stripe_active_on_invoice, // Corrected: Use the new dedicated field
+        notes: formData.notes || null,
+        stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
       };
 
-      // 2. Insert into 'invoices' table
-      const { data: newInvoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert(invoiceInsertData)
-        .select()
-        .single();
+      let savedInvoice;
 
-      if (invoiceError) {
-        console.error('Error saving invoice:', invoiceError);
-        Alert.alert('Error', `Failed to save invoice: ${invoiceError.message}`);
-        setIsSavingInvoice(false);
-        return;
-      }
+      if (isEditMode && editInvoiceId) {
+        // UPDATE existing invoice
+        console.log('[handleSaveInvoice] Updating existing invoice:', editInvoiceId);
+        const { data: updatedInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', editInvoiceId)
+          .eq('user_id', user.id) // Security: ensure user owns this invoice
+          .select()
+          .single();
 
-      if (!newInvoice) {
-        Alert.alert('Error', 'Failed to save invoice: No data returned after insert.');
-        setIsSavingInvoice(false);
-        return;
-      }
-
-      // 3. Prepare and insert line items
-      if (formData.items && formData.items.length > 0) {
-        console.log('[handleSaveInvoice] formData.items:', JSON.stringify(formData.items, null, 2)); // Log items from form
-        const lineItemsInsertData = formData.items.map(item => ({
-          invoice_id: newInvoice.id,
-          user_id: user.id,
-          item_name: item.item_name, // Corrected from item.name
-          item_description: item.description || null, // Now valid
-          quantity: item.quantity,
-          unit_price: item.unit_price, // Corrected from item.price
-          total_price: item.total_price, // This should now be the final price after line item discount
-          line_item_discount_type: item.line_item_discount_type || null,
-          line_item_discount_value: item.line_item_discount_value || null,
-          item_image_url: item.item_image_url || null,
-        }));
-
-        console.log('[handleSaveInvoice] lineItemsInsertData:', JSON.stringify(lineItemsInsertData, null, 2)); // Log data being sent to Supabase
-
-        const { error: lineItemsError } = await supabase
-          .from('invoice_line_items')
-          .insert(lineItemsInsertData);
-
-        if (lineItemsError) {
-          console.error('Error saving line items:', lineItemsError);
-          Alert.alert('Error', `Invoice saved (ID: ${newInvoice.id}), but failed to save line items: ${lineItemsError.message}. Please edit the invoice to add items.`);
+        if (invoiceError) {
+          console.error('Error updating invoice:', invoiceError);
+          Alert.alert('Error', `Failed to update invoice: ${invoiceError.message}`);
           setIsSavingInvoice(false);
-          // Navigate to the invoice dashboard
-          router.replace('/(app)/(protected)/invoices/'); 
           return;
         }
+
+        savedInvoice = updatedInvoice;
+        console.log('[handleSaveInvoice] Invoice updated successfully');
+
+      } else {
+        // CREATE new invoice
+        console.log('[handleSaveInvoice] Creating new invoice');
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert(invoiceData)
+          .select()
+          .single();
+
+        if (invoiceError) {
+          console.error('Error creating invoice:', invoiceError);
+          Alert.alert('Error', `Failed to create invoice: ${invoiceError.message}`);
+          setIsSavingInvoice(false);
+          return;
+        }
+
+        savedInvoice = newInvoice;
+        console.log('[handleSaveInvoice] Invoice created successfully');
       }
 
-      // 4. Success - Clear form and navigate to viewer
-      console.log('Invoice saved successfully! Navigating to viewer with ID:', newInvoice.id);
-      reset(defaultValues); // Reset form to default values
-      setSelectedClient(null); // Clear selected client
-      // Any other state resets needed
+      if (!savedInvoice) {
+        Alert.alert('Error', 'Failed to save invoice: No data returned.');
+        setIsSavingInvoice(false);
+        return;
+      }
+
+      // 2. Handle line items (create/update/delete)
+      await handleLineItemsUpdate(savedInvoice.id, formData.items);
+
+      // 3. Success - Navigate to viewer
+      const successMessage = isEditMode ? 'Invoice updated successfully!' : 'Invoice created successfully!';
+      console.log(`[handleSaveInvoice] ${successMessage} Navigating to viewer with ID:`, savedInvoice.id);
+      
+      if (!isEditMode) {
+        // Only reset form for new invoices, not edits
+        reset(defaultValues);
+        setSelectedClient(null);
+      }
       
       router.replace({
         pathname: '/(app)/(protected)/invoices/invoice-viewer',
-        params: { id: newInvoice.id, from: 'save' },
+        params: { id: savedInvoice.id, from: isEditMode ? 'edit' : 'save' },
       });
 
-      // Delay setting isSavingInvoice to false to allow navigation to complete
-      // and prevent potential UI flicker or premature interaction on the new screen.
       setTimeout(() => setIsSavingInvoice(false), 500);
 
     } catch (error: any) {
@@ -513,6 +618,65 @@ export default function CreateInvoiceScreen() {
       Alert.alert('Error', `An unexpected error occurred: ${error.message}`);
     } finally {
       setIsSavingInvoice(false);
+    }
+  };
+
+  // Helper function to handle line items for both create and edit modes
+  const handleLineItemsUpdate = async (invoiceId: string, items: InvoiceLineItem[]) => {
+    if (!supabase || !user) return;
+
+    console.log('[handleLineItemsUpdate] Processing line items for invoice:', invoiceId);
+    console.log('[handleLineItemsUpdate] Items count:', items.length);
+
+    if (isEditMode) {
+      // In edit mode: delete all existing items and insert new ones
+      // This is a simple approach - more sophisticated would be to track changes
+      console.log('[handleLineItemsUpdate] Edit mode: replacing all line items');
+      
+      // 1. Delete existing line items
+      const { error: deleteError } = await supabase
+        .from('invoice_line_items')
+        .delete()
+        .eq('invoice_id', invoiceId)
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.error('Error deleting existing line items:', deleteError);
+        throw new Error(`Failed to update line items: ${deleteError.message}`);
+      }
+
+      console.log('[handleLineItemsUpdate] Existing line items deleted');
+    }
+
+    // 2. Insert new/updated line items (for both create and edit modes)
+    if (items && items.length > 0) {
+      const lineItemsData = items.map(item => ({
+        invoice_id: invoiceId,
+        user_id: user.id,
+        item_name: item.item_name,
+        item_description: item.description || null,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price,
+        line_item_discount_type: item.line_item_discount_type || null,
+        line_item_discount_value: item.line_item_discount_value || null,
+        item_image_url: item.item_image_url || null,
+      }));
+
+      console.log('[handleLineItemsUpdate] Inserting line items:', lineItemsData.length);
+
+      const { error: insertError } = await supabase
+        .from('invoice_line_items')
+        .insert(lineItemsData);
+
+      if (insertError) {
+        console.error('Error inserting line items:', insertError);
+        throw new Error(`Failed to save line items: ${insertError.message}`);
+      }
+
+      console.log('[handleLineItemsUpdate] Line items saved successfully');
+    } else {
+      console.log('[handleLineItemsUpdate] No line items to save');
     }
   };
 
@@ -570,7 +734,7 @@ export default function CreateInvoiceScreen() {
       pathname: '/invoices/invoice-viewer',
       params: {
         previewInvoiceData: JSON.stringify(previewDataForViewer),
-        fromScreen: 'create_preview',
+        fromScreen: isEditMode ? 'edit_preview' : 'create_preview',
       },
     });
   };
@@ -987,7 +1151,7 @@ export default function CreateInvoiceScreen() {
   const [defaultNotesFetched, setDefaultNotesFetched] = useState(false); // New state
 
   useEffect(() => {
-    if (!invoiceId && !defaultNotesFetched && !getValues('notes') && user && supabase) {
+    if (!editInvoiceId && !defaultNotesFetched && !getValues('notes') && user && supabase) {
       const fetchDefaultNotes = async () => {
         try {
           console.log('[CreateInvoiceScreen] Fetching default notes for user:', user.id);
@@ -1011,7 +1175,109 @@ export default function CreateInvoiceScreen() {
       };
       fetchDefaultNotes();
     }
-  }, [user, supabase, invoiceId, defaultNotesFetched, setValue, getValues]); // Corrected dependency array
+  }, [user, supabase, editInvoiceId, defaultNotesFetched, setValue, getValues]); // Fixed dependency array
+
+  // Function to populate form with loaded invoice data
+  const populateFormWithInvoiceData = async (invoiceData: any) => {
+    console.log('[populateFormWithInvoiceData] Starting data population');
+    
+    try {
+      // 1. Populate basic invoice fields
+      setValue('invoice_number', invoiceData.invoice_number || '');
+      setValue('invoice_date', invoiceData.invoice_date ? new Date(invoiceData.invoice_date) : new Date());
+      setValue('due_date', invoiceData.due_date ? new Date(invoiceData.due_date) : null);
+      setValue('due_date_option', invoiceData.due_date_option || 'due_on_receipt');
+      setValue('po_number', invoiceData.po_number || '');
+      setValue('custom_headline', invoiceData.custom_headline || '');
+      setValue('notes', invoiceData.notes || '');
+      
+      // 2. Populate financial fields
+      setValue('taxPercentage', invoiceData.tax_percentage || 0);
+      setValue('invoice_tax_label', invoiceData.invoice_tax_label || 'Tax');
+      setValue('discountType', invoiceData.discount_type || null);
+      setValue('discountValue', invoiceData.discount_value || 0);
+      setValue('subTotalAmount', invoiceData.subtotal_amount || 0);
+      setValue('totalAmount', invoiceData.total_amount || 0);
+      
+      // 3. Populate payment method toggles
+      setValue('stripe_active_on_invoice', invoiceData.stripe_active || false);
+      setValue('paypal_active_on_invoice', invoiceData.paypal_active || false);
+      setValue('bank_account_active_on_invoice', invoiceData.bank_account_active || false);
+      
+      // 4. Set client information
+      if (invoiceData.clients) {
+        const clientInfo = {
+          id: invoiceData.clients.id,
+          name: invoiceData.clients.name
+        };
+        setSelectedClient(clientInfo);
+        setValue('client_id', clientInfo.id);
+        console.log('[populateFormWithInvoiceData] Client set:', clientInfo);
+      }
+      
+      // 5. Transform and populate line items
+      if (invoiceData.invoice_line_items && invoiceData.invoice_line_items.length > 0) {
+        const transformedLineItems: InvoiceLineItem[] = invoiceData.invoice_line_items.map((dbItem: any) => ({
+          id: dbItem.id, // Use database ID for existing items
+          user_saved_item_id: dbItem.user_saved_item_id,
+          item_name: dbItem.item_name,
+          description: dbItem.item_description,
+          quantity: dbItem.quantity,
+          unit_price: dbItem.unit_price,
+          total_price: dbItem.total_price,
+          line_item_discount_type: dbItem.line_item_discount_type,
+          line_item_discount_value: dbItem.line_item_discount_value,
+          item_image_url: dbItem.item_image_url
+        }));
+        
+        setValue('items', transformedLineItems);
+        console.log('[populateFormWithInvoiceData] Line items populated:', transformedLineItems.length);
+      }
+      
+      // 6. Update invoice details state for UI display
+      const dueDateDisplayLabel = getDueDateDisplayLabel(invoiceData.due_date_option, invoiceData.due_date);
+      setInvoiceDetails({
+        invoiceNumber: invoiceData.invoice_number || '',
+        creationDate: invoiceData.invoice_date ? new Date(invoiceData.invoice_date) : new Date(),
+        dueDateType: invoiceData.due_date_option || 'on_receipt',
+        customDueDate: invoiceData.due_date ? new Date(invoiceData.due_date) : null,
+        poNumber: invoiceData.po_number || '',
+        customHeadline: invoiceData.custom_headline || '',
+        dueDateDisplayLabel: dueDateDisplayLabel
+      });
+      
+      // 7. Set other states
+      setInvoiceTaxLabel(invoiceData.invoice_tax_label || 'Tax');
+      setTaxPercentage(invoiceData.tax_percentage || null);
+      
+      console.log('[populateFormWithInvoiceData] Form population completed successfully');
+      
+    } catch (error: any) {
+      console.error('[populateFormWithInvoiceData] Error populating form:', error);
+      setLoadingError(`Failed to populate form: ${error.message}`);
+    }
+  };
+
+  // Helper function to get due date display label
+  const getDueDateDisplayLabel = (dueDateOption: string | null, dueDate: string | null): string => {
+    const friendlyOptions: { [key: string]: string } = {
+      'on_receipt': 'Due on receipt',
+      'net_7': 'Due in 7 days',
+      'net_14': 'Due in 14 days',
+      'net_30': 'Due in 30 days',
+    };
+
+    if (dueDateOption && friendlyOptions[dueDateOption]) {
+      return friendlyOptions[dueDateOption];
+    }
+
+    if (dueDate) {
+      const date = new Date(dueDate);
+      return formatFriendlyDate(date);
+    }
+
+    return 'Due on receipt';
+  };
 
   return (
     <KeyboardAvoidingView 
@@ -1022,7 +1288,7 @@ export default function CreateInvoiceScreen() {
       <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
         <Stack.Screen
           options={{
-            headerTitle: '', 
+            headerTitle: isEditMode ? 'Edit Invoice' : '', 
             headerTitleAlign: 'left', 
             headerBackTitle: 'Back', 
             headerTitleStyle: { 
@@ -1045,6 +1311,72 @@ export default function CreateInvoiceScreen() {
             headerShadowVisible: false, // Keep this false to use our custom shadow from headerStyle
           }}
         />
+        
+        {/* Loading state for edit mode */}
+        {isEditMode && isLoadingInvoice && (
+          <View style={{ 
+            flex: 1, 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            backgroundColor: screenBackgroundColor 
+          }}>
+            <Text style={{ 
+              color: themeColors.foreground, 
+              fontSize: 16, 
+              marginBottom: 12 
+            }}>
+              Loading invoice...
+            </Text>
+            <Text style={{ 
+              color: themeColors.mutedForeground, 
+              fontSize: 14 
+            }}>
+              ID: {editInvoiceId}
+            </Text>
+          </View>
+        )}
+
+        {/* Error state for edit mode */}
+        {isEditMode && loadingError && !isLoadingInvoice && (
+          <View style={{ 
+            flex: 1, 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            backgroundColor: screenBackgroundColor,
+            padding: 20
+          }}>
+            <Text style={{ 
+              color: themeColors.destructive, 
+              fontSize: 16, 
+              marginBottom: 12,
+              textAlign: 'center'
+            }}>
+              Failed to load invoice
+            </Text>
+            <Text style={{ 
+              color: themeColors.mutedForeground, 
+              fontSize: 14,
+              textAlign: 'center',
+              marginBottom: 20
+            }}>
+              {loadingError}
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{
+                backgroundColor: themeColors.primary,
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+                borderRadius: 8
+              }}
+            >
+              <Text style={{ color: themeColors.primaryForeground }}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Main form content - hide when loading or error in edit mode */}
+        {(!isEditMode || (!isLoadingInvoice && !loadingError)) && (
         <ScrollView 
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 20 }} // Add some padding at the bottom
@@ -1249,10 +1581,16 @@ export default function CreateInvoiceScreen() {
           </FormSection>
 
         </ScrollView>
+        )}
 
         {/* Full Width Save Button - Not in a separate container */}
         <TouchableOpacity onPress={handleSubmit(handleSaveInvoice)} style={[styles.bottomSaveButton, isSavingInvoice && styles.disabledButton]} disabled={isSavingInvoice}>
-          <Text style={styles.bottomSaveButtonText}>{isSavingInvoice ? 'Saving...' : 'Save Invoice'}</Text>
+          <Text style={styles.bottomSaveButtonText}>
+            {isSavingInvoice 
+              ? (isEditMode ? 'Updating...' : 'Saving...') 
+              : (isEditMode ? 'Update Invoice' : 'Save Invoice')
+            }
+          </Text>
         </TouchableOpacity>
 
         {/* Add Item Bottom Sheet Modal */}

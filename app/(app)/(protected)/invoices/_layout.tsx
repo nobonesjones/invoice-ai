@@ -23,8 +23,6 @@ export default function InvoicesStackLayout() {
 					tabBarVisible: false 
 				}}
 			/>
-			{/* You would also add a screen for individual invoice details here, e.g. */}
-			{/* <Stack.Screen name="[id]" options={{ tabBarVisible: false }} /> */}
 		</Stack>
 	);
 }
