@@ -760,7 +760,7 @@ function InvoiceViewerScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : invoice ? (
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, alignItems: 'center' }}>
             <InvoiceTemplateOne
               invoice={invoice} // invoice is InvoiceForTemplate | null
               clientName={client?.name || invoice.clients?.name || 'N/A'} // Get client name from client state or embedded in invoice

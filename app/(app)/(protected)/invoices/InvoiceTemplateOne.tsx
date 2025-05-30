@@ -39,7 +39,16 @@ export interface InvoiceForTemplate {
 }
 
 // Change to a direct type alias for simplicity and to avoid extension conflicts
-export type BusinessSettingsRow = Tables<'business_settings'>;
+// Extended to include payment_options fields since they're merged in invoice-viewer.tsx
+export type BusinessSettingsRow = Tables<'business_settings'> & {
+  // Payment options fields (merged from payment_options table)
+  paypal_enabled?: boolean;
+  paypal_email?: string;
+  stripe_enabled?: boolean;
+  bank_transfer_enabled?: boolean;
+  bank_details?: string;
+  invoice_terms_notes?: string;
+};
 
 interface InvoiceTemplateOneProps {
   invoice: InvoiceForTemplate | null;
@@ -221,6 +230,49 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
             <Text style={styles.paymentTermsBody}>{invoice.payment_terms}</Text>
           </View>
           )}
+          {/* Payment Methods Section */}
+          {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
+          <View style={styles.footerBlock}>
+            <Text style={styles.paymentTermsHeader}>Payment Methods</Text>
+            
+            {/* Stripe Payment */}
+            {invoice?.stripe_active && (
+              <View style={styles.paymentMethodItem}>
+                <View style={styles.paymentMethodRow}>
+                  <Text style={styles.paymentMethodText}>Pay Online</Text>
+                  <View style={styles.paymentIconsContainer}>
+                    <Image source={require('../../../../assets/visaicon.png')} style={styles.paymentIcon} />
+                    <Image source={require('../../../../assets/mastercardicon.png')} style={styles.paymentIcon} />
+                  </View>
+                </View>
+                <Text style={styles.paymentMethodText}>www.stripelink.com</Text>
+              </View>
+            )}
+            
+            {/* PayPal Payment */}
+            {invoice?.paypal_active && (
+              <View style={styles.paymentMethodItem}>
+                <View style={styles.paymentMethodRow}>
+                  <Text style={styles.paymentMethodText}>Pay with PayPal</Text>
+                  <Image source={require('../../../../assets/paypalicon.png')} style={styles.paymentIcon} />
+                </View>
+                <Text style={styles.paymentMethodText}>
+                  {businessSettings?.paypal_email || 'nobones@gmail.com'}
+                </Text>
+              </View>
+            )}
+            
+            {/* Bank Transfer */}
+            {invoice?.bank_account_active && (
+              <View style={styles.paymentMethodItem}>
+                <Text style={styles.paymentMethodText}>Bank Transfer</Text>
+                <Text style={styles.paymentMethodText}>
+                  {businessSettings?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA'}
+                </Text>
+              </View>
+            )}
+          </View>
+          )}
         </View>
         <View style={styles.footerRight}>
           <View style={styles.totalsBlock}>
@@ -242,9 +294,14 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
                 <Text style={styles.totalsValueText}>{invoice.currency_symbol}{calculateTaxAmount(invoice).toFixed(2)}</Text>
               </View>
             )}
-            <View style={[styles.totalLine, styles.grandTotalLine]}>
-              <Text style={styles.grandTotalText}>Total:</Text>
-              <Text style={styles.grandTotalText}>{invoice.currency_symbol}{invoice.total_amount?.toFixed(2) ?? '0.00'}</Text>
+            
+            {/* Spacer before grand total */}
+            <View style={{ height: 10 }} />
+            
+            {/* Grand Total in styled box */}
+            <View style={styles.grandTotalBox}>
+              <Text style={styles.grandTotalBoxText}>Total:</Text>
+              <Text style={styles.grandTotalBoxText}>{invoice.currency_symbol}{invoice.total_amount?.toFixed(2) ?? '0.00'}</Text>
             </View>
           </View>
         </View>
@@ -359,7 +416,7 @@ const styles = StyleSheet.create({
   },
   tableRowHeader: {
     flexDirection: 'row',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderColor: '#eee',
@@ -437,17 +494,19 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     width: '100%', // Ensure the line takes full available width in its container
   },
-  grandTotalLine: {
-    marginTop: 20, // Increased from 5
-    paddingVertical: 8,
-    paddingHorizontal: 10, 
-    borderTopWidth: 2, 
-    borderColor: '#333',
+  grandTotalBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+    width: '100%',
   },
-  grandTotalText: {
-    fontSize: 8, 
+  grandTotalBoxText: {
+    fontSize: 8,
     fontWeight: 'bold',
-    textAlign: 'right',
     color: 'black',
   },
   totalsValueText: { 
@@ -466,6 +525,31 @@ const styles = StyleSheet.create({
     color: 'black', // Assuming styles.label.color is 'black'
     fontWeight: 'normal', // Making it normal weight to be less prominent
     marginLeft: 2, // Add a little space after 'Discount '
+  },
+  paymentMethodItem: {
+    marginBottom: 8,
+  },
+  paymentMethodText: {
+    fontSize: 8,
+    color: 'black',
+    fontStyle: 'italic',
+  },
+  paymentMethodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 1,
+  },
+  paymentIconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  paymentIcon: {
+    width: 16,
+    height: 10,
+    marginLeft: 2,
+    resizeMode: 'contain',
   },
 });
 
