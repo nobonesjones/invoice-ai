@@ -2248,7 +2248,7 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       borderRadius: 12, // Consistent app border radius
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 32, // Changed from 16 to move the button up further
+      marginBottom: 15, // Decreased to 15 to position button lower
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.15,
