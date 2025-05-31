@@ -54,6 +54,7 @@ import { PaymentAmountSheet } from '@/components/PaymentAmountSheet';
 import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } from '@/constants/invoice-status';
 import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
+import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
 
 type ClientRow = Tables<'clients'>;
 
@@ -145,6 +146,9 @@ function InvoiceViewerScreen() {
 
   // Add new ref for more options modal
   const moreOptionsSheetRef = useRef<BottomSheetModal>(null);
+
+  // Add ref for MakePaymentSheet
+  const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null);
 
   // Snap points for the Send Invoice Modal
   const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []); // Adjust as needed
@@ -841,10 +845,66 @@ function InvoiceViewerScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            console.log('Delete invoice pressed');
-            // TODO: Implement delete functionality
-            Alert.alert('Coming Soon', 'Delete functionality will be implemented soon.');
+          onPress: async () => {
+            if (!invoice || !supabase) {
+              Alert.alert('Error', 'Unable to delete invoice at this time.');
+              return;
+            }
+
+            try {
+              console.log('[handleDeleteInvoice] Deleting invoice:', invoice.id);
+              
+              // Delete invoice line items first (foreign key constraint)
+              const { error: lineItemsError } = await supabase
+                .from('invoice_line_items')
+                .delete()
+                .eq('invoice_id', invoice.id);
+
+              if (lineItemsError) {
+                console.error('[handleDeleteInvoice] Error deleting line items:', lineItemsError);
+                Alert.alert('Error', 'Failed to delete invoice line items.');
+                return;
+              }
+
+              // Delete invoice activities (if any exist for this invoice)
+              const { error: activitiesError } = await supabase
+                .from('invoice_activities')
+                .delete()
+                .eq('invoice_id', invoice.id);
+
+              if (activitiesError) {
+                console.error('[handleDeleteInvoice] Error deleting activities:', activitiesError);
+                // Don't stop deletion for activities, just log the error
+              }
+
+              // Delete the main invoice record
+              const { error: invoiceError } = await supabase
+                .from('invoices')
+                .delete()
+                .eq('id', invoice.id);
+
+              if (invoiceError) {
+                console.error('[handleDeleteInvoice] Error deleting invoice:', invoiceError);
+                Alert.alert('Error', `Failed to delete invoice: ${invoiceError.message}`);
+                return;
+              }
+
+              console.log('[handleDeleteInvoice] Successfully deleted invoice:', invoice.id);
+              Alert.alert('Invoice Deleted', 'The invoice has been permanently deleted.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    // Navigate back to invoice dashboard
+                    setIsTabBarVisible(true);
+                    router.back();
+                  }
+                }
+              ]);
+
+            } catch (error: any) {
+              console.error('[handleDeleteInvoice] Unexpected error:', error);
+              Alert.alert('Error', 'An unexpected error occurred while deleting the invoice.');
+            }
           }
         }
       ]
@@ -853,9 +913,117 @@ function InvoiceViewerScreen() {
 
   const handlePartialPayment = () => {
     moreOptionsSheetRef.current?.dismiss();
-    console.log('Partial payment pressed');
-    // TODO: Implement partial payment functionality
-    Alert.alert('Coming Soon', 'Partial payment functionality will be implemented soon.');
+    if (!invoice) {
+      Alert.alert('Error', 'No invoice data available.');
+      return;
+    }
+    
+    const totalAmount = invoice.total_amount || 0;
+    const paidAmount = invoice.paid_amount || 0;
+    const remainingBalance = totalAmount - paidAmount;
+    
+    console.log('[handlePartialPayment] Payment validation:', {
+      totalAmount,
+      paidAmount,
+      remainingBalance,
+      invoiceId: invoice.id
+    });
+    
+    // Check if invoice is already fully paid
+    if (remainingBalance <= 0) {
+      Alert.alert(
+        'Invoice Fully Paid', 
+        `This invoice has already been fully paid. No additional payments can be recorded.`
+      );
+      return;
+    }
+    
+    // Check if invoice status is already paid
+    if (invoice.status === 'paid') {
+      Alert.alert(
+        'Invoice Already Paid', 
+        `This invoice is marked as paid. Remaining balance: ${invoice.currency_symbol}${remainingBalance.toFixed(2)}`
+      );
+      return;
+    }
+    
+    console.log('[handlePartialPayment] Opening payment sheet - remaining balance:', remainingBalance);
+    makePaymentSheetRef.current?.present(invoice.total_amount, invoice.paid_amount || 0);
+  };
+
+  // Handle payment save from MakePaymentSheet
+  const handleMakePaymentSheetSave = async (paymentData: PaymentData) => {
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to record payment at this time.');
+      return;
+    }
+
+    try {
+      const paymentAmount = parseFloat(paymentData.paymentAmount);
+      const newTotalPaid = (invoice.paid_amount || 0) + paymentAmount;
+      
+      console.log('[handleMakePaymentSheetSave] Recording payment:', {
+        invoiceId: invoice.id,
+        paymentAmount: paymentAmount,
+        newTotalPaid: newTotalPaid,
+        paymentMethod: paymentData.paymentMethod
+      });
+
+      // Calculate status based on payment amount
+      const newStatus = calculatePaymentStatus(newTotalPaid, invoice.total_amount);
+      
+      const updateData = {
+        status: newStatus,
+        paid_amount: newTotalPaid,
+        payment_date: new Date().toISOString(),
+        payment_notes: `${paymentData.paymentMethod}: $${paymentAmount.toFixed(2)}`
+      };
+
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update(updateData)
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleMakePaymentSheetSave] Error updating payment:', updateError);
+        Alert.alert('Error', `Failed to record payment: ${updateError.message}`);
+        return;
+      }
+
+      // Log the payment activity
+      await logPaymentAdded(
+        invoice.id,
+        invoice.invoice_number,
+        paymentAmount,
+        `${paymentData.paymentMethod} payment recorded`
+      );
+
+      // Update local state
+      setInvoice(prev => prev ? { 
+        ...prev, 
+        status: newStatus,
+        paid_amount: newTotalPaid,
+        payment_date: new Date().toISOString(),
+        payment_notes: updateData.payment_notes
+      } : null);
+      
+      const statusConfig = getStatusConfig(newStatus);
+      Alert.alert(
+        'Payment Recorded', 
+        `Payment of $${paymentAmount.toFixed(2)} recorded successfully. Invoice is now ${statusConfig.label}.`
+      );
+      
+    } catch (error: any) {
+      console.error('[handleMakePaymentSheetSave] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while recording the payment.');
+    }
+  };
+
+  const handleViewClientProfile = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('View client profile pressed');
+    // TODO: Implement view client profile functionality
+    Alert.alert('Coming Soon', 'View client profile functionality will be implemented soon.');
   };
 
   const handleVoidInvoice = () => {
@@ -897,13 +1065,6 @@ function InvoiceViewerScreen() {
     console.log('Auto reminders pressed');
     // TODO: Implement auto reminders functionality
     Alert.alert('Coming Soon', 'Auto reminders functionality will be implemented soon.');
-  };
-
-  const handleViewClientProfile = () => {
-    moreOptionsSheetRef.current?.dismiss();
-    console.log('View client profile pressed');
-    // TODO: Implement view client profile functionality
-    Alert.alert('Coming Soon', 'View client profile functionality will be implemented soon.');
   };
 
   // More options action item component
@@ -1528,6 +1689,15 @@ function InvoiceViewerScreen() {
       <InvoiceHistorySheet
         ref={historyModalRef}
         onClose={() => console.log('Invoice History Modal Dismissed')}
+      />
+
+      {/* Make Payment Sheet */}
+      <MakePaymentSheet
+        ref={makePaymentSheetRef}
+        onSave={handleMakePaymentSheetSave}
+        onClose={() => console.log('Make Payment Sheet Dismissed')}
+        invoiceTotal={invoice?.total_amount || 0}
+        previouslyPaidAmount={invoice?.paid_amount || 0}
       />
     </SafeAreaView>
   );

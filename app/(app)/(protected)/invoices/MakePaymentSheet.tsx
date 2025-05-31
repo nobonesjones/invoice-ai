@@ -86,8 +86,25 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
       Alert.alert('Invalid Amount', 'Please enter a valid payment amount greater than 0.');
       return;
     }
-    if (numericPaymentAmount > displayBalanceDue + numericPaymentAmount - currentPreviouslyPaid) { 
-      Alert.alert('Overpayment Warning', `The payment amount ($${numericPaymentAmount.toFixed(2)}) exceeds the balance due ($${(currentInvoiceTotal - currentPreviouslyPaid).toFixed(2)}). Please adjust.`);
+
+    // Calculate remaining balance that can be paid
+    const remainingBalance = currentInvoiceTotal - currentPreviouslyPaid;
+    
+    // Check if trying to pay more than the remaining balance
+    if (numericPaymentAmount > remainingBalance) {
+      Alert.alert(
+        'Payment Too Large', 
+        `The payment amount ($${numericPaymentAmount.toFixed(2)}) exceeds the remaining balance of $${remainingBalance.toFixed(2)}. Please enter a smaller amount.`
+      );
+      return;
+    }
+
+    // Check if there's no remaining balance to pay
+    if (remainingBalance <= 0) {
+      Alert.alert(
+        'Invoice Fully Paid', 
+        'This invoice has already been fully paid. No additional payments can be recorded.'
+      );
       return;
     }
 
@@ -103,8 +120,16 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
 
   // Function to handle percentage button clicks
   const handlePercentageClick = (percentage: number) => {
+    const remainingBalance = currentInvoiceTotal - currentPreviouslyPaid;
     const calculatedAmount = (currentInvoiceTotal * percentage) / 100;
-    setPaymentAmount(calculatedAmount.toFixed(2));
+    
+    // Don't allow percentages that would exceed the remaining balance
+    if (calculatedAmount > remainingBalance) {
+      // Instead, set to the exact remaining balance
+      setPaymentAmount(remainingBalance.toFixed(2));
+    } else {
+      setPaymentAmount(calculatedAmount.toFixed(2));
+    }
   };
 
   const styles = StyleSheet.create({
@@ -229,6 +254,10 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
       fontSize: 14,
       fontWeight: '500',
     },
+    remainingBalanceText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
   });
 
   return (
@@ -258,6 +287,11 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
           <View> 
             {/* Percentage Buttons */}
             <View style={styles.percentageButtonsContainer}>
+              {/* Remaining Balance Indicator */}
+              <Text style={[styles.remainingBalanceText, { color: themeColors.mutedForeground, marginBottom: 8, textAlign: 'center' }]}>
+                Remaining Balance: ${(currentInvoiceTotal - currentPreviouslyPaid).toFixed(2)}
+              </Text>
+              
               <View style={styles.percentageButtonsRow}>
                 {[10, 20, 50, 75, 100].map((percentage) => (
                   <TouchableOpacity
