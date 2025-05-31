@@ -872,64 +872,135 @@ export default function CreateInvoiceScreen() {
   const handlePreviewInvoice = async () => {
     console.log('[handlePreviewInvoice] Preview requested');
     
-    // Always auto-save current form state before preview to ensure latest changes are shown
-    console.log('[handlePreviewInvoice] Auto-saving current form state for preview');
-    const savedId = await autoSaveAsDraft();
+    // Get current form data without saving to database
+    const formData = getValues();
     
-    if (savedId) {
-      // Navigate to preview with the updated saved ID
-      const fromParam = isEditMode ? 'edit_preview' : 
-                       currentInvoiceId ? 'draft_preview' : 
-                       'new_preview';
-      
-      // Use replace for edit mode to ensure back goes to dashboard, replace for others
-      if (isEditMode) {
-        router.replace({
-          pathname: '/(app)/(protected)/invoices/invoice-viewer',
-      params: {
-            id: savedId, 
-            from: fromParam
-      },
-    });
-      } else {
-        router.replace({
-          pathname: '/(app)/(protected)/invoices/invoice-viewer',
-          params: { 
-            id: savedId, 
-            from: fromParam
-          },
-        });
+    // Validate that we have the minimum required data for preview
+    if (!formData.items || formData.items.length === 0) {
+      Alert.alert('Preview Error', 'Please add at least one item to preview the invoice.');
+      return;
+    }
+    
+    try {
+      // Fetch actual business settings from database
+      console.log('[handlePreviewInvoice] Fetching business settings for preview');
+      let businessSettingsForPreview = {
+        business_name: '',
+        business_address: '',
+        business_email: '',
+        business_phone: '',
+        business_website: '',
+        currency_code: currencyCode,
+        tax_name: globalTaxName || 'Tax',
+        default_tax_rate: globalTaxRatePercent || 0,
+        business_logo_url: null,
+      };
+
+      // Fetch client data if client is selected
+      let clientData = null;
+      if (formData.client_id && supabase && user) {
+        console.log('[handlePreviewInvoice] Fetching client data for:', formData.client_id);
+        const { data: client, error: clientError } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', formData.client_id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (clientError) {
+          console.warn('[handlePreviewInvoice] Could not fetch client:', clientError.message);
+        } else if (client) {
+          console.log('[handlePreviewInvoice] Client data loaded:', client);
+          clientData = client;
+        }
+      } else if (selectedClient) {
+        // Use selectedClient state as fallback
+        console.log('[handlePreviewInvoice] Using selectedClient state:', selectedClient);
+        clientData = selectedClient;
       }
-    } else {
-      Alert.alert('Preview Error', 'Could not save current changes for preview. Please try again.');
+
+      if (supabase && user) {
+        const { data: businessData, error: businessError } = await supabase
+          .from('business_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (businessError) {
+          console.warn('[handlePreviewInvoice] Could not fetch business settings:', businessError.message);
+          // Continue with default settings
+        } else if (businessData) {
+          console.log('[handlePreviewInvoice] Business settings loaded:', businessData);
+          businessSettingsForPreview = {
+            business_name: businessData.business_name || '',
+            business_address: businessData.business_address || '',
+            business_email: businessData.business_email || '',
+            business_phone: businessData.business_phone || '',
+            business_website: businessData.business_website || '',
+            currency_code: businessData.currency_code || currencyCode,
+            tax_name: businessData.tax_name || globalTaxName || 'Tax',
+            default_tax_rate: businessData.default_tax_rate || globalTaxRatePercent || 0,
+            business_logo_url: businessData.business_logo_url || null,
+          };
+        }
+      }
+
+      // Prepare enhanced form data with client info and ensure all totals are calculated
+      const enhancedFormData = {
+        ...formData,
+        // Add client information
+        clients: clientData,
+        // Ensure all calculated values are present with correct field names
+        subtotal_amount: displaySubtotal,
+        total_amount: displayInvoiceTotal,
+        tax_percentage: formData.taxPercentage || 0,
+        discount_type: formData.discountType || null,
+        discount_value: formData.discountValue || 0,
+        // Set proper field names for invoice template
+        invoice_tax_label: formData.invoice_tax_label || globalTaxName || 'Tax',
+        currency_symbol: getCurrencySymbol(currencyCode),
+        currency: currencyCode,
+        // Transform items to match expected structure
+        invoice_line_items: formData.items || [],
+        // Map payment method fields for InvoiceTemplateOne
+        stripe_active: formData.stripe_active_on_invoice || false,
+        paypal_active: formData.paypal_active_on_invoice || false,
+        bank_account_active: formData.bank_account_active_on_invoice || false,
+      };
+      
+      // Navigate to preview screen with actual data
+      console.log('[handlePreviewInvoice] Navigating to preview with complete data');
+      console.log('[handlePreviewInvoice] Client data:', clientData);
+      console.log('[handlePreviewInvoice] Totals - Subtotal:', displaySubtotal, 'Total:', displayInvoiceTotal);
+      console.log('[handlePreviewInvoice] Payment methods - Stripe:', formData.stripe_active_on_invoice, 'PayPal:', formData.paypal_active_on_invoice, 'Bank:', formData.bank_account_active_on_invoice);
+      router.push({
+        pathname: '/(app)/(protected)/invoices/previewbusinfoclose',
+        params: {
+          invoiceData: JSON.stringify(enhancedFormData),
+          businessSettings: JSON.stringify(businessSettingsForPreview),
+        },
+      });
+    } catch (error: any) {
+      console.error('[handlePreviewInvoice] Error preparing preview:', error);
+      Alert.alert('Preview Error', 'Failed to load preview data. Please try again.');
     }
   };
 
   useLayoutEffect(() => {
-    // Only show custom header buttons for create mode, not edit mode
-    if (!isEditMode) {
+    // Show preview button for both create and edit modes
     navigation.setOptions({
       headerRight: () => (
-          <TouchableOpacity 
-            onPress={handlePreviewInvoice} 
-            style={[styles.headerPreviewButton, isAutoSaving && styles.disabledButton]}
-            disabled={isAutoSaving}
-          >
-            <Text style={styles.headerPreviewButtonText}>
-              {isAutoSaving ? 'Saving...' : 'Preview Invoice'}
-            </Text>
+        <TouchableOpacity 
+          onPress={handlePreviewInvoice} 
+          style={styles.headerPreviewButton}
+        >
+          <Text style={styles.headerPreviewButtonText}>
+            Preview
+          </Text>
         </TouchableOpacity>
       ),
-      });
-    } else {
-      // For edit mode, remove all header buttons including back button
-      navigation.setOptions({
-        headerRight: undefined,
-        headerLeft: undefined,
-        headerBackVisible: false, // Properly hide the back button
-      });
-    }
-  }, [navigation, themeColors, handlePreviewInvoice, styles, isAutoSaving, isEditMode]);
+    });
+  }, [navigation, themeColors, handlePreviewInvoice, styles, isEditMode]);
 
   const screenBackgroundColor = isLightMode ? '#F0F2F5' : themeColors.background;
 

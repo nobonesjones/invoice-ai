@@ -91,7 +91,7 @@ function InvoiceViewerScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
-  const { id: invoiceId, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
   const { supabase } = useSupabase(); 
 
   const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null);
@@ -195,33 +195,15 @@ function InvoiceViewerScreen() {
   const navigation = useNavigation(); // Added
 
   const handleCustomBack = () => {
-    console.log('[handleCustomBack] Called with from parameter:', from);
+    console.log('[handleCustomBack] Called');
     
-    // IMPORTANT: Navigation flow fix for create → preview → back
-    // Problem: Dashboard → Create → Preview → Back was going to Dashboard ❌
-    // Solution: Dashboard → Create → Preview → Back now goes to Create ✅
-    // Check if user came from create/preview flow and should go back to create/edit
-    if (from === 'new_preview' || from === 'draft_preview') {
-      // User came from create mode preview - navigate back to create/edit screen
-      console.log('[handleCustomBack] Coming from create preview - navigating back to create/edit with invoice ID:', invoiceId);
-      
-      if (invoiceId) {
-        // Navigate back to create/edit screen with the invoice ID
-        // Use router.push to maintain proper navigation stack and transition direction
-        router.push(`/invoices/create?id=${invoiceId}` as any);
-      } else {
-        console.warn('[handleCustomBack] No invoice ID available for navigation back to create');
-        // Fallback to dashboard
-        router.back();
-      }
-    } else {
-      // Default behavior for other cases (dashboard navigation, etc.)
-      console.log('[handleCustomBack] Default navigation behavior');
-      // Use router.back() for proper left-to-right transition direction
-      // DO NOT CHANGE TO router.replace() - this breaks transition direction
-      // Only change if explicitly requested by user
-      router.back();
-    }
+    // Simple back navigation - invoice-viewer is now only for final saved invoices
+    // Preview functionality has been moved to dedicated preview screen
+    console.log('[handleCustomBack] Navigating back to dashboard');
+    // Use router.back() for proper left-to-right transition direction
+    // DO NOT CHANGE TO router.replace() - this breaks transition direction
+    // Only change if explicitly requested by user
+    router.back();
   };
 
   const fetchBusinessSettings = async (userId: string) => {
