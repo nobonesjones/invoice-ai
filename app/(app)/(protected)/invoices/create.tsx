@@ -15,6 +15,14 @@
  * - Line items management (create/update/delete)
  * - Loading and error states for edit mode
  * - Consistent UX between create and edit flows
+ * - Auto-save as draft for seamless preview functionality
+ * - Unsaved changes detection and user prompts
+ * - Draft management workflow
+ * 
+ * PREVIEW WORKFLOW:
+ * - New invoice + Preview → Auto-saves as draft → Shows real preview
+ * - Edit/Draft + Preview → Uses existing ID for preview
+ * - Back navigation with unsaved changes → Prompts to save as draft
  * 
  * IMPLEMENTATION PHASES COMPLETED:
  * ✅ Phase 1: Preparation & Analysis
@@ -25,6 +33,7 @@
  * ✅ Phase 6: Route Migration
  * ✅ Phase 7: Testing & Cleanup
  * ✅ Phase 8: Documentation & Polish
+ * ✅ Phase 9: Draft Auto-Save & Unsaved Changes
  */
 
 import React, { useState, useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
@@ -279,6 +288,11 @@ export default function CreateInvoiceScreen() {
   const [isLoadingInvoice, setIsLoadingInvoice] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
+  // State to track save status and changes
+  const [currentInvoiceId, setCurrentInvoiceId] = useState<string | null>(editInvoiceId);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
 
@@ -429,11 +443,81 @@ export default function CreateInvoiceScreen() {
     const unsubscribeFocus = navigation.addListener('focus', () => {
       console.log('[CreateInvoiceScreen] Focus event: Hiding tab bar');
       setIsTabBarVisible(false);
+      
+      // Reload invoice data if in edit mode and we have an invoice ID
+      if (isEditMode && editInvoiceId && !isLoadingInvoice) {
+        console.log('[CreateInvoiceScreen] Focus in edit mode - reloading invoice data');
+        loadInvoiceForEdit(editInvoiceId);
+      }
     });
 
     const unsubscribeBlur = navigation.addListener('blur', () => {
       console.log('[CreateInvoiceScreen] Blur event: Showing tab bar');
       setIsTabBarVisible(true);
+    });
+
+    // Handle back button press for unsaved changes
+    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
+      console.log('[beforeRemove] Navigation attempt detected');
+      console.log('[beforeRemove] hasUnsavedChanges:', hasUnsavedChanges);
+      console.log('[beforeRemove] isSavingInvoice:', isSavingInvoice);
+      console.log('[beforeRemove] isAutoSaving:', isAutoSaving);
+      console.log('[beforeRemove] isEditMode:', isEditMode);
+      
+      // For edit mode, allow natural navigation - don't intercept
+      if (isEditMode) {
+        console.log('[beforeRemove] Edit mode - allowing natural navigation');
+        return;
+      }
+      
+      // Don't intercept navigation if we're currently saving or if no unsaved changes
+      if (!hasUnsavedChanges || isSavingInvoice || isAutoSaving) {
+        console.log('[beforeRemove] Allowing navigation - no unsaved changes or currently saving');
+        return;
+      }
+
+      // Always prevent default behavior IMMEDIATELY
+      e.preventDefault();
+      console.log('[beforeRemove] Navigation PREVENTED - showing dialog');
+
+      // Use setTimeout to ensure the prevention takes effect before showing dialog
+      setTimeout(() => {
+        // Prompt the user before leaving the screen with unsaved changes
+        Alert.alert(
+          'Unsaved Changes',
+          'You have unsaved changes. Do you want to save this invoice as a draft before leaving?',
+          [
+            { 
+              text: "Don't Save", 
+              style: 'destructive', 
+              onPress: () => {
+                console.log('[beforeRemove] User chose: Don\'t Save');
+                // Clear unsaved changes flag
+                setHasUnsavedChanges(false);
+                // Navigate to invoice dashboard instead of back to previewer
+                router.replace('/(app)/(protected)/invoices');
+              }
+            },
+            { text: 'Cancel', style: 'cancel', onPress: () => {
+              console.log('[beforeRemove] User chose: Cancel');
+            } },
+            {
+              text: 'Save Draft',
+              onPress: async () => {
+                console.log('[beforeRemove] User chose: Save Draft');
+                const savedId = await autoSaveAsDraft();
+                if (savedId) {
+                  setHasUnsavedChanges(false);
+                  // Navigate to invoice dashboard after saving
+                  router.replace('/(app)/(protected)/invoices');
+                } else {
+                  Alert.alert('Error', 'Could not save draft. Please try again.');
+                }
+              },
+            },
+          ]
+        );
+      }, 50); // Small delay to ensure prevention takes effect
     });
 
     // Initial hide if screen is focused on mount
@@ -446,11 +530,12 @@ export default function CreateInvoiceScreen() {
       console.log('[CreateInvoiceScreen] Unmounting: Ensuring tab bar is visible');
       unsubscribeFocus();
       unsubscribeBlur();
+      unsubscribeBeforeRemove();
       // Explicitly set to true on unmount as a safeguard, 
       // though blur should ideally handle it before unmount.
       setIsTabBarVisible(true); 
     };
-  }, [navigation, setIsTabBarVisible]);
+  }, [navigation, setIsTabBarVisible, hasUnsavedChanges, autoSaveAsDraft, isSavingInvoice, isAutoSaving, isEditMode, editInvoiceId, isLoadingInvoice]);
 
   // --- Bottom Sheet Modal (Add Item) --- //
   const addItemSheetRef = useRef<AddItemSheetRef>(null);
@@ -570,18 +655,18 @@ export default function CreateInvoiceScreen() {
       } else {
         // CREATE new invoice
         console.log('[handleSaveInvoice] Creating new invoice');
-        const { data: newInvoice, error: invoiceError } = await supabase
-          .from('invoices')
+      const { data: newInvoice, error: invoiceError } = await supabase
+        .from('invoices')
           .insert(invoiceData)
-          .select()
-          .single();
+        .select()
+        .single();
 
-        if (invoiceError) {
+      if (invoiceError) {
           console.error('Error creating invoice:', invoiceError);
           Alert.alert('Error', `Failed to create invoice: ${invoiceError.message}`);
-          setIsSavingInvoice(false);
-          return;
-        }
+        setIsSavingInvoice(false);
+        return;
+      }
 
         savedInvoice = newInvoice;
         console.log('[handleSaveInvoice] Invoice created successfully');
@@ -600,16 +685,29 @@ export default function CreateInvoiceScreen() {
       const successMessage = isEditMode ? 'Invoice updated successfully!' : 'Invoice created successfully!';
       console.log(`[handleSaveInvoice] ${successMessage} Navigating to viewer with ID:`, savedInvoice.id);
       
-      if (!isEditMode) {
-        // Only reset form for new invoices, not edits
+      // Update local state
+      setCurrentInvoiceId(savedInvoice.id);
+      setHasUnsavedChanges(false);
+      
+      if (!isEditMode && !currentInvoiceId) {
+        // Only reset form for completely new invoices, not edits or drafts
         reset(defaultValues);
         setSelectedClient(null);
       }
       
-      router.replace({
-        pathname: '/(app)/(protected)/invoices/invoice-viewer',
-        params: { id: savedInvoice.id, from: isEditMode ? 'edit' : 'save' },
-      });
+      // Navigation logic: different behavior for edit vs create
+      if (isEditMode) {
+        // For edit mode: go back to the existing invoice viewer (don't create a new one)
+        console.log('[handleSaveInvoice] Edit mode: going back to existing invoice viewer');
+        router.back();
+      } else {
+        // For new invoice creation: navigate to new invoice viewer
+        console.log('[handleSaveInvoice] Create mode: navigating to new invoice viewer');
+        router.replace({
+          pathname: '/(app)/(protected)/invoices/invoice-viewer',
+          params: { id: savedInvoice.id, from: 'save' },
+        });
+      }
 
       setTimeout(() => setIsSavingInvoice(false), 500);
 
@@ -652,21 +750,21 @@ export default function CreateInvoiceScreen() {
     if (items && items.length > 0) {
       const lineItemsData = items.map(item => ({
         invoice_id: invoiceId,
-        user_id: user.id,
+          user_id: user.id,
         item_name: item.item_name,
         item_description: item.description || null,
-        quantity: item.quantity,
+          quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price,
-        line_item_discount_type: item.line_item_discount_type || null,
-        line_item_discount_value: item.line_item_discount_value || null,
-        item_image_url: item.item_image_url || null,
-      }));
+          line_item_discount_type: item.line_item_discount_type || null,
+          line_item_discount_value: item.line_item_discount_value || null,
+          item_image_url: item.item_image_url || null,
+        }));
 
       console.log('[handleLineItemsUpdate] Inserting line items:', lineItemsData.length);
 
       const { error: insertError } = await supabase
-        .from('invoice_line_items')
+          .from('invoice_line_items')
         .insert(lineItemsData);
 
       if (insertError) {
@@ -680,75 +778,158 @@ export default function CreateInvoiceScreen() {
     }
   };
 
-  const handlePreviewInvoice = () => {
-    const currentFormData = getValues();
-    const calculatedSubTotal = currentInvoiceLineItems.reduce((sum, item) => sum + item.total_price, 0);
-    const calculatedTotal = calculateGrandTotal(
-      calculatedSubTotal,
-      currentFormData.discountType,
-      currentFormData.discountValue,
-      currentFormData.taxPercentage
-    );
+  // Function to auto-save as draft (for preview functionality)
+  const autoSaveAsDraft = async (): Promise<string | null> => {
+    if (!user || !supabase) {
+      console.error('[autoSaveAsDraft] No user or supabase available');
+      return null;
+    }
 
-    const previewDataForViewer = {
-      id: `temp-preview-${Date.now()}`, // Temporary ID for preview context
-      invoice_number: currentFormData.invoice_number || 'INV-PREVIEW',
-      client_id: selectedClient?.id || null,
-      client_name: selectedClient?.name || 'N/A',
-      issue_date: currentFormData.invoice_date ? currentFormData.invoice_date.toISOString() : new Date().toISOString(),
-      due_date: currentFormData.due_date ? currentFormData.due_date.toISOString() : null,
-      status: 'draft', // Preview status is always draft
-      line_items: currentInvoiceLineItems,
-      total: calculatedTotal,
-      subtotal: calculatedSubTotal,
-      discount_type: currentFormData.discountType || null,
-      discount_amount: currentFormData.discountValue || null,
-      tax_percentage: currentFormData.taxPercentage || null,
-      invoice_tax_label: currentFormData.invoice_tax_label || 'Tax', // Include tax label
-      notes: currentFormData.notes || '',
-      po_number: currentFormData.po_number || '',
-      custom_headline: currentFormData.custom_headline || '',
-      payment_instructions_active_on_invoice: currentFormData.payment_instructions_active_on_invoice || false,
-      bank_account_active_on_invoice: currentFormData.bank_account_active_on_invoice || false,
-      paypal_active_on_invoice: currentFormData.paypal_active_on_invoice || false,
-      stripe_active_on_invoice: currentFormData.stripe_active_on_invoice || false,
-      // Ensure all fields InvoiceViewerScreen might expect from an InvoiceRow are present or handled
-      // For example, if InvoiceRow has created_at, user_id, etc., they can be null or defaults for preview
-      created_at: new Date().toISOString(),
-      user_id: null, // Or a dummy user ID if needed by viewer logic not related to DB security
-      currency: 'USD', // Assuming a default or get from form if available
-      paid_amount: 0,
-      balance_due: calculatedTotal,
-      payment_method: null,
-      payment_date: null,
-      is_recurring: false,
-      recurring_interval: null,
-      recurring_end_date: null,
-      template_id: null,
-      last_sent_at: null,
-      viewed_at: null,
-      payment_terms: currentFormData.due_date_option || null,
-    };
+    console.log('[autoSaveAsDraft] Auto-saving invoice as draft for preview');
+    setIsAutoSaving(true);
 
-    router.push({
-      pathname: '/invoices/invoice-viewer',
+    try {
+      const formData = getValues();
+      
+      // Prepare invoice data (always as draft for auto-save)
+      const invoiceData = {
+        user_id: user.id,
+        client_id: formData.client_id,
+        invoice_number: formData.invoice_number || `INV-${Date.now().toString().slice(-6)}`,
+        status: 'draft', // Always save as draft for auto-save
+        invoice_date: formData.invoice_date instanceof Date ? formData.invoice_date.toISOString() : new Date(formData.invoice_date).toISOString(),
+        due_date: formData.due_date ? (formData.due_date instanceof Date ? formData.due_date.toISOString() : new Date(formData.due_date).toISOString()) : null,
+        due_date_option: formData.due_date_option,
+        po_number: formData.po_number || null,
+        custom_headline: formData.custom_headline || null,
+        subtotal_amount: formData.subTotalAmount,
+        discount_type: formData.discountType || null,
+        discount_value: formData.discountValue || 0,
+        tax_percentage: formData.taxPercentage || 0,
+        invoice_tax_label: formData.invoice_tax_label || 'Tax',
+        total_amount: formData.totalAmount,
+        notes: formData.notes || null,
+        stripe_active: formData.stripe_active_on_invoice,
+        bank_account_active: formData.bank_account_active_on_invoice,
+        paypal_active: formData.paypal_active_on_invoice,
+      };
+
+      let savedInvoice;
+
+      if (currentInvoiceId || editInvoiceId) {
+        // Update existing draft or invoice
+        const idToUpdate = currentInvoiceId || editInvoiceId;
+        console.log('[autoSaveAsDraft] Updating existing invoice/draft:', idToUpdate);
+        const { data: updatedInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', idToUpdate)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+
+        if (invoiceError) {
+          console.error('Error updating draft:', invoiceError);
+          return null;
+        }
+        savedInvoice = updatedInvoice;
+        
+        // Update currentInvoiceId if we were using editInvoiceId
+        if (!currentInvoiceId && editInvoiceId) {
+          setCurrentInvoiceId(editInvoiceId);
+        }
+      } else {
+        // Create new draft
+        console.log('[autoSaveAsDraft] Creating new draft');
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert(invoiceData)
+          .select()
+          .single();
+
+        if (invoiceError) {
+          console.error('Error creating draft:', invoiceError);
+          return null;
+        }
+        savedInvoice = newInvoice;
+        setCurrentInvoiceId(savedInvoice.id); // Update local state with new ID
+      }
+
+      // Save line items
+      await handleLineItemsUpdate(savedInvoice.id, formData.items || []);
+      
+      console.log('[autoSaveAsDraft] Draft saved successfully with ID:', savedInvoice.id);
+      return savedInvoice.id;
+
+    } catch (error: any) {
+      console.error('[autoSaveAsDraft] Error auto-saving draft:', error);
+      return null;
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
+
+  const handlePreviewInvoice = async () => {
+    console.log('[handlePreviewInvoice] Preview requested');
+    
+    // Always auto-save current form state before preview to ensure latest changes are shown
+    console.log('[handlePreviewInvoice] Auto-saving current form state for preview');
+    const savedId = await autoSaveAsDraft();
+    
+    if (savedId) {
+      // Navigate to preview with the updated saved ID
+      const fromParam = isEditMode ? 'edit_preview' : 
+                       currentInvoiceId ? 'draft_preview' : 
+                       'new_preview';
+      
+      // Use replace for edit mode to ensure back goes to dashboard, replace for others
+      if (isEditMode) {
+        router.replace({
+          pathname: '/(app)/(protected)/invoices/invoice-viewer',
       params: {
-        previewInvoiceData: JSON.stringify(previewDataForViewer),
-        fromScreen: isEditMode ? 'edit_preview' : 'create_preview',
+            id: savedId, 
+            from: fromParam
       },
     });
+      } else {
+        router.replace({
+          pathname: '/(app)/(protected)/invoices/invoice-viewer',
+          params: { 
+            id: savedId, 
+            from: fromParam
+          },
+        });
+      }
+    } else {
+      Alert.alert('Preview Error', 'Could not save current changes for preview. Please try again.');
+    }
   };
 
   useLayoutEffect(() => {
+    // Only show custom header buttons for create mode, not edit mode
+    if (!isEditMode) {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={handlePreviewInvoice} style={styles.headerPreviewButton}>
-          <Text style={styles.headerPreviewButtonText}>Preview Invoice</Text>
+          <TouchableOpacity 
+            onPress={handlePreviewInvoice} 
+            style={[styles.headerPreviewButton, isAutoSaving && styles.disabledButton]}
+            disabled={isAutoSaving}
+          >
+            <Text style={styles.headerPreviewButtonText}>
+              {isAutoSaving ? 'Saving...' : 'Preview Invoice'}
+            </Text>
         </TouchableOpacity>
       ),
-      headerLeft: () => null, // Explicitly remove any default left component (like a back arrow)
-    });
-  }, [navigation, themeColors, handlePreviewInvoice, styles]); // styles is now defined
+      });
+    } else {
+      // For edit mode, remove all header buttons including back button
+      navigation.setOptions({
+        headerRight: undefined,
+        headerLeft: undefined,
+        headerBackVisible: false, // Properly hide the back button
+      });
+    }
+  }, [navigation, themeColors, handlePreviewInvoice, styles, isAutoSaving, isEditMode]);
 
   const screenBackgroundColor = isLightMode ? '#F0F2F5' : themeColors.background;
 
@@ -788,6 +969,33 @@ export default function CreateInvoiceScreen() {
     setCurrentInvoiceLineItems(itemsFromForm);
     console.log('[useEffect for items] setCurrentInvoiceLineItems to:', itemsFromForm);
   }, [watchedItems]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (isEditMode || currentInvoiceId) {
+      // For edit mode or existing drafts, start with unsaved changes
+      // since any interaction means they're modifying the saved state
+      console.log('[unsaved changes tracker] Setting hasUnsavedChanges = true for edit/draft mode');
+      setHasUnsavedChanges(true);
+      
+      // Watch for any form changes
+      const subscription = watch((value, { name, type }) => {
+        console.log('[unsaved changes tracker] Form changed:', name, type);
+        if (type === 'change') {
+          console.log('[unsaved changes tracker] Setting hasUnsavedChanges = true due to form change');
+          setHasUnsavedChanges(true);
+        }
+      });
+      return () => subscription.unsubscribe();
+    } else {
+      // For new invoices, any form interaction means unsaved changes
+      const subscription = watch(() => {
+        console.log('[unsaved changes tracker] Setting hasUnsavedChanges = true for new invoice');
+        setHasUnsavedChanges(true);
+      });
+      return () => subscription.unsubscribe();
+    }
+  }, [watch, isEditMode, currentInvoiceId]);
 
   const [recordedPayments, setRecordedPayments] = useState<RecordedPayment[]>([]); // State for recorded payments
 
@@ -838,6 +1046,49 @@ export default function CreateInvoiceScreen() {
   const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
     console.log('Item data received in create.tsx:', itemDataFromSheet);
     
+    // Get current items from react-hook-form state
+    const currentFormItems = getValues('items') || [];
+    
+    // Check if this saved item already exists (only for saved items, not custom items)
+    if (itemDataFromSheet.saved_item_db_id) {
+      const existingItemIndex = currentFormItems.findIndex(
+        item => item.user_saved_item_id === itemDataFromSheet.saved_item_db_id
+      );
+      
+      if (existingItemIndex !== -1) {
+        // Item already exists, increment quantity
+        console.log('Found existing saved item, incrementing quantity');
+        const updatedItems = [...currentFormItems];
+        const existingItem = updatedItems[existingItemIndex];
+        
+        // Increment quantity
+        existingItem.quantity += itemDataFromSheet.quantity;
+        
+        // Recalculate total price with updated quantity
+        let newTotalPrice = existingItem.quantity * existingItem.unit_price;
+        
+        // Apply line item discount if present
+        if (existingItem.line_item_discount_value && existingItem.line_item_discount_value > 0) {
+          if (existingItem.line_item_discount_type === 'percentage') {
+            const discountAmount = newTotalPrice * (existingItem.line_item_discount_value / 100);
+            newTotalPrice -= discountAmount;
+          } else if (existingItem.line_item_discount_type === 'fixed') {
+            newTotalPrice -= existingItem.line_item_discount_value;
+          }
+        }
+        
+        existingItem.total_price = parseFloat(newTotalPrice.toFixed(2));
+        
+        // Update react-hook-form state with the modified items
+        setValue('items', updatedItems, { shouldValidate: true, shouldDirty: true });
+        
+        // Dismiss the AddItemSheet
+        addItemSheetRef.current?.dismiss();
+        return;
+      }
+    }
+    
+    // Item doesn't exist or it's a custom item, create new line item
     let itemTotalPrice = itemDataFromSheet.quantity * itemDataFromSheet.price;
     // Apply line item discount if present
     if (itemDataFromSheet.discountValue && itemDataFromSheet.discountValue > 0) { 
@@ -862,8 +1113,6 @@ export default function CreateInvoiceScreen() {
       item_image_url: itemDataFromSheet.imageUri || null, 
     };
 
-    // Get current items from react-hook-form state
-    const currentFormItems = getValues('items') || [];
     // Update react-hook-form state with the new item appended
     setValue('items', [...currentFormItems, newLineItem], { shouldValidate: true, shouldDirty: true });
     
@@ -1454,6 +1703,7 @@ export default function CreateInvoiceScreen() {
                 closeOnRowPress={true}
                 closeOnScroll={true}
                 closeOnRowBeginSwipe={true}
+                scrollEnabled={false} // Disable scrolling to prevent nesting conflict with parent ScrollView
               />
             )}
             {/* Always show 'Add Item or Service' button below the list if items exist */}
@@ -1587,8 +1837,8 @@ export default function CreateInvoiceScreen() {
         <TouchableOpacity onPress={handleSubmit(handleSaveInvoice)} style={[styles.bottomSaveButton, isSavingInvoice && styles.disabledButton]} disabled={isSavingInvoice}>
           <Text style={styles.bottomSaveButtonText}>
             {isSavingInvoice 
-              ? (isEditMode ? 'Updating...' : 'Saving...') 
-              : (isEditMode ? 'Update Invoice' : 'Save Invoice')
+              ? (isEditMode ? 'Saving...' : 'Saving...') 
+              : (isEditMode ? 'Save' : 'Save Invoice')
             }
           </Text>
         </TouchableOpacity>

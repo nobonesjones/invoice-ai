@@ -20,7 +20,7 @@ export default function InvoicesStackLayout() {
 				options={{
 					// headerShown: false, // Already set globally for the stack
 					// @ts-ignore - tabBarVisible is a custom option for parent navigator
-					tabBarVisible: false 
+					tabBarVisible: false,
 				}}
 			/>
 		</Stack>

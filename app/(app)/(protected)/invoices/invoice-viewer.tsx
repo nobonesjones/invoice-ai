@@ -71,9 +71,10 @@ interface PreviewInvoiceData {
 interface PdfInvoiceData {
   invoice: InvoiceForTemplate & { payment_terms?: string };
   businessSettings: BusinessSettingsRow;
+  paymentOptions: any; // Add the missing paymentOptions property
 }
 
-const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: BusinessSettingsRow): PdfInvoiceData => {
+const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: BusinessSettingsRow, paymentOptionsData: any = null): PdfInvoiceData => {
   const htmlInvoiceData: InvoiceForTemplate & { payment_terms?: string } = {
     ...invoiceData, 
     payment_terms: 'Payment due upon receipt.', 
@@ -82,6 +83,7 @@ const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: B
   return {
     invoice: htmlInvoiceData,
     businessSettings: businessSettingsData,
+    paymentOptions: paymentOptionsData, // Include the paymentOptions
   };
 };
 
@@ -109,15 +111,21 @@ function InvoiceViewerScreen() {
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
 
-  // Use useLayoutEffect to control tab bar visibility via context to run earlier
-  useLayoutEffect(() => {
-    console.log('[InvoiceViewerScreen] LayoutEffect: Hiding tab bar.');
-    setIsTabBarVisible(false); // Hide tab bar
-    return () => {
-      console.log('[InvoiceViewerScreen] LayoutEffect cleanup: Showing tab bar.');
-      setIsTabBarVisible(true); // Show tab bar when screen is unfocused/unmounted
-    };
-  }, [setIsTabBarVisible]); // Dependency array ensures it runs on mount/unmount and when setIsTabBarVisible changes (which it shouldn't)
+  // Simplified tab bar management - dashboard already hides it before navigation
+  // Just ensure it stays hidden and show it when leaving
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[InvoiceViewerScreen] FocusEffect: Ensuring tab bar stays hidden.');
+      // No need to hide again since dashboard already did it before navigation
+      // Just ensure it stays hidden in case something shows it
+      setIsTabBarVisible(false);
+      
+      return () => {
+        console.log('[InvoiceViewerScreen] FocusEffect cleanup: Showing tab bar.');
+        setIsTabBarVisible(true); // Show tab bar when leaving
+      };
+    }, [setIsTabBarVisible])
+  );
 
   const handleOpenSendModal = useCallback(() => {
     sendInvoiceModalRef.current?.present();
@@ -146,7 +154,7 @@ function InvoiceViewerScreen() {
       return;
     }
 
-    const dataForHtml = preparePdfData(invoice, businessSettings);
+    const dataForHtml = preparePdfData(invoice, businessSettings, businessSettings);
 
     try {
       const html = generateInvoiceTemplateOneHtml(dataForHtml); 
@@ -186,18 +194,12 @@ function InvoiceViewerScreen() {
 
   const navigation = useNavigation(); // Added
 
-  useFocusEffect(
-    useCallback(() => {
-      setIsLoading(true); 
-      return () => {
-        setIsLoading(false); 
-      };
-    }, [])
-  );
-
   const handleCustomBack = () => {
     console.log('[handleCustomBack] Called.');
-    router.back(); 
+    // Use router.back() for proper left-to-right transition direction
+    // DO NOT CHANGE TO router.replace() - this breaks transition direction
+    // Only change if explicitly requested by user
+    router.back();
   };
 
   const fetchBusinessSettings = async (userId: string) => {
@@ -335,18 +337,24 @@ function InvoiceViewerScreen() {
     const processData = async () => {
       if (invoiceId) {
         console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchInvoiceData with invoiceId:', invoiceId); 
-        fetchInvoiceData(invoiceId).then((fetchedInvoice) => {
+        try {
+          const fetchedInvoice = await fetchInvoiceData(invoiceId);
           if (fetchedInvoice && fetchedInvoice.user_id) {
             const targetUserId = fetchedInvoice.user_id;
             console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchBusinessSettings with targetUserId (from fetched invoiceData):', targetUserId); 
-            if (targetUserId) fetchBusinessSettings(targetUserId); // This calls the main fetchBusinessSettings
+            if (targetUserId) await fetchBusinessSettings(targetUserId); // Await this operation too
           }
-        });
+        } catch (error) {
+          console.error('[processData] Error:', error);
+          setError('Failed to load invoice data.');
+        } finally {
+          setIsLoading(false); // End loading after all async operations complete
+        }
       } else {
         console.warn("[EFFECT] No invoice ID. Cannot load invoice.");
         setError('No invoice specified.');
+        setIsLoading(false);
       }
-      setIsLoading(false); // End loading after processing
     };
 
     processData();
@@ -450,6 +458,8 @@ function InvoiceViewerScreen() {
   const handleEdit = () => {
     if (isPreviewingFromCreate) return; 
     if (invoice && invoice.id) {
+      // Hide tab bar before navigation like the working pattern
+      setIsTabBarVisible(false);
       router.push(`/invoices/create?id=${invoice.id}` as any);
     } else {
       console.warn('Edit pressed but no invoice ID found');

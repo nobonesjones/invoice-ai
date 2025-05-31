@@ -26,6 +26,7 @@ import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
+import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import type { Database } from "../../../../supabase/types/database.types"; 
 
 // Define filter options here to map type to label for initialization and sync
@@ -202,6 +203,7 @@ export default function InvoiceDashboardScreen() {
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
   const { supabase, user } = useSupabase();
+  const { setIsTabBarVisible } = useTabBarVisibility();
 
   const [invoices, setInvoices] = useState<InvoiceData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -343,12 +345,14 @@ export default function InvoiceDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       console.log('[InvoiceDashboardScreen] Screen focused, reloading data.');
+      setIsTabBarVisible(true); // Show tab bar when returning to dashboard
       fetchBusinessSettings();
       loadInvoicesAndSummary(); // Call the consolidated function
       return () => {
         console.log('[InvoiceDashboardScreen] Screen unfocused.');
+        // Tab bar visibility will be managed by the destination screen
       };
-    }, [fetchBusinessSettings, loadInvoicesAndSummary])
+    }, [fetchBusinessSettings, loadInvoicesAndSummary, setIsTabBarVisible])
   );
 
   const onRefresh = useCallback(() => {
@@ -364,7 +368,10 @@ export default function InvoiceDashboardScreen() {
 					borderBottomColor: themeColors.border,
 				},
 			]}
-			onPress={() => router.push(`/invoices/invoice-viewer?id=${item.id}` as any)} 
+			onPress={() => {
+				setIsTabBarVisible(false);
+				router.push(`/invoices/invoice-viewer?id=${item.id}` as any);
+			}} 
 		>
 			<View
 				style={[

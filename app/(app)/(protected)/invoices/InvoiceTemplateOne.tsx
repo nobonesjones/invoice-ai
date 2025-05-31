@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   grandTotalBoxText: {
-    fontSize: 8,
+    fontSize: 8, 
     fontWeight: 'bold',
     color: 'black',
   },

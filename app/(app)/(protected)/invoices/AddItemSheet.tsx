@@ -211,6 +211,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       flex: 1, // Make content area fill remaining space
       paddingHorizontal: 16, // Adjusted from 20 to 16 as per memory
       backgroundColor: themeColors.card, // As per memory for content areas
+      minHeight: 300, // Ensure minimum height to push modal to intended snap point
     },
     addNewButton: {
       flexDirection: 'row',
@@ -330,7 +331,8 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       keyboardBehavior="extend" 
-      keyboardBlurBehavior="restore" 
+      keyboardBlurBehavior="restore"
+      enableDynamicSizing={false} // Prevent automatic resizing based on content
     >
       {/* New Modal Header */}
       <View style={styles.modalHeaderContainer}>
@@ -374,7 +376,10 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
             </TouchableOpacity>
           )}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContentContainer} // Existing style with paddingBottom
+          contentContainerStyle={[
+            styles.listContentContainer,
+            filteredSavedItems.length === 0 && { flex: 1, justifyContent: 'center' } // Center empty state
+          ]}
           ListEmptyComponent={
             <>
               {isLoading && (
@@ -391,7 +396,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
               )}
             </>
           }
-          style={{ flex: 1 }} // Ensure FlatList takes up available vertical space
+          style={{ flex: 1, minHeight: 200 }} // Ensure FlatList takes up available vertical space with minimum height
         />
       </View>
       {/* Render the AddNewItemFormSheet modal so it can be presented */}
