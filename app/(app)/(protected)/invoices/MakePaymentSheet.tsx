@@ -101,6 +101,12 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
     bottomSheetModalRef.current?.dismiss(); 
   };
 
+  // Function to handle percentage button clicks
+  const handlePercentageClick = (percentage: number) => {
+    const calculatedAmount = (currentInvoiceTotal * percentage) / 100;
+    setPaymentAmount(calculatedAmount.toFixed(2));
+  };
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -203,6 +209,26 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
       color: themeColors.foreground,
       fontWeight: '500',
     },
+    percentageButtonsContainer: {
+      marginBottom: 8,
+    },
+    percentageButtonsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 4,
+    },
+    percentageButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      minWidth: 50,
+      alignItems: 'center',
+    },
+    percentageButtonText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
   });
 
   return (
@@ -230,6 +256,23 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
           keyboardShouldPersistTaps="handled" 
         >
           <View> 
+            {/* Percentage Buttons */}
+            <View style={styles.percentageButtonsContainer}>
+              <View style={styles.percentageButtonsRow}>
+                {[10, 20, 50, 75, 100].map((percentage) => (
+                  <TouchableOpacity
+                    key={percentage}
+                    style={[styles.percentageButton, { borderColor: themeColors.border, backgroundColor: themeColors.card }]}
+                    onPress={() => handlePercentageClick(percentage)}
+                  >
+                    <Text style={[styles.percentageButtonText, { color: themeColors.foreground }]}>
+                      {percentage}%
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.card}>
               <View style={styles.inputRow}>
                 <Text style={styles.inputLabel}>Amount</Text>

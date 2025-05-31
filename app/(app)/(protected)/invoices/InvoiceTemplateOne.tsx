@@ -7,35 +7,38 @@ import { format } from 'date-fns';
 // This gives more control than Omit if type conflicts are occurring
 export interface InvoiceForTemplate {
   // Properties from Tables<'invoices'>
-  id: Tables<'invoices'>['id'];
-  user_id: Tables<'invoices'>['user_id'];
-  client_id: Tables<'invoices'>['client_id'];
-  invoice_number: Tables<'invoices'>['invoice_number'];
-  status: Tables<'invoices'>['status'];
-  invoice_date: Tables<'invoices'>['invoice_date'];
-  due_date: Tables<'invoices'>['due_date'];
-  due_date_option: Tables<'invoices'>['due_date_option'];
-  po_number: Tables<'invoices'>['po_number'];
-  custom_headline: Tables<'invoices'>['custom_headline'];
-  subtotal_amount: Tables<'invoices'>['subtotal_amount'];
-  discount_type: Tables<'invoices'>['discount_type'];
-  discount_value: Tables<'invoices'>['discount_value'];
-  tax_percentage: Tables<'invoices'>['tax_percentage'];
-  total_amount: Tables<'invoices'>['total_amount'];
-  notes: Tables<'invoices'>['notes'];
-  stripe_active: Tables<'invoices'>['stripe_active'];
-  bank_account_active: Tables<'invoices'>['bank_account_active'];
-  paypal_active: Tables<'invoices'>['paypal_active'];
-  created_at: Tables<'invoices'>['created_at'];
-  updated_at: Tables<'invoices'>['updated_at'];
-  clients: Tables<'clients'> | null; // Corrected type for clients relation
-
-  // Overridden or new properties for the template
+  id: string;
+  user_id: string;
+  client_id: string;
+  invoice_number: string;
+  status: string;
+  invoice_date: string;
+  due_date?: string | null;
+  po_number?: string | null;
+  custom_headline?: string | null;
+  subtotal_amount: number;
+  discount_type?: string | null;
+  discount_value: number;
+  tax_percentage: number;
+  total_amount: number;
+  notes?: string | null;
+  stripe_active: boolean;
+  bank_account_active: boolean;
+  paypal_active: boolean;
+  created_at: string;
+  updated_at: string;
+  due_date_option?: string | null;
+  invoice_tax_label?: string | null;
+  // Relations
+  clients: Tables<'clients'> | null;
   invoice_line_items: Tables<'invoice_line_items'>[];
-  currency: string; // Strictly string
+  // Computed fields
+  currency: string;
   currency_symbol: string;
-  invoice_tax_label: string; // New property
-  payment_terms?: string; // Added payment_terms
+  // Payment tracking fields
+  paid_amount?: number;
+  payment_date?: string | null;
+  payment_notes?: string | null;
 }
 
 // Change to a direct type alias for simplicity and to avoid extension conflicts
@@ -295,13 +298,25 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
               </View>
             )}
             
+            {/* Paid Section - Show if there's a paid amount */}
+            {invoice.paid_amount != null && invoice.paid_amount > 0 && (
+              <View style={styles.totalLine}>
+                <Text style={styles.label}>Paid:</Text>
+                <Text style={[styles.totalsValueText, { color: '#10B981' }]}>-{invoice.currency_symbol}{invoice.paid_amount.toFixed(2)}</Text>
+              </View>
+            )}
+            
             {/* Spacer before grand total */}
             <View style={{ height: 10 }} />
             
-            {/* Grand Total in styled box */}
+            {/* Grand Total in styled box - Show Balance Due if there are payments */}
             <View style={styles.grandTotalBox}>
-              <Text style={styles.grandTotalBoxText}>Total:</Text>
-              <Text style={styles.grandTotalBoxText}>{invoice.currency_symbol}{invoice.total_amount?.toFixed(2) ?? '0.00'}</Text>
+              <Text style={styles.grandTotalBoxText}>
+                {(invoice.paid_amount != null && invoice.paid_amount > 0) ? 'Balance Due:' : 'Total:'}
+              </Text>
+              <Text style={styles.grandTotalBoxText}>
+                {invoice.currency_symbol}{((invoice.total_amount || 0) - (invoice.paid_amount || 0)).toFixed(2)}
+              </Text>
             </View>
           </View>
         </View>

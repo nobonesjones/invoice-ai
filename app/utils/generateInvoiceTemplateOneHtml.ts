@@ -30,6 +30,7 @@ export interface PdfInvoice extends Omit<Tables<'invoices'>, 'client_id' | 'user
   paypal_active: Tables<'invoices'>['paypal_active'];
   bank_account_active: Tables<'invoices'>['bank_account_active'];
   stripe_active: Tables<'invoices'>['stripe_active'];
+  paid_amount: Tables<'invoices'>['paid_amount'];
 
   // Extended properties for PDF
   invoice_line_items: PdfInvoiceLineItem[];
@@ -567,9 +568,15 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
                 <span class="total-line-value">${formatCurrency(calculateTaxAmount(invoice), invoice.currency_symbol)}</span>
               </div>` : ''}
               
+              ${invoice.paid_amount && invoice.paid_amount > 0 ? `
+              <div class="total-line">
+                <span class="total-line-label">Paid:</span>
+                <span class="total-line-value" style="color: #10B981;">-${formatCurrency(invoice.paid_amount, invoice.currency_symbol)}</span>
+              </div>` : ''}
+              
               <div class="grand-total-row">
-                <span class="grand-total-label">Total:</span>
-                <span class="grand-total-value">${formatCurrency(invoice.total_amount, invoice.currency_symbol)}</span>
+                <span class="grand-total-label">${(invoice.paid_amount && invoice.paid_amount > 0) ? 'Balance Due:' : 'Total:'}</span>
+                <span class="grand-total-value">${formatCurrency((invoice.total_amount || 0) - (invoice.paid_amount || 0), invoice.currency_symbol)}</span>
               </div>
             </div>
           </div>

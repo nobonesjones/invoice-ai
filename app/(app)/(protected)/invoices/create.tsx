@@ -73,6 +73,8 @@ import type { Database } from '../../../../types/database.types'; // Corrected p
 import { Image } from 'react-native'; // Added Image import
 import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
 import { KeyboardAvoidingView } from 'react-native';
+import { INVOICE_STATUSES, InvoiceStatus, getStatusConfig, isEditable } from '@/constants/invoice-status';
+import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -271,6 +273,7 @@ export default function CreateInvoiceScreen() {
   const navigation = useNavigation(); // Get navigation object
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
   const { supabase, user } = useSupabase(); // Use Supabase context
+  const { logPaymentAdded, logInvoiceCreated, logInvoiceEdited } = useInvoiceActivityLogger(); // Add activity logger
   
   // Updated parameter handling to support both edit and create modes
   const params = useLocalSearchParams<{ 
@@ -611,7 +614,7 @@ export default function CreateInvoiceScreen() {
         user_id: user.id,
         client_id: formData.client_id,
         invoice_number: formData.invoice_number || `INV-${Date.now().toString().slice(-6)}`,
-        status: isMarkedAsPaid ? 'paid' : 'draft',
+        status: INVOICE_STATUSES.DRAFT, // Always save as draft from the form
         invoice_date: formData.invoice_date instanceof Date ? formData.invoice_date.toISOString() : new Date(formData.invoice_date).toISOString(),
         due_date: formData.due_date ? (formData.due_date instanceof Date ? formData.due_date.toISOString() : new Date(formData.due_date).toISOString()) : null,
         due_date_option: formData.due_date_option,
@@ -684,6 +687,13 @@ export default function CreateInvoiceScreen() {
       // 3. Success - Navigate to viewer
       const successMessage = isEditMode ? 'Invoice updated successfully!' : 'Invoice created successfully!';
       console.log(`[handleSaveInvoice] ${successMessage} Navigating to viewer with ID:`, savedInvoice.id);
+      
+      // Log the activity
+      if (isEditMode) {
+        await logInvoiceEdited(savedInvoice.id, savedInvoice.invoice_number);
+      } else {
+        await logInvoiceCreated(savedInvoice.id, savedInvoice.invoice_number);
+      }
       
       // Update local state
       setCurrentInvoiceId(savedInvoice.id);
@@ -973,13 +983,13 @@ export default function CreateInvoiceScreen() {
       console.log('[handlePreviewInvoice] Client data:', clientData);
       console.log('[handlePreviewInvoice] Totals - Subtotal:', displaySubtotal, 'Total:', displayInvoiceTotal);
       console.log('[handlePreviewInvoice] Payment methods - Stripe:', formData.stripe_active_on_invoice, 'PayPal:', formData.paypal_active_on_invoice, 'Bank:', formData.bank_account_active_on_invoice);
-      router.push({
+    router.push({
         pathname: '/(app)/(protected)/invoices/previewbusinfoclose',
-        params: {
+      params: {
           invoiceData: JSON.stringify(enhancedFormData),
           businessSettings: JSON.stringify(businessSettingsForPreview),
-        },
-      });
+      },
+    });
     } catch (error: any) {
       console.error('[handlePreviewInvoice] Error preparing preview:', error);
       Alert.alert('Preview Error', 'Failed to load preview data. Please try again.');
@@ -1338,7 +1348,7 @@ export default function CreateInvoiceScreen() {
     setTaxPercentage(isNaN(rate) ? null : rate); // Update the main tax percentage state
   };
 
-  const handleMakePaymentSheetSave = (data: PaymentData) => {
+  const handleMakePaymentSheetSave = async (data: PaymentData) => {
     console.log('MakePaymentSheet Save:', data);
     const newPayment: RecordedPayment = {
       id: `payment_${new Date().toISOString()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -1347,11 +1357,30 @@ export default function CreateInvoiceScreen() {
       date: new Date(),
     };
     setRecordedPayments(prevPayments => [...prevPayments, newPayment]);
+    
+    // Log the payment activity if we have an invoice ID
+    if (currentInvoiceId || editInvoiceId) {
+      const invoiceId = currentInvoiceId || editInvoiceId;
+      const invoiceNumber = getValues('invoice_number');
+      await logPaymentAdded(
+        invoiceId!, 
+        invoiceNumber || undefined, 
+        newPayment.amount, 
+        newPayment.method
+      );
+    }
+    
     makePaymentSheetRef.current?.dismiss(); // Close the sheet after saving
   };
 
   const handleMakePaymentSheetClose = () => {
     console.log('Closing Make Payment Sheet');
+  };
+
+  // Function to open the payment sheet with current totals
+  const handleOpenPaymentSheet = () => {
+    console.log('[handleOpenPaymentSheet] Opening payment sheet with total:', displayInvoiceTotal, 'paid:', totalPaidAmount);
+    makePaymentSheetRef.current?.present(displayInvoiceTotal, totalPaidAmount);
   };
 
   // Compute displayed tax values, prioritizing invoice-specific, then global
@@ -1569,6 +1598,18 @@ export default function CreateInvoiceScreen() {
       // 7. Set other states
       setInvoiceTaxLabel(invoiceData.invoice_tax_label || 'Tax');
       setTaxPercentage(invoiceData.tax_percentage || null);
+      
+      // 8. Populate recorded payments if they exist
+      if (invoiceData.paid_amount && invoiceData.paid_amount > 0) {
+        const existingPayment: RecordedPayment = {
+          id: `existing_payment_${invoiceData.id}`,
+          amount: invoiceData.paid_amount,
+          method: invoiceData.payment_notes || 'Payment',
+          date: invoiceData.payment_date ? new Date(invoiceData.payment_date) : new Date()
+        };
+        setRecordedPayments([existingPayment]);
+        console.log('[populateFormWithInvoiceData] Populated existing payment:', existingPayment);
+      }
       
       console.log('[populateFormWithInvoiceData] Form population completed successfully');
       
@@ -1835,9 +1876,38 @@ export default function CreateInvoiceScreen() {
                 />
               </>
             )}
+            {/* Payment Section - Added between tax and total */}
+            {recordedPayments.length > 0 && (
+              <>
+                <View style={styles.separator} />
+                {recordedPayments.map((payment) => (
+                  <View key={payment.id} style={[styles.summaryRow, { paddingVertical: 8 }]}>
+                    <Text style={[styles.summaryLabel, { fontSize: 14, color: themeColors.mutedForeground }]}>
+                      {payment.method} ({payment.date.toLocaleDateString()})
+                    </Text>
+                    <Text style={[styles.summaryText, { fontSize: 14, color: themeColors.primary }]}>
+                      -{getCurrencySymbol(currencyCode)}{Number(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+            <View style={styles.separator} />
+            <ActionRow
+              label="Add Payment"
+              value={totalPaidAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(totalPaidAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} paid` : ''}
+              onPress={handleOpenPaymentSheet}
+              icon={CreditCard}
+              themeColors={themeColors}
+              showChevron={true}
+            />
             <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
-              <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>Total</Text>
-              <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>{getCurrencySymbol(currencyCode)}{Number(displayInvoiceTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+              <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>
+                {totalPaidAmount > 0 ? 'Balance Due' : 'Total'}
+              </Text>
+              <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17 }]}>
+                {getCurrencySymbol(currencyCode)}{Number(displayInvoiceTotal - totalPaidAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
             </View>
           </FormSection>
 
@@ -1957,8 +2027,8 @@ export default function CreateInvoiceScreen() {
           ref={makePaymentSheetRef}
           onSave={handleMakePaymentSheetSave}
           onClose={handleMakePaymentSheetClose}
-          invoiceTotal={0} // Provide initial dummy value
-          previouslyPaidAmount={0} // Provide initial dummy value
+          invoiceTotal={displayInvoiceTotal} // Use actual total
+          previouslyPaidAmount={totalPaidAmount} // Use actual paid amount
         />
       </SafeAreaView>
     </KeyboardAvoidingView>

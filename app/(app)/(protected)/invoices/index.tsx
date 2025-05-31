@@ -21,12 +21,15 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import InvoiceOverviewDatesSheet from './InvoiceOverviewDatesSheet';
+import { StatusBadge } from '@/components/StatusBadge';
+import { InvoiceStatus } from '@/constants/invoice-status';
 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useInvoiceStatusUpdater } from '@/hooks/useInvoiceStatusUpdater';
 import type { Database } from "../../../../supabase/types/database.types"; 
 
 // Define filter options here to map type to label for initialization and sync
@@ -204,6 +207,9 @@ export default function InvoiceDashboardScreen() {
 	const router = useRouter();
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  
+  // Auto-update overdue invoice statuses
+  useInvoiceStatusUpdater();
 
   const [invoices, setInvoices] = useState<InvoiceData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -385,14 +391,12 @@ export default function InvoiceDashboardScreen() {
 				<Text style={[styles.clientName, { color: themeColors.foreground }]}>
 					{item.client_name || 'N/A Client'}
 				</Text>
-				<Text
-					style={[styles.summaryLine, { color: themeColors.mutedForeground }]}
-				>
-          <Text style={{ color: getStatusColor(item.status, themeColors), textTransform: 'capitalize' }}>
-						{item.status || 'Unknown'}
+				<View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+					<StatusBadge status={(item.status || 'draft') as InvoiceStatus} size="small" />
+					<Text style={[styles.summaryLine, { color: themeColors.mutedForeground, marginLeft: 8 }]}>
+						{formatDisplayDate(item.invoice_date)}
 					</Text>
-					{` · ${formatDisplayDate(item.invoice_date)}`}
-				</Text>
+				</View>
 			</View>
       <View style={styles.amountContainer}> 
         <Text style={[styles.invoiceAmount, { color: themeColors.foreground }]}>

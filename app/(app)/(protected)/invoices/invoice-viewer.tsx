@@ -12,21 +12,48 @@ import {
   ActivityIndicator,
   ViewStyle,
   TextStyle,
+  Dimensions,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
-import { ArrowLeft, Edit3, MoreHorizontal, Clock, Send, Maximize, ChevronLeft, History } from 'lucide-react-native'; 
+import {
+  ArrowLeft,
+  Edit3,
+  MoreHorizontal,
+  Clock,
+  Send,
+  Maximize,
+  ChevronLeft,
+  History,
+  User,
+  Mail,
+  FileText,
+  X as XIcon,
+  Link2,
+  Plus,
+  Settings,
+  Trash2,
+  DollarSign,
+  AlertTriangle,
+  RefreshCw,
+  Bell,
+} from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
-import { useSupabase } from '@/context/supabase-provider'; 
-import type { Database, Json, Tables } from '../../../../types/database.types'; 
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
-import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader'; // Import the skeleton loader
+import { useSupabase } from '@/context/supabase-provider';
+import type { Database, Json, Tables } from '../../../../types/database.types';
+import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne';
+import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import { Mail, Link, FileText, X as XIcon } from 'lucide-react-native';
-import RNHTMLtoPDF from 'react-native-html-to-pdf'; // Added import
-import Share from 'react-native-share'; // Added import
-import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml'; // Updated function and file name
+import Share from 'react-native-share';
+import RNHTMLtoPDF from 'react-native-html-to-pdf';
+import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml';
+import { StatusBadge } from '@/components/StatusBadge';
+import { StatusSelectorSheet } from '@/components/StatusSelectorSheet';
+import { PaymentAmountSheet } from '@/components/PaymentAmountSheet';
+import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } from '@/constants/invoice-status';
+import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
+import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 
 type ClientRow = Tables<'clients'>;
 
@@ -92,7 +119,8 @@ function InvoiceViewerScreen() {
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
   const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
-  const { supabase } = useSupabase(); 
+  const { supabase } = useSupabase();
+  const { logPaymentAdded, logStatusChanged, logInvoiceSent } = useInvoiceActivityLogger();
 
   const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null);
   const [client, setClient] = useState<ClientRow | null>(null);
@@ -105,9 +133,27 @@ function InvoiceViewerScreen() {
 
   // Ref for the Send Invoice Modal
   const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
+  
+  // Ref for the Status Selector Modal
+  const statusSelectorModalRef = useRef<BottomSheetModal>(null);
+  
+  // Ref for the Payment Amount Modal
+  const paymentAmountModalRef = useRef<BottomSheetModal>(null);
+
+  // Ref for the History Modal
+  const historyModalRef = useRef<InvoiceHistorySheetRef>(null);
+
+  // Add new ref for more options modal
+  const moreOptionsSheetRef = useRef<BottomSheetModal>(null);
 
   // Snap points for the Send Invoice Modal
   const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []); // Adjust as needed
+  
+  // Snap points for the Status Selector Modal
+  const statusSelectorSnapPoints = useMemo(() => ['60%', '80%'], []);
+  
+  // Snap points for the Payment Amount Modal
+  const paymentAmountSnapPoints = useMemo(() => ['75%', '90%'], []);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
 
@@ -137,26 +183,87 @@ function InvoiceViewerScreen() {
   }, []);
 
   // Placeholder actions for modal options
-  const handleSendByEmail = () => {
-    console.log('Send by Email selected');
-    handleCloseSendModal();
+  const handleSendByEmail = async () => {
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to send invoice at this time.');
+      return;
+    }
+
+    try {
+      // Update invoice status to sent
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'sent' })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleSendByEmail] Error updating status:', updateError);
+        Alert.alert('Error', 'Failed to update invoice status.');
+        return;
+      }
+
+      // Log the send activity
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'email');
+
+      // Update local state
+      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
+
+      Alert.alert('Email Sent', 'Invoice has been sent via email.');
+      handleCloseSendModal(); // Close the send modal
+    } catch (error: any) {
+      console.error('[handleSendByEmail] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while sending the invoice.');
+    }
   };
 
-  const handleSendLink = () => {
-    console.log('Send Link selected');
-    handleCloseSendModal();
+  const handleSendLink = async () => {
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to send invoice at this time.');
+      return;
+    }
+
+    try {
+      // Update invoice status to sent
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'sent' })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleSendLink] Error updating status:', updateError);
+        Alert.alert('Error', 'Failed to update invoice status.');
+        return;
+      }
+
+      // Log the send activity
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'link');
+
+      // Update local state
+      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
+
+      Alert.alert('Link Shared', 'Invoice link has been shared.');
+      handleCloseSendModal(); // Close the send modal
+    } catch (error: any) {
+      console.error('[handleSendLink] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while sharing the invoice link.');
+    }
   };
 
   const handleSendPDF = async () => {
     if (!invoice || !businessSettings) {
-      Alert.alert('Error', 'Invoice or business data not loaded.');
-      handleCloseSendModal();
+      Alert.alert('Error', 'Invoice or business data is not available.');
       return;
     }
 
-    const dataForHtml = preparePdfData(invoice, businessSettings, businessSettings);
+    if (!supabase) {
+      Alert.alert('Error', 'Unable to send invoice at this time.');
+      return;
+    }
 
     try {
+      console.log('[handleSendPDF] Starting PDF generation and send process');
+      
+      const dataForHtml = preparePdfData(invoice, businessSettings, businessSettings);
       const html = generateInvoiceTemplateOneHtml(dataForHtml); 
       const pdfOptions = {
         html,
@@ -170,13 +277,41 @@ function InvoiceViewerScreen() {
         paddingBottom: 0,
         bgColor: '#FFFFFF',
       };
+
+      console.log('[handleSendPDF] Generating PDF with options:', pdfOptions);
       const file = await RNHTMLtoPDF.convert(pdfOptions);
-      await Share.open({ url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, title: 'Share Invoice PDF' });
-    } catch (error: any) { 
-      console.error('Error in handleSendPDF:', error);
-      Alert.alert('PDF Error', `Failed: ${error.message}`);
+      console.log('[handleSendPDF] PDF generated successfully:', file.filePath);
+
+      // Update invoice status to sent
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'sent' })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleSendPDF] Error updating status:', updateError);
+        Alert.alert('Error', 'Failed to update invoice status.');
+        return;
+      }
+
+      // Log the send activity
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'PDF');
+
+      // Update local state
+      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
+
+      await Share.open({ 
+        url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, 
+        title: 'Share Invoice PDF' 
+      });
+
+      Alert.alert('PDF Sent', 'Invoice PDF has been generated and shared.');
+      handleCloseSendModal(); // Close the send modal
+      
+    } catch (error: any) {
+      console.error('[handleSendPDF] Error generating or sharing PDF:', error);
+      Alert.alert('Error', `Failed to generate or share PDF: ${error.message}`);
     }
-    handleCloseSendModal();
   };
 
   // Custom backdrop for the modal
@@ -314,6 +449,9 @@ function InvoiceViewerScreen() {
         currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_code || 'USD'),
         // Add missing invoice_tax_label, ensuring it's a string
         invoice_tax_label: invoiceData.invoice_tax_label || 'Tax', 
+        paid_amount: invoiceData.paid_amount,
+        payment_date: invoiceData.payment_date,
+        payment_notes: invoiceData.payment_notes,
       };
       
       console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
@@ -450,6 +588,197 @@ function InvoiceViewerScreen() {
     return { badgeStyle, textStyle };
   };
 
+  // Status selector modal handlers
+  const handleOpenStatusSelector = useCallback(() => {
+    statusSelectorModalRef.current?.present();
+  }, []);
+
+  const handleCloseStatusSelector = useCallback(() => {
+    statusSelectorModalRef.current?.dismiss();
+  }, []);
+
+  // Payment amount modal handlers
+  const handleOpenPaymentModal = useCallback(() => {
+    paymentAmountModalRef.current?.present();
+  }, []);
+
+  const handleClosePaymentModal = useCallback(() => {
+    paymentAmountModalRef.current?.dismiss();
+  }, []);
+
+  const handlePaymentUpdate = async (newPaidAmount: number, notes?: string) => {
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to update payment at this time.');
+      return;
+    }
+
+    try {
+      console.log(`[handlePaymentUpdate] Updating invoice ${invoice.id} payment: ${newPaidAmount}`);
+      
+      // Calculate status based on payment amount
+      const newStatus = calculatePaymentStatus(newPaidAmount, invoice.total_amount);
+      
+      const updateData = {
+        status: newStatus,
+        paid_amount: newPaidAmount,
+        payment_date: newPaidAmount > 0 ? new Date().toISOString() : null,
+        payment_notes: notes || null
+      };
+
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update(updateData)
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handlePaymentUpdate] Error updating payment:', updateError);
+        Alert.alert('Error', `Failed to update payment: ${updateError.message}`);
+        return;
+      }
+
+      // Log the payment activity
+      await logPaymentAdded(
+        invoice.id,
+        invoice.invoice_number,
+        newPaidAmount,
+        notes || 'Payment update'
+      );
+
+      // Update local state
+      setInvoice(prev => prev ? { 
+        ...prev, 
+        status: newStatus,
+        paid_amount: newPaidAmount,
+        payment_date: newPaidAmount > 0 ? new Date().toISOString() : null,
+        payment_notes: notes || null
+      } : null);
+      
+      const statusConfig = getStatusConfig(newStatus);
+      Alert.alert(
+        'Payment Updated', 
+        `Payment recorded successfully. Invoice is now ${statusConfig.label}.`
+      );
+      
+    } catch (error: any) {
+      console.error('[handlePaymentUpdate] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while updating payment.');
+    }
+  };
+
+  const handleTogglePaid = async (isPaid: boolean) => {
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to update payment status at this time.');
+      return;
+    }
+
+    try {
+      console.log(`[handleTogglePaid] Updating invoice ${invoice.id} payment status to: ${isPaid}`);
+      
+      let updateData: any = {};
+      
+      if (isPaid) {
+        // When marking as paid, set paid amount to total amount and status to paid
+        updateData = {
+          status: 'paid',
+          paid_amount: invoice.total_amount,
+          payment_date: new Date().toISOString(),
+          payment_notes: 'Marked as paid via toggle'
+        };
+      } else {
+        // When marking as unpaid, reset payment tracking and set status to sent
+        updateData = {
+          status: 'sent',
+          paid_amount: 0,
+          payment_date: null,
+          payment_notes: null
+        };
+      }
+
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update(updateData)
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleTogglePaid] Error updating payment status:', updateError);
+        Alert.alert('Error', `Failed to update payment status: ${updateError.message}`);
+        return;
+      }
+
+      // Log the payment activity
+      if (isPaid) {
+        await logPaymentAdded(
+          invoice.id,
+          invoice.invoice_number,
+          invoice.total_amount,
+          'Toggle - marked as paid'
+        );
+      }
+
+      // Update local state
+      setInvoice(prev => prev ? { 
+        ...prev, 
+        status: isPaid ? 'paid' : 'sent',
+        paid_amount: isPaid ? invoice.total_amount : 0,
+        payment_date: isPaid ? new Date().toISOString() : null,
+        payment_notes: isPaid ? 'Marked as paid via toggle' : null
+      } : null);
+      
+      Alert.alert(
+        'Payment Updated', 
+        isPaid 
+          ? `Invoice marked as paid (${invoice.currency_symbol}${invoice.total_amount?.toFixed(2)})`
+          : 'Invoice marked as unpaid'
+      );
+      
+    } catch (error: any) {
+      console.error('[handleTogglePaid] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while updating payment status.');
+    }
+  };
+
+  const handleStatusChange = async (newStatus: InvoiceStatus) => {
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to update status at this time.');
+      return;
+    }
+
+    try {
+      console.log(`[handleStatusChange] Updating invoice ${invoice.id} status from ${invoice.status} to ${newStatus}`);
+      
+      const oldStatus = invoice.status;
+      
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: newStatus })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleStatusChange] Error updating status:', updateError);
+        Alert.alert('Error', `Failed to update invoice status: ${updateError.message}`);
+        return;
+      }
+
+      // Log the status change activity
+      await logStatusChanged(
+        invoice.id,
+        invoice.invoice_number,
+        oldStatus || undefined,
+        newStatus
+      );
+
+      // Update local state
+      setInvoice(prev => prev ? { ...prev, status: newStatus } : null);
+      
+      const config = getStatusConfig(newStatus);
+      Alert.alert('Status Updated', `Invoice has been marked as ${config.label}.`);
+      
+    } catch (error: any) {
+      console.error('[handleStatusChange] Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while updating the status.');
+    }
+  };
+
   const invoiceStatus = invoice?.status?.toLowerCase() || 'draft';
   const statusStyle = getStatusBadgeStyle(invoice?.status);
   
@@ -461,8 +790,34 @@ function InvoiceViewerScreen() {
 
   const handleEdit = () => {
     if (isPreviewingFromCreate) return; 
-    if (invoice && invoice.id) {
-      // Hide tab bar before navigation like the working pattern
+    if (!invoice) return;
+    
+    // Check if invoice is editable based on status
+    const currentStatus = (invoice.status || 'draft') as InvoiceStatus;
+    
+    // For non-draft invoices, show a warning but allow editing
+    if (!isEditable(currentStatus)) {
+      const config = getStatusConfig(currentStatus);
+      Alert.alert(
+        'Edit Invoice', 
+        `This invoice is currently marked as ${config.label}. Editing it may affect its status or cause confusion with clients. Do you want to continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Edit Anyway', 
+            onPress: () => {
+              // Hide tab bar before navigation
+              setIsTabBarVisible(false);
+              router.push(`/invoices/create?id=${invoice.id}` as any);
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // For draft invoices, edit directly
+    if (invoice.id) {
       setIsTabBarVisible(false);
       router.push(`/invoices/create?id=${invoice.id}` as any);
     } else {
@@ -471,15 +826,116 @@ function InvoiceViewerScreen() {
     }
   };
 
-  const handleTogglePaid = (isPaid: boolean) => {
-    if (invoice) {
-      Alert.alert('Status Update', `Invoice marked as ${isPaid ? 'Paid' : 'Not Paid (Sent)'}. (DB update pending)`);
-    }
+  const handleMoreOptions = () => {
+    moreOptionsSheetRef.current?.present();
   };
 
-  const handleMoreOptions = () => {
-    Alert.alert('Modal Coming Soon', 'More options modal will be available soon.');
+  // Handler functions for each more option
+  const handleDeleteInvoice = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    Alert.alert(
+      'Delete Invoice',
+      'Are you sure you want to delete this invoice? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            console.log('Delete invoice pressed');
+            // TODO: Implement delete functionality
+            Alert.alert('Coming Soon', 'Delete functionality will be implemented soon.');
+          }
+        }
+      ]
+    );
   };
+
+  const handlePartialPayment = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('Partial payment pressed');
+    // TODO: Implement partial payment functionality
+    Alert.alert('Coming Soon', 'Partial payment functionality will be implemented soon.');
+  };
+
+  const handleVoidInvoice = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    Alert.alert(
+      'Void Invoice',
+      'Are you sure you want to void this invoice? This will mark it as cancelled.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Void',
+          style: 'destructive',
+          onPress: () => {
+            console.log('Void invoice pressed');
+            // TODO: Implement void functionality
+            Alert.alert('Coming Soon', 'Void functionality will be implemented soon.');
+          }
+        }
+      ]
+    );
+  };
+
+  const handlePaymentLink = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('Payment link pressed');
+    // TODO: Implement payment link functionality
+    Alert.alert('Coming Soon', 'Payment link functionality will be implemented soon.');
+  };
+
+  const handleRefundCreditNote = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('Refund/Credit note pressed');
+    // TODO: Implement refund/credit note functionality
+    Alert.alert('Coming Soon', 'Refund/Credit note functionality will be implemented soon.');
+  };
+
+  const handleAutoReminders = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('Auto reminders pressed');
+    // TODO: Implement auto reminders functionality
+    Alert.alert('Coming Soon', 'Auto reminders functionality will be implemented soon.');
+  };
+
+  const handleViewClientProfile = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('View client profile pressed');
+    // TODO: Implement view client profile functionality
+    Alert.alert('Coming Soon', 'View client profile functionality will be implemented soon.');
+  };
+
+  // More options action item component
+  const MoreOptionItem = ({ 
+    icon: IconComponent, 
+    title, 
+    onPress, 
+    variant = 'default' 
+  }: { 
+    icon: React.ElementType; 
+    title: string; 
+    onPress: () => void;
+    variant?: 'default' | 'destructive';
+  }) => (
+    <TouchableOpacity style={styles.moreOptionItem} onPress={onPress}>
+      <View style={styles.moreOptionLeft}>
+        <IconComponent 
+          size={20} 
+          color={variant === 'destructive' ? '#DC2626' : themeColors.foreground} 
+          style={styles.moreOptionIcon} 
+        />
+        <Text style={[
+          styles.moreOptionTitle, 
+          { 
+            color: variant === 'destructive' ? '#DC2626' : themeColors.foreground 
+          }
+        ]}>
+          {title}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   const handleSendInvoice = () => {
     if (!invoice) return;
@@ -491,7 +947,9 @@ function InvoiceViewerScreen() {
   };
 
   const handleViewHistory = () => {
-    Alert.alert('History', 'History functionality coming soon!');
+    if (!invoice) return;
+    console.log('[handleViewHistory] Opening history for invoice:', invoice.id);
+    historyModalRef.current?.present(invoice.id, invoice.invoice_number || undefined);
   };
   
   const getStyles = (themeColors: any) => StyleSheet.create({
@@ -622,6 +1080,10 @@ function InvoiceViewerScreen() {
       fontSize: 14,
       fontWeight: '500',
     },
+    paymentAmountText: {
+      fontSize: 12,
+      fontWeight: '400',
+    },
     actionBarContainer: {
       position: 'absolute',
       bottom: 0,
@@ -706,6 +1168,50 @@ function InvoiceViewerScreen() {
       backgroundColor: themeColors.border,
       marginLeft: 16, // Indent separator if desired, or remove for full width
     },
+    moreOptionsContainer: {
+      flex: 1,
+    },
+    moreOptionsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    moreOptionsTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    closeButton: {
+      padding: 6,
+    },
+    moreOptionsContent: {
+      flex: 1,
+      paddingTop: 8,
+    },
+    moreOptionItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+    },
+    moreOptionLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    moreOptionIcon: {
+      marginRight: 12,
+    },
+    moreOptionTitle: {
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    moreOptionSeparator: {
+      height: StyleSheet.hairlineWidth,
+      marginLeft: 48, // Align with text, accounting for icon width + margin
+    },
   });
 
   const styles = getStyles(themeColors);
@@ -731,22 +1237,32 @@ function InvoiceViewerScreen() {
           </TouchableOpacity>
           
           <View style={styles.statusIndicatorContainer}>
-            <View style={[{ backgroundColor: statusStyle.badgeStyle.backgroundColor, borderColor: statusStyle.badgeStyle.borderColor, borderWidth: statusStyle.badgeStyle.borderWidth, paddingVertical: statusStyle.badgeStyle.paddingVertical, paddingHorizontal: statusStyle.badgeStyle.paddingHorizontal, borderRadius: statusStyle.badgeStyle.borderRadius }]}>
-              <Text style={[styles.statusValueText, statusStyle.textStyle]}>
-                {invoiceStatus === 'draft' ? 'Not Sent' : (invoiceStatus.charAt(0).toUpperCase() + invoiceStatus.slice(1))}
-              </Text>
-            </View>
+            <TouchableOpacity onPress={handleOpenStatusSelector} activeOpacity={0.7}>
+              <StatusBadge 
+                status={(invoice?.status || 'draft') as InvoiceStatus} 
+                size="medium" 
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.actionButtonsRow}>
           <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
+            style={[
+              styles.actionButton, 
+              { backgroundColor: themeColors.card, borderColor: themeColors.border }, 
+              isPreviewingFromCreate && styles.disabledButton
+            ]} 
             onPress={handleEdit} 
             disabled={isPreviewingFromCreate}
           >
             <Edit3 size={20} color={isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary} />
-            <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>Edit</Text>
+            <Text style={[
+              styles.actionButtonText, 
+              { 
+                color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary 
+              }
+            ]}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
@@ -831,18 +1347,14 @@ function InvoiceViewerScreen() {
           style={[
             styles.primaryButton,
             {
-              backgroundColor: invoice?.status === 'paid' ? themeColors.muted : themeColors.primary,
-              opacity: invoice?.status === 'paid' ? 0.5 : 1, // Explicitly set opacity
+              backgroundColor: themeColors.primary,
             },
           ]}
-          onPress={handleOpenSendModal} // Updated to open the modal
-          disabled={invoice?.status === 'paid'} // Disable button if paid
+          onPress={handleOpenSendModal}
         >
           <Send size={20} color={themeColors.primaryForeground} style={{ marginRight: 8 }}/>
           <Text style={[styles.primaryButtonText, { color: themeColors.primaryForeground }]}>
-            {invoice?.status === 'draft' ? 'Send Invoice' : 
-             invoice?.status === 'sent' || invoice?.status === 'overdue' ? 'Resend Invoice' : 
-             invoice?.status === 'paid' ? 'Invoice Paid' : 'Send Invoice'}
+            {invoice?.status === 'draft' ? 'Send Invoice' : 'Resend Invoice'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -874,7 +1386,7 @@ function InvoiceViewerScreen() {
           <View style={[styles.modalSeparator, { backgroundColor: themeColors.border }]} />
 
           <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendLink}>
-            <Link size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+            <Link2 size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
             <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Send Link</Text>
           </TouchableOpacity>
           <View style={[styles.modalSeparator, { backgroundColor: themeColors.border }]} />
@@ -885,6 +1397,138 @@ function InvoiceViewerScreen() {
           </TouchableOpacity>
         </BottomSheetView>
       </BottomSheetModal>
+
+      {/* Status Selector Modal */}
+      <BottomSheetModal
+        ref={statusSelectorModalRef}
+        index={0}
+        snapPoints={statusSelectorSnapPoints}
+        backdropComponent={renderBackdrop}
+        handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
+        backgroundStyle={{ backgroundColor: themeColors.card }}
+        onDismiss={() => console.log('Status Selector Modal Dismissed')}
+      >
+        <StatusSelectorSheet
+          currentStatus={(invoice?.status || 'draft') as InvoiceStatus}
+          onStatusChange={handleStatusChange}
+          onClose={handleCloseStatusSelector}
+          invoiceNumber={invoice?.invoice_number || undefined}
+        />
+      </BottomSheetModal>
+
+      {/* Payment Amount Modal */}
+      <BottomSheetModal
+        ref={paymentAmountModalRef}
+        index={0}
+        snapPoints={paymentAmountSnapPoints}
+        backdropComponent={renderBackdrop}
+        handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
+        backgroundStyle={{ backgroundColor: themeColors.card }}
+        onDismiss={() => console.log('Payment Amount Modal Dismissed')}
+      >
+        {invoice && (
+          <PaymentAmountSheet
+            totalAmount={invoice.total_amount}
+            paidAmount={invoice.paid_amount || 0}
+            currencySymbol={invoice.currency_symbol}
+            invoiceNumber={invoice.invoice_number}
+            onPaymentUpdate={handlePaymentUpdate}
+            onClose={handleClosePaymentModal}
+          />
+        )}
+      </BottomSheetModal>
+
+      {/* More Options Bottom Sheet */}
+      <BottomSheetModal
+        ref={moreOptionsSheetRef}
+        snapPoints={['60%']}
+        enablePanDownToClose={true}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+        )}
+        backgroundStyle={{ backgroundColor: themeColors.card }}
+        handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
+      >
+        <BottomSheetView style={[styles.moreOptionsContainer, { backgroundColor: themeColors.card }]}>
+          {/* Header */}
+          <View style={[styles.moreOptionsHeader, { borderBottomColor: themeColors.border }]}>
+            <Text style={[styles.moreOptionsTitle, { color: themeColors.foreground }]}>
+              More Options
+            </Text>
+            <TouchableOpacity 
+              onPress={() => moreOptionsSheetRef.current?.dismiss()}
+              style={styles.closeButton}
+            >
+              <MoreHorizontal size={24} color={themeColors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Options List */}
+          <ScrollView style={styles.moreOptionsContent} showsVerticalScrollIndicator={false}>
+            <MoreOptionItem
+              icon={DollarSign}
+              title="Record Partial Payment"
+              onPress={handlePartialPayment}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={Link2}
+              title="Generate Payment Link"
+              onPress={handlePaymentLink}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={RefreshCw}
+              title="Issue Refund/Credit Note"
+              onPress={handleRefundCreditNote}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={Bell}
+              title="Setup Auto Reminders"
+              onPress={handleAutoReminders}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={User}
+              title="View Client Profile"
+              onPress={handleViewClientProfile}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={AlertTriangle}
+              title="Void Invoice"
+              onPress={handleVoidInvoice}
+              variant="destructive"
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={Trash2}
+              title="Delete Invoice"
+              onPress={handleDeleteInvoice}
+              variant="destructive"
+            />
+          </ScrollView>
+        </BottomSheetView>
+      </BottomSheetModal>
+
+      {/* Invoice History Modal */}
+      <InvoiceHistorySheet
+        ref={historyModalRef}
+        onClose={() => console.log('Invoice History Modal Dismissed')}
+      />
     </SafeAreaView>
   );
 }
