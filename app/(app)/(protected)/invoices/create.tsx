@@ -1051,32 +1051,57 @@ export default function CreateInvoiceScreen() {
     console.log('[useEffect for items] setCurrentInvoiceLineItems to:', itemsFromForm);
   }, [watchedItems]);
 
-  // Track unsaved changes
+  // Track unsaved changes - Smart detection of meaningful content
   useEffect(() => {
-    if (isEditMode || currentInvoiceId) {
-      // For edit mode or existing drafts, start with unsaved changes
-      // since any interaction means they're modifying the saved state
-      console.log('[unsaved changes tracker] Setting hasUnsavedChanges = true for edit/draft mode');
-      setHasUnsavedChanges(true);
+    // Helper function to check if the form has meaningful content
+    const hasSignificantContent = () => {
+      const currentItems = getValues('items') || [];
+      const clientId = getValues('client_id');
+      const invoiceNumber = getValues('invoice_number');
+      const customHeadline = getValues('custom_headline');
+      const poNumber = getValues('po_number');
+      const notes = getValues('notes');
       
-      // Watch for any form changes
-      const subscription = watch((value, { name, type }) => {
-        console.log('[unsaved changes tracker] Form changed:', name, type);
-        if (type === 'change') {
-          console.log('[unsaved changes tracker] Setting hasUnsavedChanges = true due to form change');
-          setHasUnsavedChanges(true);
-        }
+      // Check if there's any meaningful content
+      const hasItems = currentItems.length > 0;
+      const hasClient = Boolean(clientId);
+      const hasCustomInvoiceNumber = Boolean(invoiceNumber && invoiceNumber.trim());
+      const hasCustomHeadline = Boolean(customHeadline && customHeadline.trim());
+      const hasPONumber = Boolean(poNumber && poNumber.trim());
+      const hasNotes = Boolean(notes && notes.trim());
+      
+      console.log('[hasSignificantContent] Check:', {
+        hasItems,
+        hasClient,
+        hasCustomInvoiceNumber,
+        hasCustomHeadline,
+        hasPONumber,
+        hasNotes,
+        itemsCount: currentItems.length
       });
-      return () => subscription.unsubscribe();
-    } else {
-      // For new invoices, any form interaction means unsaved changes
-      const subscription = watch(() => {
-        console.log('[unsaved changes tracker] Setting hasUnsavedChanges = true for new invoice');
-        setHasUnsavedChanges(true);
-      });
-      return () => subscription.unsubscribe();
+      
+      return hasItems || hasClient || hasCustomInvoiceNumber || hasCustomHeadline || hasPONumber || hasNotes;
+    };
+
+    // Watch for form changes and only set unsaved changes if there's meaningful content
+    const subscription = watch((value, { name, type }) => {
+      if (type === 'change') {
+        const hasContent = hasSignificantContent();
+        console.log('[unsaved changes tracker] Form changed:', name, 'hasContent:', hasContent);
+        setHasUnsavedChanges(hasContent);
+      }
+    });
+
+    // Initial check on mount for edit mode
+    if (isEditMode || currentInvoiceId) {
+      // For edit mode, check if there's content to determine initial state
+      const hasContent = hasSignificantContent();
+      console.log('[unsaved changes tracker] Edit mode initial check - hasContent:', hasContent);
+      setHasUnsavedChanges(hasContent);
     }
-  }, [watch, isEditMode, currentInvoiceId]);
+
+    return () => subscription.unsubscribe();
+  }, [watch, getValues, isEditMode, currentInvoiceId]);
 
   const [recordedPayments, setRecordedPayments] = useState<RecordedPayment[]>([]); // State for recorded payments
 
@@ -1872,24 +1897,8 @@ export default function CreateInvoiceScreen() {
                   icon={Percent}
                   themeColors={themeColors}
                   onPress={handlePresentEditInvoiceTaxSheet}
-                  showChevron={true}
+                  showChevron={displayTaxAmount <= 0}
                 />
-              </>
-            )}
-            {/* Payment Section - Added between tax and total */}
-            {recordedPayments.length > 0 && (
-              <>
-                <View style={styles.separator} />
-                {recordedPayments.map((payment) => (
-                  <View key={payment.id} style={[styles.summaryRow, { paddingVertical: 8 }]}>
-                    <Text style={[styles.summaryLabel, { fontSize: 14, color: themeColors.mutedForeground }]}>
-                      {payment.method} ({payment.date.toLocaleDateString()})
-                    </Text>
-                    <Text style={[styles.summaryText, { fontSize: 14, color: themeColors.primary }]}>
-                      -{getCurrencySymbol(currencyCode)}{Number(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </Text>
-                  </View>
-                ))}
               </>
             )}
             <View style={styles.separator} />
@@ -1899,7 +1908,7 @@ export default function CreateInvoiceScreen() {
               onPress={handleOpenPaymentSheet}
               icon={CreditCard}
               themeColors={themeColors}
-              showChevron={true}
+              showChevron={totalPaidAmount <= 0}
             />
             <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
               <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17 }]}>

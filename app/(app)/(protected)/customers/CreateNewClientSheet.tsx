@@ -38,24 +38,39 @@ export interface CreateNewClientSheetRef {
 interface CreateNewClientSheetProps {
 	onClose?: () => void;
 	onClientAdded?: (client: Client) => void;
+	editMode?: boolean;
+	initialData?: Client | null;
 }
 
 const CreateNewClientSheet = forwardRef<
 	CreateNewClientSheetRef,
 	CreateNewClientSheetProps
->(({ onClose, onClientAdded }, ref) => {
+>(({ onClose, onClientAdded, editMode, initialData }, ref) => {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 
 	const bottomSheetModalRef = useRef<BottomSheetModal>(null);
 
-	const [fullName, setFullName] = useState("");
-	const [email, setEmail] = useState("");
-	const [phone, setPhone] = useState("");
-	const [address, setAddress] = useState("");
+	const [fullName, setFullName] = useState(editMode && initialData ? initialData.name : "");
+	const [email, setEmail] = useState(editMode && initialData ? initialData.email || "" : "");
+	const [phone, setPhone] = useState(editMode && initialData ? initialData.phone || "" : "");
+	const [address, setAddress] = useState(editMode && initialData ? formatInitialAddress(initialData) : "");
 	const [isLoading, setIsLoading] = useState(false);
 
 	const snapPoints = useMemo(() => ["70%", "90%"], []);
+
+	// Helper function to format address from database fields
+	function formatInitialAddress(client: Client): string {
+		const parts = [
+			client.address_line1,
+			client.address_line2,
+			client.city,
+			client.state_province_region,
+			client.postal_zip_code,
+			client.country
+		].filter(Boolean);
+		return parts.join(', ');
+	}
 
 	React.useImperativeHandle(ref, () => ({
 		present: () => bottomSheetModalRef.current?.present(),
@@ -101,28 +116,51 @@ const CreateNewClientSheet = forwardRef<
 				setIsLoading(false);
 				return;
 			}
+
 			const clientData = {
 				name: fullName.trim(),
 				email: email.trim() || null,
 				phone: phone.trim() || null,
-				address_client: address.trim() || null,
+				address_line1: address.trim() || null, // Store in address_line1 for now
 				user_id: user.id,
 			};
-			const { data: inserted, error: insertError } = await supabase
-				.from("clients")
-				.insert([clientData])
-				.select()
-				.single();
-			if (insertError) {
-				Alert.alert("Error", `Could not save client. ${insertError.message}`);
+
+			if (editMode && initialData) {
+				// Update existing client
+				const { data: updated, error: updateError } = await supabase
+					.from("clients")
+					.update(clientData)
+					.eq('id', initialData.id)
+					.eq('user_id', user.id)
+					.select()
+					.single();
+
+				if (updateError) {
+					Alert.alert("Error", `Could not update client. ${updateError.message}`);
+				} else {
+					Alert.alert("Success", "Client updated successfully!");
+					if (onClientAdded && updated) onClientAdded(updated);
+					internalClose();
+				}
 			} else {
-				Alert.alert("Success", "Client saved successfully!");
-				setFullName("");
-				setEmail("");
-				setPhone("");
-				setAddress("");
-				if (onClientAdded && inserted) onClientAdded(inserted);
-				internalClose();
+				// Create new client
+				const { data: inserted, error: insertError } = await supabase
+					.from("clients")
+					.insert([clientData])
+					.select()
+					.single();
+
+				if (insertError) {
+					Alert.alert("Error", `Could not save client. ${insertError.message}`);
+				} else {
+					Alert.alert("Success", "Client saved successfully!");
+					setFullName("");
+					setEmail("");
+					setPhone("");
+					setAddress("");
+					if (onClientAdded && inserted) onClientAdded(inserted);
+					internalClose();
+				}
 			}
 		} catch (error: any) {
 			Alert.alert("Error", `An unexpected error occurred: ${error.message}`);
@@ -275,7 +313,7 @@ const CreateNewClientSheet = forwardRef<
 			onDismiss={onClose}
 		>
 			<View style={styles.headerContainer}>
-				<Text style={styles.title}>Add New Client</Text>
+				<Text style={styles.title}>{editMode ? "Edit Client" : "Add New Client"}</Text>
 				<TouchableOpacity
 					onPress={internalClose}
 					style={styles.closeButton}
@@ -289,14 +327,16 @@ const CreateNewClientSheet = forwardRef<
 				style={styles.contentScrollView}
 				contentContainerStyle={styles.contentContainerStyle}
 			>
-				<TouchableOpacity
-					style={styles.addFromContactsButton}
-					onPress={handleAddFromContacts}
-					disabled={isLoading}
-				>
-					<UserPlus size={20} style={styles.addFromContactsIcon} />
-					<Text style={styles.addFromContactsText}>Add from Contacts</Text>
-				</TouchableOpacity>
+				{!editMode && (
+					<TouchableOpacity
+						style={styles.addFromContactsButton}
+						onPress={handleAddFromContacts}
+						disabled={isLoading}
+					>
+						<UserPlus size={20} style={styles.addFromContactsIcon} />
+						<Text style={styles.addFromContactsText}>Add from Contacts</Text>
+					</TouchableOpacity>
+				)}
 
 				<View style={styles.inputGroupContainer}>
 					<View style={styles.inputRow}>
@@ -378,7 +418,9 @@ const CreateNewClientSheet = forwardRef<
 							color={themeColors.primaryForeground}
 						/>
 					) : (
-						<Text style={styles.saveButtonText}>Save Client</Text>
+						<Text style={styles.saveButtonText}>
+							{editMode ? "Update Client" : "Save Client"}
+						</Text>
 					)}
 				</TouchableOpacity>
 			</BottomSheetScrollView>

@@ -40,9 +40,9 @@ import {
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
-import { useSupabase } from '@/context/supabase-provider';
-import type { Database, Json, Tables } from '../../../../types/database.types';
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne';
+import { useSupabase } from '@/context/supabase-provider'; 
+import type { Database, Json, Tables } from '../../../../types/database.types'; 
+import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import Share from 'react-native-share';
@@ -120,7 +120,7 @@ function InvoiceViewerScreen() {
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
   const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
-  const { supabase } = useSupabase();
+  const { supabase } = useSupabase(); 
   const { logPaymentAdded, logStatusChanged, logInvoiceSent } = useInvoiceActivityLogger();
 
   const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null);
@@ -152,7 +152,7 @@ function InvoiceViewerScreen() {
 
   // Snap points for the Send Invoice Modal
   const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []); // Adjust as needed
-  
+
   // Snap points for the Status Selector Modal
   const statusSelectorSnapPoints = useMemo(() => ['60%', '80%'], []);
   
@@ -160,22 +160,6 @@ function InvoiceViewerScreen() {
   const paymentAmountSnapPoints = useMemo(() => ['75%', '90%'], []);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
-
-  // Simplified tab bar management - dashboard already hides it before navigation
-  // Just ensure it stays hidden and show it when leaving
-  useFocusEffect(
-    useCallback(() => {
-      console.log('[InvoiceViewerScreen] FocusEffect: Ensuring tab bar stays hidden.');
-      // No need to hide again since dashboard already did it before navigation
-      // Just ensure it stays hidden in case something shows it
-      setIsTabBarVisible(false);
-      
-      return () => {
-        console.log('[InvoiceViewerScreen] FocusEffect cleanup: Showing tab bar.');
-        setIsTabBarVisible(true); // Show tab bar when leaving
-      };
-    }, [setIsTabBarVisible])
-  );
 
   const handleOpenSendModal = useCallback(() => {
     sendInvoiceModalRef.current?.present();
@@ -186,7 +170,34 @@ function InvoiceViewerScreen() {
     sendInvoiceModalRef.current?.dismiss();
   }, []);
 
-  // Placeholder actions for modal options
+  // Tab bar visibility management (following pagetransitions.md Approach 2)
+  const navigation = useNavigation();
+  
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      console.log('[InvoiceViewerScreen] Focus event: Hiding tab bar');
+      setIsTabBarVisible(false);
+    });
+
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      console.log('[InvoiceViewerScreen] Blur event: Showing tab bar');
+      setIsTabBarVisible(true);
+    });
+
+    // Initial hide if screen is focused on mount
+    if (navigation.isFocused()) {
+      console.log('[InvoiceViewerScreen] Initial focus: Hiding tab bar');
+      setIsTabBarVisible(false);
+    }
+
+    return () => {
+      console.log('[InvoiceViewerScreen] Unmounting: Ensuring tab bar is visible');
+      unsubscribeFocus();
+      unsubscribeBlur();
+      setIsTabBarVisible(true);
+    };
+  }, [navigation, setIsTabBarVisible]);
+
   const handleSendByEmail = async () => {
     if (!invoice || !supabase) {
       Alert.alert('Error', 'Unable to send invoice at this time.');
@@ -312,7 +323,7 @@ function InvoiceViewerScreen() {
       Alert.alert('PDF Sent', 'Invoice PDF has been generated and shared.');
       handleCloseSendModal(); // Close the send modal
       
-    } catch (error: any) {
+    } catch (error: any) { 
       console.error('[handleSendPDF] Error generating or sharing PDF:', error);
       Alert.alert('Error', `Failed to generate or share PDF: ${error.message}`);
     }
@@ -331,8 +342,6 @@ function InvoiceViewerScreen() {
     []
   );
 
-  const navigation = useNavigation(); // Added
-
   const handleCustomBack = () => {
     console.log('[handleCustomBack] Called');
     
@@ -342,7 +351,7 @@ function InvoiceViewerScreen() {
     // Use router.back() for proper left-to-right transition direction
     // DO NOT CHANGE TO router.replace() - this breaks transition direction
     // Only change if explicitly requested by user
-    router.back();
+    router.back(); 
   };
 
   const fetchBusinessSettings = async (userId: string) => {
