@@ -61,15 +61,8 @@ const CreateNewClientSheet = forwardRef<
 
 	// Helper function to format address from database fields
 	function formatInitialAddress(client: Client): string {
-		const parts = [
-			client.address_line1,
-			client.address_line2,
-			client.city,
-			client.state_province_region,
-			client.postal_zip_code,
-			client.country
-		].filter(Boolean);
-		return parts.join(', ');
+		// Since we only have address_client field, return it directly
+		return client.address_client || '';
 	}
 
 	React.useImperativeHandle(ref, () => ({
@@ -121,7 +114,7 @@ const CreateNewClientSheet = forwardRef<
 				name: fullName.trim(),
 				email: email.trim() || null,
 				phone: phone.trim() || null,
-				address_line1: address.trim() || null, // Store in address_line1 for now
+				address_client: address.trim() || null, // Match the database column name
 				user_id: user.id,
 			};
 
