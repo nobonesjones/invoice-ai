@@ -11,6 +11,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { TabBarVisibilityProvider } from "@/context/TabBarVisibilityContext";
 import { SupabaseProvider, useSupabase } from "@/context/supabase-provider";
 import { ThemeProvider, useTheme } from "@/context/theme-provider";
+import { UsageProvider } from "@/context/usage-provider";
 
 // Inner component to access theme and supabase context
 function RootLayoutNav() {
@@ -32,6 +33,12 @@ function RootLayoutNav() {
 			segments[0] === "(app)" &&
 			segments.length === 2 &&
 			segments[1] === "welcome";
+			
+		// Check if the current route is the soft paywall screen
+		const isSoftPaywallScreen =
+			segments[0] === "(app)" &&
+			segments.length === 2 &&
+			segments[1] === "soft-paywall";
 
     // Check if the current route is account-details directly under (app)
     const isAccountDetailsScreen =
@@ -84,7 +91,7 @@ function RootLayoutNav() {
 			router.replace("/(app)/(protected)");
 		} else if (
 			!session &&
-			!(inAuthGroup || inAppAuthGroup || isWelcomeScreen)
+			!(inAuthGroup || inAppAuthGroup || isWelcomeScreen || isSoftPaywallScreen)
 		) {
 			// User is not logged in AND is not on any allowed auth/onboarding/welcome screen.
 			// Redirect to the start of the onboarding flow.
@@ -105,11 +112,13 @@ export default function AppLayout() {
 				<Host>
 					<SupabaseProvider>
 						<ThemeProvider>
-							<BottomSheetModalProvider>
-								<TabBarVisibilityProvider>
-									<RootLayoutNav />
-								</TabBarVisibilityProvider>
-							</BottomSheetModalProvider>
+							<UsageProvider>
+								<BottomSheetModalProvider>
+									<TabBarVisibilityProvider>
+										<RootLayoutNav />
+									</TabBarVisibilityProvider>
+								</BottomSheetModalProvider>
+							</UsageProvider>
 						</ThemeProvider>
 					</SupabaseProvider>
 				</Host>

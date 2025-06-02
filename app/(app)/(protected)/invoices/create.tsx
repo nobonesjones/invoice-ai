@@ -75,6 +75,7 @@ import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // A
 import { KeyboardAvoidingView } from 'react-native';
 import { INVOICE_STATUSES, InvoiceStatus, getStatusConfig, isEditable } from '@/constants/invoice-status';
 import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
+import { UsageService } from '@/services/usageService'; // Added UsageService import
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -604,6 +605,38 @@ export default function CreateInvoiceScreen() {
 
     try {
       console.log(`[handleSaveInvoice] ${isEditMode ? 'UPDATE' : 'CREATE'} mode - Processing invoice`);
+
+      // Check usage limits for new invoice creation (not for edits)
+      if (!isEditMode) {
+        console.log('[handleSaveInvoice] Checking usage limits for new invoice');
+        const limitCheck = await UsageService.checkInvoiceLimit(user.id);
+        
+        if (!limitCheck.canCreate) {
+          console.log('[handleSaveInvoice] Usage limit reached, showing paywall');
+          Alert.alert(
+            'Upgrade Required',
+            `You've reached your limit of ${limitCheck.remaining === 0 ? limitCheck.total : 'free'} invoices! Upgrade to create unlimited invoices and unlock premium features.`,
+            [
+              {
+                text: 'Maybe Later',
+                style: 'cancel'
+              },
+              {
+                text: 'Upgrade Now',
+                onPress: () => {
+                  // Navigate to paywall/subscription screen
+                  router.push('/(app)/(protected)/subscription/paywall');
+                }
+              }
+            ]
+          );
+          setIsSavingInvoice(false);
+          return;
+        }
+
+        console.log(`[handleSaveInvoice] Usage check passed. Remaining: ${limitCheck.remaining}`);
+      }
+
       console.log('[handleSaveInvoice] formData.invoice_number:', formData.invoice_number);
       console.log('[handleSaveInvoice] formData.invoice_date:', formData.invoice_date);
       console.log('[handleSaveInvoice] formData.due_date:', formData.due_date);
@@ -673,6 +706,15 @@ export default function CreateInvoiceScreen() {
 
         savedInvoice = newInvoice;
         console.log('[handleSaveInvoice] Invoice created successfully');
+
+        // Increment usage count for new invoices only
+        try {
+          await UsageService.incrementInvoiceCount(user.id);
+          console.log('[handleSaveInvoice] Usage count incremented');
+        } catch (usageError) {
+          console.error('Error incrementing usage count:', usageError);
+          // Don't fail the invoice creation for this, just log it
+        }
       }
 
       if (!savedInvoice) {

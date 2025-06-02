@@ -1,5 +1,6 @@
 import { supabase } from '@/config/supabase';
 import { OpenAIFunction } from '@/services/openaiService';
+import { UsageService } from '@/services/usageService';
 
 // Function definitions for OpenAI
 export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
@@ -624,6 +625,10 @@ export class InvoiceFunctionService {
 
   private static async createInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
+      // Note: No usage limit check for creation - users can create unlimited invoices
+      // The limit is now on sending, not creating
+      console.log('[AI Invoice Create] Creating invoice (unlimited creation in freemium model)');
+
       // Step 1: Find or create client with improved search
       let clientId: string;
       let existingClient = null;

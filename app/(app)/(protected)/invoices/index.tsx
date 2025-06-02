@@ -23,6 +23,7 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import InvoiceOverviewDatesSheet from './InvoiceOverviewDatesSheet';
 import { StatusBadge } from '@/components/StatusBadge';
 import { InvoiceStatus } from '@/constants/invoice-status';
+import { TrialIndicator } from '@/components/ui/trial-indicator';
 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
@@ -520,7 +521,9 @@ export default function InvoiceDashboardScreen() {
             />
           </View>
 
-          <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} /> 
+          <TrialIndicator />
+
+          <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} />
 
           {/* Display Current Filter Label */} 
           {invoices.length > 0 && !loading && (

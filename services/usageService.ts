@@ -1,0 +1,437 @@
+import { supabase } from '@/config/supabase';
+import { TrialService } from '@/services/trialService';
+
+export interface UsageStats {
+  invoiceCount: number;
+  sentInvoiceCount: number;
+  freeLimit: number;
+  subscriptionTier: 'free' | 'premium' | 'trial' | 'grandfathered';
+  canCreateInvoice: boolean;
+  canSendInvoice: boolean;
+  remainingInvoices: number;
+  subscriptionExpiresAt?: Date;
+  isTrial?: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  onboarding_completed: boolean;
+  industry?: string;
+  region?: string;
+  business_logo_url?: string;
+  invoice_count: number;
+  subscription_tier: string;
+  free_limit: number;
+  subscription_expires_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export class UsageService {
+  /**
+   * Check if user can create a new invoice based on their current usage and subscription
+   * Now supports both authenticated users and trial sessions, with unlimited creation
+   */
+  static async checkInvoiceLimit(userId: string): Promise<{
+    canCreate: boolean; // Always true for freemium flow
+    canSend: boolean; // New: check send permissions
+    remaining: number; // Remaining sends
+    total: number;
+    subscriptionTier: string;
+    requiresUpgrade: boolean;
+  }> {
+    try {
+      // First check if this is a trial session
+      const isTrialSession = await TrialService.isTrialSession();
+      
+      if (isTrialSession) {
+        console.log('[UsageService] Checking trial session limits');
+        const trialCreateCheck = await TrialService.canCreateInvoice();
+        const trialSendCheck = await TrialService.canSendInvoice();
+        return {
+          canCreate: true, // Always allow creation
+          canSend: trialSendCheck.canSend,
+          remaining: trialSendCheck.remaining,
+          total: trialSendCheck.total,
+          subscriptionTier: 'trial',
+          requiresUpgrade: !trialSendCheck.canSend
+        };
+      }
+
+      // Original authenticated user logic
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        // If profile doesn't exist, create it
+        if (error.code === 'PGRST116') {
+          await this.createUserProfile(userId);
+          return {
+            canCreate: true,
+            canSend: true,
+            remaining: 3,
+            total: 0,
+            subscriptionTier: 'free',
+            requiresUpgrade: false
+          };
+        }
+        throw error;
+      }
+
+      const isUnlimited = ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      
+      if (isUnlimited) {
+        return {
+          canCreate: true,
+          canSend: true,
+          remaining: -1, // Unlimited
+          total: profile.sent_invoice_count || 0,
+          subscriptionTier: profile.subscription_tier,
+          requiresUpgrade: false
+        };
+      }
+
+      // Free tier logic - check sent invoices, not created
+      const sentCount = profile.sent_invoice_count || 0;
+      const remaining = Math.max(0, profile.free_limit - sentCount);
+      const canSend = remaining > 0;
+
+      return {
+        canCreate: true, // Always allow creation
+        canSend,
+        remaining,
+        total: sentCount,
+        subscriptionTier: profile.subscription_tier,
+        requiresUpgrade: !canSend
+      };
+
+    } catch (error) {
+      console.error('Error checking invoice limit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Increment the user's invoice count after successful invoice creation
+   * Now supports both authenticated users and trial sessions
+   */
+  static async incrementInvoiceCount(userId: string): Promise<void> {
+    try {
+      // Check if this is a trial session
+      const isTrialSession = await TrialService.isTrialSession();
+      
+      if (isTrialSession) {
+        console.log('[UsageService] Incrementing trial session invoice count');
+        await TrialService.incrementTrialInvoiceCount();
+        return;
+      }
+
+      // Original authenticated user logic
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          invoice_count: supabase.raw('invoice_count + 1'),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error incrementing invoice count:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Incremented invoice count for user ${userId}`);
+    } catch (error) {
+      console.error('Error incrementing invoice count:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Increment the user's sent invoice count after successful invoice send
+   * This is what triggers the freemium limits
+   */
+  static async incrementSentInvoiceCount(userId: string): Promise<void> {
+    try {
+      // Check if this is a trial session
+      const isTrialSession = await TrialService.isTrialSession();
+      
+      if (isTrialSession) {
+        console.log('[UsageService] Incrementing trial session sent count');
+        await TrialService.incrementTrialSentCount();
+        return;
+      }
+
+      // Authenticated user logic
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          sent_invoice_count: supabase.raw('sent_invoice_count + 1'),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error incrementing sent invoice count:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Incremented sent invoice count for user ${userId}`);
+    } catch (error) {
+      console.error('Error incrementing sent invoice count:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive usage statistics for a user
+   * Now supports both authenticated users and trial sessions
+   */
+  static async getUsageStats(userId: string): Promise<UsageStats> {
+    try {
+      // Check if this is a trial session
+      const isTrialSession = await TrialService.isTrialSession();
+      
+      if (isTrialSession) {
+        console.log('[UsageService] Getting trial session usage stats');
+        const trialStatus = await TrialService.getTrialStatus();
+        return {
+          invoiceCount: trialStatus.invoiceCount,
+          sentInvoiceCount: trialStatus.sentInvoiceCount,
+          freeLimit: trialStatus.maxInvoices,
+          subscriptionTier: 'trial',
+          canCreateInvoice: !trialStatus.isExpired,
+          canSendInvoice: trialStatus.canSendInvoice,
+          remainingInvoices: trialStatus.remaining,
+          isTrial: true
+        };
+      }
+
+      // Original authenticated user logic
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching usage stats:', error);
+        throw error;
+      }
+
+      const isUnlimited = ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      const sentCount = profile.sent_invoice_count || 0;
+      
+      return {
+        invoiceCount: profile.invoice_count,
+        sentInvoiceCount: sentCount,
+        freeLimit: profile.free_limit,
+        subscriptionTier: profile.subscription_tier as any,
+        canCreateInvoice: true, // Always true for freemium
+        canSendInvoice: isUnlimited || sentCount < profile.free_limit,
+        remainingInvoices: isUnlimited ? -1 : Math.max(0, profile.free_limit - sentCount),
+        subscriptionExpiresAt: profile.subscription_expires_at ? new Date(profile.subscription_expires_at) : undefined,
+        isTrial: false
+      };
+    } catch (error) {
+      console.error('Error getting usage stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user's subscription tier (when they upgrade)
+   */
+  static async updateSubscriptionTier(
+    userId: string, 
+    tier: 'free' | 'premium' | 'trial' | 'grandfathered',
+    expiresAt?: Date
+  ): Promise<void> {
+    try {
+      const updateData: any = {
+        subscription_tier: tier,
+        updated_at: new Date().toISOString()
+      };
+
+      if (expiresAt) {
+        updateData.subscription_expires_at = expiresAt.toISOString();
+      }
+
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(updateData)
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error updating subscription tier:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Updated subscription tier to ${tier} for user ${userId}`);
+    } catch (error) {
+      console.error('Error updating subscription tier:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create user profile if it doesn't exist
+   */
+  static async createUserProfile(userId: string): Promise<UserProfile> {
+    try {
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: userId,
+          onboarding_completed: false,
+          invoice_count: 0,
+          subscription_tier: 'free',
+          free_limit: 3
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating user profile:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Created profile for user ${userId}`);
+      return profile;
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user profile data
+   */
+  static async getUserProfile(userId: string): Promise<UserProfile | null> {
+    try {
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Profile doesn't exist
+        }
+        console.error('Error fetching user profile:', error);
+        throw error;
+      }
+
+      return profile;
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update onboarding completion status
+   */
+  static async markOnboardingCompleted(userId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error marking onboarding completed:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Marked onboarding completed for user ${userId}`);
+    } catch (error) {
+      console.error('Error marking onboarding completed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user's business information from onboarding
+   */
+  static async updateBusinessInfo(userId: string, businessInfo: {
+    industry?: string;
+    region?: string;
+    business_logo_url?: string;
+  }): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          ...businessInfo,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error updating business info:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Updated business info for user ${userId}`);
+    } catch (error) {
+      console.error('Error updating business info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reset invoice count (useful for testing or subscription resets)
+   */
+  static async resetInvoiceCount(userId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          invoice_count: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error resetting invoice count:', error);
+        throw error;
+      }
+
+      console.log(`[UsageService] Reset invoice count for user ${userId}`);
+    } catch (error) {
+      console.error('Error resetting invoice count:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all users and their usage stats (admin function)
+   */
+  static async getAllUsageStats(): Promise<UserProfile[]> {
+    try {
+      const { data: profiles, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching all usage stats:', error);
+        throw error;
+      }
+
+      return profiles || [];
+    } catch (error) {
+      console.error('Error getting all usage stats:', error);
+      throw error;
+    }
+  }
+} 

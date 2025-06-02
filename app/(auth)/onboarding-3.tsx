@@ -42,7 +42,7 @@ export default function OnboardingScreen3() {
 
 	const handleNext = () => {
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-		router.replace("/(app)/welcome");
+		router.replace("/(app)/soft-paywall");
 	};
 
 	return (
@@ -87,7 +87,7 @@ export default function OnboardingScreen3() {
 					onPress={handleNext}
 					className="w-full dark:bg-white dark:text-primary"
 				>
-					Sign Up
+					Get Started
 				</Button>
 			</View>
 		</SafeAreaView>
