@@ -1,4 +1,8 @@
-solve this issue at a later date...we need to plan it before in details. whent rying to add commas intot he values . 
+
+
+
+
+When trying to add commas into the values . 
 
 Error Overview:
 The error was a JSX syntax error:

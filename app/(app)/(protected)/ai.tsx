@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, Alert, Modal } from "react-native";
+import { View, TextInput, TouchableOpacity, ScrollView, Alert, Modal, KeyboardAvoidingView, Platform } from "react-native";
 import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, X } from "lucide-react-native";
 import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler } from 'react-native-gesture-handler';
 import Animated, {
@@ -194,6 +194,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	const { invoice, line_items, client_id } = invoiceData;
 	const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
 	const [showModal, setShowModal] = useState(false);
+	const { supabase } = useSupabase();
 	
 	// Load business settings on mount
 	useEffect(() => {
@@ -202,7 +203,39 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 
 	const loadBusinessSettings = async () => {
 		try {
-			// Default business settings for now - in a real app you'd fetch this from the database
+			// Fetch actual business settings from the database
+			const { data: businessSettings, error } = await supabase
+				.from('business_settings')
+				.select('*')
+				.eq('user_id', invoice.user_id)
+				.single();
+
+			if (error) {
+				console.error('Error loading business settings:', error);
+				// Fall back to default settings if no business settings found
+				const defaultSettings: BusinessSettingsRow = {
+					id: 'default',
+					user_id: invoice.user_id,
+					business_name: 'Your Business',
+					business_address: 'Your Address',
+					business_logo_url: null,
+					currency: 'USD',
+					currency_symbol: '$',
+					paypal_enabled: true,
+					stripe_enabled: true,
+					bank_transfer_enabled: true,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+				};
+				setBusinessSettings(defaultSettings);
+			} else {
+				// Use actual business settings from database
+				console.log('[AI Invoice Preview] Loaded business settings:', businessSettings);
+				setBusinessSettings(businessSettings);
+			}
+		} catch (error) {
+			console.error('Error loading business settings:', error);
+			// Fall back to default settings on error
 			const defaultSettings: BusinessSettingsRow = {
 				id: 'default',
 				user_id: invoice.user_id,
@@ -218,8 +251,6 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				updated_at: new Date().toISOString(),
 			};
 			setBusinessSettings(defaultSettings);
-		} catch (error) {
-			console.error('Error loading business settings:', error);
 		}
 	};
 
@@ -443,235 +474,226 @@ export default function AiScreen() {
 
 	return (
 		<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
-			{/* Header */}
-			<View 
-				style={{
-					flex: 1,
-					paddingHorizontal: 0,
-					paddingTop: 16,
-					backgroundColor: theme.background,
-				}}
+			<KeyboardAvoidingView 
+				style={{ flex: 1 }}
+				behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+				keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
 			>
+				{/* Header */}
 				<View 
 					style={{
-						flexDirection: "row",
-						justifyContent: "space-between",
-						alignItems: "center",
-						paddingHorizontal: 16,
-						marginBottom: 16,
+						flex: 1,
+						paddingHorizontal: 0,
+						paddingTop: 16,
+						backgroundColor: theme.background,
 					}}
 				>
-					<Text 
+					<View 
 						style={{
-							fontSize: 30,
-							fontWeight: "bold",
-							color: theme.foreground,
+							flexDirection: "row",
+							justifyContent: "space-between",
+							alignItems: "center",
+							paddingHorizontal: 16,
+							marginBottom: 16,
 						}}
 					>
-						AI Assistant
-					</Text>
-					{conversation && (
-						<TouchableOpacity onPress={handleRefresh} disabled={isLoading}>
-							<RefreshCw 
-								size={20} 
-								color={isLoading ? theme.mutedForeground : theme.foreground} 
-							/>
-						</TouchableOpacity>
-					)}
-				</View>
-
-				{/* Error Banner */}
-				{error && (
-					<View 
-						style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
-						className="mx-4 mb-4 p-3 rounded-lg border"
-					>
-						<Text style={{ color: '#DC2626', fontSize: 14 }}>
-							{error}
-						</Text>
-						<TouchableOpacity onPress={clearError} className="mt-2">
-							<Text style={{ color: '#DC2626', fontSize: 12, textDecorationLine: 'underline' }}>
-								Dismiss
-							</Text>
-						</TouchableOpacity>
-					</View>
-				)}
-
-				{/* Messages */}
-				<ScrollView 
-					ref={scrollViewRef}
-					className="flex-1 px-4"
-					contentContainerStyle={{ paddingBottom: 20 }}
-					showsVerticalScrollIndicator={false}
-				>
-					{displayMessages.map((message) => (
-						<View
-							key={message.id}
-							className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+						<Text 
+							style={{
+								fontSize: 30,
+								fontWeight: "bold",
+								color: theme.foreground,
+							}}
 						>
+							AI Assistant
+						</Text>
+						{conversation && (
+							<TouchableOpacity onPress={handleRefresh} disabled={isLoading}>
+								<RefreshCw 
+									size={20} 
+									color={isLoading ? theme.mutedForeground : theme.foreground} 
+								/>
+							</TouchableOpacity>
+						)}
+					</View>
+
+					{/* Error Banner */}
+					{error && (
+						<View 
+							style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
+							className="mx-4 mb-4 p-3 rounded-lg border"
+						>
+							<Text style={{ color: '#DC2626', fontSize: 14 }}>
+								{error}
+							</Text>
+							<TouchableOpacity onPress={clearError} className="mt-2">
+								<Text style={{ color: '#DC2626', fontSize: 12, textDecorationLine: 'underline' }}>
+									Dismiss
+								</Text>
+							</TouchableOpacity>
+						</View>
+					)}
+
+					{/* Messages */}
+					<ScrollView 
+						ref={scrollViewRef}
+						className="flex-1 px-4"
+						contentContainerStyle={{ paddingBottom: 20 }}
+						showsVerticalScrollIndicator={false}
+					>
+						{displayMessages.map((message) => (
 							<View
-								style={{
-									backgroundColor: message.role === 'user' ? theme.primary : theme.card,
-									maxWidth: '90%',
-									paddingHorizontal: 16,
-									paddingVertical: 12,
-									borderRadius: 16,
-									borderBottomRightRadius: message.role === 'user' ? 4 : 16,
-									borderBottomLeftRadius: message.role === 'user' ? 16 : 4,
-								}}
+								key={message.id}
+								className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
 							>
-								<Text
+								<View
 									style={{
-										color: message.role === 'user' ? '#FFFFFF' : theme.foreground,
-										fontSize: 16,
-										lineHeight: 22,
+										backgroundColor: message.role === 'user' ? theme.primary : theme.card,
+										maxWidth: '90%',
+										paddingHorizontal: 16,
+										paddingVertical: 12,
+										borderRadius: 16,
+										borderBottomRightRadius: message.role === 'user' ? 4 : 16,
+										borderBottomLeftRadius: message.role === 'user' ? 16 : 4,
 									}}
 								>
-									{message.content}
-								</Text>
-
-								{/* Show invoice preview if this message has invoice data */}
-								{message.role === 'assistant' && message.attachments && message.attachments.length > 0 && (
-									message.attachments.map((attachment: any, index: number) => {
-										// Check if attachment has invoice data
-										if (attachment && attachment.invoice && attachment.line_items) {
-											return (
-												<InvoicePreview 
-													key={index}
-													invoiceData={attachment} 
-													theme={theme} 
-												/>
-											);
-										}
-										return null;
-									})
-								)}
-
-								{/* Show timestamp for saved messages */}
-								{message.id !== 'welcome' && message.id !== 'setup' && (
 									<Text
 										style={{
-											color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : theme.mutedForeground,
-											fontSize: 12,
-											marginTop: 4,
+											color: message.role === 'user' ? '#FFFFFF' : theme.foreground,
+											fontSize: 16,
+											lineHeight: 22,
 										}}
 									>
-										{new Date(message.created_at).toLocaleTimeString([], { 
-											hour: '2-digit', 
-											minute: '2-digit' 
-										})}
+										{message.content}
 									</Text>
-								)}
-							</View>
-						</View>
-					))}
 
-					{/* Loading indicator */}
-					{isLoading && (
-						<View className="items-start mb-4">
-							<View
+									{/* Show invoice preview if this message has invoice data */}
+									{message.role === 'assistant' && message.attachments && message.attachments.length > 0 && (
+										message.attachments.map((attachment: any, index: number) => {
+											// Check if attachment has invoice data
+											if (attachment && attachment.invoice && attachment.line_items) {
+												return (
+													<InvoicePreview 
+														key={index}
+														invoiceData={attachment} 
+														theme={theme} 
+													/>
+												);
+											}
+											return null;
+										})
+									)}
+
+									{/* Show timestamp for saved messages */}
+									{message.id !== 'welcome' && message.id !== 'setup' && (
+										<Text
+											style={{
+												color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : theme.mutedForeground,
+												fontSize: 12,
+												marginTop: 4,
+											}}
+										>
+											{new Date(message.created_at).toLocaleTimeString([], { 
+												hour: '2-digit', 
+												minute: '2-digit' 
+											})}
+										</Text>
+									)}
+								</View>
+							</View>
+						))}
+
+						{/* Loading indicator */}
+						{isLoading && (
+							<View className="items-start mb-4">
+								<View
+									style={{
+										backgroundColor: theme.card,
+										paddingHorizontal: 16,
+										paddingVertical: 12,
+										borderRadius: 16,
+										borderBottomLeftRadius: 4,
+									}}
+								>
+									<Text style={{ color: theme.mutedForeground }}>
+										AI is thinking...
+									</Text>
+								</View>
+							</View>
+						)}
+					</ScrollView>
+
+					{/* Input Area */}
+					<View 
+						style={{ 
+							backgroundColor: theme.card,
+							padding: 12,
+							borderTopWidth: 1,
+							borderTopColor: theme.border
+						}}
+					>
+						<View className="flex-row items-center space-x-3">
+							{/* Voice Input Button (placeholder for now) */}
+							<TouchableOpacity
 								style={{
-									backgroundColor: theme.card,
+									padding: 12,
+									borderRadius: 24,
+									backgroundColor: theme.muted
+								}}
+								onPress={() => Alert.alert('Coming Soon', 'Voice input will be available in the next update!')}
+								disabled={isLoading}
+							>
+								<Mic size={20} color={isLoading ? theme.mutedForeground : theme.foreground} />
+							</TouchableOpacity>
+
+							{/* Text Input */}
+							<TextInput
+								value={inputText}
+								onChangeText={setInputText}
+								placeholder={showSetupMessage ? "Configure API key first..." : "Type your message..."}
+								placeholderTextColor={theme.mutedForeground}
+								style={{
+									flex: 1,
+									backgroundColor: theme.background,
+									color: theme.foreground,
 									paddingHorizontal: 16,
 									paddingVertical: 12,
-									borderRadius: 16,
-									borderBottomLeftRadius: 4,
+									borderRadius: 24,
+									borderWidth: 1,
+									borderColor: theme.border,
+									fontSize: 16,
+								}}
+								multiline
+								maxLength={1000}
+								returnKeyType="default"
+								editable={!isLoading && !showSetupMessage}
+							/>
+
+							{/* Send Button */}
+							<TouchableOpacity
+								onPress={() => {
+									console.log('[AI Screen] Send button pressed');
+									console.log('[AI Screen] inputText.trim():', !!inputText.trim());
+									console.log('[AI Screen] isLoading:', isLoading);
+									console.log('[AI Screen] showSetupMessage:', showSetupMessage);
+									console.log('[AI Screen] Button disabled:', !inputText.trim() || isLoading || showSetupMessage);
+									handleSendMessage();
+								}}
+								disabled={!inputText.trim() || isLoading || showSetupMessage}
+								style={{
+									padding: 12,
+									borderRadius: 24,
+									backgroundColor: (inputText.trim() && !isLoading && !showSetupMessage) ? theme.primary : theme.muted
 								}}
 							>
-								<Text style={{ color: theme.mutedForeground }}>
-									AI is thinking...
-								</Text>
-							</View>
+								<Send 
+									size={20} 
+									color={(inputText.trim() && !isLoading && !showSetupMessage) ? '#FFFFFF' : theme.mutedForeground} 
+								/>
+							</TouchableOpacity>
 						</View>
-					)}
-				</ScrollView>
-
-				{/* Input Area */}
-				<View 
-					style={{ 
-						backgroundColor: theme.card,
-						padding: 16,
-						borderTopWidth: 1,
-						borderTopColor: theme.border
-					}}
-				>
-					<View className="flex-row items-center space-x-3">
-						{/* Voice Input Button (placeholder for now) */}
-						<TouchableOpacity
-							style={{
-								padding: 12,
-								borderRadius: 24,
-								backgroundColor: theme.muted
-							}}
-							onPress={() => Alert.alert('Coming Soon', 'Voice input will be available in the next update!')}
-							disabled={isLoading}
-						>
-							<Mic size={20} color={isLoading ? theme.mutedForeground : theme.foreground} />
-						</TouchableOpacity>
-
-						{/* Text Input */}
-						<TextInput
-							value={inputText}
-							onChangeText={setInputText}
-							placeholder={showSetupMessage ? "Configure API key first..." : "Type your message..."}
-							placeholderTextColor={theme.mutedForeground}
-							style={{
-								flex: 1,
-								backgroundColor: theme.background,
-								color: theme.foreground,
-								paddingHorizontal: 16,
-								paddingVertical: 12,
-								borderRadius: 24,
-								borderWidth: 1,
-								borderColor: theme.border,
-								fontSize: 16,
-							}}
-							multiline
-							maxLength={1000}
-							onSubmitEditing={handleSendMessage}
-							returnKeyType="send"
-							editable={!isLoading && !showSetupMessage}
-						/>
-
-						{/* Send Button */}
-						<TouchableOpacity
-							onPress={() => {
-								console.log('[AI Screen] Send button pressed');
-								console.log('[AI Screen] inputText.trim():', !!inputText.trim());
-								console.log('[AI Screen] isLoading:', isLoading);
-								console.log('[AI Screen] showSetupMessage:', showSetupMessage);
-								console.log('[AI Screen] Button disabled:', !inputText.trim() || isLoading || showSetupMessage);
-								handleSendMessage();
-							}}
-							disabled={!inputText.trim() || isLoading || showSetupMessage}
-							style={{
-								padding: 12,
-								borderRadius: 24,
-								backgroundColor: (inputText.trim() && !isLoading && !showSetupMessage) ? theme.primary : theme.muted
-							}}
-						>
-							<Send 
-								size={20} 
-								color={(inputText.trim() && !isLoading && !showSetupMessage) ? '#FFFFFF' : theme.mutedForeground} 
-							/>
-						</TouchableOpacity>
 					</View>
-
-					{/* Connection Status */}
-					{conversation && (
-						<Text 
-							style={{ 
-								color: theme.mutedForeground, 
-								fontSize: 12, 
-								textAlign: 'center', 
-								marginTop: 8,
-							}}
-						>
-							Connected • Conversation ID: {conversation.id.slice(0, 8)}...
-						</Text>
-					)}
 				</View>
-			</View>
+			</KeyboardAvoidingView>
 		</SafeAreaView>
 	);
 }

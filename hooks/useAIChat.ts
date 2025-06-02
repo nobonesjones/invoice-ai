@@ -82,9 +82,16 @@ export function useAIChat(): UseAIChatReturn {
       setIsLoading(true);
       setError(null);
 
-      // Clear conversation
+      // If we have an active conversation, clear its messages from the database
+      if (conversation?.id) {
+        await ChatService.clearConversationMessages(conversation.id);
+      }
+
+      // Clear UI state
       setConversation(null);
       setMessages([]);
+
+      console.log('[useAIChat] Conversation cleared successfully');
 
     } catch (err) {
       console.error('Error clearing conversation:', err);
@@ -94,7 +101,7 @@ export function useAIChat(): UseAIChatReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, conversation?.id]);
 
   // Load messages on mount and when user changes
   useEffect(() => {

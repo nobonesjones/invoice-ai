@@ -62,6 +62,8 @@ export class ChatService {
   }
 
   static async getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
+    console.log('[ChatService] Getting messages for conversation:', conversationId);
+    
     const { data: messages, error } = await supabase
       .from('chat_messages')
       .select('*')
@@ -69,11 +71,18 @@ export class ChatService {
       .order('created_at', { ascending: true });
 
     if (error) {
+      console.error('[ChatService] Error fetching messages:', error);
       throw new Error(`Failed to fetch messages: ${error.message}`);
     }
 
     // Filter out function call messages from user display - they're internal only
-    return (messages || []).filter(msg => msg.role !== 'function');
+    const filteredMessages = (messages || []).filter(msg => msg.role !== 'function');
+    
+    console.log('[ChatService] Retrieved messages from DB:', messages?.length || 0);
+    console.log('[ChatService] After filtering:', filteredMessages.length);
+    console.log('[ChatService] Message roles:', filteredMessages.map(m => m.role));
+
+    return filteredMessages;
   }
 
   static async saveMessage(
@@ -111,12 +120,17 @@ export class ChatService {
   }
 
   private static convertChatMessagesToOpenAI(messages: ChatMessage[]): OpenAIMessage[] {
-    return messages
+    const converted = messages
       .filter(msg => ['user', 'assistant', 'system'].includes(msg.role))
       .map(msg => ({
         role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.content
       }));
+
+    console.log('[ChatService] Converting messages to OpenAI format:');
+    console.log(`[ChatService] Input: ${messages.length} messages, Output: ${converted.length} messages`);
+    
+    return converted;
   }
 
   private static async getUserName(userId: string): Promise<string | undefined> {
@@ -158,6 +172,10 @@ export class ChatService {
       const conversationHistory = this.convertChatMessagesToOpenAI(
         allPreviousMessages.slice(0, -1) // Exclude the just-saved user message
       );
+
+      console.log('[ChatService] Conversation history length:', conversationHistory.length);
+      console.log('[ChatService] Previous messages:', allPreviousMessages.map(m => ({ role: m.role, content: m.content.substring(0, 100) + '...' })));
+      console.log('[ChatService] Converted history for OpenAI:', conversationHistory.map(m => ({ role: m.role, content: m.content.substring(0, 100) + '...' })));
 
       // Get user name for personalization
       const userName = await this.getUserName(userId);
@@ -290,5 +308,47 @@ export class ChatService {
     }
 
     return conversations || [];
+  }
+
+  static async clearConversationMessages(conversationId: string): Promise<void> {
+    const { error } = await supabase
+      .from('chat_messages')
+      .delete()
+      .eq('conversation_id', conversationId);
+
+    if (error) {
+      throw new Error(`Failed to clear conversation messages: ${error.message}`);
+    }
+
+    // Update conversation title to indicate it's been cleared
+    await supabase
+      .from('chat_conversations')
+      .update({ 
+        title: 'New Chat', 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', conversationId);
+  }
+
+  static async deleteConversation(conversationId: string): Promise<void> {
+    // First delete all messages
+    const { error: messagesError } = await supabase
+      .from('chat_messages')
+      .delete()
+      .eq('conversation_id', conversationId);
+
+    if (messagesError) {
+      throw new Error(`Failed to delete conversation messages: ${messagesError.message}`);
+    }
+
+    // Then delete the conversation
+    const { error: conversationError } = await supabase
+      .from('chat_conversations')
+      .delete()
+      .eq('id', conversationId);
+
+    if (conversationError) {
+      throw new Error(`Failed to delete conversation: ${conversationError.message}`);
+    }
   }
 } 

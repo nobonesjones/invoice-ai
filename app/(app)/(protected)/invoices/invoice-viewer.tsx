@@ -45,7 +45,7 @@ import type { Database, Json, Tables } from '../../../../types/database.types';
 import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import Share from 'react-native-share';
+import * as Sharing from 'expo-sharing';
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -105,7 +105,10 @@ interface PdfInvoiceData {
 const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: BusinessSettingsRow, paymentOptionsData: any = null): PdfInvoiceData => {
   const htmlInvoiceData: InvoiceForTemplate & { payment_terms?: string } = {
     ...invoiceData, 
-    payment_terms: 'Payment due upon receipt.', 
+    payment_terms: 'Payment due upon receipt.',
+    // Ensure required fields are never undefined
+    due_date: invoiceData.due_date ?? null,
+    custom_headline: invoiceData.custom_headline ?? null,
   };
 
   return {
@@ -315,10 +318,7 @@ function InvoiceViewerScreen() {
       // Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
-      await Share.open({ 
-        url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, 
-        title: 'Share Invoice PDF' 
-      });
+      await Sharing.shareAsync(Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath || '', { mimeType: 'application/pdf', dialogTitle: 'Share Invoice PDF' });
 
       Alert.alert('PDF Sent', 'Invoice PDF has been generated and shared.');
       handleCloseSendModal(); // Close the send modal
@@ -465,6 +465,9 @@ function InvoiceViewerScreen() {
         paid_amount: invoiceData.paid_amount,
         payment_date: invoiceData.payment_date,
         payment_notes: invoiceData.payment_notes,
+        // Ensure due_date is never undefined
+        due_date: invoiceData.due_date ?? null,
+        custom_headline: invoiceData.custom_headline ?? null,
       };
       
       console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));

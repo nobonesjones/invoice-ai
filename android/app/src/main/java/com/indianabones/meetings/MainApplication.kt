@@ -1,4 +1,4 @@
-package com.supastarter
+package com.indianabones.meetings
 
 import android.app.Application
 import android.content.res.Configuration

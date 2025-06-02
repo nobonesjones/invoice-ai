@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
-import Share from 'react-native-share';
+import * as Sharing from 'expo-sharing';
 import { generateInvoiceTemplateOneHtml, PdfInvoiceData } from '../app/utils/generateInvoiceTemplateOneHtml'; // Updated function and file name
 import { InvoiceForTemplate, BusinessSettingsRow } from '../app/(app)/(protected)/invoices/InvoiceTemplateOne'; // Adjusted path
 
@@ -63,15 +63,19 @@ const useInvoiceSender = ({ invoice, businessSettings }: UseInvoiceSenderProps):
 
       const pdf = await RNHTMLtoPDF.convert(options);
 
-      const shareOptions = {
-        title: `Invoice ${invoice.invoice_number}`,
-        message: `Here is your invoice: ${invoice.invoice_number}`,
-        url: Platform.OS === 'android' ? `file://${pdf.filePath}` : pdf.filePath, // For Android, prefix with file://
-        type: 'application/pdf',
-        subject: `Invoice ${invoice.invoice_number}`,
-      };
+      // Check if sharing is available
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Error', 'Sharing is not available on this device');
+        return;
+      }
 
-      await Share.open(shareOptions);
+      // Share the PDF using Expo Sharing
+      await Sharing.shareAsync(pdf.filePath, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Invoice ${invoice.invoice_number}`,
+        UTI: 'com.adobe.pdf',
+      });
+
     } catch (e: any) {
       console.error('Failed to send PDF:', e);
       Alert.alert('Error', `Failed to generate or share PDF. ${e.message || ''}`);

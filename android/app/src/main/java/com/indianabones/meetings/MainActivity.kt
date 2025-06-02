@@ -1,4 +1,4 @@
-package com.supastarter
+package com.indianabones.meetings
 
 import android.os.Build
 import android.os.Bundle
