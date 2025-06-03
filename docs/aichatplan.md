@@ -21,40 +21,58 @@
 
 ### Goals
 Build an AI-powered chat interface for invoice management with:
-- **Conversational AI** with persistent memory
+- **Autonomous AI Agent** with persistent memory and reasoning capabilities
 - **Voice input/output** for hands-free operation
 - **Function calling** for invoice operations (create, edit, search, pay)
 - **Rich document display** showing invoices directly in chat
 - **Contextual awareness** of user's business patterns and preferences
+- **Multi-step reasoning** for complex business workflows
 
 ### Technology Stack
 - **Frontend**: React Native with TypeScript
-- **AI Model**: OpenAI GPT-4 with function calling
+- **AI Model**: OpenAI Assistants API (GPT-4) with built-in memory and threading
 - **Voice**: React Native Voice + OpenAI Whisper
-- **Memory**: Supabase PostgreSQL + Vector embeddings
-- **Functions**: Supabase Edge Functions
+- **Memory**: OpenAI Threads + Supabase PostgreSQL for business data
+- **Functions**: OpenAI Assistant Tools + Supabase Edge Functions
 - **Real-time**: Supabase Realtime subscriptions
+
+### Key Architecture Decision: OpenAI Assistants API
+
+**Why Assistants API over Chat Completions:**
+- ✅ **Built-in Memory**: Automatic conversation threading eliminates manual context management
+- ✅ **Better Reasoning**: Enhanced multi-step planning and autonomous decision making
+- ✅ **Persistent State**: Conversations maintain context across sessions automatically
+- ✅ **Tool Integration**: Native tool calling with better error handling and retry logic
+- ✅ **Thread Management**: Seamless conversation persistence without token management
+- ✅ **Future-Ready**: Positioned for OpenAI's agent ecosystem evolution
+
+**Migration Benefits:**
+- Eliminate manual 15-message context window management
+- Reduce complexity in `chatService.ts` and `openaiService.ts`
+- Enable true conversational memory across sessions
+- Support for complex multi-step workflows (e.g., "Create 5 invoices for my regular clients")
+- Better handling of incomplete information gathering
 
 ---
 
 ## System Architecture
 
-### High-Level Flow
+### High-Level Flow (Updated for Assistants API)
 ```
 User Input (Voice/Text) 
     ↓
 Voice Processing (RN Voice → Whisper)
     ↓
-Context Loading (Memory + Business Data)
+Assistant Thread Loading (OpenAI persistent context)
     ↓
-AI Processing (GPT-4 + Function Calls)
+AI Processing (Assistant API + Native Tool Calls)
     ↓
-Response Generation (Text + Documents)
+Response Generation (Text + Tool Results)
     ↓
 UI Display (Chat Messages + Invoice Cards)
 ```
 
-### Component Structure
+### Component Structure (Updated)
 ```
 /app/chat/
 ├── ChatScreen.tsx           # Main chat interface
@@ -66,48 +84,125 @@ UI Display (Chat Messages + Invoice Cards)
 │   │   ├── ClientCard.tsx   # Client display in chat
 │   │   └── PaymentCard.tsx  # Payment display in chat
 ├── hooks/
-│   ├── useAIChat.tsx        # Main AI integration
+│   ├── useAIAssistant.tsx   # OpenAI Assistants API integration
 │   ├── useVoiceInput.tsx    # Voice recording logic
-│   ├── useChatMemory.tsx    # Memory management
-│   └── useFunctionCalls.tsx # Function execution
+│   ├── useAssistantThread.tsx # Thread management
+│   └── useAssistantTools.tsx  # Tool execution
 └── services/
-    ├── aiService.ts         # OpenAI API integration
+    ├── assistantService.ts  # OpenAI Assistants API integration
     ├── voiceService.ts      # Whisper API integration
-    ├── memoryService.ts     # Memory management
-    └── functionService.ts   # Function implementations
+    ├── threadService.ts     # Thread management
+    └── toolService.ts       # Assistant tool implementations
+```
+
+### New Architecture Benefits
+
+#### 1. Simplified Memory Management
+**Before (Chat Completions):**
+```typescript
+// Manual context management
+const conversationHistory = this.convertChatMessagesToOpenAI(
+  allPreviousMessages.slice(0, -1) // Exclude just-saved message
+);
+// Limited to 15 messages due to token constraints
+...conversationHistory.slice(-15)
+```
+
+**After (Assistants API):**
+```typescript
+// Automatic thread management
+const thread = await this.getOrCreateThread(userId);
+await this.addMessageToThread(thread.id, userMessage);
+const run = await this.createRun(thread.id, assistantId);
+// OpenAI handles all context automatically
+```
+
+#### 2. Enhanced Tool Calling
+**Before:**
+```typescript
+// Manual function result handling
+if (aiResult.functionCall) {
+  functionResult = await InvoiceFunctionService.executeFunction(
+    aiResult.functionCall.name,
+    aiResult.functionCall.arguments,
+    userId
+  );
+  // Manual integration back into conversation
+}
+```
+
+**After:**
+```typescript
+// Native Assistant tool calling
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "create_invoice",
+      description: "Create a new invoice",
+      parameters: { /* schema */ }
+    }
+  }
+];
+// OpenAI handles tool execution flow automatically
+```
+
+#### 3. Persistent Conversation State
+**Before:**
+```typescript
+// Manual conversation recreation
+const conversation = await this.getOrCreateConversation(userId);
+const messages = await this.getConversationMessages(conversation.id);
+// Lost context between sessions
+```
+
+**After:**
+```typescript
+// Persistent threads across sessions
+const thread = await this.getOrCreateThread(userId);
+// Full conversation history maintained by OpenAI
+// Context persists across app sessions automatically
 ```
 
 ---
 
-## Memory System
+## Memory System (Updated for Assistants API)
 
-### Memory Types
+### Hybrid Memory Architecture
 
-#### 1. Conversational Memory (Short-term)
-- **Purpose**: Track current conversation context
-- **Duration**: Current session only
-- **Storage**: In-memory state + database backup
-- **Max Size**: 10 messages (4K tokens)
+#### 1. Conversational Memory (OpenAI Threads)
+- **Purpose**: Track conversation context and reasoning flow
+- **Duration**: Persistent across sessions until explicitly deleted
+- **Storage**: OpenAI Threads API (native Assistant memory)
+- **Capacity**: No token limit management needed
+- **Benefits**: 
+  - Automatic context management
+  - Built-in reasoning chain preservation
+  - Cross-session conversation continuity
+  - No manual token counting
 
-#### 2. Session Memory (Medium-term)  
-- **Purpose**: Remember context across conversations in same day
-- **Duration**: 24 hours or logout
-- **Storage**: Database with TTL
-- **Examples**: "Working on Johnson project today"
+#### 2. Business Data Memory (Supabase)  
+- **Purpose**: Store invoice, client, and business operation data
+- **Duration**: Permanent business records
+- **Storage**: Supabase PostgreSQL with RLS
+- **Access**: Via Assistant tools for real-time business operations
+- **Examples**: "Create invoice", "Search clients", "Mark paid"
 
-#### 3. Persistent Memory (Long-term)
-- **Purpose**: User preferences, patterns, business context
-- **Duration**: Permanent until deleted
-- **Storage**: Database + vector embeddings
-- **Examples**: Default rates, client preferences, work habits
+#### 3. User Patterns & Preferences (Supabase + Vector)
+- **Purpose**: Learn user habits, preferences, business rules
+- **Duration**: Long-term learning (months/years)
+- **Storage**: Database + vector embeddings for similarity search
+- **Integration**: Injected into Assistant system prompt and tool parameters
+- **Examples**: Default rates, client preferences, work habits, business rules
 
-### Database Schema
+### Updated Database Schema (Simplified)
 
 ```sql
--- Conversations
-CREATE TABLE chat_conversations (
+-- Assistant Threads mapping (lightweight)
+CREATE TABLE chat_threads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL,
+  openai_thread_id TEXT UNIQUE NOT NULL,
   title TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
@@ -115,104 +210,116 @@ CREATE TABLE chat_conversations (
   metadata JSONB DEFAULT '{}'
 );
 
--- Messages
-CREATE TABLE chat_messages (
+-- Simplified message tracking (for UI display only)
+CREATE TABLE chat_message_display (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID REFERENCES chat_conversations(id) NOT NULL,
-  role TEXT CHECK (role IN ('user', 'assistant', 'system', 'function')) NOT NULL,
+  thread_id UUID REFERENCES chat_threads(id) NOT NULL,
+  openai_message_id TEXT,
+  role TEXT CHECK (role IN ('user', 'assistant')) NOT NULL,
   content TEXT,
-  message_type TEXT CHECK (message_type IN ('text', 'voice', 'function_call', 'function_result', 'document')) DEFAULT 'text',
-  function_name TEXT,
-  function_parameters JSONB,
-  function_result JSONB,
   attachments JSONB DEFAULT '[]',
-  created_at TIMESTAMP DEFAULT NOW(),
-  tokens_used INTEGER DEFAULT 0
-);
-
--- Memory Facts
-CREATE TABLE chat_memory_facts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) NOT NULL,
-  fact_type TEXT CHECK (fact_type IN ('preference', 'pattern', 'context', 'client_info', 'business_rule')) NOT NULL,
-  category TEXT, -- 'pricing', 'scheduling', 'communication', 'workflow'
-  key TEXT NOT NULL,
-  value TEXT NOT NULL,
-  confidence_score FLOAT CHECK (confidence_score >= 0 AND confidence_score <= 1) DEFAULT 0.5,
-  source_conversation_id UUID REFERENCES chat_conversations(id),
-  source_type TEXT DEFAULT 'conversation', -- 'conversation', 'pattern_analysis', 'user_input'
-  created_at TIMESTAMP DEFAULT NOW(),
-  last_used_at TIMESTAMP DEFAULT NOW(),
-  use_count INTEGER DEFAULT 1,
-  is_active BOOLEAN DEFAULT true
-);
-
--- Vector Embeddings
-CREATE TABLE chat_memory_embeddings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) NOT NULL,
-  content TEXT NOT NULL,
-  embedding VECTOR(1536), -- OpenAI ada-002 embedding size
-  metadata JSONB DEFAULT '{}',
-  source_type TEXT DEFAULT 'conversation',
-  source_id UUID,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Create vector similarity search index
-CREATE INDEX chat_memory_embeddings_vector_idx ON chat_memory_embeddings 
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Business patterns and preferences (enhanced)
+CREATE TABLE user_business_patterns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  pattern_type TEXT CHECK (pattern_type IN ('pricing', 'scheduling', 'communication', 'workflow', 'client_preference')) NOT NULL,
+  category TEXT, -- 'rates', 'terms', 'follow_ups', 'templates'
+  key TEXT NOT NULL,
+  value JSONB NOT NULL,
+  confidence_score FLOAT CHECK (confidence_score >= 0 AND confidence_score <= 1) DEFAULT 0.5,
+  learned_from TEXT DEFAULT 'conversation', -- 'conversation', 'pattern_analysis', 'user_input'
+  created_at TIMESTAMP DEFAULT NOW(),
+  last_reinforced_at TIMESTAMP DEFAULT NOW(),
+  reinforcement_count INTEGER DEFAULT 1,
+  is_active BOOLEAN DEFAULT true
+);
+
+-- Vector embeddings for pattern matching
+CREATE TABLE business_pattern_embeddings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  pattern_id UUID REFERENCES user_business_patterns(id),
+  content TEXT NOT NULL,
+  embedding VECTOR(1536),
+  created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
-### Memory Management Functions
+### Assistant System Prompt Integration
 
 ```typescript
-// Memory extraction after conversation
-const extractMemoryFacts = async (conversationId: string, messages: ChatMessage[]) => {
-  const extractionPrompt = `
-    Analyze this conversation and extract learnable facts about the user's business:
-    
-    Categories to extract:
-    1. Pricing patterns (rates, project values, discounts)
-    2. Client relationships (communication preferences, payment patterns)
-    3. Work habits (scheduling, invoicing frequency, follow-ups)
-    4. Business rules (terms, policies, workflows)
-    
-    For each fact, provide:
-    - Type: preference/pattern/context/client_info/business_rule
-    - Category: pricing/scheduling/communication/workflow
-    - Key: descriptive identifier
-    - Value: the actual fact/preference
-    - Confidence: 0.0-1.0 based on how certain this fact is
-    
-    Messages: ${JSON.stringify(messages)}
-  `;
+// Enhanced system prompt with learned patterns
+const buildSystemPromptWithPatterns = async (userId: string): Promise<string> => {
+  const patterns = await getUserBusinessPatterns(userId);
   
-  // Call OpenAI to extract facts
-  // Save to database with proper categorization
+  const basePrompt = `You are an AI assistant for invoice management...`;
+  
+  const patternsContext = patterns.map(p => {
+    switch (p.pattern_type) {
+      case 'pricing':
+        return `The user typically charges ${p.value.rate} for ${p.key} work.`;
+      case 'scheduling':
+        return `The user prefers ${p.value.preference} for ${p.key}.`;
+      case 'communication':
+        return `For ${p.key}, the user usually ${p.value.approach}.`;
+      case 'workflow':
+        return `The user's workflow for ${p.key} is: ${p.value.steps}.`;
+      case 'client_preference':
+        return `For client ${p.key}: ${p.value.notes}`;
+    }
+  }).join('\n');
+  
+  return `${basePrompt}\n\nLEARNED USER PATTERNS:\n${patternsContext}`;
 };
+```
 
-// Context retrieval for new messages
-const buildContextForMessage = async (userId: string, message: string): Promise<ChatContext> => {
-  // 1. Get recent conversation (last 10 messages)
-  const recentHistory = await getRecentMessages(userId, 10);
+### Memory Management Flow
+
+```typescript
+// Simplified memory management with Assistants API
+export class AssistantMemoryService {
+  // 1. Get or create persistent thread
+  async getOrCreateThread(userId: string): Promise<string> {
+    let thread = await this.getActiveThread(userId);
+    
+    if (!thread) {
+      // Create new OpenAI thread
+      const openaiThread = await openai.beta.threads.create({
+        metadata: { userId }
+      });
+      
+      // Store thread mapping
+      thread = await this.saveThreadMapping(userId, openaiThread.id);
+    }
+    
+    return thread.openai_thread_id;
+  }
   
-  // 2. Search relevant memory using embeddings
-  const embedding = await createEmbedding(message);
-  const relevantMemory = await searchMemoryByEmbedding(userId, embedding, 5);
+  // 2. Add message with automatic context
+  async addMessageToThread(threadId: string, message: string, userId: string): Promise<void> {
+    // Inject business patterns into message context
+    const patterns = await this.getRelevantPatterns(userId, message);
+    const enhancedMessage = this.enhanceMessageWithPatterns(message, patterns);
+    
+    await openai.beta.threads.messages.create(threadId, {
+      role: "user",
+      content: enhancedMessage
+    });
+  }
   
-  // 3. Get business context (recent invoices, clients)
-  const businessContext = await getRelevantBusinessData(userId, message);
-  
-  // 4. Apply token budget (max 4000 tokens)
-  const context = optimizeContextForTokens({
-    recentHistory,
-    relevantMemory,
-    businessContext
-  }, 4000);
-  
-  return context;
-};
+  // 3. Learn patterns from assistant responses
+  async extractPatternsFromRun(userId: string, threadId: string, runId: string): Promise<void> {
+    const run = await openai.beta.threads.runs.retrieve(threadId, runId);
+    const messages = await openai.beta.threads.messages.list(threadId);
+    
+    // Analyze for new patterns
+    const newPatterns = await this.analyzeForPatterns(messages.data, userId);
+    await this.saveBusinessPatterns(userId, newPatterns);
+  }
+}
 ```
 
 ---
@@ -828,215 +935,229 @@ const ClientCard: React.FC<ClientCardProps> = ({ client, onAction }) => {
 
 ---
 
-## Implementation Phases
+## Implementation Phases (Updated for Assistants API Migration)
 
-### Phase 1: Foundation (Weeks 1-2)
-**Goal**: Basic text-based AI chat with core functionality
+### Phase 0: Assistants API Migration (Week 1)
+**Goal**: Migrate from Chat Completions to Assistants API for better memory and reasoning
 
-#### Week 1: Core Chat Infrastructure
-- [ ] Set up chat database tables
-- [ ] Create basic ChatScreen component
-- [ ] Implement ChatMessage components
-- [ ] Set up OpenAI API integration
-- [ ] Create basic function calling system
+#### Migration Steps:
+- [ ] Create new `assistantService.ts` with Assistants API integration
+- [ ] Implement thread management system
+- [ ] Migrate existing functions to Assistant tools format
+- [ ] Update `chatService.ts` to use Assistants API
+- [ ] Test conversation persistence across sessions
+- [ ] Migrate existing conversations to thread format
 
-#### Week 2: Basic Function Calls
-- [ ] Implement create_invoice function
-- [ ] Implement search_invoices function
-- [ ] Implement mark_invoice_paid function
-- [ ] Add basic error handling
-- [ ] Create simple invoice display in chat
-
-**Deliverable**: Working text chat that can create, search, and mark invoices as paid
+**Success Criteria**: 
+- All existing functionality works with Assistants API
+- Conversations persist across app sessions
+- Tool calling works seamlessly
+- No token limit management needed
 
 ---
 
-### Phase 2: Memory System (Weeks 3-4)
-**Goal**: Add conversational memory and context awareness
+### Phase 1: Enhanced Memory & Reasoning (Week 2)
+**Goal**: Leverage Assistants API capabilities for better autonomy
 
-#### Week 3: Database & Memory Infrastructure
-- [ ] Set up memory tables (facts, embeddings, conversations)
-- [ ] Implement memory extraction system
-- [ ] Create embedding generation pipeline
-- [ ] Build context retrieval system
+#### Week 2: Memory Enhancement
+- [ ] Set up assistant with enhanced system prompt
+- [ ] Implement business pattern learning system
+- [ ] Create user preference extraction
+- [ ] Add pattern-based suggestions
+- [ ] Test multi-step reasoning workflows
 
-#### Week 4: Memory Integration
-- [ ] Integrate memory into chat responses
-- [ ] Add fact learning from conversations
-- [ ] Implement memory-based suggestions
-- [ ] Create memory management UI
-
-**Deliverable**: AI that remembers user preferences and business patterns
+**Deliverable**: AI that truly learns user patterns and handles complex workflows autonomously
 
 ---
 
-### Phase 3: Voice Integration (Weeks 5-6)
-**Goal**: Add voice input/output capabilities
+### Phase 2: Advanced Tool Integration (Week 3)
+**Goal**: Enhanced function calling with better error handling
 
-#### Week 5: Voice Input
-- [ ] Set up React Native Voice
-- [ ] Create VoiceInput component
-- [ ] Integrate OpenAI Whisper API
-- [ ] Add voice error handling
+#### Week 3: Tool Enhancement
+- [ ] Implement all invoice management tools in Assistant format
+- [ ] Add advanced client management tools
+- [ ] Create analytics and reporting tools
+- [ ] Add batch operation tools (e.g., "Create invoices for all my regular clients")
+- [ ] Implement tool error handling and retry logic
 
-#### Week 6: Voice Polish & Testing
-- [ ] Add visual feedback for voice recording
-- [ ] Implement voice quality optimization
-- [ ] Add offline voice handling
-- [ ] Test voice in various conditions
-
-**Deliverable**: Hands-free voice interaction with AI chat
+**Deliverable**: Comprehensive tool suite with robust error handling
 
 ---
 
-### Phase 4: Rich Documents (Weeks 7-8)
-**Goal**: Enhanced document display and interactions
+### Phase 3: Voice Integration (Week 4)
+**Goal**: Add voice capabilities to the enhanced Assistant
 
-#### Week 7: Document Cards
-- [ ] Create InvoiceCard component
-- [ ] Create ClientCard component
-- [ ] Add document actions (view, edit, etc.)
-- [ ] Implement card interactions
+#### Week 4: Voice Polish
+- [ ] Integrate voice input with Assistants API
+- [ ] Test voice workflows with memory persistence
+- [ ] Add voice feedback for complex workflows
+- [ ] Optimize voice-to-tool workflows
 
-#### Week 8: Advanced Documents
-- [ ] Add PaymentCard component
-- [ ] Create ReportCard component
-- [ ] Add batch actions
-- [ ] Implement document export
-
-**Deliverable**: Rich visual documents embedded in chat
+**Deliverable**: Voice-enabled autonomous AI assistant
 
 ---
 
-### Phase 5: Advanced Features (Weeks 9-10)
-**Goal**: Polish and advanced functionality
+### Phase 4: Rich Document Enhancement (Week 5)
+**Goal**: Enhanced document display leveraging better AI reasoning
 
-#### Week 9: Analytics & Insights
-- [ ] Add revenue analytics functions
-- [ ] Create insight generation
-- [ ] Implement proactive suggestions
-- [ ] Add business intelligence features
+#### Week 5: Smart Documents
+- [ ] Enhance invoice cards with AI-generated insights
+- [ ] Add smart document actions based on conversation context
+- [ ] Implement batch document operations
+- [ ] Create intelligent document recommendations
 
-#### Week 10: Polish & Optimization
-- [ ] Performance optimization
-- [ ] Advanced error handling
-- [ ] Security hardening
-- [ ] User experience polish
-
-**Deliverable**: Production-ready AI chat system
+**Deliverable**: Context-aware document interface
 
 ---
 
-## Technical Implementation Details
+### Phase 5: Advanced Business Intelligence (Week 6)
+**Goal**: Leverage persistent memory for business insights
 
-### API Rate Limiting
+#### Week 6: Business Intelligence
+- [ ] Add pattern-based business insights
+- [ ] Create proactive recommendations
+- [ ] Implement trend analysis
+- [ ] Add automated workflow suggestions
+
+**Deliverable**: AI that proactively helps with business optimization
+
+---
+
+## Migration Strategy: Chat Completions → Assistants API
+
+### 1. Service Layer Migration
+
+#### Current Architecture:
 ```typescript
-// services/rateLimiter.ts
-export class RateLimiter {
-  private limits = {
-    chat_messages: { count: 100, window: 3600 }, // 100 per hour
-    voice_transcriptions: { count: 50, window: 3600 }, // 50 per hour
-    function_calls: { count: 200, window: 3600 } // 200 per hour
-  };
-
-  async checkLimit(userId: string, action: string): Promise<boolean> {
-    const key = `ratelimit:${userId}:${action}`;
-    const current = await redis.get(key) || 0;
-    
-    if (current >= this.limits[action].count) {
-      throw new Error(`Rate limit exceeded for ${action}`);
-    }
-    
-    await redis.incr(key);
-    await redis.expire(key, this.limits[action].window);
-    return true;
+// openaiService.ts - Chat Completions
+export class OpenAIService {
+  static async sendMessage(messages: ChatMessage[], functions?: any[]) {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: messages,
+      functions: functions
+    });
+    return response;
   }
 }
 ```
 
-### Context Window Management
+#### New Architecture:
 ```typescript
-// services/contextManager.ts
-export class ContextManager {
-  private readonly MAX_TOKENS = 4000;
+// assistantService.ts - Assistants API
+export class AssistantService {
+  private static assistantId: string;
   
-  async buildContext(userId: string, message: string): Promise<ChatContext> {
-    const components = {
-      systemPrompt: await this.getSystemPrompt(userId),
-      recentHistory: await this.getRecentHistory(userId),
-      relevantMemory: await this.getRelevantMemory(userId, message),
-      businessContext: await this.getBusinessContext(userId, message)
-    };
-    
-    // Calculate tokens for each component
-    const tokenCounts = {
-      systemPrompt: this.countTokens(components.systemPrompt),
-      recentHistory: this.countTokens(components.recentHistory),
-      relevantMemory: this.countTokens(components.relevantMemory),
-      businessContext: this.countTokens(components.businessContext)
-    };
-    
-    // Optimize for token budget
-    return this.optimizeContext(components, tokenCounts);
+  static async initializeAssistant() {
+    this.assistantId = await this.createOrGetAssistant();
   }
   
-  private optimizeContext(components: any, tokenCounts: any): ChatContext {
-    let totalTokens = Object.values(tokenCounts).reduce((a, b) => a + b, 0);
+  static async sendMessage(userId: string, message: string) {
+    const threadId = await this.getOrCreateThread(userId);
     
-    // If over budget, trim components by priority
-    if (totalTokens > this.MAX_TOKENS) {
-      // Priority: System > Memory > Business > History
-      components.recentHistory = this.trimHistory(
-        components.recentHistory,
-        this.MAX_TOKENS - tokenCounts.systemPrompt - tokenCounts.relevantMemory - tokenCounts.businessContext
-      );
-    }
+    await openai.beta.threads.messages.create(threadId, {
+      role: "user",
+      content: message
+    });
     
-    return components;
+    const run = await openai.beta.threads.runs.create(threadId, {
+      assistant_id: this.assistantId
+    });
+    
+    return await this.waitForCompletion(threadId, run.id);
   }
 }
 ```
 
-### Security Implementation
+### 2. Database Migration
+
+#### Update Existing Tables:
+```sql
+-- Add thread mapping for existing conversations
+ALTER TABLE chat_conversations ADD COLUMN openai_thread_id TEXT;
+
+-- Migration script to convert existing conversations
+CREATE OR REPLACE FUNCTION migrate_conversations_to_threads()
+RETURNS void AS $$
+DECLARE
+  conv RECORD;
+  thread_id TEXT;
+BEGIN
+  FOR conv IN SELECT * FROM chat_conversations WHERE openai_thread_id IS NULL LOOP
+    -- Create OpenAI thread for each existing conversation
+    -- This would be done via API calls in the migration script
+    -- UPDATE chat_conversations SET openai_thread_id = ? WHERE id = conv.id;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### 3. Gradual Migration Approach
+
+#### Phase A: Parallel Systems
 ```typescript
-// middleware/chatSecurity.ts
-export class ChatSecurity {
-  static validateMessage(message: string): ValidationResult {
-    // Check for SQL injection attempts
-    const sqlPatterns = [/union\s+select/i, /drop\s+table/i, /delete\s+from/i];
-    if (sqlPatterns.some(pattern => pattern.test(message))) {
-      return { valid: false, reason: 'Potential SQL injection detected' };
-    }
+// chatService.ts - During migration
+export class ChatService {
+  static async processMessage(message: string, userId: string) {
+    const useAssistants = await this.shouldUseAssistants(userId);
     
-    // Check for prompt injection
-    const promptPatterns = [/ignore\s+previous/i, /system\s*:/i, /assistant\s*:/i];
-    if (promptPatterns.some(pattern => pattern.test(message))) {
-      return { valid: false, reason: 'Potential prompt injection detected' };
+    if (useAssistants) {
+      return await AssistantService.sendMessage(userId, message);
+    } else {
+      return await OpenAIService.sendMessage(/* existing logic */);
     }
-    
-    // Check message length
-    if (message.length > 10000) {
-      return { valid: false, reason: 'Message too long' };
-    }
-    
-    return { valid: true };
   }
   
-  static async validateFunctionCall(userId: string, functionName: string, parameters: any): Promise<boolean> {
-    // Validate user has access to referenced resources
-    if (parameters.invoice_id) {
-      const hasAccess = await this.validateInvoiceAccess(userId, parameters.invoice_id);
-      if (!hasAccess) throw new Error('Access denied to invoice');
-    }
-    
-    if (parameters.client_id) {
-      const hasAccess = await this.validateClientAccess(userId, parameters.client_id);
-      if (!hasAccess) throw new Error('Access denied to client');
-    }
-    
-    return true;
+  private static async shouldUseAssistants(userId: string): Promise<boolean> {
+    // Feature flag or gradual rollout logic
+    const userConfig = await this.getUserConfig(userId);
+    return userConfig.use_assistants_api || false;
   }
 }
+```
+
+#### Phase B: Full Migration
+```typescript
+// chatService.ts - After migration
+export class ChatService {
+  static async processMessage(message: string, userId: string) {
+    return await AssistantService.sendMessage(userId, message);
+  }
+}
+```
+
+### 4. Testing Strategy for Migration
+
+#### Migration Tests:
+```typescript
+describe('Assistants API Migration', () => {
+  test('should maintain conversation context across sessions', async () => {
+    const userId = 'test-user';
+    
+    // Send first message
+    await AssistantService.sendMessage(userId, 'My rate is $75/hour');
+    
+    // Simulate app restart by creating new service instance
+    const newService = new AssistantService();
+    
+    // Send follow-up message
+    const response = await newService.sendMessage(userId, 'Create an invoice for 2 hours of work');
+    
+    // Should remember the rate from previous session
+    expect(response).toContain('$150'); // 2 hours * $75
+  });
+  
+  test('should handle tool calling better than chat completions', async () => {
+    const response = await AssistantService.sendMessage(
+      'test-user', 
+      'Create invoices for all my regular clients'
+    );
+    
+    // Should handle complex multi-step workflow
+    expect(response.tool_calls).toHaveLength(greaterThan(1));
+    expect(response.success).toBe(true);
+  });
+});
 ```
 
 ---
@@ -1198,25 +1319,80 @@ export class ErrorTracking {
 
 ---
 
-## Success Metrics
+## Expected Benefits from Assistants API Migration
 
-### Core Metrics
-- **Response Time**: < 3 seconds for text, < 10 seconds for voice
-- **Function Success Rate**: > 95%
-- **User Satisfaction**: > 4.5/5 rating
-- **Voice Accuracy**: > 90% transcription accuracy
+### 1. **Autonomous Conversation Management**
+**Before**: Manual token counting and context window management
+```typescript
+// Complex manual management
+const conversationHistory = this.convertChatMessagesToOpenAI(
+  allPreviousMessages.slice(0, -1)
+);
+if (conversationHistory.length > 15) {
+  conversationHistory = conversationHistory.slice(-15);
+}
+```
 
-### Business Metrics
-- **Invoice Creation Speed**: 50% faster than manual entry
-- **User Engagement**: Daily active usage > 70%
-- **Error Rate**: < 5% failed operations
-- **Memory Accuracy**: > 85% relevant context retrieval
+**After**: Automatic thread persistence
+```typescript
+// Simple, persistent threads
+const threadId = await this.getOrCreateThread(userId);
+await openai.beta.threads.messages.create(threadId, {
+  role: "user", 
+  content: message
+});
+```
+
+### 2. **Enhanced Multi-Step Reasoning**
+**Current Problem**: AI forgets context mid-conversation
+- User: "Create invoice for Ben"
+- AI: "What's the client's name?" (Already said it was Ben!)
+
+**Expected Solution**: Persistent context enables complex workflows
+- User: "Create invoices for all my regular clients with their usual rates"
+- AI: Remembers all clients, their rates, creates multiple invoices autonomously
+
+### 3. **Cross-Session Memory**
+**Before**: Conversations reset on app restart
+**After**: Conversations continue seamlessly across sessions
+
+### 4. **Better Error Recovery**
+**Before**: Failed function calls break conversation flow
+**After**: Native retry logic and error handling within OpenAI's system
+
+### 5. **Reduced Complexity**
+- Eliminate 200+ lines of context management code
+- No more token counting logic
+- Simplified error handling
+- Automatic conversation persistence
+
+---
+
+## Success Metrics (Updated)
+
+### Core Performance Metrics
+- **Response Time**: < 3 seconds for simple requests, < 10 seconds for complex multi-step workflows
+- **Tool Success Rate**: > 98% (improved from 95% with better error handling)
+- **Cross-Session Memory**: 100% conversation persistence
+- **Multi-Step Workflow Success**: > 90% for complex requests
+
+### Memory & Intelligence Metrics
+- **Context Retention**: Unlimited conversation history (vs. previous 15 message limit)
+- **Pattern Learning**: Recognize user patterns within 3-5 interactions
+- **Autonomous Task Completion**: Handle 80% of requests without asking for clarification
+- **Reasoning Accuracy**: Correctly infer missing information 85% of the time
+
+### User Experience Metrics
+- **Conversation Continuity**: 100% preservation across app sessions
+- **Workflow Completion**: 90% of complex tasks completed in single conversation
+- **Clarification Reduction**: 60% fewer "what did you mean?" responses
+- **User Satisfaction**: > 4.7/5 rating (improved from 4.5/5)
 
 ### Technical Metrics
-- **API Costs**: < $0.10 per user per day
-- **Database Performance**: < 100ms query response
-- **Memory Usage**: < 500MB per user session
-- **Uptime**: > 99.9% availability
+- **Code Complexity**: 50% reduction in service layer complexity
+- **API Cost Optimization**: Better cost efficiency with native tools
+- **Error Rate**: < 2% failed operations (improved from 5%)
+- **Memory Footprint**: 70% reduction in client-side memory usage
 
 ---
 

@@ -150,6 +150,44 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
     }
   },
   {
+    name: "update_client",
+    description: "Update an existing client's details like email, phone, address, or notes. Use this when user wants to edit or update client information.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "Current name of the client to update (used to find the client)"
+        },
+        client_id: {
+          type: "string",
+          description: "Client ID if known (alternative to client_name)"
+        },
+        new_name: {
+          type: "string",
+          description: "New name for the client (optional)"
+        },
+        email: {
+          type: "string",
+          format: "email",
+          description: "New email address (optional)"
+        },
+        phone: {
+          type: "string",
+          description: "New phone number (optional)"
+        },
+        address: {
+          type: "string",
+          description: "New address (optional)"
+        },
+        notes: {
+          type: "string",
+          description: "New notes about the client (optional)"
+        }
+      }
+    }
+  },
+  {
     name: "search_invoices",
     description: "Search for invoices by various criteria like client name, status, date range, or amount",
     parameters: {
@@ -237,6 +275,20 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
           description: "Time period for the summary"
         }
       }
+    }
+  },
+  {
+    name: "get_client_outstanding_amount",
+    description: "Get the total outstanding amount for a specific client (unpaid invoices). Use when user asks 'how much does X owe me' or 'what's X's balance'.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "Name of the client to check outstanding balance for"
+        }
+      },
+      required: ["client_name"]
     }
   },
   {
@@ -342,6 +394,127 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       properties: {},
       required: []
     }
+  },
+  {
+    name: "update_invoice_line_items",
+    description: "Add, update, or remove line items from an existing invoice. Use this when user wants to add items to an invoice, modify existing items, or remove items.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The invoice number to update (e.g., INV-001)"
+        },
+        action: {
+          type: "string",
+          enum: ["add", "update", "remove"],
+          description: "Whether to add new items, update existing items, or remove items"
+        },
+        line_items: {
+          type: "array",
+          description: "Array of line items to add, update, or remove",
+          items: {
+            type: "object",
+            properties: {
+              item_id: {
+                type: "string",
+                description: "ID of existing line item (required for update/remove actions)"
+              },
+              item_name: {
+                type: "string",
+                description: "Name of the item/service"
+              },
+              item_description: {
+                type: "string",
+                description: "Description of the item/service (optional)"
+              },
+              quantity: {
+                type: "number",
+                default: 1,
+                description: "Quantity of the item"
+              },
+              unit_price: {
+                type: "number",
+                description: "Price per unit"
+              }
+            },
+            required: ["item_name", "unit_price"]
+          }
+        }
+      },
+      required: ["invoice_number", "action", "line_items"]
+    }
+  },
+  {
+    name: "get_invoice_details",
+    description: "Get detailed information about a specific invoice including all line items. Use this to check current invoice contents before making updates.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The invoice number to get details for (e.g., INV-001)"
+        }
+      },
+      required: ["invoice_number"]
+    }
+  },
+  {
+    name: "update_invoice_details",
+    description: "Update basic invoice information like invoice number, client details, dates, tax rates, notes, etc. (not for line items - use update_invoice_line_items for that)",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The current invoice number to update"
+        },
+        new_invoice_number: {
+          type: "string",
+          description: "New invoice number/reference to set"
+        },
+        client_name: {
+          type: "string",
+          description: "Update client name"
+        },
+        client_email: {
+          type: "string",
+          description: "Update client email"
+        },
+        invoice_date: {
+          type: "string",
+          format: "date",
+          description: "Update invoice date (YYYY-MM-DD)"
+        },
+        due_date: {
+          type: "string",
+          format: "date",
+          description: "Update due date (YYYY-MM-DD)"
+        },
+        tax_percentage: {
+          type: "number",
+          description: "Update tax percentage"
+        },
+        discount_type: {
+          type: "string",
+          enum: ["percentage", "fixed"],
+          description: "Update discount type"
+        },
+        discount_value: {
+          type: "number",
+          description: "Update discount value"
+        },
+        notes: {
+          type: "string",
+          description: "Update invoice notes"
+        },
+        custom_headline: {
+          type: "string",
+          description: "Update custom headline"
+        }
+      },
+      required: ["invoice_number"]
+    }
   }
 ];
 
@@ -396,6 +569,16 @@ export class InvoiceFunctionService {
           return await this.setRegion(parameters, userId);
         case 'get_currency_options':
           return await this.getCurrencyOptions(parameters, userId);
+        case 'update_invoice_line_items':
+          return await this.updateInvoiceLineItems(parameters, userId);
+        case 'get_invoice_details':
+          return await this.getInvoiceDetails(parameters, userId);
+        case 'update_invoice_details':
+          return await this.updateInvoiceDetails(parameters, userId);
+        case 'update_client':
+          return await this.updateClient(parameters, userId);
+        case 'get_client_outstanding_amount':
+          return await this.getClientOutstandingAmount(parameters, userId);
         default:
           return {
             success: false,
@@ -418,17 +601,24 @@ export class InvoiceFunctionService {
       .from('invoices')
       .select(`
         *,
+        clients!inner(name, email),
         line_items:invoice_line_items(*)
       `)
       .eq('user_id', userId);
 
     // Apply filters
     if (params.client_name) {
-      query = query.ilike('client_name', `%${params.client_name}%`);
+      // Use proper join to search client names
+      query = query.ilike('clients.name', `%${params.client_name}%`);
     }
     
     if (params.status) {
-      query = query.eq('status', params.status);
+      // Handle "unpaid" status by filtering for sent and overdue
+      if (params.status === 'unpaid') {
+        query = query.in('status', ['sent', 'overdue']);
+      } else {
+        query = query.eq('status', params.status);
+      }
     }
     
     if (params.date_from) {
@@ -629,6 +819,37 @@ export class InvoiceFunctionService {
       // The limit is now on sending, not creating
       console.log('[AI Invoice Create] Creating invoice (unlimited creation in freemium model)');
 
+      // Step 0: Get user's business settings for default tax rate
+      let defaultTaxRate = 0;
+      let businessCurrency = 'USD';
+      let businessCurrencySymbol = '$';
+      
+      try {
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('default_tax_rate, auto_apply_tax, currency_code')
+          .eq('user_id', userId)
+          .single();
+          
+        if (businessSettings) {
+          console.log('[AI Invoice Create] Loaded business settings:', businessSettings);
+          if (businessSettings.auto_apply_tax && businessSettings.default_tax_rate) {
+            defaultTaxRate = businessSettings.default_tax_rate;
+            console.log('[AI Invoice Create] Applying default tax rate:', defaultTaxRate, '%');
+          }
+          if (businessSettings.currency_code) {
+            businessCurrency = businessSettings.currency_code;
+            businessCurrencySymbol = this.getCurrencySymbol(businessSettings.currency_code);
+            console.log('[AI Invoice Create] Using business currency:', businessCurrency, businessCurrencySymbol);
+          }
+        }
+      } catch (settingsError) {
+        console.log('[AI Invoice Create] No business settings found, using defaults');
+      }
+
+      // Use default tax rate if no tax percentage specified
+      const taxPercentage = params.tax_percentage !== undefined ? params.tax_percentage : defaultTaxRate;
+
       // Step 1: Find or create client with improved search
       let clientId: string;
       let existingClient = null;
@@ -743,7 +964,7 @@ export class InvoiceFunctionService {
       }
 
       const discountedAmount = subtotalAmount - discountAmount;
-      const taxAmount = discountedAmount * ((params.tax_percentage || 0) / 100);
+      const taxAmount = discountedAmount * ((taxPercentage || 0) / 100);
       const totalAmount = discountedAmount + taxAmount;
 
       // Step 6: Create invoice
@@ -760,7 +981,7 @@ export class InvoiceFunctionService {
           subtotal_amount: subtotalAmount,
           discount_type: params.discount_type || null,
           discount_value: params.discount_value || 0,
-          tax_percentage: params.tax_percentage || 0,
+          tax_percentage: taxPercentage || 0,
           total_amount: totalAmount,
           notes: params.notes || null
         })
@@ -868,6 +1089,30 @@ Would you like me to help you send this invoice or make any changes?`;
       .trim();
   }
 
+  // Currency symbol mapping function
+  private static getCurrencySymbol(code: string): string {
+    const mapping: Record<string, string> = {
+      GBP: '£',
+      USD: '$',
+      EUR: '€',
+      AUD: 'A$',
+      CAD: 'C$',
+      JPY: '¥',
+      INR: '₹',
+      CHF: 'Fr',
+      CNY: '¥',
+      NZD: 'NZ$',
+      SEK: 'kr',
+      NOK: 'kr',
+      DKK: 'kr',
+      SGD: 'S$',
+      HKD: 'HK$'
+    };
+    if (!code) return '$';
+    const normalized = code.split(' ')[0]; // Handle "GBP - British Pound" format
+    return mapping[normalized] || '$';
+  }
+
   private static async createClient(params: any, userId: string): Promise<FunctionResult> {
     try {
       // Validate required parameters
@@ -918,20 +1163,26 @@ Would you like me to help you send this invoice or make any changes?`;
         throw new Error(`Failed to create client: ${clientError.message}`);
       }
 
-      const successMessage = `Great! I've successfully created a new client: ${params.name}${params.email ? ` (${params.email})` : ''}.
-
-Client details:
-• Name: ${params.name}${params.email ? `
-• Email: ${params.email}` : ''}${params.phone ? `
-• Phone: ${params.phone}` : ''}${params.address ? `
-• Address: ${params.address}` : ''}${params.notes ? `
-• Notes: ${params.notes}` : ''}
-
-The client is now ready for invoicing! Would you like me to create an invoice for this client?`;
+      // Build success message based on new workflow
+      const baseMessage = `Great! I added ${params.name} as a new client.`;
+      
+      // Determine what details are missing and could be added
+      const missingDetails = [];
+      if (!params.email) missingDetails.push("Email");
+      if (!params.phone) missingDetails.push("Phone number");  
+      if (!params.address) missingDetails.push("Address");
+      
+      let successMessage = baseMessage;
+      if (missingDetails.length > 0) {
+        successMessage += `\n\nWould you like to add any more details?\n${missingDetails.map(detail => `• ${detail}?`).join('\n')}`;
+      }
 
       return {
         success: true,
-        data: newClient,
+        data: {
+          client: newClient,
+          type: 'client'
+        },
         message: successMessage
       };
 
@@ -948,7 +1199,7 @@ The client is now ready for invoicing! Would you like me to create an invoice fo
   private static async searchClients(params: { name?: string; email?: string; limit?: number }, userId: string): Promise<FunctionResult> {
     let query = supabase
       .from('clients')
-      .select('id, name, email')
+      .select('id, name, email, phone, address_client, notes, created_at, updated_at')
       .eq('user_id', userId);
 
     if (params.name) {
@@ -960,19 +1211,39 @@ The client is now ready for invoicing! Would you like me to create an invoice fo
     }
 
     const { data: clients, error } = await query
+      .order('name', { ascending: true })
       .limit(params.limit || 10);
 
     if (error) {
       throw new Error(`Failed to search clients: ${error.message}`);
     }
 
-    const resultMessage = clients?.length 
-      ? `Found ${clients.length} client${clients.length === 1 ? '' : 's'} matching your criteria.`
-      : 'No clients found matching your criteria.';
+    let resultMessage = '';
+    let resultData = null;
+
+    if (clients && clients.length > 0) {
+      if (clients.length === 1) {
+        resultMessage = `Found ${clients[0].name}${clients[0].email ? ` (${clients[0].email})` : ''}.`;
+        resultData = {
+          client: clients[0],
+          type: 'client'
+        };
+      } else {
+        resultMessage = `Found ${clients.length} clients matching your criteria:
+${clients.map(client => `• ${client.name}${client.email ? ` (${client.email})` : ''}`).join('\n')}`;
+        resultData = {
+          clients: clients,
+          type: 'client_list'
+        };
+      }
+    } else {
+      resultMessage = 'No clients found matching your criteria.';
+      resultData = null;
+    }
 
     return {
       success: true,
-      data: clients || [],
+      data: resultData,
       message: resultMessage
     };
   }
@@ -1430,6 +1701,713 @@ Just tell me which currency you'd like to use (like "set my currency to USD" or 
       return {
         success: false,
         message: 'Failed to retrieve currency options. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateInvoiceLineItems(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, action, line_items } = params;
+
+      if (!invoice_number || !action || !line_items) {
+        return {
+          success: false,
+          message: 'Invoice number, action, and line_items are required.',
+          error: 'Missing required parameters'
+        };
+      }
+
+      // Get the invoice first
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          line_items:invoice_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (invoiceError || !invoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found.`,
+          error: 'Invoice not found'
+        };
+      }
+
+      let updatedLineItems = [...(invoice.line_items || [])];
+      let actionDescription = '';
+
+      switch (action) {
+        case 'add':
+          // Add new line items
+          for (const newItem of line_items) {
+            const { data: addedItem, error: addError } = await supabase
+              .from('invoice_line_items')
+              .insert({
+                invoice_id: invoice.id,
+                user_id: userId,
+                item_name: newItem.item_name,
+                item_description: newItem.item_description || null,
+                quantity: newItem.quantity || 1,
+                unit_price: newItem.unit_price,
+                total_price: (newItem.quantity || 1) * newItem.unit_price
+              })
+              .select()
+              .single();
+
+            if (addError) {
+              console.error('Error adding line item:', addError);
+              continue;
+            }
+            updatedLineItems.push(addedItem);
+          }
+          actionDescription = `Added ${line_items.length} item(s)`;
+          break;
+
+        case 'update':
+          // Update existing line items
+          for (const updateItem of line_items) {
+            if (!updateItem.item_id) continue;
+
+            const { error: updateError } = await supabase
+              .from('invoice_line_items')
+              .update({
+                item_name: updateItem.item_name,
+                item_description: updateItem.item_description || null,
+                quantity: updateItem.quantity || 1,
+                unit_price: updateItem.unit_price,
+                total_price: (updateItem.quantity || 1) * updateItem.unit_price
+              })
+              .eq('id', updateItem.item_id)
+              .eq('user_id', userId);
+
+            if (updateError) {
+              console.error('Error updating line item:', updateError);
+            }
+          }
+          actionDescription = `Updated ${line_items.length} item(s)`;
+          break;
+
+        case 'remove':
+          // Remove line items
+          for (const removeItem of line_items) {
+            if (!removeItem.item_id) continue;
+
+            const { error: removeError } = await supabase
+              .from('invoice_line_items')
+              .delete()
+              .eq('id', removeItem.item_id)
+              .eq('user_id', userId);
+
+            if (removeError) {
+              console.error('Error removing line item:', removeError);
+            }
+          }
+          actionDescription = `Removed ${line_items.length} item(s)`;
+          break;
+      }
+
+      // Recalculate totals
+      const { data: currentLineItems } = await supabase
+        .from('invoice_line_items')
+        .select('*')
+        .eq('invoice_id', invoice.id);
+
+      const subtotalAmount = currentLineItems?.reduce((sum, item) => sum + (item.total_price || 0), 0) || 0;
+      
+      // Apply existing discounts and taxes
+      let discountAmount = 0;
+      if (invoice.discount_value > 0) {
+        if (invoice.discount_type === 'percentage') {
+          discountAmount = subtotalAmount * (invoice.discount_value / 100);
+        } else {
+          discountAmount = invoice.discount_value;
+        }
+      }
+
+      const discountedAmount = subtotalAmount - discountAmount;
+      const taxAmount = discountedAmount * ((invoice.tax_percentage || 0) / 100);
+      const totalAmount = discountedAmount + taxAmount;
+
+      // Update invoice totals
+      const { data: updatedInvoice, error: updateError } = await supabase
+        .from('invoices')
+        .update({
+          subtotal_amount: subtotalAmount,
+          total_amount: totalAmount
+        })
+        .eq('id', invoice.id)
+        .select(`
+          *,
+          line_items:invoice_line_items(*)
+        `)
+        .single();
+
+      if (updateError) {
+        throw new Error(`Failed to update invoice totals: ${updateError.message}`);
+      }
+
+      const successMessage = `Successfully ${actionDescription.toLowerCase()} to invoice ${invoice_number}.
+
+Updated totals:
+• Subtotal: $${subtotalAmount.toFixed(2)}
+• Total: $${totalAmount.toFixed(2)}
+
+Would you like to view the updated invoice or make more changes?`;
+
+      return {
+        success: true,
+        data: {
+          invoice: {
+            ...updatedInvoice,
+            client_name: invoice.client_name,
+            client_email: invoice.client_email
+          },
+          line_items: currentLineItems,
+          action_performed: actionDescription
+        },
+        message: successMessage
+      };
+
+    } catch (error) {
+      console.error('Error updating invoice line items:', error);
+      return {
+        success: false,
+        message: 'Failed to update invoice line items. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getInvoiceDetails(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number } = params;
+
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: 'Invoice number is required.',
+          error: 'Missing required parameter: invoice_number'
+        };
+      }
+
+      const { data: invoice, error } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          line_items:invoice_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (error || !invoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found.`,
+          error: 'Invoice not found'
+        };
+      }
+
+      const lineItemsList = invoice.line_items?.map((item: any, index: number) => 
+        `${index + 1}. ${item.item_name}${item.item_description ? ` (${item.item_description})` : ''} - $${item.unit_price}${item.quantity > 1 ? ` x ${item.quantity} = $${item.total_price}` : ''}`
+      ).join('\n') || 'No line items';
+
+      const message = `Invoice ${invoice_number} details:
+
+**Client:** ${invoice.client_name}${invoice.client_email ? ` (${invoice.client_email})` : ''}
+**Status:** ${invoice.status}
+**Date:** ${new Date(invoice.invoice_date).toLocaleDateString()}
+**Due Date:** ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'Not set'}
+
+**Line Items:**
+${lineItemsList}
+
+**Totals:**
+• Subtotal: $${invoice.subtotal_amount?.toFixed(2) || '0.00'}
+• Tax (${invoice.tax_percentage || 0}%): $${((invoice.subtotal_amount || 0) * ((invoice.tax_percentage || 0) / 100)).toFixed(2)}
+• Total: $${invoice.total_amount?.toFixed(2) || '0.00'}
+
+${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
+
+      return {
+        success: true,
+        data: {
+          invoice: invoice,
+          line_items: invoice.line_items
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error getting invoice details:', error);
+      return {
+        success: false,
+        message: 'Failed to get invoice details. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateInvoiceDetails(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, new_invoice_number, client_name, client_email, invoice_date, due_date, tax_percentage, discount_type, discount_value, notes, custom_headline } = params;
+
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: 'Invoice number is required.',
+          error: 'Missing required parameter: invoice_number'
+        };
+      }
+
+      // Get the current invoice
+      const { data: currentInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (fetchError || !currentInvoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found.`,
+          error: 'Invoice not found'
+        };
+      }
+
+      // Build update object with only provided fields
+      const updateData: any = {
+        user_id: userId,
+        updated_at: new Date().toISOString()
+      };
+
+      if (new_invoice_number) {
+        updateData.invoice_number = new_invoice_number;
+      }
+      if (client_name) {
+        updateData.client_name = client_name;
+      }
+      if (client_email) {
+        updateData.client_email = client_email;
+      }
+      if (invoice_date) {
+        updateData.invoice_date = invoice_date;
+      }
+      if (due_date) {
+        updateData.due_date = due_date;
+      }
+      if (tax_percentage !== undefined) {
+        updateData.tax_percentage = tax_percentage;
+      }
+      if (discount_type) {
+        updateData.discount_type = discount_type;
+      }
+      if (discount_value !== undefined) {
+        updateData.discount_value = discount_value;
+      }
+      if (notes) {
+        updateData.notes = notes;
+      }
+      if (custom_headline) {
+        updateData.custom_headline = custom_headline;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return {
+          success: false,
+          message: 'No valid fields provided for update.',
+          error: 'No update fields'
+        };
+      }
+
+      // If tax or discount changed, recalculate totals
+      if (updateData.tax_percentage !== undefined || updateData.discount_type || updateData.discount_value !== undefined) {
+        const { data: lineItems } = await supabase
+          .from('invoice_line_items')
+          .select('total_price')
+          .eq('invoice_id', currentInvoice.id);
+
+        const subtotalAmount = lineItems?.reduce((sum, item) => sum + (item.total_price || 0), 0) || 0;
+        
+        let discountAmount = 0;
+        const discountValue = updateData.discount_value !== undefined ? updateData.discount_value : currentInvoice.discount_value;
+        const discountType = updateData.discount_type || currentInvoice.discount_type;
+
+        if (discountValue > 0) {
+          if (discountType === 'percentage') {
+            discountAmount = subtotalAmount * (discountValue / 100);
+          } else {
+            discountAmount = discountValue;
+          }
+        }
+
+        const discountedAmount = subtotalAmount - discountAmount;
+        const taxPercentage = updateData.tax_percentage !== undefined ? updateData.tax_percentage : currentInvoice.tax_percentage;
+        const taxAmount = discountedAmount * ((taxPercentage || 0) / 100);
+        const totalAmount = discountedAmount + taxAmount;
+
+        updateData.total_amount = totalAmount;
+      }
+
+      // Update the invoice
+      const { data: updatedInvoice, error: updateError } = await supabase
+        .from('invoices')
+        .update(updateData)
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .select(`
+          *,
+          line_items:invoice_line_items(*)
+        `)
+        .single();
+
+      if (updateError) {
+        throw new Error(`Failed to update invoice: ${updateError.message}`);
+      }
+
+      const message = `Successfully updated invoice ${invoice_number}.
+
+${updatedInvoice.total_amount ? `New total: $${updatedInvoice.total_amount.toFixed(2)}` : ''}
+
+Would you like to view the updated invoice or make more changes?`;
+
+      return {
+        success: true,
+        data: {
+          invoice: updatedInvoice,
+          line_items: updatedInvoice.line_items,
+          updated_fields: Object.keys(params).filter(key => key !== 'invoice_number')
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error updating invoice details:', error);
+      return {
+        success: false,
+        message: 'Failed to update invoice details. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateClient(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { client_name, client_id, new_name, email, phone, address, notes } = params;
+
+      if (!client_name && !client_id) {
+        return {
+          success: false,
+          message: 'Client name or client_id is required.',
+          error: 'Missing required parameter: client_name or client_id'
+        };
+      }
+
+      console.log('[Update Client] Starting search for client:', { client_name, client_id, userId });
+
+      let existingClient = null;
+
+      if (client_id) {
+        // Search by ID (more reliable)
+        const { data: clientById, error: idError } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('id', client_id)
+          .single();
+
+        if (idError) {
+          return {
+            success: false,
+            message: `Client with ID ${client_id} not found.`,
+            error: 'Client not found'
+          };
+        }
+        existingClient = clientById;
+      } else if (client_name) {
+        // Search by name with very aggressive matching
+        console.log('[Update Client] Searching for client by name:', client_name);
+        
+        // Get ALL clients for this user to debug
+        const { data: allUserClients } = await supabase
+          .from('clients')
+          .select('id, name, email, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        console.log('[Update Client] All user clients:', allUserClients?.map(c => ({ name: c.name, id: c.id, created: c.created_at })));
+
+        if (allUserClients && allUserClients.length > 0) {
+          const searchName = client_name.toLowerCase().trim();
+          
+          // Try multiple matching strategies
+          const exactMatch = allUserClients.find(c => c.name.toLowerCase().trim() === searchName);
+          const startsWithMatch = allUserClients.find(c => c.name.toLowerCase().trim().startsWith(searchName));
+          const containsMatch = allUserClients.find(c => c.name.toLowerCase().trim().includes(searchName));
+          const wordsMatch = allUserClients.find(c => {
+            const clientWords = c.name.toLowerCase().split(/\s+/);
+            const searchWords = searchName.split(/\s+/);
+            return searchWords.every(word => clientWords.some(cWord => cWord.includes(word)));
+          });
+
+          // Use the best match we can find
+          existingClient = exactMatch || startsWithMatch || containsMatch || wordsMatch;
+          
+          if (exactMatch) {
+            console.log('[Update Client] Found exact match:', existingClient.name);
+          } else if (startsWithMatch) {
+            console.log('[Update Client] Found starts-with match:', existingClient.name);
+          } else if (containsMatch) {
+            console.log('[Update Client] Found contains match:', existingClient.name);
+          } else if (wordsMatch) {
+            console.log('[Update Client] Found words match:', existingClient.name);
+          }
+
+          // If we still don't have a match, try the most recently created client
+          if (!existingClient && allUserClients.length > 0) {
+            const recentClient = allUserClients[0]; // Most recent due to ordering
+            const recentClientAge = (Date.now() - new Date(recentClient.created_at).getTime()) / 1000; // seconds
+            
+            if (recentClientAge < 300) { // Created within last 5 minutes
+              console.log('[Update Client] Using recently created client (age:', recentClientAge, 'seconds):', recentClient.name);
+              existingClient = recentClient;
+            }
+          }
+        }
+
+        if (!existingClient) {
+          // Provide helpful error with context
+          const recentClients = allUserClients?.slice(0, 5) || [];
+          return {
+            success: false,
+            message: `I couldn't find a client named "${client_name}". Your recent clients are:
+${recentClients.map((c, i) => `${i + 1}. ${c.name} (${c.email || 'no email'})`).join('\n')}
+
+If you just created an invoice for this client, please try again in a moment, or provide the exact client name as it appears above.`,
+            error: 'Client not found'
+          };
+        }
+      }
+
+      if (!existingClient) {
+        return {
+          success: false,
+          message: `Client "${client_name || client_id}" not found. You can create a new client with that name if needed.`,
+          error: 'Client not found'
+        };
+      }
+
+      console.log('[Update Client] Found client to update:', existingClient.name, existingClient.id);
+
+      // Check if there are multiple clients with the same name that might be causing issues
+      const { data: duplicateCheck } = await supabase
+        .from('clients')
+        .select('id, name, email')
+        .eq('user_id', userId)
+        .eq('name', existingClient.name);
+      
+      if (duplicateCheck && duplicateCheck.length > 1) {
+        console.warn('[Update Client] Found', duplicateCheck.length, 'clients with name:', existingClient.name);
+        console.warn('[Update Client] Duplicate clients:', duplicateCheck);
+      }
+
+      const updateData: any = {
+        user_id: userId,
+        updated_at: new Date().toISOString()
+      };
+
+      if (new_name) {
+        updateData.name = new_name;
+      }
+      if (email) {
+        updateData.email = email;
+      }
+      if (phone) {
+        updateData.phone = phone;
+      }
+      if (address) {
+        updateData.address_client = address;
+      }
+      if (notes) {
+        updateData.notes = notes;
+      }
+
+      const { data: updatedClient, error: updateError } = await supabase
+        .from('clients')
+        .update(updateData)
+        .eq('user_id', userId)
+        .eq('id', existingClient.id)
+        .select('*')
+        .single();
+
+      if (updateError) {
+        console.error('[Update Client] Update error details:', updateError);
+        
+        // If it's a multiple rows error, try a more specific update
+        if (updateError.message.includes('multiple') || updateError.message.includes('no rows')) {
+          console.log('[Update Client] Attempting more specific update...');
+          
+          // Try updating by exact ID match only
+          const { data: specificUpdate, error: specificError } = await supabase
+            .from('clients')
+            .update(updateData)
+            .eq('id', existingClient.id)
+            .select('*');
+
+          if (specificError) {
+            throw new Error(`Failed to update client (specific): ${specificError.message}`);
+          }
+
+          if (specificUpdate && specificUpdate.length > 0) {
+            console.log('[Update Client] Successfully updated client with specific query');
+            const updatedClientData = specificUpdate[0];
+            
+            let message = `Successfully updated ${existingClient.name}'s ${updatedFields.join(', ')}.`;
+            
+            if (address) {
+              message += `\n\nThis address will now appear on all invoices for ${existingClient.name}.`;
+            }
+
+            return {
+              success: true,
+              data: {
+                client: updatedClientData,
+                type: 'client'
+              },
+              message: message
+            };
+          }
+        }
+        
+        throw new Error(`Failed to update client: ${updateError.message}`);
+      }
+
+      console.log('[Update Client] Successfully updated client:', updatedClient.name);
+
+      // Build a better success message
+      const updatedFields = [];
+      if (new_name) updatedFields.push(`name to "${new_name}"`);
+      if (email) updatedFields.push(`email to "${email}"`);
+      if (phone) updatedFields.push(`phone to "${phone}"`);
+      if (address) updatedFields.push(`address to "${address}"`);
+      if (notes) updatedFields.push(`notes`);
+
+      let message = `Successfully updated ${existingClient.name}'s ${updatedFields.join(', ')}.`;
+      
+      // Add context for address updates
+      if (address) {
+        message += `\n\nThis address will now appear on all invoices for ${existingClient.name}.`;
+      }
+
+      return {
+        success: true,
+        data: {
+          client: updatedClient,
+          type: 'client'
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error updating client:', error);
+      return {
+        success: false,
+        message: 'Failed to update client. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getClientOutstandingAmount(params: { client_name: string }, userId: string): Promise<FunctionResult> {
+    try {
+      const { client_name } = params;
+
+      if (!client_name) {
+        return {
+          success: false,
+          message: 'Client name is required.',
+          error: 'Missing required parameter: client_name'
+        };
+      }
+
+      console.log('[Get Outstanding] Searching for invoices for client:', client_name);
+
+      // Use ilike for case-insensitive partial matching
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select(`
+          invoice_number, 
+          status, 
+          total_amount, 
+          due_date, 
+          created_at,
+          clients!inner(name, email)
+        `)
+        .eq('user_id', userId)
+        .ilike('clients.name', `%${client_name}%`);
+
+      if (error) {
+        throw new Error(`Failed to get invoices: ${error.message}`);
+      }
+
+      if (!invoices || invoices.length === 0) {
+        return {
+          success: false,
+          message: `No invoices found for "${client_name}". Double-check the client name or try searching for recent invoices.`,
+          error: 'No invoices found'
+        };
+      }
+
+      console.log('[Get Outstanding] Found', invoices.length, 'invoices for', client_name);
+
+      // Filter for unpaid invoices (sent or overdue)
+      const unpaidInvoices = invoices.filter(invoice => 
+        invoice.status === 'sent' || invoice.status === 'overdue'
+      );
+
+      const totalOutstanding = unpaidInvoices.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0);
+      const totalAll = invoices.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0);
+
+      let message = `${client_name} invoice summary:\n\n`;
+      
+      if (unpaidInvoices.length > 0) {
+        message += `💰 **Outstanding Amount: $${totalOutstanding.toFixed(2)}**\n`;
+        message += `📄 Unpaid invoices: ${unpaidInvoices.length}\n\n`;
+        
+        message += `Unpaid invoices:\n`;
+        unpaidInvoices.forEach(invoice => {
+          message += `• ${invoice.invoice_number}: $${invoice.total_amount?.toFixed(2)} (${invoice.status})\n`;
+        });
+      } else {
+        message += `✅ **All invoices are paid!**\n`;
+        message += `💰 Total paid: $${totalAll.toFixed(2)}\n`;
+      }
+
+      message += `\n📊 Total invoices: ${invoices.length}`;
+
+      return {
+        success: true,
+        data: {
+          client_name: client_name,
+          total_outstanding: totalOutstanding,
+          total_amount: totalAll,
+          unpaid_invoices: unpaidInvoices,
+          all_invoices: invoices
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error getting client outstanding amount:', error);
+      return {
+        success: false,
+        message: 'Failed to get client outstanding amount. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }

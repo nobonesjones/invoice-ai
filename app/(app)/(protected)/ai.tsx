@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, TextInput, TouchableOpacity, ScrollView, Alert, Modal, KeyboardAvoidingView, Platform } from "react-native";
-import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, X } from "lucide-react-native";
+import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, X, User, Mail, Phone, MapPin } from "lucide-react-native";
 import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler } from 'react-native-gesture-handler';
 import Animated, {
 	useAnimatedGestureHandler,
@@ -8,6 +8,7 @@ import Animated, {
 	useSharedValue,
 	withSpring,
 } from 'react-native-reanimated';
+import { router } from 'expo-router';
 
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Text } from "@/components/ui/text";
@@ -203,6 +204,8 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 
 	const loadBusinessSettings = async () => {
 		try {
+			console.log('[AI Invoice Preview] Loading business settings for user:', invoice.user_id);
+			
 			// Fetch actual business settings from the database
 			const { data: businessSettings, error } = await supabase
 				.from('business_settings')
@@ -231,7 +234,18 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			} else {
 				// Use actual business settings from database
 				console.log('[AI Invoice Preview] Loaded business settings:', businessSettings);
-				setBusinessSettings(businessSettings);
+				
+				// Map currency_code to currency_symbol
+				const currencySymbol = getCurrencySymbol(businessSettings.currency_code || 'USD');
+				
+				const enhancedSettings: BusinessSettingsRow = {
+					...businessSettings,
+					currency: businessSettings.currency_code || 'USD',
+					currency_symbol: currencySymbol,
+				};
+				
+				console.log('[AI Invoice Preview] Using currency symbol:', currencySymbol, 'for currency:', businessSettings.currency_code);
+				setBusinessSettings(enhancedSettings);
 			}
 		} catch (error) {
 			console.error('Error loading business settings:', error);
@@ -252,6 +266,30 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			};
 			setBusinessSettings(defaultSettings);
 		}
+	};
+
+	// Currency symbol mapping function
+	const getCurrencySymbol = (code: string) => {
+		const mapping: Record<string, string> = {
+			GBP: '£',
+			USD: '$',
+			EUR: '€',
+			AUD: 'A$',
+			CAD: 'C$',
+			JPY: '¥',
+			INR: '₹',
+			CHF: 'Fr',
+			CNY: '¥',
+			NZD: 'NZ$',
+			SEK: 'kr',
+			NOK: 'kr',
+			DKK: 'kr',
+			SGD: 'S$',
+			HKD: 'HK$'
+		};
+		if (!code) return '$';
+		const normalized = code.split(' ')[0]; // Handle "GBP - British Pound" format
+		return mapping[normalized] || '$';
 	};
 
 	// Transform data to InvoiceForTemplate format
@@ -363,6 +401,106 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				theme={theme}
 			/>
 		</>
+	);
+};
+
+// Client Preview Component for Chat
+const ClientPreview = ({ clientData, theme }: { clientData: any; theme: any }) => {
+	const { client } = clientData;
+	
+	const handleClientTap = () => {
+		router.push(`/(app)/(protected)/customers/${client.id}`);
+	};
+
+	const getInitials = (name: string) => {
+		return name
+			.split(' ')
+			.map(n => n[0])
+			.join('')
+			.toUpperCase()
+			.slice(0, 2);
+	};
+
+	return (
+		<TouchableOpacity onPress={handleClientTap} activeOpacity={0.8}>
+			<View 
+				style={{
+					backgroundColor: theme.background,
+					borderWidth: 1,
+					borderColor: theme.border,
+					borderRadius: 12,
+					padding: 16,
+					marginTop: 8,
+				}}
+			>
+				{/* Tap to view hint */}
+				<View style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+					<Text style={{ color: theme.mutedForeground, fontSize: 12, backgroundColor: theme.background + 'E6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+						Tap to view
+					</Text>
+				</View>
+
+				{/* Client Header */}
+				<View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+					<View 
+						style={{
+							width: 48,
+							height: 48,
+							borderRadius: 24,
+							backgroundColor: theme.primary,
+							justifyContent: 'center',
+							alignItems: 'center',
+							marginRight: 12,
+						}}
+					>
+						<Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+							{getInitials(client.name)}
+						</Text>
+					</View>
+					<View style={{ flex: 1 }}>
+						<Text style={{ color: theme.foreground, fontSize: 16, fontWeight: 'bold', marginBottom: 2 }}>
+							{client.name}
+						</Text>
+						<View style={{ flexDirection: 'row', alignItems: 'center' }}>
+							<User size={12} color={theme.mutedForeground} />
+							<Text style={{ color: theme.mutedForeground, fontSize: 12, marginLeft: 4 }}>
+								Client
+							</Text>
+						</View>
+					</View>
+				</View>
+
+				{/* Client Details */}
+				<View style={{ gap: 8 }}>
+					{client.email && (
+						<View style={{ flexDirection: 'row', alignItems: 'center' }}>
+							<Mail size={14} color={theme.mutedForeground} />
+							<Text style={{ color: theme.foreground, fontSize: 14, marginLeft: 8 }}>
+								{client.email}
+							</Text>
+						</View>
+					)}
+					
+					{client.phone && (
+						<View style={{ flexDirection: 'row', alignItems: 'center' }}>
+							<Phone size={14} color={theme.mutedForeground} />
+							<Text style={{ color: theme.foreground, fontSize: 14, marginLeft: 8 }}>
+								{client.phone}
+							</Text>
+						</View>
+					)}
+					
+					{client.address_client && (
+						<View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+							<MapPin size={14} color={theme.mutedForeground} style={{ marginTop: 2 }} />
+							<Text style={{ color: theme.foreground, fontSize: 14, marginLeft: 8, flex: 1 }}>
+								{client.address_client}
+							</Text>
+						</View>
+					)}
+				</View>
+			</View>
+		</TouchableOpacity>
 	);
 };
 
@@ -506,7 +644,7 @@ export default function AiScreen() {
 						>
 							AI Assistant
 						</Text>
-						{conversation && (
+						{messages.length > 0 && (
 							<TouchableOpacity onPress={handleRefresh} disabled={isLoading}>
 								<RefreshCw 
 									size={20} 
@@ -566,19 +704,31 @@ export default function AiScreen() {
 										{message.content}
 									</Text>
 
-									{/* Show invoice preview if this message has invoice data */}
-									{message.role === 'assistant' && message.attachments && message.attachments.length > 0 && (
-										message.attachments.map((attachment: any, index: number) => {
+									{/* Show invoice and client previews if this message has attachment data */}
+									{message.role === 'assistant' && (message as any).attachments && (message as any).attachments.length > 0 && (
+										(message as any).attachments.map((attachment: any, index: number) => {
 											// Check if attachment has invoice data
 											if (attachment && attachment.invoice && attachment.line_items) {
 												return (
 													<InvoicePreview 
-														key={index}
+														key={`invoice-${index}`}
 														invoiceData={attachment} 
 														theme={theme} 
 													/>
 												);
 											}
+											
+											// Check if attachment has client data
+											if (attachment && attachment.type === 'client' && attachment.client) {
+												return (
+													<ClientPreview 
+														key={`client-${index}`}
+														clientData={attachment} 
+														theme={theme} 
+													/>
+												);
+											}
+											
 											return null;
 										})
 									)}
