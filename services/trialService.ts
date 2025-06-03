@@ -14,12 +14,51 @@ export interface TrialSession {
 export class TrialService {
   private static readonly TRIAL_KEY = 'trial_session';
   private static readonly MAX_TRIAL_INVOICES = 3;
+  private static readonly SIGNUP_IN_PROGRESS_KEY = 'signup_in_progress';
+
+  /**
+   * Mark that signup is in progress to prevent trial creation
+   */
+  static async setSignupInProgress(inProgress: boolean): Promise<void> {
+    try {
+      if (inProgress) {
+        await AsyncStorage.setItem(this.SIGNUP_IN_PROGRESS_KEY, 'true');
+        console.log('[TrialService] Signup in progress flag set');
+      } else {
+        await AsyncStorage.removeItem(this.SIGNUP_IN_PROGRESS_KEY);
+        console.log('[TrialService] Signup in progress flag cleared');
+      }
+    } catch (error) {
+      console.error('[TrialService] Error managing signup flag:', error);
+    }
+  }
+
+  /**
+   * Check if signup is currently in progress
+   */
+  static async isSignupInProgress(): Promise<boolean> {
+    try {
+      const flag = await AsyncStorage.getItem(this.SIGNUP_IN_PROGRESS_KEY);
+      return flag === 'true';
+    } catch (error) {
+      console.error('[TrialService] Error checking signup flag:', error);
+      return false;
+    }
+  }
 
   /**
    * Create a new trial session with anonymous authentication
+   * This should ONLY be called for users who explicitly want to skip authentication
    */
   static async createTrialSession(): Promise<TrialSession | null> {
     try {
+      // Check if signup is in progress - if so, don't create trial
+      const signupInProgress = await this.isSignupInProgress();
+      if (signupInProgress) {
+        console.log('[TrialService] Signup in progress, skipping trial creation');
+        return null;
+      }
+
       console.log('[TrialService] Creating new trial session');
       
       // Generate a unique email for the trial user

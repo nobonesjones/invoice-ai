@@ -23,12 +23,20 @@ import {
   X 
 } from 'lucide-react-native';
 import { TrialService } from '@/services/trialService';
+import { useOnboarding } from '@/context/onboarding-provider';
+import { useSupabase } from '@/context/supabase-provider';
+import { AuthModal } from '@/components/auth/auth-modal';
+import { supabase } from '@/config/supabase';
 
 export default function SoftPaywallScreen() {
   const router = useRouter();
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
+  const { saveOnboardingData, onboardingData } = useOnboarding();
+  const { session } = useSupabase();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'free' | 'paid'>('free');
 
   const premiumFeatures = [
     { icon: Send, title: 'Unlimited Invoice Sends', description: 'Send as many invoices as you need' },
@@ -49,17 +57,9 @@ export default function SoftPaywallScreen() {
     try {
       setIsProcessing(true);
       
-      // TODO: Integrate RevenueCat here
-      console.log('[Soft Paywall] Starting subscription flow with RevenueCat');
-      
-      // For now, show coming soon alert and navigate to sign up
-      Alert.alert(
-        'Coming Soon!', 
-        'Payment integration with RevenueCat will be added here. For now, you can create an account.',
-        [
-          { text: 'OK', onPress: () => router.replace('/(app)/welcome') }
-        ]
-      );
+      // Set plan to paid and show auth modal
+      setSelectedPlan('paid');
+      setAuthModalVisible(true);
       
     } catch (error: any) {
       console.error('[Soft Paywall] Error starting subscription:', error);
@@ -71,25 +71,12 @@ export default function SoftPaywallScreen() {
 
   const handleSkip = async () => {
     try {
-      // User chooses to continue with free version - create trial and go to app
-      console.log('[Soft Paywall] User skipped paywall, creating trial session');
-      
-      const trialSession = await TrialService.createTrialSession();
-      
-      if (!trialSession) {
-        Alert.alert(
-          'Error', 
-          'Unable to start your free trial right now. Please try again.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-      
-      console.log('[Soft Paywall] Trial session created, navigating to app');
-      router.replace('/(app)/(protected)');
+      // Set plan to free and show auth modal
+      setSelectedPlan('free');
+      setAuthModalVisible(true);
       
     } catch (error: any) {
-      console.error('[Soft Paywall] Error creating trial:', error);
+      console.error('[Soft Paywall] Error starting free trial:', error);
       Alert.alert('Error', 'Failed to start trial. Please try again.');
     }
   };
@@ -97,6 +84,78 @@ export default function SoftPaywallScreen() {
   const handleClose = () => {
     // Go back to onboarding
     router.back();
+  };
+
+  const handleAuthSuccess = async () => {
+    setAuthModalVisible(false);
+    
+    try {
+      // At this point, the user has successfully authenticated with their REAL account
+      // Get the session directly from Supabase to ensure we have the latest session data
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('[Soft Paywall] Error getting session:', sessionError);
+        Alert.alert('Error', 'Failed to verify your session. Please try again.');
+        return;
+      }
+      
+      if (selectedPlan === 'free') {
+        console.log('[Soft Paywall] User chose free plan and authenticated');
+        
+        // Get the current authenticated user (their REAL account)
+        if (sessionData?.session?.user?.id) {
+          try {
+            // Save onboarding data to the REAL user account
+            await saveOnboardingData(sessionData.session.user.id);
+            console.log('[Soft Paywall] Onboarding data saved successfully to real user account:', sessionData.session.user.id);
+            
+            // Navigate to the protected area (no trial needed since they have a real account)
+            router.replace('/(app)/(protected)');
+          } catch (error) {
+            console.error('[Soft Paywall] Error saving onboarding data:', error);
+            Alert.alert('Error', 'Failed to save your information. Please try again.');
+            return;
+          }
+        } else {
+          // This shouldn't happen if auth was successful, but handle it gracefully
+          Alert.alert('Error', 'Authentication was successful but we couldn\'t access your account. Please try again.');
+          return;
+        }
+        
+      } else {
+        // User chose paid plan - TODO: Integrate RevenueCat here
+        console.log('[Soft Paywall] User chose paid plan');
+        
+        if (sessionData?.session?.user?.id) {
+          try {
+            // Save onboarding data to the REAL user account
+            await saveOnboardingData(sessionData.session.user.id);
+            console.log('[Soft Paywall] Onboarding data saved successfully to real paid user account:', sessionData.session.user.id);
+          } catch (error) {
+            console.error('[Soft Paywall] Error saving onboarding data:', error);
+            // Don't block the flow if onboarding data save fails
+          }
+        }
+        
+        // For now, show coming soon alert and navigate to app
+        Alert.alert(
+          'Coming Soon!', 
+          'Payment integration with RevenueCat will be added here. For now, you can access the app.',
+          [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                router.replace('/(app)/(protected)');
+              }
+            }
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('[Soft Paywall] Error handling auth success:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    }
   };
 
   return (
@@ -192,6 +251,15 @@ export default function SoftPaywallScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Auth Modal */}
+      <AuthModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        initialMode="signup"
+        plan={selectedPlan}
+        onSuccess={handleAuthSuccess}
+      />
     </SafeAreaView>
   );
 }

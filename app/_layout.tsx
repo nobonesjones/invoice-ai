@@ -12,6 +12,7 @@ import { TabBarVisibilityProvider } from "@/context/TabBarVisibilityContext";
 import { SupabaseProvider, useSupabase } from "@/context/supabase-provider";
 import { ThemeProvider, useTheme } from "@/context/theme-provider";
 import { UsageProvider } from "@/context/usage-provider";
+import { OnboardingProvider } from "@/context/onboarding-provider";
 
 // Inner component to access theme and supabase context
 function RootLayoutNav() {
@@ -113,11 +114,13 @@ export default function AppLayout() {
 					<SupabaseProvider>
 						<ThemeProvider>
 							<UsageProvider>
-								<BottomSheetModalProvider>
-									<TabBarVisibilityProvider>
-										<RootLayoutNav />
-									</TabBarVisibilityProvider>
-								</BottomSheetModalProvider>
+								<OnboardingProvider>
+									<BottomSheetModalProvider>
+										<TabBarVisibilityProvider>
+											<RootLayoutNav />
+										</TabBarVisibilityProvider>
+									</BottomSheetModalProvider>
+								</OnboardingProvider>
 							</UsageProvider>
 						</ThemeProvider>
 					</SupabaseProvider>

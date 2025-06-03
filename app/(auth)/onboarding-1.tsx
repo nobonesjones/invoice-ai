@@ -1,136 +1,219 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React, { useState } from "react";
 import {
-	View,
-	Text,
-	StyleSheet,
-	Pressable,
-	SafeAreaView,
-	useColorScheme as useDeviceColorScheme,
-	Animated,
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  SafeAreaView,
+  Platform,
 } from "react-native";
 
-import ShiningText from "@/components/ui/ShiningText";
 import { Button } from "@/components/ui/button";
-import { StepIndicator } from "@/components/ui/step-indicator";
-import { P } from "@/components/ui/typography";
-import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
+import { AuthModal } from "@/components/auth/auth-modal";
 
 export default function OnboardingScreen1() {
-	const router = useRouter();
-	const deviceColorScheme = useDeviceColorScheme() ?? "light";
-	const isDeviceLightMode = deviceColorScheme === "light";
+  const router = useRouter();
+  const { theme } = useTheme();
+  const [authModalVisible, setAuthModalVisible] = useState(false);
 
-	const translateY = useRef(new Animated.Value(0)).current;
+  const handleGetStarted = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push("/onboarding-2");
+  };
 
-	useEffect(() => {
-		const bounce = Animated.sequence([
-			Animated.timing(translateY, {
-				toValue: 5,
-				duration: 1500,
-				useNativeDriver: true,
-			}),
-			Animated.timing(translateY, {
-				toValue: 0,
-				duration: 1500,
-				useNativeDriver: true,
-			}),
-		]);
+  const handleSignIn = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setAuthModalVisible(true);
+  };
 
-		Animated.loop(bounce).start();
-	}, [translateY]);
+  const handleAuthSuccess = () => {
+    setAuthModalVisible(false);
+    // User signed in successfully - navigate to the main app
+    router.replace("/(app)/(protected)");
+  };
 
-	const handleNext = () => {
-		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-		router.push("/onboarding-2");
-	};
+  const styles = getStyles(theme);
 
-	return (
-		<SafeAreaView
-			className={`flex-1 bg-background ${!isDeviceLightMode ? "dark" : ""}`}
-		>
-			<View style={styles.container}>
-				<StepIndicator currentStep={1} totalSteps={3} />
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={styles.splitContainer}>
+        {/* Top Side - Branded Visual */}
+        <View style={styles.topSide}>
+          <LinearGradient
+            colors={['#4F46E5', '#7C3AED', '#2563EB']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradientBackground}
+          >
+            {/* Brand visual placeholder - replace with actual branded element */}
+            <View style={styles.brandVisual}>
+              <View style={styles.logoCircle}>
+                <Text style={styles.logoText}>SI</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
 
-				{/* Image Box */}
-				<View style={styles.box}>
-					<Animated.View
-						style={{
-							width: "100%",
-							height: "100%",
-							transform: [{ translateY }],
-						}}
-					>
-						<View className="w-full h-full bg-gray-300 rounded-lg" />
-					</Animated.View>
-				</View>
+        {/* Bottom Side - Content Area */}
+        <View style={[styles.bottomSide, { backgroundColor: theme.card }]}>
+          <View style={styles.contentArea}>
+            {/* App Logo & Name */}
+            <View style={styles.logoSection}>
+              <View style={styles.appLogoContainer}>
+                <View style={[styles.appLogo, { backgroundColor: theme.muted }]}>
+                  <Text style={styles.appLogoText}>📧</Text>
+                </View>
+              </View>
+              <Text style={[styles.appName, { color: theme.foreground }]}>SupaInvoice</Text>
+              <Text style={[styles.tagline, { color: theme.mutedForeground }]}>
+                Create fast and professional invoices directly from your phone.
+              </Text>
+            </View>
 
-				{/* Text Content */}
-				<View style={styles.textContainer}>
-					<ShiningText
-						text="Onboarding 1"
-						className="text-3xl font-bold text-center text-foreground mb-4"
-					/>
-					<P
-						style={[
-							styles.description,
-							{ color: colors[deviceColorScheme].mutedForeground },
-						]}
-					>
-						Something about the app...
-					</P>
-				</View>
+            {/* Spacer */}
+            <View style={styles.spacer} />
 
-				{/* Spacer */}
-				<View style={styles.spacer} />
+            {/* Buttons */}
+            <View style={styles.buttonContainer}>
+              <Button
+                onPress={handleGetStarted}
+                style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+              >
+                <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Get started</Text>
+              </Button>
 
-				{/* Button */}
-				<Button
-					onPress={handleNext}
-					className="w-full dark:bg-white dark:text-primary"
-				>
-					Get Started
-				</Button>
-			</View>
-		</SafeAreaView>
-	);
+              <Pressable onPress={handleSignIn} style={styles.secondaryButton}>
+                <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>
+                  Already have an account?
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Auth Modal */}
+      <AuthModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        initialMode="signin"
+        plan="free"
+        onSuccess={handleAuthSuccess}
+      />
+    </SafeAreaView>
+  );
 }
 
-const styles = StyleSheet.create({
-	safeArea: {
-		flex: 1,
-	},
-	container: {
-		flex: 1,
-		alignItems: "center",
-		justifyContent: "space-between",
-		padding: 20,
-	},
-	box: {
-		width: "80%",
-		height: 300,
-		justifyContent: "center",
-		alignItems: "center",
-		marginBottom: 30,
-		borderRadius: 10,
-		overflow: "hidden",
-		padding: 10,
-		marginTop: 30,
-	},
-	textContainer: {
-		alignItems: "center",
-		paddingHorizontal: 20,
-		marginBottom: 30,
-		marginTop: 60,
-	},
-	description: {
-		fontSize: 16,
-		textAlign: "center",
-		marginBottom: 20,
-	},
-	spacer: {
-		flex: 1,
-	},
+const getStyles = (theme: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  splitContainer: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  topSide: {
+    flex: 1,
+  },
+  gradientBackground: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  brandVisual: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  logoText: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  bottomSide: {
+    flex: 1,
+  },
+  contentArea: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    justifyContent: 'space-between',
+  },
+  logoSection: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  appLogoContainer: {
+    marginBottom: 16,
+  },
+  appLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  appLogoText: {
+    fontSize: 24,
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  tagline: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  spacer: {
+    flex: 1,
+  },
+  buttonContainer: {
+    width: '100%',
+  },
+  primaryButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  secondaryButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
 });

@@ -1,163 +1,138 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import {
-	View,
-	Text,
-	StyleSheet,
-	SafeAreaView,
-	useColorScheme as useDeviceColorScheme,
-	Animated,
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  Platform,
 } from "react-native";
 
-import { colors } from "../../constants/colors";
-
-import ShiningText from "@/components/ui/ShiningText";
 import { Button } from "@/components/ui/button";
-import { StepIndicator } from "@/components/ui/step-indicator";
-import { P } from "@/components/ui/typography";
+import { useTheme } from "@/context/theme-provider";
 
 export default function OnboardingScreen2() {
-	const router = useRouter();
-	const deviceColorScheme = useDeviceColorScheme() ?? "light";
-	const isDeviceLightMode = deviceColorScheme === "light";
+  const router = useRouter();
+  const { theme } = useTheme();
 
-	const translateY = useRef(new Animated.Value(0)).current;
+  const handleContinue = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push("/onboarding-3");
+  };
 
-	useEffect(() => {
-		const bounce = Animated.sequence([
-			Animated.timing(translateY, {
-				toValue: 5,
-				duration: 1500,
-				useNativeDriver: true,
-			}),
-			Animated.timing(translateY, {
-				toValue: 0,
-				duration: 1500,
-				useNativeDriver: true,
-			}),
-		]);
+  const styles = getStyles(theme);
 
-		Animated.loop(bounce).start();
-	}, [translateY]);
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={styles.backgroundContainer}>
+        {/* Background - placeholder gradient, replace with actual image */}
+        <LinearGradient
+          colors={['#F3F4F6', '#E5E7EB', '#D1D5DB']}
+          style={styles.background}
+        >
+          {/* Content overlay */}
+          <View style={styles.overlay}>
+            <View style={styles.contentContainer}>
+              {/* Header content */}
+              <View style={styles.headerContent}>
+                <Text style={styles.headline}>Invoice in seconds</Text>
+                <Text style={styles.subHeadline}>
+                  Create professional invoices and send them from your phone
+                </Text>
+              </View>
 
-	const handleNext = () => {
-		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-		router.push("/onboarding-3");
-	};
+              {/* Spacer */}
+              <View style={styles.spacer} />
 
-	return (
-		<SafeAreaView
-			className={`flex-1 bg-background ${!isDeviceLightMode ? "dark" : ""}`}
-		>
-			<View style={styles.container}>
-				<StepIndicator currentStep={2} totalSteps={3} />
-
-				<View style={styles.box}>
-					<Animated.View
-						style={{
-							width: "100%",
-							height: "100%",
-							transform: [{ translateY }],
-						}}
-					>
-						<View className="w-full h-full bg-gray-300 rounded-lg" />
-					</Animated.View>
-				</View>
-
-				<View style={styles.textContainer}>
-					<ShiningText
-						text="Onboarding 2"
-						className="text-3xl font-bold text-center text-foreground mb-4"
-					/>
-					<P
-						style={[
-							styles.description,
-							{ color: colors[deviceColorScheme].mutedForeground },
-						]}
-					>
-						Something else about the app...
-					</P>
-				</View>
-
-				<View style={styles.spacer} />
-
-				<Button
-					onPress={handleNext}
-					className="w-full dark:bg-white dark:text-primary"
-				>
-					Continue
-				</Button>
-			</View>
-		</SafeAreaView>
-	);
+              {/* Bottom button */}
+              <View style={styles.buttonContainer}>
+                <Button
+                  onPress={handleContinue}
+                  style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                >
+                  <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
+                </Button>
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
+      </View>
+    </SafeAreaView>
+  );
 }
 
-const styles = StyleSheet.create({
-	safeArea: {
-		flex: 1,
-	},
-	container: {
-		flex: 1,
-		padding: 20,
-		alignItems: "center",
-		justifyContent: "space-between",
-	},
-	stepIndicatorContainer: {
-		flexDirection: "row",
-		justifyContent: "center",
-		alignItems: "center",
-		paddingVertical: 10,
-		width: "100%",
-		position: "absolute",
-		top: 10,
-	},
-	stepIndicator: {
-		height: 8,
-		width: 60,
-		borderRadius: 4,
-		marginHorizontal: 5,
-	},
-	stepIndicatorActive: {},
-	box: {
-		width: "80%",
-		aspectRatio: 1,
-		borderRadius: 10,
-		overflow: "hidden",
-		alignSelf: "center",
-		marginBottom: 20,
-		marginTop: 30,
-	},
-	textContainer: {
-		alignItems: "center",
-		paddingHorizontal: 20,
-		marginBottom: 30,
-		marginTop: 60,
-	},
-	title: {
-		fontSize: 24,
-		fontWeight: "bold",
-		textAlign: "center",
-		marginBottom: 15,
-	},
-	description: {
-		fontSize: 16,
-		textAlign: "center",
-		marginBottom: 20,
-	},
-	spacer: {
-		flex: 1,
-	},
-	button: {
-		paddingVertical: 15,
-		paddingHorizontal: 30,
-		borderRadius: 25,
-		width: "90%",
-		alignItems: "center",
-		marginBottom: 20,
-	},
-	buttonText: {
-		fontSize: 18,
-		fontWeight: "bold",
-	},
-});
+const getStyles = (theme: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  backgroundContainer: {
+    flex: 1,
+  },
+  background: {
+    flex: 1,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)', // Dark overlay for text readability
+  },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    justifyContent: 'space-between',
+  },
+  headerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  headline: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  subHeadline: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 26,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  spacer: {
+    flex: 0.5,
+  },
+  buttonContainer: {
+    width: '100%',
+    paddingBottom: 20,
+  },
+  primaryButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+}); 
