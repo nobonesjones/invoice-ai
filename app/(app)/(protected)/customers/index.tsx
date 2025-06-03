@@ -33,6 +33,7 @@ export default function CustomersScreen() {
 
 	const theme = colors.light;
 	const [customers, setCustomers] = useState<Customer[]>([]);
+	const [searchTerm, setSearchTerm] = useState('');
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
@@ -41,6 +42,18 @@ export default function CustomersScreen() {
 		origin?: string;
 	}>();
 	const addNewClientSheetRef = useRef<BottomSheetModal>(null);
+
+	// Filter customers based on search term
+	const filteredCustomers = customers.filter((customer) => {
+		if (!searchTerm.trim()) return true;
+		
+		const searchLower = searchTerm.toLowerCase().trim();
+		const nameMatch = customer.name?.toLowerCase().includes(searchLower);
+		const emailMatch = customer.email?.toLowerCase().includes(searchLower);
+		const phoneMatch = customer.phone?.toLowerCase().includes(searchLower);
+		
+		return nameMatch || emailMatch || phoneMatch;
+	});
 
 	const fetchClients = useCallback(async () => {
 		console.log("Fetching clients from Supabase...");
@@ -111,6 +124,10 @@ export default function CustomersScreen() {
 		console.log("CustomersScreen: CreateNewClientSheet closed");
 	};
 
+	const handleSearchChange = (text: string) => {
+		setSearchTerm(text);
+	};
+
   // Shine animation for Add Client button
   const addClientButtonShineX = useShineAnimation({
     duration: 1000,
@@ -173,14 +190,17 @@ export default function CustomersScreen() {
 						style={styles.searchIcon}
 					/>
 					<TextInput
-						placeholder="Search Customers"
+						placeholder="Search by name, email, or phone"
 						placeholderTextColor={theme.mutedForeground}
 						style={styles.searchInput}
-						// TODO: Implement search functionality
+						value={searchTerm}
+						onChangeText={handleSearchChange}
+						autoCorrect={false}
+						autoCapitalize="none"
 					/>
 				</View>
 				<FlashList
-					data={customers}
+					data={filteredCustomers}
 					renderItem={renderCustomerItem}
 					keyExtractor={(item) => item.id}
 					ItemSeparatorComponent={ItemSeparator}
@@ -197,6 +217,12 @@ export default function CustomersScreen() {
 							);
 						if (error)
 							return <Text style={styles.emptyListTextError}>{error}</Text>;
+						if (searchTerm.trim() && !filteredCustomers.length)
+							return (
+								<Text style={styles.emptyListText}>
+									No clients found matching "{searchTerm}". Try a different search term.
+								</Text>
+							);
 						if (!customers.length)
 							return (
 								<Text style={styles.emptyListText}>

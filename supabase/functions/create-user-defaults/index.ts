@@ -58,7 +58,7 @@ serve(async (req) => {
       stripe_enabled: false,
       bank_transfer_enabled: false,
       bank_details: null,
-      invoice_terms_notes: "Payment is due within 30 days of invoice date. Late payments may incur additional fees.",
+      invoice_terms_notes: null, // Start with empty instructions - users will add their own
     };
 
     const { data: paymentOptionsData, error: paymentError } = await supabase

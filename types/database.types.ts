@@ -24,6 +24,7 @@ export type Database = {
           id: string
           region: string | null
           tax_name: string | null
+          tax_number: string | null
           updated_at: string
           user_id: string
         }
@@ -41,6 +42,7 @@ export type Database = {
           id?: string
           region?: string | null
           tax_name?: string | null
+          tax_number?: string | null
           updated_at?: string
           user_id: string
         }
@@ -58,6 +60,7 @@ export type Database = {
           id?: string
           region?: string | null
           tax_name?: string | null
+          tax_number?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -78,6 +81,7 @@ export type Database = {
           phone: string | null
           postal_zip_code: string | null
           state_province_region: string | null
+          tax_number: string | null
           updated_at: string | null
           user_id: string
         }
@@ -95,6 +99,7 @@ export type Database = {
           phone?: string | null
           postal_zip_code?: string | null
           state_province_region?: string | null
+          tax_number?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -112,6 +117,7 @@ export type Database = {
           phone?: string | null
           postal_zip_code?: string | null
           state_province_region?: string | null
+          tax_number?: string | null
           updated_at?: string | null
           user_id?: string
         }

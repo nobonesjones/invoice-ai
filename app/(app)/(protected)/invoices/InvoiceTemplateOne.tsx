@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { Tables } from '../../../../types/database.types'; // Corrected import path
 import { format } from 'date-fns';
+import { paginateInvoiceItems } from '../../../utils/invoicePagination';
 
 // Define InvoiceForTemplate by explicitly listing properties
 // This gives more control than Omit if type conflicts are occurring
@@ -51,6 +52,8 @@ export type BusinessSettingsRow = Tables<'business_settings'> & {
   bank_transfer_enabled?: boolean;
   bank_details?: string;
   invoice_terms_notes?: string;
+  auto_apply_tax?: boolean;
+  tax_name?: string;
 };
 
 interface InvoiceTemplateOneProps {
@@ -138,195 +141,226 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
     );
   }
 
+  // Get paginated items for screen display
+  const paginationResult = paginateInvoiceItems(invoice.invoice_line_items || []);
+  const { pages, hasMultiplePages, totalPages } = paginationResult;
+
   return (
     <View style={[styles.container, { borderColor: colors.border }]}>
-      {/* 1. Header Section */}
-      <View style={styles.headerSection}>
-        <View style={styles.headerLeft}>
-          {businessSettings?.business_logo_url ? (
-            <Image source={{ uri: businessSettings.business_logo_url }} style={styles.logo} resizeMode="contain" />
-          ) : (
-            <Text style={styles.logoPlaceholder}>{businessSettings?.business_name || 'Your Logo'}</Text>
-          )}
-        </View>
-        <View style={styles.headerRight}>
-          <Text style={styles.invoiceLabel}>INVOICE</Text>
-          <Text style={[styles.text, { marginTop: 4 }]}>Ref: {invoice.invoice_number || 'N/A'}</Text>
-          <Text style={styles.text}>Date: {formatDate(invoice.invoice_date)}</Text>
-          <Text style={styles.text}>
-            Due: {formatDueDateDisplay(invoice.due_date_option, invoice.due_date)}
-          </Text>
-        </View>
-      </View>
-
-      {/* 2. Recipient & 3. Invoice Number Section */}
-      <View style={styles.metaSection}>
-        <View style={styles.metaLeft}> 
-          {/* Business Information (From) */}
-          <Text style={styles.label}>From:</Text>
-          {businessSettings?.business_name && (
-            <Text style={styles.businessNameText}>{businessSettings.business_name}</Text>
-          )}
-          {businessSettings?.business_address && (
-            <Text style={styles.text}>{businessSettings.business_address}</Text>
-          )}
-          {/* You can add more business details here if needed, like email/phone */}
-        </View>
-
-        <View style={styles.metaRight}> 
-          {/* Client Information (Bill To) */}
-          <Text style={[styles.label, { textAlign: 'right' }]}>Bill To:</Text>
-          <Text style={[styles.clientNameText, { textAlign: 'right' }]}>{invoice.clients?.name || clientName || 'N/A'}</Text>
-          {/* TODO: Regenerate Supabase types. Using 'as any' as a temporary workaround because TS types are outdated. */} 
-          {(invoice.clients as any)?.address_client && (
-            <Text style={[styles.text, { textAlign: 'right' }]}>{(invoice.clients as any).address_client}</Text>
-          )}
-          {invoice.clients?.email && <Text style={[styles.text, { textAlign: 'right' }]}>{invoice.clients.email}</Text>}
-          {invoice.clients?.phone && <Text style={[styles.text, { textAlign: 'right' }]}>{invoice.clients.phone}</Text>}
-        </View>
-      </View>
-
-      {/* 4. Item Table Section */}
-      <View style={styles.itemTableSection}>
-        {/* Table Header */}
-        <View style={styles.tableRowHeader}>
-          <View style={styles.qtyCol}><Text style={[styles.tableHeader, { textAlign: 'center' }]}>QTY</Text></View>
-          <View style={styles.descCol}><Text style={styles.tableHeader}>DESCRIPTION</Text></View>
-          <View style={styles.priceCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>PRICE</Text></View>
-          <View style={styles.totalCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>TOTAL</Text></View>
-        </View>
-
-        {/* Table Body - Dynamically generated item rows */}
-        {invoice?.invoice_line_items && invoice.invoice_line_items.length > 0 ? (
-          invoice.invoice_line_items.map((item, index) => (
-            <View key={item.id || `item-${index}`} style={styles.tableRow}>
-              <View style={styles.qtyCol}><Text style={[styles.lineItemCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
-              <View style={styles.descCol}>
-                <Text style={styles.lineItemCellText}>{item.item_name}</Text>
-                {item.item_description && (
-                  <Text style={styles.itemSubtitle}>{item.item_description}</Text>
-                )}
-              </View>
-              <View style={styles.priceCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{invoice.currency_symbol}{item.unit_price?.toFixed(2) ?? '0.00'}</Text></View>
-              <View style={styles.totalCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{invoice.currency_symbol}{item.total_price?.toFixed(2) ?? '0.00'}</Text></View>
-            </View>
-          ))
-        ) : (
-          <View style={styles.tableRow}>
-            <Text style={{ flex: 1, textAlign: 'center', paddingVertical: 10, fontStyle: 'italic', color: 'black' }}>
-              No line items.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* 5. Footer Section */}
-      <View style={styles.footerSection}>
-        <View style={styles.footerLeft}>
-          <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Terms, Instructions & Notes</Text>
-            <Text style={styles.paymentTermsBody}>{invoice?.notes || 'No terms specified.'}</Text>
-          </View>
-          {invoice?.payment_terms && (
-          <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Payment Terms</Text>
-            <Text style={styles.paymentTermsBody}>{invoice.payment_terms}</Text>
-          </View>
-          )}
-          {/* Payment Methods Section */}
-          {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
-          <View style={styles.footerBlock}>
-            <Text style={styles.paymentTermsHeader}>Payment Methods</Text>
-            
-            {/* Stripe Payment */}
-            {invoice?.stripe_active && (
-              <View style={styles.paymentMethodItem}>
-                <View style={styles.paymentMethodRow}>
-                  <Text style={styles.paymentMethodText}>Pay Online</Text>
-                  <View style={styles.paymentIconsContainer}>
-                    <Image source={require('../../../../assets/visaicon.png')} style={styles.paymentIcon} />
-                    <Image source={require('../../../../assets/mastercardicon.png')} style={styles.paymentIcon} />
+      {/* Render pages as complete containers */}
+      {pages.length > 0 ? (
+        pages.map((pageItems, pageIndex) => (
+          <View key={`page-${pageIndex}`} style={[
+            styles.pageContainer,
+            pageIndex > 0 && styles.pageBreak
+          ]}>
+            {/* Page 1: Include header and business info */}
+            {pageIndex === 0 && (
+              <>
+                {/* Header Section */}
+                <View style={styles.headerSection}>
+                  <View style={styles.headerLeft}>
+                    {businessSettings?.business_logo_url ? (
+                      <Image source={{ uri: businessSettings.business_logo_url }} style={styles.logo} resizeMode="contain" />
+                    ) : (
+                      <Text style={styles.logoPlaceholder}>{businessSettings?.business_name || 'Your Logo'}</Text>
+                    )}
+                  </View>
+                  <View style={styles.headerRight}>
+                    <Text style={styles.invoiceLabel}>INVOICE</Text>
+                    <Text style={[styles.text, { marginTop: 4 }]}>Ref: {invoice.invoice_number || 'N/A'}</Text>
+                    <Text style={styles.text}>Date: {formatDate(invoice.invoice_date)}</Text>
+                    <Text style={styles.text}>
+                      Due: {formatDueDateDisplay(invoice.due_date_option, invoice.due_date)}
+                    </Text>
                   </View>
                 </View>
-                <Text style={styles.paymentMethodText}>www.stripelink.com</Text>
-              </View>
-            )}
-            
-            {/* PayPal Payment */}
-            {invoice?.paypal_active && (
-              <View style={styles.paymentMethodItem}>
-                <View style={styles.paymentMethodRow}>
-                  <Text style={styles.paymentMethodText}>Pay with PayPal</Text>
-                  <Image source={require('../../../../assets/paypalicon.png')} style={styles.paymentIcon} />
+
+                {/* Business and Client Info */}
+                <View style={styles.metaSection}>
+                  <View style={styles.metaLeft}> 
+                    <Text style={styles.label}>From:</Text>
+                    {businessSettings?.business_name && (
+                      <Text style={styles.businessNameText}>{businessSettings.business_name}</Text>
+                    )}
+                    {businessSettings?.business_address && (
+                      <Text style={styles.text}>{businessSettings.business_address}</Text>
+                    )}
+                    {businessSettings?.auto_apply_tax && businessSettings?.tax_number && (
+                      <Text style={styles.text}>
+                        {businessSettings?.tax_name || 'Tax'} - {businessSettings.tax_number}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.metaRight}> 
+                    <Text style={[styles.label, { textAlign: 'right' }]}>Bill To:</Text>
+                    <Text style={[styles.clientNameText, { textAlign: 'right' }]}>{invoice.clients?.name || clientName || 'N/A'}</Text>
+                    {(invoice.clients as any)?.address_client && (
+                      <Text style={[styles.text, { textAlign: 'right' }]}>{(invoice.clients as any).address_client}</Text>
+                    )}
+                    {invoice.clients?.email && <Text style={[styles.text, { textAlign: 'right' }]}>{invoice.clients.email}</Text>}
+                    {invoice.clients?.phone && <Text style={[styles.text, { textAlign: 'right' }]}>{invoice.clients.phone}</Text>}
+                  </View>
                 </View>
-                <Text style={styles.paymentMethodText}>
-                  {businessSettings?.paypal_email || 'nobones@gmail.com'}
-                </Text>
+              </>
+            )}
+
+            {/* Line Items Section for this page */}
+            <View style={styles.itemTableSection}>
+              {/* Table Header */}
+              <View style={styles.tableRowHeader}>
+                <View style={styles.qtyCol}><Text style={[styles.tableHeader, { textAlign: 'center' }]}>QTY</Text></View>
+                <View style={styles.descCol}><Text style={styles.tableHeader}>DESCRIPTION</Text></View>
+                <View style={styles.priceCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>PRICE</Text></View>
+                <View style={styles.totalCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>TOTAL</Text></View>
+              </View>
+
+              {/* Line Items for this page */}
+              {pageItems.map((item, index) => (
+                <View key={item.id || `item-${pageIndex}-${index}`} style={styles.tableRow}>
+                  <View style={styles.qtyCol}><Text style={[styles.lineItemCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
+                  <View style={styles.descCol}>
+                    <Text style={styles.lineItemCellText}>{item.item_name}</Text>
+                    {item.item_description && (
+                      <Text style={styles.itemSubtitle}>{item.item_description}</Text>
+                    )}
+                  </View>
+                  <View style={styles.priceCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{invoice.currency_symbol}{item.unit_price?.toFixed(2) ?? '0.00'}</Text></View>
+                  <View style={styles.totalCol}><Text style={[styles.lineItemCellText, { textAlign: 'right' }]}>{invoice.currency_symbol}{item.total_price?.toFixed(2) ?? '0.00'}</Text></View>
+                </View>
+              ))}
+            </View>
+
+            {/* Last Page: Include footer with totals and payment info */}
+            {pageIndex === pages.length - 1 && (
+              <View style={styles.footerSection}>
+                <View style={styles.footerLeft}>
+                  <View style={styles.footerBlock}>
+                    <Text style={styles.paymentTermsHeader}>Terms, Instructions & Notes</Text>
+                    <Text style={styles.paymentTermsBody}>{invoice?.notes || 'No terms specified.'}</Text>
+                  </View>
+                  {invoice?.payment_terms && (
+                  <View style={styles.footerBlock}>
+                    <Text style={styles.paymentTermsHeader}>Payment Terms</Text>
+                    <Text style={styles.paymentTermsBody}>{invoice.payment_terms}</Text>
+                  </View>
+                  )}
+                  {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
+                  <View style={styles.footerBlock}>
+                    <Text style={styles.paymentTermsHeader}>Payment Methods</Text>
+                    
+                    {invoice?.stripe_active && (
+                      <View style={styles.paymentMethodItem}>
+                        <View style={styles.paymentMethodRow}>
+                          <Text style={styles.paymentMethodText}>Pay Online</Text>
+                          <View style={styles.paymentIconsContainer}>
+                            <Image source={require('../../../../assets/visaicon.png')} style={styles.paymentIcon} />
+                            <Image source={require('../../../../assets/mastercardicon.png')} style={styles.paymentIcon} />
+                          </View>
+                        </View>
+                        <Text style={styles.paymentMethodText}>www.stripelink.com</Text>
+                      </View>
+                    )}
+                    
+                    {invoice?.paypal_active && (
+                      <View style={styles.paymentMethodItem}>
+                        <View style={styles.paymentMethodRow}>
+                          <Text style={styles.paymentMethodText}>Pay with PayPal</Text>
+                          <Image source={require('../../../../assets/paypalicon.png')} style={styles.paymentIcon} />
+                        </View>
+                        <Text style={styles.paymentMethodText}>
+                          {businessSettings?.paypal_email || 'nobones@gmail.com'}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {invoice?.bank_account_active && (
+                      <View style={styles.paymentMethodItem}>
+                        <Text style={styles.paymentMethodText}>Bank Transfer</Text>
+                        <Text style={styles.paymentMethodText}>
+                          {businessSettings?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  )}
+                </View>
+                <View style={styles.footerRight}>
+                  <View style={styles.totalsBlock}>
+                    <View style={styles.totalLine}>
+                      <Text style={styles.label}>Subtotal:</Text>
+                      <Text style={styles.totalsValueText}>{invoice.currency_symbol}{invoice.subtotal_amount?.toFixed(2) ?? '0.00'}</Text>
+                    </View>
+                    {invoice.discount_value != null && invoice.discount_value > 0 && (
+                      <View style={styles.totalLine}>
+                        <Text style={styles.label}>
+                          Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
+                        </Text>
+                        <Text style={styles.totalsValueText}>-{invoice.currency_symbol}{calculateDiscountAmount(invoice).toFixed(2)}</Text>
+                      </View>
+                    )}
+                    {invoice.tax_percentage != null && invoice.tax_percentage > 0 && (
+                      <View style={styles.totalLine}>
+                        <Text style={styles.label}>{invoice.invoice_tax_label || 'Tax'} ({invoice.tax_percentage}%):</Text>
+                        <Text style={styles.totalsValueText}>{invoice.currency_symbol}{calculateTaxAmount(invoice).toFixed(2)}</Text>
+                      </View>
+                    )}
+                    
+                    {invoice.paid_amount != null && invoice.paid_amount > 0 && (
+                      <View style={styles.totalLine}>
+                        <Text style={styles.label}>Paid:</Text>
+                        <Text style={[styles.totalsValueText, { color: '#10B981' }]}>-{invoice.currency_symbol}{invoice.paid_amount.toFixed(2)}</Text>
+                      </View>
+                    )}
+                    
+                    <View style={{ height: 10 }} />
+                    
+                    <View style={styles.grandTotalBox}>
+                      <Text style={styles.grandTotalBoxText}>
+                        {(invoice.paid_amount != null && invoice.paid_amount > 0) ? 'Balance Due:' : 'Total:'}
+                      </Text>
+                      <Text style={styles.grandTotalBoxText}>
+                        {invoice.currency_symbol}{((invoice.total_amount || 0) - (invoice.paid_amount || 0)).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
               </View>
             )}
-            
-            {/* Bank Transfer */}
-            {invoice?.bank_account_active && (
-              <View style={styles.paymentMethodItem}>
-                <Text style={styles.paymentMethodText}>Bank Transfer</Text>
-                <Text style={styles.paymentMethodText}>
-                  {businessSettings?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA'}
+
+            {/* Page indicator */}
+            {hasMultiplePages && (
+              <View style={styles.pageIndicator}>
+                <Text style={styles.pageIndicatorText}>
+                  Page {pageIndex + 1}/{totalPages}
                 </Text>
               </View>
             )}
           </View>
-          )}
-        </View>
-        <View style={styles.footerRight}>
-          <View style={styles.totalsBlock}>
-            <View style={styles.totalLine}>
-              <Text style={styles.label}>Subtotal:</Text>
-              <Text style={styles.totalsValueText}>{invoice.currency_symbol}{invoice.subtotal_amount?.toFixed(2) ?? '0.00'}</Text>
+        ))
+      ) : (
+        <View style={styles.pageContainer}>
+          <View style={styles.itemTableSection}>
+            <View style={styles.tableRowHeader}>
+              <View style={styles.qtyCol}><Text style={[styles.tableHeader, { textAlign: 'center' }]}>QTY</Text></View>
+              <View style={styles.descCol}><Text style={styles.tableHeader}>DESCRIPTION</Text></View>
+              <View style={styles.priceCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>PRICE</Text></View>
+              <View style={styles.totalCol}><Text style={[styles.tableHeader, { textAlign: 'right' }]}>TOTAL</Text></View>
             </View>
-            {invoice.discount_value != null && invoice.discount_value > 0 && (
-              <View style={styles.totalLine}>
-                <Text style={styles.label}>
-                  Discount {invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:
-                </Text>
-                <Text style={styles.totalsValueText}>-{invoice.currency_symbol}{calculateDiscountAmount(invoice).toFixed(2)}</Text>
-              </View>
-            )}
-            {invoice.tax_percentage != null && invoice.tax_percentage > 0 && (
-              <View style={styles.totalLine}>
-                <Text style={styles.label}>{invoice.invoice_tax_label || 'Tax'} ({invoice.tax_percentage}%):</Text>
-                <Text style={styles.totalsValueText}>{invoice.currency_symbol}{calculateTaxAmount(invoice).toFixed(2)}</Text>
-              </View>
-            )}
-            
-            {/* Paid Section - Show if there's a paid amount */}
-            {invoice.paid_amount != null && invoice.paid_amount > 0 && (
-              <View style={styles.totalLine}>
-                <Text style={styles.label}>Paid:</Text>
-                <Text style={[styles.totalsValueText, { color: '#10B981' }]}>-{invoice.currency_symbol}{invoice.paid_amount.toFixed(2)}</Text>
-              </View>
-            )}
-            
-            {/* Spacer before grand total */}
-            <View style={{ height: 10 }} />
-            
-            {/* Grand Total in styled box - Show Balance Due if there are payments */}
-            <View style={styles.grandTotalBox}>
-              <Text style={styles.grandTotalBoxText}>
-                {(invoice.paid_amount != null && invoice.paid_amount > 0) ? 'Balance Due:' : 'Total:'}
-              </Text>
-              <Text style={styles.grandTotalBoxText}>
-                {invoice.currency_symbol}{((invoice.total_amount || 0) - (invoice.paid_amount || 0)).toFixed(2)}
+            <View style={styles.tableRow}>
+              <Text style={{ flex: 1, textAlign: 'center', paddingVertical: 10, fontStyle: 'italic', color: 'black' }}>
+                No line items.
               </Text>
             </View>
           </View>
         </View>
-      </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-
   container: {
     width: '100%',
     maxWidth: 370,
@@ -340,7 +374,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     margin: 10, // Added margin for better visual separation if scaled in viewer
-    height: 600, // Reduced height further
   },
   textPlaceholder: { // Added for placeholder client address lines
     fontSize: 6,
@@ -565,6 +598,45 @@ const styles = StyleSheet.create({
     height: 10,
     marginLeft: 2,
     resizeMode: 'contain',
+  },
+  pageIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  pageIndicatorText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: 'black',
+  },
+  pageBreak: {
+    marginTop: 60, // Larger gap to simulate page break
+    paddingTop: 20,
+    borderTopWidth: 2,
+    borderColor: '#ddd',
+    borderStyle: 'dashed', // Dashed border to show page break
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  pageContainer: {
+    minHeight: 600, // Increased height to accommodate full invoice content
+    backgroundColor: '#fff',
+    marginBottom: 30,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+    padding: 15,
+  },
+  pageContent: {
+    flex: 1,
+    paddingVertical: 10,
   },
 });
 

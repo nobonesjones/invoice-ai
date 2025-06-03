@@ -656,19 +656,56 @@ Use tools to take action. Reference previous conversation naturally.`;
         const clientNameMatch = rawArgs.match(/"client_name"\s*:\s*"([^"]+)"/);
         if (clientNameMatch) params.client_name = clientNameMatch[1];
         
-        // Extract line_items array (simplified)
+        // Extract line_items array (improved to handle multiple items)
         const lineItemsMatch = rawArgs.match(/"line_items"\s*:\s*\[([^\]]+)\]/);
         if (lineItemsMatch) {
-          // Try to extract at least one line item
-          const itemNameMatch = lineItemsMatch[1].match(/"item_name"\s*:\s*"([^"]+)"/);
-          const unitPriceMatch = lineItemsMatch[1].match(/"unit_price"\s*:\s*(\d+(?:\.\d+)?)/);
-          
-          if (itemNameMatch && unitPriceMatch) {
-            params.line_items = [{
-              item_name: itemNameMatch[1],
-              unit_price: parseFloat(unitPriceMatch[1]),
-              quantity: 1
-            }];
+          try {
+            // Try to parse multiple line items by finding all item objects
+            const itemsContent = lineItemsMatch[1];
+            const items = [];
+            
+            // Use regex to find all item objects within the array
+            const itemRegex = /\{[^}]*"item_name"\s*:\s*"([^"]+)"[^}]*"unit_price"\s*:\s*(\d+(?:\.\d+)?)[^}]*\}/g;
+            let match;
+            
+            while ((match = itemRegex.exec(itemsContent)) !== null) {
+              items.push({
+                item_name: match[1],
+                unit_price: parseFloat(match[2]),
+                quantity: 1
+              });
+            }
+            
+            // Fallback to single item extraction if no matches found
+            if (items.length === 0) {
+              const itemNameMatch = itemsContent.match(/"item_name"\s*:\s*"([^"]+)"/);
+              const unitPriceMatch = itemsContent.match(/"unit_price"\s*:\s*(\d+(?:\.\d+)?)/);
+              
+              if (itemNameMatch && unitPriceMatch) {
+                items.push({
+                  item_name: itemNameMatch[1],
+                  unit_price: parseFloat(unitPriceMatch[1]),
+                  quantity: 1
+                });
+              }
+            }
+            
+            if (items.length > 0) {
+              params.line_items = items;
+            }
+          } catch (parseError) {
+            console.log('[AssistantService] Error parsing multiple line items, trying single item fallback');
+            // Original single-item fallback
+            const itemNameMatch = lineItemsMatch[1].match(/"item_name"\s*:\s*"([^"]+)"/);
+            const unitPriceMatch = lineItemsMatch[1].match(/"unit_price"\s*:\s*(\d+(?:\.\d+)?)/);
+            
+            if (itemNameMatch && unitPriceMatch) {
+              params.line_items = [{
+                item_name: itemNameMatch[1],
+                unit_price: parseFloat(unitPriceMatch[1]),
+                quantity: 1
+              }];
+            }
           }
         }
         

@@ -1,4 +1,11 @@
 import { Tables } from '../../types/database.types';
+import { 
+  paginateInvoiceItems, 
+  generateTableHeader, 
+  generatePageItems, 
+  generatePageSubtotal,
+  getPaginationStyles 
+} from './invoicePagination';
 
 // Re-define types similar to InvoiceTemplateOne.tsx for clarity and independence
 // if PDF data needs to diverge slightly in the future.
@@ -30,7 +37,7 @@ export interface PdfInvoice extends Omit<Tables<'invoices'>, 'client_id' | 'user
   paypal_active: Tables<'invoices'>['paypal_active'];
   bank_account_active: Tables<'invoices'>['bank_account_active'];
   stripe_active: Tables<'invoices'>['stripe_active'];
-  paid_amount: Tables<'invoices'>['paid_amount'];
+  paid_amount: number | null;
 
   // Extended properties for PDF
   invoice_line_items: PdfInvoiceLineItem[];
@@ -119,315 +126,14 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
   const { invoice, businessSettings, paymentOptions } = data;
   const client = invoice.clients;
 
-  // CSS to match mobile template exactly - compact and fits on one page
-  const styles = `
-    /* Force color rendering for PDF on iOS */
-    * {
-      print-color-adjust: exact !important;
-      -webkit-print-color-adjust: exact !important;
-      box-sizing: border-box;
-    }
-    
-    @page {
-      size: A4;
-      margin: 50mm 23mm 30mm 50mm;
-    }
-    
-    html, body { 
-      width: 100%; 
-      height: 100%;
-      margin: 0; 
-      padding: 0; 
-      font-family: Arial, sans-serif; 
-      color: #000; 
-      font-size: 12px; 
-      background-color: #fff;
-      line-height: 1.2;
-    }
-    
-    .container { 
-      width: 100%; 
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      background-color: #fff;
-    }
-    
-    /* Header Section - compact like mobile */
-    .header-section { 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: flex-start; 
-      margin-bottom: 15mm;
-      margin-top: 5mm;
-    }
-    .header-left { 
-      flex: 1;
-    }
-    .header-right { 
-      flex: 1;
-      text-align: right;
-    }
-    .header-left img { 
-      max-width: 210px;
-      max-height: 105px;
-      margin-bottom: 5mm;
-    }
-    .logo-placeholder {
-      font-size: 25px; 
-      font-weight: bold;
-      color: #000;
-      width: 210px;
-      height: 105px;
-      text-align: center;
-      line-height: 105px;
-      border: 1px solid #ddd;
-      margin-bottom: 5mm;
-    }
-    .invoice-title { 
-      font-size: 20px; 
-      font-weight: bold; 
-      margin: 0 0 3mm 0; 
-      color: #000; 
-    }
-    .header-right p { 
-      margin: 1mm 0; 
-      font-size: 11px; 
-      color: #000;
-      line-height: 1.3;
-    }
+  // Paginate line items
+  const paginationResult = paginateInvoiceItems(invoice.invoice_line_items || []);
+  const { pages, hasMultiplePages, totalPages } = paginationResult;
 
-    /* Address Section - compact */
-    .address-section { 
-      display: flex; 
-      justify-content: space-between; 
-      margin-bottom: 10mm; 
-    }
-    .from-address, .to-address { 
-      flex: 1; 
-      max-width: 45%;
-    }
-    .to-address { 
-      text-align: right; 
-    }
-    .address-block-title { 
-      font-size: 10px; 
-      font-weight: bold; 
-      color: #666; 
-      margin-bottom: 2mm; 
-      text-transform: uppercase;
-    }
-    .address-name { 
-      font-size: 12px; 
-      font-weight: bold; 
-      color: #000; 
-      margin-bottom: 1mm; 
-    }
-    .business-name { 
-      font-size: 12px; 
-      font-weight: bold; 
-      color: #000; 
-      margin-bottom: 1mm; 
-    }
-    .address-line { 
-      font-size: 10px; 
-      color: #000; 
-      line-height: 1.3; 
-      margin: 0 0 1mm 0; 
-    }
+  console.log('[PDF Generation] Items:', invoice.invoice_line_items?.length);
+  console.log('[PDF Generation] Pages:', totalPages, 'Has multiple:', hasMultiplePages);
 
-    /* Custom headline - compact */
-    .custom-headline { 
-      padding: 3mm 0; 
-      text-align: center; 
-      margin-bottom: 8mm; 
-      border-top: 1px solid #eee;
-      border-bottom: 1px solid #eee;
-    }
-    .custom-headline p { 
-      font-size: 13px; 
-      font-weight: bold; 
-      margin: 0; 
-      color: #000;
-    }
-
-    /* Line Items Table - compact like mobile */
-    .line-items { 
-      margin-bottom: 10mm; 
-    }
-    .line-items table { 
-      width: 100%; 
-      border-collapse: collapse; 
-    }
-    .line-items th { 
-      background-color: rgba(76, 175, 80, 0.15) !important;
-      padding: 2mm 1.5mm; 
-      font-size: 9px;
-      font-weight: bold;
-      color: #000;
-      text-align: left;
-      text-transform: uppercase;
-    }
-    .line-items td { 
-      padding: 2mm 1.5mm; 
-      border-bottom: 1px solid #eee;
-      font-size: 10px;
-      color: #000;
-      vertical-align: top;
-    }
-    .line-items tr:last-child td { 
-      border-bottom: none; 
-    }
-
-    .line-items .col-qty { 
-      width: 10%; 
-      text-align: center; 
-    }
-    .line-items .col-desc { 
-      width: 50%; 
-    }
-    .line-items .col-price { 
-      width: 20%; 
-      text-align: right; 
-    }
-    .line-items .col-total { 
-      width: 20%; 
-      text-align: right; 
-    }
-    .line-items .item-description-pdf { 
-      font-size: 9px; 
-      color: #666; 
-      margin-top: 1mm; 
-      display: block; 
-      font-style: italic;
-    }
-
-    /* Footer Section - compact */
-    .summary-section { 
-      display: flex; 
-      justify-content: space-between; 
-      margin-top: 8mm; 
-      padding-top: 5mm; 
-      border-top: 1px solid #eee;
-    }
-    .notes-and-terms-section { 
-      flex: 1.2; 
-      padding-right: 8mm;
-    }
-    .notes-and-terms-section .section-title { 
-      font-size: 9px; 
-      margin-bottom: 2mm; 
-      color: #000; 
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-    .notes-and-terms-section p { 
-      font-size: 10px; 
-      margin: 0 0 2mm 0; 
-      color: #666; 
-      line-height: 1.3;
-    }
-    .totals-section-html { 
-      flex: 0.8; 
-      min-width: 40mm;
-    }
-
-    /* Payment Methods Section - compact */
-    .payment-method-item { 
-      margin-bottom: 3mm; 
-    }
-    .payment-method-item p { 
-      font-size: 10px; 
-      margin: 0 0 1mm 0; 
-      color: #666; 
-    }
-    .payment-method-item p strong {
-      font-weight: bold;
-      color: #000;
-    }
-    .logo-container { 
-      display: flex; 
-      align-items: center; 
-      justify-content: flex-start;
-      margin-bottom: 1mm;
-    }
-    .logo-container img { 
-      width: 12mm; 
-      height: 8mm; 
-      margin-left: 1mm;
-      object-fit: contain;
-    }
-    .payment-method-text {
-      font-size: 10px;
-      color: #000;
-      font-weight: 500;
-    }
-
-    /* Totals Section - compact */
-    .totals-section-html .total-line { 
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1mm 0;
-      border-bottom: 1px solid #f5f5f5;
-    }
-    .totals-section-html .total-line-label { 
-      font-size: 10px;
-      font-weight: 500;
-      color: #000;
-    }
-    .totals-section-html .total-line-value { 
-      font-size: 10px;
-      color: #000;
-      text-align: right;
-      font-weight: 500;
-    }
-    .grand-total-row { 
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background-color: rgba(76, 175, 80, 0.15) !important; 
-      padding: 2mm;
-      margin-top: 3mm;
-    }
-    .grand-total-row .grand-total-label,
-    .grand-total-row .grand-total-value { 
-      font-size: 11px;
-      font-weight: bold;
-      color: #000;
-    }
-
-    /* Ensure everything fits on one page */
-    .line-items {
-      page-break-inside: avoid;
-    }
-    
-    .summary-section {
-      page-break-inside: avoid;
-    }
-  `;
-
-  // Generate line items HTML
-  let lineItemsHtml = '';
-  if (invoice.invoice_line_items && invoice.invoice_line_items.length > 0) {
-    invoice.invoice_line_items.forEach(item => {
-      lineItemsHtml += `
-        <tr>
-          <td class="col-qty">${item.quantity}</td>
-          <td class="col-desc">
-            ${item.item_name || 'N/A'}
-            ${item.item_description ? `<span class="item-description-pdf">${item.item_description.replace(/\n/g, '<br>')}</span>` : ''}
-          </td>
-          <td class="col-price">${formatCurrency(item.unit_price, invoice.currency_symbol)}</td>
-          <td class="col-total">${formatCurrency(item.total_price, invoice.currency_symbol)}</td>
-        </tr>
-      `;
-    });
-  } else {
-    lineItemsHtml = '<tr><td colspan="4" style="text-align: center; padding: 5mm; font-style: italic; color: #666;">No line items.</td></tr>';
-  }
-
-  // Generate payment methods HTML
+  // Generate payment methods HTML BEFORE the pagination loop
   let paymentMethodsHtmlString = '';
   let individualMethodsHtml = '';
 
@@ -479,6 +185,364 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
     }
   }
 
+  // CSS to match mobile template exactly - compact and fits on one page
+  const styles = `
+    /* Force color rendering for PDF on iOS */
+    * {
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+      box-sizing: border-box;
+    }
+    
+    @page {
+      size: 210mm 327mm;
+      margin: 20mm 15mm 20mm 20mm;
+    }
+    
+    html, body { 
+      width: 100%; 
+      height: 100%;
+      margin: 0; 
+      padding: 0; 
+      font-family: Arial, sans-serif; 
+      color: #000; 
+      font-size: 13px; 
+      background-color: #fff;
+      line-height: 1.2;
+    }
+    
+    .container { 
+      width: 100%; 
+      height: 100%;
+      margin: 0;
+      padding: 20mm;
+      background-color: #fff;
+      border: 1px solid #ddd; /* Add border back */
+    }
+    
+    /* Header Section - compact like mobile */
+    .header-section { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: flex-start; 
+      margin-bottom: 10.5mm;
+      margin-top: 5mm;
+    }
+    .header-left { 
+      flex: 1;
+    }
+    .header-right { 
+      flex: 1;
+      text-align: right;
+    }
+    .header-left img { 
+      max-width: 210px;
+      max-height: 105px;
+      margin-bottom: 3.5mm;
+    }
+    .logo-placeholder {
+      font-size: 26px; 
+      font-weight: bold;
+      color: #000;
+      width: 210px;
+      height: 105px;
+      text-align: center;
+      line-height: 105px;
+      border: 1px solid #ddd;
+      margin-bottom: 3.5mm;
+    }
+    .invoice-title { 
+      font-size: 21px; 
+      font-weight: bold; 
+      margin: 0 0 3mm 0; 
+      color: #000; 
+    }
+    .header-right p { 
+      margin: 1mm 0; 
+      font-size: 12px; 
+      color: #000;
+      line-height: 1.3;
+    }
+
+    /* Address Section - compact */
+    .address-section { 
+      display: flex; 
+      justify-content: space-between; 
+      margin-bottom: 10mm; 
+    }
+    .from-address, .to-address { 
+      flex: 1; 
+      max-width: 45%;
+    }
+    .to-address { 
+      text-align: right; 
+    }
+    .address-block-title { 
+      font-size: 11px; 
+      font-weight: bold; 
+      color: #666; 
+      margin-bottom: 2mm; 
+      text-transform: uppercase;
+    }
+    .address-name { 
+      font-size: 13px; 
+      font-weight: bold; 
+      color: #000; 
+      margin-bottom: 1mm; 
+    }
+    .business-name { 
+      font-size: 13px; 
+      font-weight: bold; 
+      color: #000; 
+      margin-bottom: 1mm; 
+    }
+    .address-line { 
+      font-size: 11px; 
+      color: #000; 
+      line-height: 1.3; 
+      margin: 0 0 1mm 0; 
+    }
+
+    /* Custom headline - compact */
+    .custom-headline { 
+      padding: 3mm 0; 
+      text-align: center; 
+      margin-bottom: 8mm; 
+      border-top: 1px solid #eee;
+      border-bottom: 1px solid #eee;
+    }
+    .custom-headline p { 
+      font-size: 14px; 
+      font-weight: bold; 
+      margin: 0; 
+      color: #000;
+    }
+
+    /* Line Items Table - compact like mobile */
+    .line-items { 
+      margin-bottom: 10mm; 
+    }
+    .line-items table { 
+      width: 100%; 
+      border-collapse: collapse; 
+    }
+    .line-items th { 
+      background-color: rgba(76, 175, 80, 0.15) !important;
+      padding: 2mm 1.5mm; 
+      font-size: 10px;
+      font-weight: bold;
+      color: #000;
+      text-align: left;
+      text-transform: uppercase;
+    }
+    .line-items td { 
+      padding: 2mm 1.5mm; 
+      border-bottom: 1px solid #eee;
+      font-size: 11px;
+      color: #000;
+      vertical-align: top;
+    }
+    .line-items tr:last-child td { 
+      border-bottom: none; 
+    }
+
+    .line-items .col-qty { 
+      width: 10%; 
+      text-align: center; 
+    }
+    .line-items .col-desc { 
+      width: 50%; 
+    }
+    .line-items .col-price { 
+      width: 20%; 
+      text-align: right; 
+    }
+    .line-items .col-total { 
+      width: 20%; 
+      text-align: right; 
+    }
+    .line-items .item-description-pdf { 
+      font-size: 10px; 
+      color: #666; 
+      margin-top: 1mm; 
+      display: block;
+    }
+
+    /* Summary Section - compact */
+    .summary-section { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: flex-start; 
+      margin-top: 8mm; 
+    }
+    .notes-and-terms-section { 
+      flex: 1; 
+      max-width: 50%; 
+      margin-right: 5mm; 
+    }
+    .totals-section-html { 
+      flex: 1; 
+      max-width: 45%; 
+      text-align: right; 
+    }
+
+    /* Section Title */
+    .section-title { 
+      font-size: 11px; 
+      font-weight: bold; 
+      color: #000; 
+      margin-bottom: 2mm; 
+      text-transform: uppercase;
+    }
+
+    /* Payment Methods styling - compact */
+    .payment-method-item { 
+      margin-bottom: 3mm; 
+    }
+    .payment-method-item p { 
+      margin: 1mm 0; 
+      font-size: 11px; 
+      color: #000;
+      line-height: 1.3;
+    }
+    .logo-container { 
+      display: flex; 
+      align-items: center; 
+      gap: 1.5mm; 
+      margin-bottom: 1mm; 
+    }
+    .logo-container img { 
+      width: 6mm; 
+      height: 4mm; 
+      object-fit: contain; 
+    }
+    .payment-method-text { 
+      font-size: 11px; 
+      color: #000;
+    }
+
+    /* Totals styling - compact */
+    .total-line { 
+      display: flex; 
+      justify-content: space-between; 
+      margin-bottom: 1.5mm; 
+      font-size: 11px; 
+      color: #000;
+    }
+    .total-line-label { 
+      font-weight: normal; 
+    }
+    .total-line-value { 
+      font-weight: bold; 
+    }
+    .grand-total-row { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center;
+      background-color: rgba(76, 175, 80, 0.15) !important; 
+      padding: 2mm;
+      margin-top: 3mm;
+    }
+    .grand-total-row .grand-total-label,
+    .grand-total-row .grand-total-value { 
+      font-size: 12px;
+      font-weight: bold;
+      color: #000;
+    }
+
+    ${getPaginationStyles()}
+  `;
+
+  // Generate paginated line items HTML
+  let lineItemsHtml = '';
+  
+  if (pages.length === 0 || (pages.length === 1 && pages[0].length === 0)) {
+    // No line items case
+    lineItemsHtml = `
+      <div class="line-items">
+        <table>
+          ${generateTableHeader()}
+          <tbody>
+            <tr><td colspan="4" style="text-align: center; padding: 5mm; font-style: italic; color: #666;">No line items.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else {
+    // Generate pages
+    pages.forEach((pageItems, pageIndex) => {
+      const pageNumber = pageIndex + 1;
+      const isLastPage = pageNumber === totalPages;
+      const pageInfo = { pageNumber, totalPages, isLastPage };
+      
+      // Add page break for subsequent pages
+      const pageBreakClass = pageIndex > 0 ? 'page-break' : '';
+      
+      lineItemsHtml += `
+        <div class="line-items-page ${pageBreakClass}">
+          <div class="line-items">
+            <table>
+              ${generateTableHeader()}
+              <tbody>
+                ${generatePageItems(pageItems, formatCurrency, invoice.currency_symbol, pageInfo)}
+              </tbody>
+            </table>
+          </div>
+          
+          ${isLastPage ? `
+            <div class="summary-section">
+              <div class="notes-and-terms-section">
+                ${invoice.notes ? `
+                  <div style="margin-bottom:5mm;">
+                    <div class="section-title">Terms, Instructions & Notes</div>
+                    <p>${invoice.notes.replace(/\n/g, '<br>')}</p>
+                  </div>
+                ` : ''}
+                
+                ${paymentMethodsHtmlString}
+              </div>
+
+              <div class="totals-section-html">
+                <div class="total-line">
+                  <span class="total-line-label">Subtotal:</span>
+                  <span class="total-line-value">${formatCurrency(invoice.subtotal_amount, invoice.currency_symbol)}</span>
+                </div>
+                ${invoice.discount_value && invoice.discount_value > 0 ? `
+                <div class="total-line">
+                  <span class="total-line-label">Discount ${invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:</span>
+                  <span class="total-line-value">-${formatCurrency(calculateDiscountAmount(invoice), invoice.currency_symbol)}</span>
+                </div>` : ''}
+                ${invoice.tax_percentage && invoice.tax_percentage > 0 ? `
+                <div class="total-line">
+                  <span class="total-line-label">${invoice.invoice_tax_label || 'Tax'} (${invoice.tax_percentage}%):</span>
+                  <span class="total-line-value">${formatCurrency(calculateTaxAmount(invoice), invoice.currency_symbol)}</span>
+                </div>` : ''}
+                
+                ${invoice.paid_amount && invoice.paid_amount > 0 ? `
+                <div class="total-line">
+                  <span class="total-line-label">Paid:</span>
+                  <span class="total-line-value" style="color: #10B981;">-${formatCurrency(invoice.paid_amount, invoice.currency_symbol)}</span>
+                </div>` : ''}
+                
+                <div class="grand-total-row">
+                  <span class="grand-total-label">${(invoice.paid_amount && invoice.paid_amount > 0) ? 'Balance Due:' : 'Total:'}</span>
+                  <span class="grand-total-value">${formatCurrency((invoice.total_amount || 0) - (invoice.paid_amount || 0), invoice.currency_symbol)}</span>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+          
+          <!-- Page number in bottom right corner -->
+          ${totalPages > 1 ? `
+            <div class="page-number">
+              Page ${pageNumber} of ${totalPages}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+  }
+
   return `
     <!DOCTYPE html>
     <html>
@@ -524,64 +588,9 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
 
           ${invoice.custom_headline ? `<div class="custom-headline"><p>${invoice.custom_headline}</p></div>` : ''}
 
-          <div class="line-items">
-            <table>
-              <thead>
-                <tr>
-                  <th class="col-qty">QTY</th>
-                  <th class="col-desc">DESCRIPTION</th>
-                  <th class="col-price">PRICE</th>
-                  <th class="col-total">TOTAL</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${lineItemsHtml}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="summary-section">
-            <div class="notes-and-terms-section">
-              ${invoice.notes ? `
-                <div style="margin-bottom:5mm;">
-                  <div class="section-title">Terms, Instructions & Notes</div>
-                  <p>${invoice.notes.replace(/\n/g, '<br>')}</p>
-                </div>
-              ` : ''}
-              
-              ${paymentMethodsHtmlString}
-            </div>
-
-            <div class="totals-section-html">
-              <div class="total-line">
-                <span class="total-line-label">Subtotal:</span>
-                <span class="total-line-value">${formatCurrency(invoice.subtotal_amount, invoice.currency_symbol)}</span>
-              </div>
-              ${invoice.discount_value && invoice.discount_value > 0 ? `
-              <div class="total-line">
-                <span class="total-line-label">Discount ${invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:</span>
-                <span class="total-line-value">-${formatCurrency(calculateDiscountAmount(invoice), invoice.currency_symbol)}</span>
-              </div>` : ''}
-              ${invoice.tax_percentage && invoice.tax_percentage > 0 ? `
-              <div class="total-line">
-                <span class="total-line-label">${invoice.invoice_tax_label || 'Tax'} (${invoice.tax_percentage}%):</span>
-                <span class="total-line-value">${formatCurrency(calculateTaxAmount(invoice), invoice.currency_symbol)}</span>
-              </div>` : ''}
-              
-              ${invoice.paid_amount && invoice.paid_amount > 0 ? `
-              <div class="total-line">
-                <span class="total-line-label">Paid:</span>
-                <span class="total-line-value" style="color: #10B981;">-${formatCurrency(invoice.paid_amount, invoice.currency_symbol)}</span>
-              </div>` : ''}
-              
-              <div class="grand-total-row">
-                <span class="grand-total-label">${(invoice.paid_amount && invoice.paid_amount > 0) ? 'Balance Due:' : 'Total:'}</span>
-                <span class="grand-total-value">${formatCurrency((invoice.total_amount || 0) - (invoice.paid_amount || 0), invoice.currency_symbol)}</span>
-              </div>
-            </div>
-          </div>
+          ${lineItemsHtml}
         </div>
       </body>
     </html>
   `;
-}; 
+};

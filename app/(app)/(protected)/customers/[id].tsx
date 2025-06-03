@@ -41,7 +41,7 @@ type Invoice = Tables<'invoices'>;
 interface ClientMetrics {
 	totalBilled: number;
 	totalOutstanding: number;
-	averagePaymentDays: number;
+	averagePaymentDays: number | null;
 	totalInvoices: number;
 	paidInvoices: number;
 	overdueInvoices: number;
@@ -185,8 +185,21 @@ export default function ClientProfileScreen() {
 				inv.status !== 'paid' && inv.status !== 'cancelled'
 			).reduce((sum, inv) => sum + ((inv.total_amount || 0) - (inv.paid_amount || 0)), 0);
 
-			// Calculate average payment days (simplified - just using paid invoices)
-			const averagePaymentDays = 12; // Placeholder - would need payment dates to calculate properly
+			// Calculate average payment days from sent date to payment date
+			const paidInvoicesWithPaymentDates = invoices.filter(inv => 
+				inv.status === 'paid' && inv.payment_date && inv.invoice_date
+			);
+			
+			let averagePaymentDays: number | null = null;
+			if (paidInvoicesWithPaymentDates.length > 0) {
+				const totalDays = paidInvoicesWithPaymentDates.reduce((sum, inv) => {
+					const sentDate = new Date(inv.invoice_date);
+					const paidDate = new Date(inv.payment_date!);
+					const diffInDays = Math.ceil((paidDate.getTime() - sentDate.getTime()) / (1000 * 60 * 60 * 24));
+					return sum + Math.max(0, diffInDays); // Ensure non-negative days
+				}, 0);
+				averagePaymentDays = Math.round(totalDays / paidInvoicesWithPaymentDates.length);
+			}
 
 			const calculatedMetrics: ClientMetrics = {
 				totalBilled,
@@ -697,6 +710,9 @@ export default function ClientProfileScreen() {
 							
 							<Text style={styles.clientContact}>{client?.email}</Text>
 							<Text style={styles.clientContact}>{client?.phone}</Text>
+							{client?.tax_number && (
+								<Text style={styles.clientContact}>Tax: {client.tax_number}</Text>
+							)}
 							<Text style={styles.clientContact}>{formatAddress(client as Client)}</Text>
 
 							{/* Quick Actions */}
@@ -759,7 +775,7 @@ export default function ClientProfileScreen() {
 							
 							<View style={styles.statsRow}>
 								<Text style={styles.statsLabel}>Avg. Payment Time</Text>
-								<Text style={styles.statsValue}>{metrics?.averagePaymentDays} days</Text>
+								<Text style={styles.statsValue}>{metrics?.averagePaymentDays ? `${metrics.averagePaymentDays} days` : 'No data'}</Text>
 							</View>
 						</View>
 

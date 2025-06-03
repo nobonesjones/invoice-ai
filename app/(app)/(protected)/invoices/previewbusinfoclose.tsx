@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useNavigation, useLocalSearchParams } from 'expo-router';
+import { useRouter, useNavigation, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { ChevronLeft } from 'lucide-react-native';
@@ -89,7 +89,7 @@ export default function PreviewBusinfoCloseScreen() {
   const styles = getStyles(theme);
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { invoiceData: invoiceDataParam, businessSettings: businessSettingsParam } = useLocalSearchParams<PreviewScreenParams>();
+  const { invoiceData: invoiceDataParam, businessSettings: businessSettingsParam } = useLocalSearchParams();
 
   // Parse the passed data
   const [invoiceData, setInvoiceData] = useState<InvoiceForTemplate | null>(() => {
@@ -138,6 +138,49 @@ export default function PreviewBusinfoCloseScreen() {
       return null;
     }
   });
+
+  // Refresh data when screen comes back into focus (e.g., after editing)
+  useFocusEffect(
+    useCallback(() => {
+      const refreshData = () => {
+        console.log('[PreviewBusinfoCloseScreen] Refreshing preview data on focus');
+        
+        // Re-parse invoice data
+        try {
+          if (invoiceDataParam && typeof invoiceDataParam === 'string') {
+            const parsed = JSON.parse(invoiceDataParam);
+            console.log('[PreviewBusinfoCloseScreen] Refreshed invoice data:', parsed);
+            
+            const transformedData = {
+              ...parsed,
+              id: 'preview-temp-id',
+              user_id: 'preview-user',
+              status: 'draft',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            } as InvoiceForTemplate;
+            
+            setInvoiceData(transformedData);
+          }
+        } catch (error) {
+          console.error('[PreviewBusinfoCloseScreen] Error refreshing invoice data:', error);
+        }
+
+        // Re-parse business settings
+        try {
+          if (businessSettingsParam && typeof businessSettingsParam === 'string') {
+            const parsed = JSON.parse(businessSettingsParam);
+            console.log('[PreviewBusinfoCloseScreen] Refreshed business settings:', parsed);
+            setBusinessSettings(parsed);
+          }
+        } catch (error) {
+          console.error('[PreviewBusinfoCloseScreen] Error refreshing business settings:', error);
+        }
+      };
+
+      refreshData();
+    }, [invoiceDataParam, businessSettingsParam])
+  );
 
   // Zoom and pan animation values
   const scale = useSharedValue(1);

@@ -209,6 +209,7 @@ export default function TaxCurrencyScreen() {
   const [selectedTaxName, setSelectedTaxName] = useState('VAT');
   const [actualCustomTaxName, setActualCustomTaxName] = useState('');
   const [taxRate, setTaxRate] = useState('');
+  const [taxNumber, setTaxNumber] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true); // New state for loading indicator
 
@@ -310,6 +311,7 @@ export default function TaxCurrencyScreen() {
         if (data) {
           setTaxRate(data.default_tax_rate ? `${data.default_tax_rate}` : ''); // Convert numeric to string
           setAutoApplyTax(data.auto_apply_tax ?? true); // Default to true if null from DB
+          setTaxNumber(data.tax_number || ''); // Load tax number
 
           setSelectedRegion(data.region || 'Select Region');
           setSelectedCurrency(data.currency_code || 'Select Currency');
@@ -368,6 +370,7 @@ export default function TaxCurrencyScreen() {
         user_id: user.id,
         default_tax_rate: numericTaxRate,
         tax_name: finalTaxNameToSave,
+        tax_number: taxNumber.trim() || null, // Save tax number
         auto_apply_tax: autoApplyTax,
         region: selectedRegion === 'Select Region' ? null : selectedRegion,
         currency_code: selectedCurrency === 'Select Currency' ? null : selectedCurrency,
@@ -539,6 +542,19 @@ export default function TaxCurrencyScreen() {
                 />
               </View>
             )}
+
+            {/* Tax Number */}
+            <View style={[styles.inputRow, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.label, styles.boldLabel, { color: theme.foreground }]}>Tax Number</Text>
+              <TextInput
+                style={[styles.input, { color: theme.foreground }]}
+                placeholder="e.g., VAT123456789"
+                placeholderTextColor={theme.mutedForeground}
+                value={taxNumber}
+                onChangeText={setTaxNumber}
+                autoCapitalize="characters"
+              />
+            </View>
 
             {/* Auto Apply Tax Toggle */}
             <View style={[styles.inputRow, { borderBottomWidth: 0 /* Last item */ }]}>

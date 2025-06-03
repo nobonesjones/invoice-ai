@@ -13,6 +13,7 @@ import {
   ViewStyle,
   TextStyle,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import {
@@ -46,7 +47,7 @@ import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './I
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
-import RNHTMLtoPDF from 'react-native-html-to-pdf';
+import * as Print from 'expo-print';
 import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml';
 import { StatusBadge } from '@/components/StatusBadge';
 import { StatusSelectorSheet } from '@/components/StatusSelectorSheet';
@@ -103,18 +104,19 @@ interface PdfInvoiceData {
 }
 
 const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: BusinessSettingsRow, paymentOptionsData: any = null): PdfInvoiceData => {
+  // Create a properly typed invoice object for PDF generation
   const htmlInvoiceData: InvoiceForTemplate & { payment_terms?: string } = {
     ...invoiceData, 
     payment_terms: 'Payment due upon receipt.',
-    // Ensure required fields are never undefined
-    due_date: invoiceData.due_date ?? null,
-    custom_headline: invoiceData.custom_headline ?? null,
+    // Ensure all fields are properly typed - these are already handled in fetchInvoiceData
+    due_date: invoiceData.due_date,
+    custom_headline: invoiceData.custom_headline,
   };
 
   return {
     invoice: htmlInvoiceData,
     businessSettings: businessSettingsData,
-    paymentOptions: paymentOptionsData, // Include the paymentOptions
+    paymentOptions: paymentOptionsData,
   };
 };
 
@@ -202,12 +204,30 @@ function InvoiceViewerScreen() {
   }, [navigation, setIsTabBarVisible]);
 
   const handleSendByEmail = async () => {
-    if (!invoice || !supabase) {
+    if (!invoice || !businessSettings) {
+      Alert.alert('Error', 'Invoice or business data is not available.');
+      return;
+    }
+
+    if (!supabase) {
       Alert.alert('Error', 'Unable to send invoice at this time.');
       return;
     }
 
     try {
+      console.log('[handleSendByEmail] Generating PDF for email sharing:', invoice.id);
+      
+      // Generate PDF using expo-print
+      const dataForHtml = preparePdfData(invoice, businessSettings, businessSettings);
+      const html = generateInvoiceTemplateOneHtml(dataForHtml as any);
+      
+      console.log('[handleSendByEmail] Generating PDF with expo-print');
+      const { uri } = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+      console.log('[handleSendByEmail] PDF generated successfully at:', uri);
+
       // Update invoice status to sent
       const { error: updateError } = await supabase
         .from('invoices')
@@ -226,11 +246,18 @@ function InvoiceViewerScreen() {
       // Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
-      Alert.alert('Email Sent', 'Invoice has been sent via email.');
+      // Share the PDF directly - user can choose email from the share dialog
+      await Sharing.shareAsync(uri, { 
+        mimeType: 'application/pdf', 
+        dialogTitle: 'Send Invoice via Email' 
+      });
+
+      Alert.alert('Invoice Ready', 'Choose your email app from the share options to send the invoice.');
       handleCloseSendModal(); // Close the send modal
+      
     } catch (error: any) {
-      console.error('[handleSendByEmail] Unexpected error:', error);
-      Alert.alert('Error', 'An unexpected error occurred while sending the invoice.');
+      console.error('[handleSendByEmail] Error generating PDF or sharing:', error);
+      Alert.alert('Error', `Failed to prepare invoice for email: ${error.message}`);
     }
   };
 
@@ -282,23 +309,14 @@ function InvoiceViewerScreen() {
       console.log('[handleSendPDF] Starting PDF generation and send process');
       
       const dataForHtml = preparePdfData(invoice, businessSettings, businessSettings);
-      const html = generateInvoiceTemplateOneHtml(dataForHtml); 
-      const pdfOptions = {
-        html,
-        fileName: `Invoice-${invoice.invoice_number || 'details'}`,
-        directory: 'Invoices',
-        width: 595, // A4 width in points
-        height: 842, // A4 height in points
-        paddingLeft: 0,
-        paddingRight: 0,
-        paddingTop: 0,
-        paddingBottom: 0,
-        bgColor: '#FFFFFF',
-      };
+      const html = generateInvoiceTemplateOneHtml(dataForHtml as any);
 
-      console.log('[handleSendPDF] Generating PDF with options:', pdfOptions);
-      const file = await RNHTMLtoPDF.convert(pdfOptions);
-      console.log('[handleSendPDF] PDF generated successfully:', file.filePath);
+      console.log('[handleSendPDF] Generating PDF with expo-print');
+      const { uri } = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+      console.log('[handleSendPDF] PDF generated successfully at:', uri);
 
       // Update invoice status to sent
       const { error: updateError } = await supabase
@@ -318,7 +336,7 @@ function InvoiceViewerScreen() {
       // Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
-      await Sharing.shareAsync(Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath || '', { mimeType: 'application/pdf', dialogTitle: 'Share Invoice PDF' });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share Invoice PDF' });
 
       Alert.alert('PDF Sent', 'Invoice PDF has been generated and shared.');
       handleCloseSendModal(); // Close the send modal
@@ -465,8 +483,9 @@ function InvoiceViewerScreen() {
         paid_amount: invoiceData.paid_amount,
         payment_date: invoiceData.payment_date,
         payment_notes: invoiceData.payment_notes,
-        // Ensure due_date is never undefined
+        // Ensure due_date is never undefined - convert undefined to null
         due_date: invoiceData.due_date ?? null,
+        // Ensure custom_headline is never undefined - convert undefined to null
         custom_headline: invoiceData.custom_headline ?? null,
       };
       
@@ -477,7 +496,7 @@ function InvoiceViewerScreen() {
       }
       setError(null);
       setIsLoading(false);
-      return fetchedInvoiceForTemplate;
+      return fetchedInvoiceForTemplate as any; // Use type assertion to bypass type conflicts
     } catch (e: any) {
       console.error('[fetchInvoiceData] Exception:', e.message);
       setError('An unexpected error occurred while fetching invoice data.');
@@ -517,6 +536,28 @@ function InvoiceViewerScreen() {
 
     processData();
   }, [invoiceId, supabase]);
+
+  // Refresh data when screen comes back into focus (e.g., after editing)
+  useFocusEffect(
+    useCallback(() => {
+      const refreshData = async () => {
+        if (invoiceId && supabase) {
+          console.log('[useFocusEffect] Refreshing invoice data on focus');
+          try {
+            const fetchedInvoice = await fetchInvoiceData(invoiceId);
+            if (fetchedInvoice && fetchedInvoice.user_id) {
+              const targetUserId = fetchedInvoice.user_id;
+              if (targetUserId) await fetchBusinessSettings(targetUserId);
+            }
+          } catch (error) {
+            console.error('[useFocusEffect] Error refreshing data:', error);
+          }
+        }
+      };
+
+      refreshData();
+    }, [invoiceId, supabase])
+  );
 
   const getCurrencySymbol = (currencyCode: string): string => {
     // Handles both codes and full names from the DB, e.g. 'GBP - British Pound'
@@ -1265,6 +1306,15 @@ function InvoiceViewerScreen() {
       padding: 16,
       paddingBottom: Platform.OS === 'ios' ? 32 : 16, 
       borderTopWidth: StyleSheet.hairlineWidth,
+      // Add shadow for better visual separation
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: -6, // Increased negative value for more pronounced shadow
+      },
+      shadowOpacity: 0.25, // Increased from 0.15 to make it more noticeable
+      shadowRadius: 12, // Increased from 8 for a softer, more diffused shadow
+      elevation: 16, // Increased for Android
     },
     primaryButton: {
       paddingVertical: 16,

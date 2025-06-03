@@ -995,7 +995,7 @@ export default function PaymentOptionsScreen() {
                 ]}
                 value={invoiceTermsNotes}
                 onChangeText={setInvoiceTermsNotes}
-                placeholder="Add your preferred payment details below. Bank account info, Venmo, Zelle, Cash App, etc. Anything else customers need to know. These instructions will be added to every invoice and estimate."
+                placeholder="Add your payment terms here. For example: bank account details, Venmo/PayPal info, payment deadlines, late fees, or any other instructions for your customers. This will appear on all your invoices."
                 multiline
                 numberOfLines={5}
                 editable={!isLoadingInvoiceTermsNotes}

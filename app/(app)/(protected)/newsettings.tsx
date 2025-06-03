@@ -21,6 +21,7 @@ export default function NewSettingsScreen() {
   const { user, signOut } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Use the custom hook for shine animation
   const shineTranslateX = useShineAnimation({
@@ -74,6 +75,135 @@ export default function NewSettingsScreen() {
 
   const userDisplayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
 
+  // Define all settings items in a searchable structure
+  const allSettingsItems = [
+    {
+      section: 'Account',
+      items: [
+        {
+          id: 'edit-account',
+          icon: <User color={theme.foreground} size={24} />,
+          label: 'Edit Account Details',
+          onPress: handleEditAccountPress,
+          searchTerms: ['edit', 'account', 'details', 'profile', 'user']
+        }
+      ]
+    },
+    {
+      section: 'Business Settings',
+      items: [
+        {
+          id: 'business-info',
+          icon: <Briefcase color={theme.foreground} size={24} />,
+          label: 'Business Information',
+          onPress: handleBusinessInformationPress,
+          searchTerms: ['business', 'information', 'company', 'details']
+        },
+        {
+          id: 'tax-currency',
+          icon: <DollarSign color={theme.foreground} size={24} />,
+          label: 'Tax and Currency',
+          onPress: handleTaxCurrencyPress,
+          searchTerms: ['tax', 'currency', 'money', 'dollar', 'vat']
+        },
+        {
+          id: 'payment-options',
+          icon: <CreditCard color={theme.foreground} size={24} />,
+          label: 'Payment Options',
+          onPress: handlePaymentOptionsPress,
+          searchTerms: ['payment', 'options', 'credit', 'card', 'paypal', 'bank']
+        },
+        {
+          id: 'payment-reminders',
+          icon: <Bell color={theme.foreground} size={24} />,
+          label: 'Payment Reminders',
+          onPress: handlePaymentRemindersPress,
+          searchTerms: ['payment', 'reminders', 'notifications', 'alerts']
+        }
+      ]
+    },
+    {
+      section: 'App Settings',
+      items: [
+        {
+          id: 'theme',
+          icon: isLightMode ? <Moon color={theme.foreground} size={24} /> : <Sun color={theme.foreground} size={24} />,
+          label: isLightMode ? "Dark Mode" : "Light Mode",
+          onPress: toggleTheme,
+          hideChevron: true,
+          rightContent: (
+            <Switch 
+              value={!isLightMode} 
+              onValueChange={toggleTheme} 
+              trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
+              thumbColor={isLightMode ? theme.primary : theme.foreground }
+            />
+          ),
+          searchTerms: ['dark', 'light', 'mode', 'theme', 'appearance']
+        },
+        {
+          id: 'language',
+          icon: <Languages color={theme.foreground} size={24} />,
+          label: 'App Language',
+          onPress: handleAppLanguagePress,
+          searchTerms: ['language', 'app', 'translation', 'locale']
+        }
+      ]
+    },
+    {
+      section: 'Help',
+      items: [
+        {
+          id: 'help',
+          icon: <HelpCircle color={theme.foreground} size={24} />,
+          label: 'Help & Customer Support',
+          onPress: handleHelpPress,
+          searchTerms: ['help', 'customer', 'support', 'assistance', 'contact']
+        },
+        {
+          id: 'review',
+          icon: <Star color={theme.foreground} size={24} />,
+          label: 'Leave Review',
+          onPress: handleLeaveReviewPress,
+          searchTerms: ['leave', 'review', 'rating', 'feedback', 'star']
+        },
+        {
+          id: 'privacy',
+          icon: <Shield color={theme.foreground} size={24} />,
+          label: 'Privacy Policy',
+          onPress: handlePrivacyPolicyPress,
+          searchTerms: ['privacy', 'policy', 'data', 'protection']
+        },
+        {
+          id: 'terms',
+          icon: <FileText color={theme.foreground} size={24} />,
+          label: 'Terms Of Service',
+          onPress: handleTermsOfServicePress,
+          searchTerms: ['terms', 'service', 'agreement', 'legal']
+        }
+      ]
+    }
+  ];
+
+  // Filter settings based on search term
+  const filteredSections = searchTerm.trim() 
+    ? allSettingsItems.map(section => ({
+        ...section,
+        items: section.items.filter(item => {
+          const searchLower = searchTerm.toLowerCase().trim();
+          const labelMatch = item.label.toLowerCase().includes(searchLower);
+          const searchTermsMatch = item.searchTerms.some(term => 
+            term.toLowerCase().includes(searchLower)
+          );
+          return labelMatch || searchTermsMatch;
+        })
+      })).filter(section => section.items.length > 0)
+    : allSettingsItems;
+
+  const handleSearchChange = (text: string) => {
+    setSearchTerm(text);
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -113,88 +243,36 @@ export default function NewSettingsScreen() {
               placeholder="Search Settings"
               placeholderTextColor={theme.mutedForeground}
               style={[styles.searchInput, { color: theme.foreground}]}
+              value={searchTerm}
+              onChangeText={handleSearchChange}
             />
           </View>
 
-          <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>Account</Text>
-          <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
-            <SettingsListItem
-              icon={<User color={theme.foreground} size={24} />}
-              label="Edit Account Details"
-              onPress={handleEditAccountPress}
-            />
-          </View>
-
-          <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>Business Settings</Text>
-          <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
-            <SettingsListItem
-              icon={<Briefcase color={theme.foreground} size={24} />}
-              label="Business Information"
-              onPress={handleBusinessInformationPress}
-            />
-            <SettingsListItem
-              icon={<DollarSign color={theme.foreground} size={24} />}
-              label="Tax and Currency"
-              onPress={handleTaxCurrencyPress}
-            />
-            <SettingsListItem
-              icon={<CreditCard color={theme.foreground} size={24} />}
-              label="Payment Options"
-              onPress={handlePaymentOptionsPress}
-            />
-            <SettingsListItem
-              icon={<Bell color={theme.foreground} size={24} />}
-              label="Payment Reminders"
-              onPress={handlePaymentRemindersPress}
-            />
-          </View>
-
-          <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>App Settings</Text>
-          <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
-            <SettingsListItem
-              icon={isLightMode ? <Moon color={theme.foreground} size={24} /> : <Sun color={theme.foreground} size={24} />}
-              label={isLightMode ? "Dark Mode" : "Light Mode"}
-              onPress={toggleTheme}
-              hideChevron={true}
-              rightContent={
-                <Switch 
-                  value={!isLightMode} 
-                  onValueChange={toggleTheme} 
-                  trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
-                  thumbColor={isLightMode ? theme.primary : theme.foreground }
-                />
-              }
-            />
-            <SettingsListItem
-              icon={<Languages color={theme.foreground} size={24} />} 
-              label="App Language"
-              onPress={handleAppLanguagePress}
-            />
-          </View>
-
-          <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>Help</Text>
-          <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
-            <SettingsListItem
-              icon={<HelpCircle color={theme.foreground} size={24} />}
-              label="Help & Customer Support"
-              onPress={handleHelpPress}
-            />
-            <SettingsListItem
-              icon={<Star color={theme.foreground} size={24} />}
-              label="Leave Review"
-              onPress={handleLeaveReviewPress}
-            />
-            <SettingsListItem
-              icon={<Shield color={theme.foreground} size={24} />}
-              label="Privacy Policy"
-              onPress={handlePrivacyPolicyPress}
-            />
-            <SettingsListItem
-              icon={<FileText color={theme.foreground} size={24} />}
-              label="Terms Of Service"
-              onPress={handleTermsOfServicePress}
-            />
-          </View>
+          {filteredSections.length > 0 ? (
+            filteredSections.map((section, index) => (
+              <React.Fragment key={section.section}>
+                <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>{section.section}</Text>
+                <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
+                  {section.items.map((item, itemIndex) => (
+                    <SettingsListItem
+                      key={item.id}
+                      icon={item.icon}
+                      label={item.label}
+                      onPress={item.onPress}
+                      hideChevron={item.hideChevron}
+                      rightContent={item.rightContent}
+                    />
+                  ))}
+                </View>
+              </React.Fragment>
+            ))
+          ) : (
+            <View style={{ alignItems: 'center', marginTop: 50 }}>
+              <Text style={[{ color: theme.mutedForeground, fontSize: 16 }]}>
+                No settings found matching "{searchTerm}"
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>

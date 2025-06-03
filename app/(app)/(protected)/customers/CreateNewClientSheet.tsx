@@ -11,6 +11,7 @@ import React, {
 	useState,
 	forwardRef,
 	useRef,
+	useEffect,
 } from "react";
 import {
 	View,
@@ -54,8 +55,28 @@ const CreateNewClientSheet = forwardRef<
 	const [fullName, setFullName] = useState(editMode && initialData ? initialData.name : "");
 	const [email, setEmail] = useState(editMode && initialData ? initialData.email || "" : "");
 	const [phone, setPhone] = useState(editMode && initialData ? initialData.phone || "" : "");
+	const [taxNumber, setTaxNumber] = useState(editMode && initialData ? initialData.tax_number || "" : "");
 	const [address, setAddress] = useState(editMode && initialData ? formatInitialAddress(initialData) : "");
 	const [isLoading, setIsLoading] = useState(false);
+
+	// Update form fields when initialData changes (important for edit mode)
+	useEffect(() => {
+		console.log('[CreateNewClientSheet] Props changed:', { editMode, initialData });
+		if (editMode && initialData) {
+			setFullName(initialData.name || "");
+			setEmail(initialData.email || "");
+			setPhone(initialData.phone || "");
+			setTaxNumber(initialData.tax_number || "");
+			setAddress(formatInitialAddress(initialData));
+		} else if (!editMode) {
+			// Clear form when switching to create mode
+			setFullName("");
+			setEmail("");
+			setPhone("");
+			setTaxNumber("");
+			setAddress("");
+		}
+	}, [editMode, initialData]);
 
 	const snapPoints = useMemo(() => ["70%", "90%"], []);
 
@@ -114,25 +135,32 @@ const CreateNewClientSheet = forwardRef<
 				name: fullName.trim(),
 				email: email.trim() || null,
 				phone: phone.trim() || null,
+				tax_number: taxNumber.trim() || null,
 				address_client: address.trim() || null, // Match the database column name
 				user_id: user.id,
 			};
 
 			if (editMode && initialData) {
 				// Update existing client
+				console.log('[handleSaveClient] Updating client:', initialData.id, 'with data:', clientData);
+				
 				const { data: updated, error: updateError } = await supabase
 					.from("clients")
 					.update(clientData)
 					.eq('id', initialData.id)
 					.eq('user_id', user.id)
-					.select()
-					.single();
+					.select();
+
+				console.log('[handleSaveClient] Update result:', { updated, updateError });
 
 				if (updateError) {
 					Alert.alert("Error", `Could not update client. ${updateError.message}`);
+				} else if (!updated || updated.length === 0) {
+					Alert.alert("Error", "Client not found or you don't have permission to update this client.");
 				} else {
 					Alert.alert("Success", "Client updated successfully!");
-					if (onClientAdded && updated) onClientAdded(updated);
+					// Use the first (and should be only) updated record
+					if (onClientAdded && updated[0]) onClientAdded(updated[0]);
 					internalClose();
 				}
 			} else {
@@ -150,6 +178,7 @@ const CreateNewClientSheet = forwardRef<
 					setFullName("");
 					setEmail("");
 					setPhone("");
+					setTaxNumber("");
 					setAddress("");
 					if (onClientAdded && inserted) onClientAdded(inserted);
 					internalClose();
@@ -375,6 +404,21 @@ const CreateNewClientSheet = forwardRef<
 								value={phone}
 								onChangeText={setPhone}
 								keyboardType="phone-pad"
+								editable={!isLoading}
+							/>
+						</View>
+					</View>
+
+					<View style={styles.inputRow}>
+						<Text style={styles.inputLabelText}>Tax Number</Text>
+						<View style={styles.inputValueArea}>
+							<BottomSheetTextInput
+								style={styles.textInputStyled}
+								placeholder="e.g. VAT123456789"
+								placeholderTextColor={themeColors.mutedForeground}
+								value={taxNumber}
+								onChangeText={setTaxNumber}
+								autoCapitalize="characters"
 								editable={!isLoading}
 							/>
 						</View>

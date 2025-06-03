@@ -213,6 +213,7 @@ export default function InvoiceDashboardScreen() {
   useInvoiceStatusUpdater();
 
   const [invoices, setInvoices] = useState<InvoiceData[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
@@ -224,6 +225,18 @@ export default function InvoiceDashboardScreen() {
   const [totalPaid, setTotalPaid] = useState<number>(0); 
   const [totalOverdue, setTotalOverdue] = useState<number>(0); 
   const [currencyCode, setCurrencyCode] = useState<string>('USD'); // Default to USD
+
+  // Filter invoices based on search term
+  const filteredInvoices = invoices.filter((invoice) => {
+    if (!searchTerm.trim()) return true;
+    
+    const searchLower = searchTerm.toLowerCase().trim();
+    const clientNameMatch = invoice.client_name?.toLowerCase().includes(searchLower);
+    const invoiceNumberMatch = invoice.invoice_number?.toLowerCase().includes(searchLower);
+    const statusMatch = invoice.status?.toLowerCase().includes(searchLower);
+    
+    return clientNameMatch || invoiceNumberMatch || statusMatch;
+  });
 
   // Ref for the new filter modal
   const filterModalRef = useRef<BottomSheetModal>(null);
@@ -245,6 +258,10 @@ export default function InvoiceDashboardScreen() {
     setCurrentDateFilterType(filterType);
     setCurrentFilterLabel(displayLabel); // Update label from modal
     // fetchInvoices will be called by useEffect due to currentDateFilterType change
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchTerm(text);
   };
 
   const fetchBusinessSettings = useCallback(async () => {
@@ -515,9 +532,13 @@ export default function InvoiceDashboardScreen() {
               style={styles.searchIcon}
             />
             <TextInput
-              placeholder="Search Invoices"
+              placeholder="Search by client, invoice #, or status"
               placeholderTextColor={themeColors.mutedForeground}
               style={[styles.searchInput, { color: themeColors.foreground }]}
+              value={searchTerm}
+              onChangeText={handleSearchChange}
+              autoCorrect={false}
+              autoCapitalize="none"
             />
           </View>
 
@@ -526,28 +547,56 @@ export default function InvoiceDashboardScreen() {
           <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} />
 
           {/* Display Current Filter Label */} 
-          {invoices.length > 0 && !loading && (
+          {filteredInvoices.length > 0 && !loading && (
             <View style={styles.currentFilterDisplayContainer}>
               <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
-                {currentFilterLabel}
+                {searchTerm.trim() ? `${filteredInvoices.length} of ${invoices.length} invoices` : currentFilterLabel}
               </Text>
             </View>
           )}
 
           <FlatList
-            data={invoices}
+            data={filteredInvoices}
             renderItem={renderInvoiceItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={() => (
-              !loading && !error && (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
-                  <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
-                    No invoices found.
-                  </Text>
-                </View>
-              )
-            )}
+            ListEmptyComponent={() => {
+              if (loading) {
+                return (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
+                    <ActivityIndicator size="large" color={themeColors.primary} />
+                  </View>
+                );
+              }
+              if (error) {
+                return (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
+                    <Text style={[styles.placeholderText, { color: themeColors.destructive }]}>
+                      {error}
+                    </Text>
+                  </View>
+                );
+              }
+              if (searchTerm.trim() && !filteredInvoices.length) {
+                return (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
+                    <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
+                      No invoices found matching "{searchTerm}". Try a different search term.
+                    </Text>
+                  </View>
+                );
+              }
+              if (!invoices.length) {
+                return (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
+                    <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
+                      No invoices found.
+                    </Text>
+                  </View>
+                );
+              }
+              return null;
+            }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
