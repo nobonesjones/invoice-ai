@@ -259,6 +259,101 @@ export type Database = {
           },
         ]
       }
+      invoice_shares: {
+        Row: {
+          id: string
+          invoice_id: string
+          user_id: string
+          share_token: string
+          expires_at: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          user_id: string
+          share_token: string
+          expires_at?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          user_id?: string
+          share_token?: string
+          expires_at?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_shares_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_shares_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_share_analytics: {
+        Row: {
+          id: string
+          share_id: string
+          event_type: string
+          ip_address: string | null
+          user_agent: string | null
+          referrer: string | null
+          country: string | null
+          city: string | null
+          created_at: string
+          metadata: Record<string, any> | null
+        }
+        Insert: {
+          id?: string
+          share_id: string
+          event_type: string
+          ip_address?: string | null
+          user_agent?: string | null
+          referrer?: string | null
+          country?: string | null
+          city?: string | null
+          created_at?: string
+          metadata?: Record<string, any> | null
+        }
+        Update: {
+          id?: string
+          share_id?: string
+          event_type?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          referrer?: string | null
+          country?: string | null
+          city?: string | null
+          created_at?: string
+          metadata?: Record<string, any> | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_share_analytics_share_id_fkey"
+            columns: ["share_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_shares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_options: {
         Row: {
           bank_details: string | null

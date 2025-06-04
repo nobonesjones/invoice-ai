@@ -14,6 +14,7 @@ import {
   TextStyle,
   Dimensions,
   Linking,
+  Clipboard,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import {
@@ -37,6 +38,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Bell,
+  Share2,
+  BarChart3,
 } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
@@ -56,6 +59,7 @@ import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } fr
 import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
+import { InvoiceShareService } from '../../../../services/invoiceShareService';
 
 type ClientRow = Tables<'clients'>;
 
@@ -125,7 +129,7 @@ function InvoiceViewerScreen() {
   const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
   const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
-  const { supabase } = useSupabase(); 
+  const { supabase, user } = useSupabase(); 
   const { logPaymentAdded, logStatusChanged, logInvoiceSent } = useInvoiceActivityLogger();
 
   const [invoice, setInvoice] = useState<InvoiceForTemplate | null>(null);
@@ -1120,6 +1124,98 @@ function InvoiceViewerScreen() {
     Alert.alert('Coming Soon', 'Auto reminders functionality will be implemented soon.');
   };
 
+  const handleShareInvoice = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!invoice || !supabase || !user) {
+      Alert.alert('Error', 'Unable to share invoice at this time.');
+      return;
+    }
+
+    try {
+      // Generate shareable link
+      const result = await InvoiceShareService.generateShareLink(
+        invoice.id, 
+        user.id,
+        30 // Expires in 30 days
+      );
+
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to generate share link');
+        return;
+      }
+
+      // Copy link to clipboard
+      await Clipboard.setString(result.shareUrl!);
+
+      Alert.alert(
+        'Invoice Link Generated',
+        `A shareable link has been created and copied to your clipboard. This link will expire in 30 days.\n\nLink: ${result.shareUrl}`,
+        [
+          { text: 'Share Link', onPress: () => shareInvoiceLink(result.shareUrl!) },
+          { text: 'OK', style: 'default' }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Error sharing invoice:', error);
+      Alert.alert('Error', 'Failed to generate shareable link. Please try again.');
+    }
+  };
+
+  const shareInvoiceLink = async (shareUrl: string) => {
+    try {
+      await Sharing.shareAsync(shareUrl, {
+        dialogTitle: `Share Invoice ${invoice?.invoice_number}`,
+      });
+    } catch (error) {
+      console.error('Error sharing link:', error);
+    }
+  };
+
+  const handleViewAnalytics = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!invoice || !user) {
+      Alert.alert('Error', 'Unable to view analytics at this time.');
+      return;
+    }
+
+    try {
+      const analytics = await InvoiceShareService.getShareAnalytics(invoice.id, user.id);
+      
+      if (!analytics) {
+        Alert.alert(
+          'No Share Data',
+          'This invoice hasn\'t been shared yet. Use "Generate Share Link" to create a trackable link.'
+        );
+        return;
+      }
+
+      const analyticsMessage = `
+📊 Invoice Analytics for ${invoice.invoice_number}
+
+👀 Total Views: ${analytics.totalViews}
+📥 Downloads: ${analytics.totalDownloads}
+🖨️ Prints: ${analytics.totalPrints}
+👥 Unique Visitors: ${analytics.uniqueVisitors}
+
+${analytics.lastViewed ? `Last Viewed: ${new Date(analytics.lastViewed).toLocaleDateString()}` : ''}
+${analytics.lastDownloaded ? `Last Downloaded: ${new Date(analytics.lastDownloaded).toLocaleDateString()}` : ''}
+
+${analytics.countries.length > 0 ? 
+  `\n🌍 Top Countries:\n${analytics.countries.slice(0, 3).map(c => `${c.country}: ${c.count} views`).join('\n')}` : ''
+}
+      `.trim();
+
+      Alert.alert('Invoice Analytics', analyticsMessage);
+
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+      Alert.alert('Error', 'Failed to load analytics. Please try again.');
+    }
+  };
+
   // More options action item component
   const MoreOptionItem = ({ 
     icon: IconComponent, 
@@ -1688,6 +1784,22 @@ function InvoiceViewerScreen() {
 
           {/* Options List */}
           <ScrollView style={styles.moreOptionsContent} showsVerticalScrollIndicator={false}>
+            <MoreOptionItem
+              icon={Share2}
+              title="Generate Share Link"
+              onPress={handleShareInvoice}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={BarChart3}
+              title="View Share Analytics"
+              onPress={handleViewAnalytics}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
             <MoreOptionItem
               icon={DollarSign}
               title="Record Partial Payment"
