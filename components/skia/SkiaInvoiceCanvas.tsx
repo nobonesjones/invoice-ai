@@ -21,7 +21,53 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
 
   // Original design dimensions: maxWidth: 370, compact mobile-first
   const canvasWidth = 370;
-  const canvasHeight = 520; // Increased for content
+  const canvasHeight = 560; // Single page height
+  
+  // Pagination calculations
+  const itemRowHeight = 20;
+  const tableHeaderY = 220;
+  const tableHeaderHeight = 25;
+  const firstItemY = 245;
+  const footerStartY = 410;
+  
+  // Calculate how many items fit on first page
+  const availableSpaceFirstPage = footerStartY - firstItemY;
+  const maxItemsFirstPage = Math.floor(availableSpaceFirstPage / itemRowHeight);
+  
+  // Get dynamic line items from invoice data
+  const lineItems = invoice?.invoice_line_items || [
+    {
+      quantity: 1,
+      item_name: "Big winner",
+      item_description: "Easy winner fm",
+      unit_price: 200.00,
+      total_price: 200.00
+    },
+    {
+      quantity: 1,
+      item_name: "Big winner", 
+      item_description: "Easy winner fm",
+      unit_price: 200.00,
+      total_price: 200.00
+    }
+  ];
+  
+  // Pagination logic
+  const totalItems = lineItems.length;
+  const needsPagination = totalItems > maxItemsFirstPage;
+  const firstPageItems = lineItems.slice(0, maxItemsFirstPage);
+  const remainingItems = lineItems.slice(maxItemsFirstPage);
+  
+  // Calculate number of pages
+  const itemsPerSubsequentPage = Math.floor((canvasHeight - 50) / itemRowHeight); // Leave space for page margins
+  const totalPages = needsPagination ? 
+    1 + Math.ceil(remainingItems.length / itemsPerSubsequentPage) : 1;
+  
+  // Calculate total canvas height for all pages
+  const separatorHeight = needsPagination ? 30 * (totalPages - 1) : 0; // 30px separator between each page
+  const totalCanvasHeight = (totalPages * canvasHeight) + separatorHeight;
+  
+  console.log(`[SkiaInvoiceCanvas] PAGINATION: Items=${totalItems}, Space=${availableSpaceFirstPage}px, MaxFirstPage=${maxItemsFirstPage}, Pages=${totalPages}`);
 
   // Calculate discount values outside useMemo so they can be used in both places
   const hasDiscount = invoice?.discount_value && invoice?.discount_value > 0;
@@ -442,45 +488,8 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
     }
   }, [fonts.medium, invoice, business, client, hasDiscount, discountAmount]);
 
-  // REAL INVOICE DATA for INV-710231
-  const businessName = "Hello mate";
-  const businessAddress = "101\nBeefy Road\nRochester\nUk";
-  const businessEmail = "mrbill@gmail.com";
-  const businessPhone = "01686698541";
-  
-  const clientName = "Chill Free Ltd";
-  const clientEmail = "harrisonjbj@gmail.com";
-  
-  const invoiceNumber = "INV-710231";
-  const invoiceDate = "2025-06-03";
-  const dueDate = "In 7 days"; // due_date_option: net_7
-  
   // Logo handling
   const logoImage = useImage(business?.business_logo_url);
-  
-  // Dynamic line items from invoice data
-  const lineItems = invoice?.invoice_line_items || [
-    {
-      quantity: 1,
-      item_name: "Big winner",
-      item_description: "Easy winner fm",
-      unit_price: 200.00,
-      total_price: 200.00
-    },
-    {
-      quantity: 1,
-      item_name: "Big winner", 
-      item_description: "Easy winner fm",
-      unit_price: 200.00,
-      total_price: 200.00
-    }
-  ];
-  
-  const subtotal = 400.00;
-  const taxRate = 20;
-  const taxAmount = 80.00;
-  const total = 480.00;
-  const bankDetails = "Bank Transfer\nNew Bank\n123456\n12-12-32\nHSBC";
 
   // Original design colors
   const colors = {
@@ -523,8 +532,24 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
     }
   };
 
+  // Extract initials from business name
+  const getBusinessInitials = (businessName: string): string => {
+    if (!businessName) return 'B';
+    
+    const words = businessName.trim().split(/\s+/);
+    if (words.length === 1) {
+      // Single word - take first two characters
+      return words[0].substring(0, 2).toUpperCase();
+    } else {
+      // Multiple words - take first letter of first two words
+      return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+    }
+  };
+
+  const businessInitials = getBusinessInitials(business?.business_name || 'Hello mate');
+
   // Calculate footer positioning
-  const footerY = 365;
+  const footerY = 410;
 
   // Calculate dynamic positioning for Payment Methods based on notes
   const notesLineCount = invoice?.notes ? invoice.notes.split('\n').filter(line => line.trim()).length : 0;
@@ -534,7 +559,8 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
   return (
     <View style={[styles.container, style]}>
       <View style={styles.pageContainer}>
-        <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
+        <Canvas style={{ width: canvasWidth, height: totalCanvasHeight }}>
+          {/* === PAGE 1 === */}
           {/* Container background */}
           <Rect x={0} y={0} width={canvasWidth} height={canvasHeight} color={colors.background} />
           <Rect x={10} y={10} width={canvasWidth - 20} height={canvasHeight - 20} color="transparent" strokeColor={colors.shadow} strokeWidth={1} />
@@ -553,9 +579,15 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
             />
           ) : (
             <>
-              {/* Fallback logo with "H" text */}
+              {/* Fallback logo with dynamic business initials */}
               <Circle cx={59} cy={55} r={32} color={colors.orange} />
-              <Text x={51} y={64} text="H" font={fonts.title} color="white" />
+              <Text 
+                x={businessInitials.length === 1 ? 51 : 45} 
+                y={64} 
+                text={businessInitials} 
+                font={businessInitials.length === 1 ? fonts.title : fonts.large} 
+                color="white" 
+              />
             </>
           )}
           
@@ -598,19 +630,19 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
             </>
           )}
           
-          {/* === LINE ITEMS TABLE === */}
+          {/* === LINE ITEMS TABLE - PAGE 1 === */}
           {/* Table header with green background */}
-          <Rect x={tableX} y={250} width={tableWidth + 5} height={25} color={colors.greenAccent} />
+          <Rect x={tableX} y={220} width={tableWidth + 5} height={25} color={colors.greenAccent} />
           
           {/* Table headers - PERFECTLY ALIGNED */}
-          <Text x={qtyX + 10} y={267} text="QTY" font={fonts.bodyBold} color={colors.text} />
-          <Text x={descX + 5} y={267} text="DESCRIPTION" font={fonts.bodyBold} color={colors.text} />
-          <Text x={priceX + 35} y={267} text="PRICE" font={fonts.bodyBold} color={colors.text} />
-          <Text x={totalX + 32} y={267} text="TOTAL" font={fonts.bodyBold} color={colors.text} />
+          <Text x={qtyX + 10} y={237} text="QTY" font={fonts.bodyBold} color={colors.text} />
+          <Text x={descX + 5} y={237} text="DESCRIPTION" font={fonts.bodyBold} color={colors.text} />
+          <Text x={priceX + 35} y={237} text="PRICE" font={fonts.bodyBold} color={colors.text} />
+          <Text x={totalX + 32} y={237} text="TOTAL" font={fonts.bodyBold} color={colors.text} />
           
-          {/* Line Items - PERFECTLY ALIGNED WITH PROPER SPACING */}
-          {lineItems.map((item: any, index: number) => {
-            const rowY = 285 + (index * 25);
+          {/* Line Items - First Page */}
+          {firstPageItems.map((item: any, index: number) => {
+            const rowY = 245 + (index * itemRowHeight);
             
             return (
               <React.Fragment key={index}>
@@ -635,6 +667,17 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   color={colors.text} 
                 />
                 
+                {/* Item description in brackets - light grey, smaller */}
+                {item.item_description && (
+                  <Text 
+                    x={descX + 5 + (item.item_name.length * 6)} 
+                    y={rowY + 13} 
+                    text={` (${item.item_description})`} 
+                    font={fonts.tiny} 
+                    color="#999" 
+                  />
+                )}
+                
                 {/* Price - aligned directly under PRICE header - REGULAR WEIGHT */}
                 <Text 
                   x={priceX + 35} 
@@ -655,108 +698,552 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
               </React.Fragment>
             );
           })}
-          
-          {/* === FOOTER SECTION === */}
-          
-          {/* Left: Notes and Payment Methods */}
-          {invoice?.notes && (
+
+          {/* Page 1 label when there's pagination */}
+          {needsPagination && (
             <>
-              <Text x={27} y={footerY + 20} text="Terms, Instructions & Notes" font={fonts.bodyBold} color={colors.text} />
-              {invoice.notes.split('\n').filter(line => line.trim()).map((line, index) => (
-                <Text 
-                  key={index}
-                  x={27} 
-                  y={footerY + 35 + (index * 12)} 
-                  text={line.trim()} 
-                  font={fonts.body} 
-                  color={colors.text} 
-                />
-              ))}
+              <Text 
+                x={canvasWidth / 2 - 20} 
+                y={canvasHeight - 20} 
+                text="Page 1" 
+                font={fonts.body} 
+                color="#666" 
+              />
             </>
           )}
-          
-          {/* Payment Methods - Dynamic based on invoice flags */}
-          {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
-            <>
-              <Text x={27} y={paymentMethodsY} text="Payment Methods" font={fonts.bodyBold} color={colors.text} />
+
+          {/* === ADDITIONAL PAGES FOR REMAINING ITEMS === */}
+          {needsPagination && (() => {
+            let currentItemIndex = maxItemsFirstPage;
+            const pageElements = [];
+            
+            for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
+              const pageY = (pageNum - 1) * canvasHeight + (pageNum - 1) * 30; // Include separator space
+              const itemsOnThisPage = remainingItems.slice(
+                currentItemIndex - maxItemsFirstPage, 
+                currentItemIndex - maxItemsFirstPage + itemsPerSubsequentPage
+              );
               
-              {/* Stripe Payment Method */}
-              {invoice?.stripe_active && (
-                <>
-                  <Text x={27} y={paymentMethodsY + 12} text="Pay Online" font={fonts.body} color={colors.text} />
-                  <Text x={27} y={paymentMethodsY + 24} text="www.stripelink.com" font={fonts.body} color={colors.text} />
-                </>
-              )}
+              // PAGE SEPARATOR - Visual break between pages
+              pageElements.push(
+                <Rect 
+                  key={`page-separator-${pageNum}`}
+                  x={0} 
+                  y={pageY - 30} 
+                  width={canvasWidth} 
+                  height={30} 
+                  color="#f5f5f5"
+                />
+              );
               
-              {/* PayPal Payment Method */}
-              {invoice?.paypal_active && (
-                <>
-                  <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 35 : 12)} text="Pay with PayPal" font={fonts.body} color={colors.text} />
-                  <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 47 : 24)} text={business?.paypal_email || 'nobones@gmail.com'} font={fonts.body} color={colors.text} />
-                </>
-              )}
+              // Page number label in separator
+              pageElements.push(
+                <Text 
+                  key={`page-label-${pageNum}`}
+                  x={canvasWidth / 2 - 20} 
+                  y={pageY - 10} 
+                  text={`Page ${pageNum}`} 
+                  font={fonts.body} 
+                  color="#666" 
+                />
+              );
               
-              {/* Bank Transfer Payment Method */}
-              {invoice?.bank_account_active && (
-                <>
-                  {(() => {
-                    const baseY = paymentMethodsY + 12 + 
-                      (invoice?.stripe_active ? 35 : 0) + 
-                      (invoice?.paypal_active ? 35 : 0);
-                    
+              // Divider line
+              pageElements.push(
+                <Rect 
+                  key={`page-divider-${pageNum}`}
+                  x={20} 
+                  y={pageY - 2} 
+                  width={canvasWidth - 40} 
+                  height={2} 
+                  color="#ddd"
+                />
+              );
+              
+              // Page background
+              pageElements.push(
+                <Rect 
+                  key={`page-${pageNum}-bg`}
+                  x={0} 
+                  y={pageY} 
+                  width={canvasWidth} 
+                  height={canvasHeight} 
+                  color={colors.background} 
+                />
+              );
+              pageElements.push(
+                <Rect 
+                  key={`page-${pageNum}-border`}
+                  x={10} 
+                  y={pageY + 10} 
+                  width={canvasWidth - 20} 
+                  height={canvasHeight - 20} 
+                  color="transparent" 
+                  strokeColor={colors.shadow} 
+                  strokeWidth={1} 
+                />
+              );
+              
+              // Table header for continuation
+              pageElements.push(
+                <Rect 
+                  key={`page-${pageNum}-header-bg`}
+                  x={tableX} 
+                  y={pageY + 30} 
+                  width={tableWidth + 5} 
+                  height={25} 
+                  color={colors.greenAccent} 
+                />
+              );
+              
+              pageElements.push(
+                <Text 
+                  key={`page-${pageNum}-qty-header`}
+                  x={qtyX + 10} 
+                  y={pageY + 47} 
+                  text="QTY" 
+                  font={fonts.bodyBold} 
+                  color={colors.text} 
+                />
+              );
+              pageElements.push(
+                <Text 
+                  key={`page-${pageNum}-desc-header`}
+                  x={descX + 5} 
+                  y={pageY + 47} 
+                  text="DESCRIPTION" 
+                  font={fonts.bodyBold} 
+                  color={colors.text} 
+                />
+              );
+              pageElements.push(
+                <Text 
+                  key={`page-${pageNum}-price-header`}
+                  x={priceX + 35} 
+                  y={pageY + 47} 
+                  text="PRICE" 
+                  font={fonts.bodyBold} 
+                  color={colors.text} 
+                />
+              );
+              pageElements.push(
+                <Text 
+                  key={`page-${pageNum}-total-header`}
+                  x={totalX + 32} 
+                  y={pageY + 47} 
+                  text="TOTAL" 
+                  font={fonts.bodyBold} 
+                  color={colors.text} 
+                />
+              );
+              
+              // Items on this page
+              itemsOnThisPage.forEach((item: any, index: number) => {
+                const rowY = pageY + 65 + (index * itemRowHeight);
+                
+                pageElements.push(
+                  <Rect 
+                    key={`page-${pageNum}-item-${index}-line`}
+                    x={tableX} 
+                    y={rowY + 20} 
+                    width={tableWidth + 5} 
+                    height={1} 
+                    color={colors.border} 
+                  />
+                );
+                
+                pageElements.push(
+                  <Text 
+                    key={`page-${pageNum}-item-${index}-qty`}
+                    x={qtyX + 15} 
+                    y={rowY + 13} 
+                    text={item.quantity.toString()} 
+                    font={fonts.body} 
+                    color={colors.text} 
+                  />
+                );
+                
+                pageElements.push(
+                  <Text 
+                    key={`page-${pageNum}-item-${index}-desc`}
+                    x={descX + 5} 
+                    y={rowY + 13} 
+                    text={item.item_name} 
+                    font={fonts.body} 
+                    color={colors.text} 
+                  />
+                );
+                
+                // Add item description in brackets for pagination
+                if (item.item_description) {
+                  pageElements.push(
+                    <Text 
+                      key={`page-${pageNum}-item-${index}-desc-detail`}
+                      x={descX + 5 + (item.item_name.length * 6)} 
+                      y={rowY + 13} 
+                      text={` (${item.item_description})`} 
+                      font={fonts.tiny} 
+                      color="#999" 
+                    />
+                  );
+                }
+                
+                pageElements.push(
+                  <Text 
+                    key={`page-${pageNum}-item-${index}-price`}
+                    x={priceX + 35} 
+                    y={rowY + 13} 
+                    text={`${currencySymbol}${item.unit_price.toFixed(2)}`} 
+                    font={fonts.body} 
+                    color={colors.text} 
+                  />
+                );
+                
+                pageElements.push(
+                  <Text 
+                    key={`page-${pageNum}-item-${index}-total`}
+                    x={totalX + 32} 
+                    y={rowY + 13} 
+                    text={`${currencySymbol}${item.total_price.toFixed(2)}`} 
+                    font={fonts.body} 
+                    color={colors.text} 
+                  />
+                );
+              });
+              
+              currentItemIndex += itemsOnThisPage.length;
+              
+              // If this is the last page, add footer content
+              if (pageNum === totalPages) {
+                const lastPageFooterY = pageY + 65 + (itemsOnThisPage.length * 25) + 30;
+                
+                // Calculate dynamic positioning for Payment Methods based on notes
+                const notesLineCount = invoice?.notes ? invoice.notes.split('\n').filter(line => line.trim()).length : 0;
+                const notesHeight = invoice?.notes ? (15 + (notesLineCount * 12) + 10) : 0;
+                const paymentMethodsY = lastPageFooterY + 20 + notesHeight;
+                
+                // Notes section
+                if (invoice?.notes) {
+                  pageElements.push(
+                    <Text 
+                      key={`page-${pageNum}-notes-header`}
+                      x={27} 
+                      y={lastPageFooterY + 20} 
+                      text="Terms, Instructions & Notes" 
+                      font={fonts.bodyBold} 
+                      color={colors.text} 
+                    />
+                  );
+                  
+                  invoice.notes.split('\n').filter(line => line.trim()).forEach((line, index) => {
+                    pageElements.push(
+                      <Text 
+                        key={`page-${pageNum}-notes-line-${index}`}
+                        x={27} 
+                        y={lastPageFooterY + 35 + (index * 12)} 
+                        text={line.trim()} 
+                        font={fonts.body} 
+                        color={colors.text} 
+                      />
+                    );
+                  });
+                }
+                
+                // Payment Methods
+                if (invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) {
+                  pageElements.push(
+                    <Text 
+                      key={`page-${pageNum}-payment-header`}
+                      x={27} 
+                      y={paymentMethodsY} 
+                      text="Payment Methods" 
+                      font={fonts.bodyBold} 
+                      color={colors.text} 
+                    />
+                  );
+                  
+                  let paymentY = paymentMethodsY + 12;
+                  
+                  if (invoice?.stripe_active) {
+                    pageElements.push(
+                      <Text 
+                        key={`page-${pageNum}-stripe-label`}
+                        x={27} 
+                        y={paymentY} 
+                        text="Pay Online" 
+                        font={fonts.body} 
+                        color={colors.text} 
+                      />
+                    );
+                    pageElements.push(
+                      <Text 
+                        key={`page-${pageNum}-stripe-url`}
+                        x={27} 
+                        y={paymentY + 12} 
+                        text="www.stripelink.com" 
+                        font={fonts.body} 
+                        color={colors.text} 
+                      />
+                    );
+                    paymentY += 35;
+                  }
+                  
+                  if (invoice?.paypal_active) {
+                    pageElements.push(
+                      <Text 
+                        key={`page-${pageNum}-paypal-label`}
+                        x={27} 
+                        y={paymentY} 
+                        text="Pay with PayPal" 
+                        font={fonts.body} 
+                        color={colors.text} 
+                      />
+                    );
+                    pageElements.push(
+                      <Text 
+                        key={`page-${pageNum}-paypal-email`}
+                        x={27} 
+                        y={paymentY + 12} 
+                        text={business?.paypal_email || 'nobones@gmail.com'} 
+                        font={fonts.body} 
+                        color={colors.text} 
+                      />
+                    );
+                    paymentY += 35;
+                  }
+                  
+                  if (invoice?.bank_account_active) {
                     const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
                     const bankLines = bankDetails.split('\n');
                     
-                    return (
-                      <>
-                        <Text x={27} y={baseY} text="Bank Transfer" font={fonts.body} color={colors.text} />
-                        {bankLines.map((line, index) => (
-                          <Text 
-                            key={index}
-                            x={27} 
-                            y={baseY + 12 + (index * 8)} 
-                            text={line.trim()} 
-                            font={fonts.body} 
-                            color={colors.text} 
-                          />
-                        ))}
-                      </>
+                    pageElements.push(
+                      <Text 
+                        key={`page-${pageNum}-bank-label`}
+                        x={27} 
+                        y={paymentY} 
+                        text="Bank Transfer" 
+                        font={fonts.body} 
+                        color={colors.text} 
+                      />
                     );
-                  })()}
-                </>
-              )}
-            </>
-          )}
-          
-          {/* Right: Totals section aligned with Terms section */}
-          
-          {rightAlignedParagraphs && (
+                    
+                    bankLines.forEach((line, index) => {
+                      pageElements.push(
+                        <Text 
+                          key={`page-${pageNum}-bank-line-${index}`}
+                          x={27} 
+                          y={paymentY + 12 + (index * 8)} 
+                          text={line.trim()} 
+                          font={fonts.body} 
+                          color={colors.text} 
+                        />
+                      );
+                    });
+                  }
+                }
+                
+                // Totals section on the last page
+                if (rightAlignedParagraphs) {
+                  pageElements.push(
+                    <Paragraph 
+                      key={`page-${pageNum}-subtotal-label`}
+                      paragraph={rightAlignedParagraphs.subtotalLabelParagraph} 
+                      x={220} 
+                      y={lastPageFooterY + 20} 
+                      width={70} 
+                    />
+                  );
+                  pageElements.push(
+                    <Paragraph 
+                      key={`page-${pageNum}-subtotal-value`}
+                      paragraph={rightAlignedParagraphs.subtotalValueParagraph} 
+                      x={290} 
+                      y={lastPageFooterY + 20} 
+                      width={60} 
+                    />
+                  );
+                  
+                  if (rightAlignedParagraphs.discountLabelParagraph) {
+                    pageElements.push(
+                      <Paragraph 
+                        key={`page-${pageNum}-discount-label`}
+                        paragraph={rightAlignedParagraphs.discountLabelParagraph} 
+                        x={220} 
+                        y={lastPageFooterY + 40} 
+                        width={70} 
+                      />
+                    );
+                    pageElements.push(
+                      <Paragraph 
+                        key={`page-${pageNum}-discount-value`}
+                        paragraph={rightAlignedParagraphs.discountValueParagraph} 
+                        x={290} 
+                        y={lastPageFooterY + 40} 
+                        width={60} 
+                      />
+                    );
+                  }
+                  
+                  pageElements.push(
+                    <Paragraph 
+                      key={`page-${pageNum}-tax-label`}
+                      paragraph={rightAlignedParagraphs.taxLabelParagraph} 
+                      x={220} 
+                      y={lastPageFooterY + 60} 
+                      width={70} 
+                    />
+                  );
+                  pageElements.push(
+                    <Paragraph 
+                      key={`page-${pageNum}-tax-value`}
+                      paragraph={rightAlignedParagraphs.taxValueParagraph} 
+                      x={290} 
+                      y={lastPageFooterY + 60} 
+                      width={60} 
+                    />
+                  );
+                  
+                  // Grand Total Box
+                  pageElements.push(
+                    <Rect 
+                      key={`page-${pageNum}-total-bg`}
+                      x={220} 
+                      y={lastPageFooterY + (hasDiscount ? 90 : 70)} 
+                      width={135} 
+                      height={20} 
+                      color={colors.greenAccent} 
+                    />
+                  );
+                  
+                  pageElements.push(
+                    <Paragraph 
+                      key={`page-${pageNum}-total-label`}
+                      paragraph={rightAlignedParagraphs.totalLabelParagraph} 
+                      x={220} 
+                      y={lastPageFooterY + (hasDiscount ? 95 : 75)} 
+                      width={70} 
+                    />
+                  );
+                  pageElements.push(
+                    <Paragraph 
+                      key={`page-${pageNum}-total-value`}
+                      paragraph={rightAlignedParagraphs.totalValueParagraph} 
+                      x={288} 
+                      y={lastPageFooterY + (hasDiscount ? 95 : 75)} 
+                      width={65} 
+                    />
+                  );
+                }
+              }
+            }
+            
+            return pageElements;
+          })()}
+
+          {/* === FOOTER SECTION (only on single page invoices) === */}
+          {!needsPagination && (
             <>
-              {/* Subtotal row */}
-              <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={220} y={footerY + 20} width={70} />
-              <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={290} y={footerY + 20} width={60} />
-              
-              {/* Discount row */}
-              {rightAlignedParagraphs.discountLabelParagraph && (
+              {/* Left: Notes and Payment Methods */}
+              {invoice?.notes && (
                 <>
-                  <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={220} y={footerY + 40} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={290} y={footerY + 40} width={60} />
+                  <Text x={27} y={footerY + 20} text="Terms, Instructions & Notes" font={fonts.bodyBold} color={colors.text} />
+                  {invoice.notes.split('\n').filter(line => line.trim()).map((line, index) => (
+                    <Text 
+                      key={index}
+                      x={27} 
+                      y={footerY + 35 + (index * 12)} 
+                      text={line.trim()} 
+                      font={fonts.body} 
+                      color={colors.text} 
+                    />
+                  ))}
                 </>
               )}
               
-              {/* Tax row */}
-              <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={220} y={footerY + 60} width={70} />
-              <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={290} y={footerY + 60} width={60} />
-            </>
-          )}
-          
-          {/* Grand Total Box with green background - aligned with Terms section */}
-          <Rect x={220} y={footerY + (hasDiscount ? 90 : 70)} width={135} height={20} color={colors.greenAccent} />
-          
-          {rightAlignedParagraphs && (
-            <>
-              <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={220} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
-              <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={288} y={footerY + (hasDiscount ? 95 : 75)} width={65} />
+              {/* Payment Methods - Dynamic based on invoice flags */}
+              {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
+                <>
+                  <Text x={27} y={paymentMethodsY} text="Payment Methods" font={fonts.bodyBold} color={colors.text} />
+                  
+                  {/* Stripe Payment Method */}
+                  {invoice?.stripe_active && (
+                    <>
+                      <Text x={27} y={paymentMethodsY + 12} text="Pay Online" font={fonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + 24} text="www.stripelink.com" font={fonts.body} color={colors.text} />
+                    </>
+                  )}
+                  
+                  {/* PayPal Payment Method */}
+                  {invoice?.paypal_active && (
+                    <>
+                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 35 : 12)} text="Pay with PayPal" font={fonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 47 : 24)} text={business?.paypal_email || 'nobones@gmail.com'} font={fonts.body} color={colors.text} />
+                    </>
+                  )}
+                  
+                  {/* Bank Transfer Payment Method */}
+                  {invoice?.bank_account_active && (
+                    <>
+                      {(() => {
+                        const baseY = paymentMethodsY + 12 + 
+                          (invoice?.stripe_active ? 35 : 0) + 
+                          (invoice?.paypal_active ? 35 : 0);
+                        
+                        const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
+                        const bankLines = bankDetails.split('\n');
+                        
+                        return (
+                          <>
+                            <Text x={27} y={baseY} text="Bank Transfer" font={fonts.body} color={colors.text} />
+                            {bankLines.map((line, index) => (
+                              <Text 
+                                key={index}
+                                x={27} 
+                                y={baseY + 12 + (index * 8)} 
+                                text={line.trim()} 
+                                font={fonts.body} 
+                                color={colors.text} 
+                              />
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </>
+                  )}
+                </>
+              )}
+              
+              {/* Right: Totals section aligned with Terms section */}
+              
+              {rightAlignedParagraphs && (
+                <>
+                  {/* Subtotal row */}
+                  <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={220} y={footerY + 20} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={290} y={footerY + 20} width={60} />
+                  
+                  {/* Discount row */}
+                  {rightAlignedParagraphs.discountLabelParagraph && (
+                    <>
+                      <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={220} y={footerY + 40} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={290} y={footerY + 40} width={60} />
+                    </>
+                  )}
+                  
+                  {/* Tax row */}
+                  <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={220} y={footerY + 60} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={290} y={footerY + 60} width={60} />
+                </>
+              )}
+              
+              {/* Grand Total Box with green background - aligned with Terms section */}
+              <Rect x={220} y={footerY + (hasDiscount ? 90 : 70)} width={135} height={20} color={colors.greenAccent} />
+              
+              {rightAlignedParagraphs && (
+                <>
+                  <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={220} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={288} y={footerY + (hasDiscount ? 95 : 75)} width={65} />
+                </>
+              )}
             </>
           )}
         </Canvas>

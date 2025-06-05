@@ -148,7 +148,11 @@ export default function SkiaTestScreen() {
 
     try {
       setDataLoading(true);
-      console.log('[fetchRealInvoiceData] Fetching live data for invoice ID: ea512ea5-e222-4bdb-8e3b-ab66a9f26597');
+      // Use long invoice for pagination testing, short invoice for normal testing
+      const invoiceId = showLongInvoice ? 'ebf2fc13-07b6-4aab-9e77-215e029c765f' : 'ea512ea5-e222-4bdb-8e3b-ab66a9f26597';
+      const invoiceNumber = showLongInvoice ? 'INV-740196' : 'INV-710231';
+      
+      console.log(`[fetchRealInvoiceData] Fetching live data for invoice: ${invoiceNumber} (${invoiceId})`);
       
       // Fetch real invoice with client and line items using invoice ID
       const { data: invoiceData, error: invoiceError } = await supabase
@@ -158,7 +162,7 @@ export default function SkiaTestScreen() {
           clients (*),
           invoice_line_items (*)
         `)
-        .eq('id', 'ea512ea5-e222-4bdb-8e3b-ab66a9f26597')
+        .eq('id', invoiceId)
         .single();
 
       if (invoiceError) {
@@ -168,7 +172,8 @@ export default function SkiaTestScreen() {
         return;
       }
 
-      console.log('[fetchRealInvoiceData] SUCCESS - Live data received:', invoiceData);
+      console.log(`[fetchRealInvoiceData] SUCCESS - Live data received for ${invoiceNumber}:`, invoiceData);
+      console.log(`[fetchRealInvoiceData] Line items count: ${invoiceData.invoice_line_items?.length || 0}`);
       setRealInvoiceData(invoiceData);
       setRealClientData(invoiceData.clients);
       setDataError(null);
@@ -211,6 +216,11 @@ export default function SkiaTestScreen() {
     fetchBusinessSettings();
     fetchRealInvoiceData(); // FETCH REAL DATA ON MOUNT
   }, []);
+
+  // Refetch data when invoice type changes
+  useEffect(() => {
+    fetchRealInvoiceData();
+  }, [showLongInvoice]);
 
   // REFRESH DATA FUNCTION FOR TESTING
   const refreshData = () => {
@@ -265,28 +275,41 @@ export default function SkiaTestScreen() {
         <View style={{ padding: 20 }}>
           <H1>Skia Invoice System Test</H1>
           
-          <Text style={{ marginBottom: 20, color: '#666' }}>
+          <Text style={{ marginBottom: 30, color: '#666' }}>
             Compare the current React Native + HTML system with the new unified Skia system.
           </Text>
 
-          {/* Debug Info */}
-          <View style={{ marginBottom: 20, padding: 15, backgroundColor: '#e3f2fd', borderRadius: 8 }}>
-            <Text style={{ fontWeight: 'bold' }}>Debug Status:</Text>
-            <Text>• businessSettings: {businessSettings ? 'LOADED' : 'NULL'}</Text>
-            <Text>• user: {user ? 'LOGGED IN' : 'NOT LOGGED IN'}</Text>
-            <Text>• isLoading: {isLoading ? 'TRUE' : 'FALSE'}</Text>
+          {/* Pagination Testing Controls */}
+          <View style={{ marginBottom: 30, padding: 15, backgroundColor: '#fef3c7', borderRadius: 8, borderWidth: 1, borderColor: '#f59e0b' }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 15, color: '#92400e' }}>📄 Pagination Testing</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Current Invoice:</Text>
+                <Text style={{ marginBottom: 8 }}>{showLongInvoice ? 'INV-740196 (15 items - Long)' : 'INV-710231 (2 items - Short)'}</Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>
+                  {showLongInvoice ? '✅ Testing pagination with 15+ items' : '⭐ Standard invoice layout'}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ marginBottom: 8 }}>Long Invoice</Text>
+                <Switch 
+                  value={showLongInvoice} 
+                  onValueChange={setShowLongInvoice}
+                />
+              </View>
+            </View>
           </View>
 
           {/* Skia Test Section */}
-          <View style={{ marginBottom: 20 }}>
+          <View style={{ marginBottom: 240 }}>
             <H2>Skia Canvas Test</H2>
-            <Text style={{ marginBottom: 15, color: '#666' }}>
+            <Text style={{ marginBottom: 20, color: '#666' }}>
               Testing basic Skia Canvas rendering:
             </Text>
             
             {/* Fixed container with defined height - no conditional rendering */}
             <View style={{ 
-              height: 420, // Increased height to accommodate A4 proportions (280x396 + padding)
+              height: showLongInvoice ? 800 : 420, // Increased height for long invoices
               backgroundColor: '#f8f9fa',
               borderRadius: 8,
               padding: 10,
@@ -302,78 +325,83 @@ export default function SkiaTestScreen() {
                 currencySymbol={currencySymbol}
                 style={{ 
                   width: 290, // Fixed width for A4 proportion
-                  height: 400  // Fixed height for A4 proportion
+                  height: showLongInvoice ? 780 : 400  // Adjust height for pagination
                 }} 
               />
             </View>
           </View>
 
           {/* DYNAMIC DATA TESTING SECTION */}
-          <View style={{ marginBottom: 20, padding: 15, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#ddd' }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <H2>🔴 LIVE DATABASE DATA (INV-710231)</H2>
+          <View style={{ marginBottom: 30, padding: 20, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#ddd' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <H2>🔴 LIVE DATABASE DATA ({showLongInvoice ? 'INV-740196' : 'INV-710231'})</H2>
               <Button onPress={refreshData}>
                 <Text>Refresh Data</Text>
               </Button>
             </View>
             
             {dataLoading ? (
-              <Text style={{ color: '#666', fontStyle: 'italic' }}>Loading live data...</Text>
+              <Text style={{ color: '#666', fontStyle: 'italic', paddingVertical: 20 }}>Loading live data...</Text>
             ) : dataError ? (
-              <Text style={{ color: '#DC2626', fontWeight: 'bold' }}>❌ ERROR: {dataError}</Text>
+              <Text style={{ color: '#DC2626', fontWeight: 'bold', paddingVertical: 20 }}>❌ ERROR: {dataError}</Text>
             ) : realInvoiceData ? (
               <View>
-                <Text style={{ fontWeight: 'bold', marginBottom: 10, color: '#059669' }}>✅ LIVE DATA CONNECTED</Text>
+                <Text style={{ fontWeight: 'bold', marginBottom: 20, color: '#059669', fontSize: 16 }}>✅ LIVE DATA CONNECTED</Text>
                 
                 {/* Invoice Details */}
-                <View style={{ marginBottom: 15 }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 5 }}>📋 Invoice Details:</Text>
-                  <Text>• Number: {realInvoiceData.invoice_number}</Text>
-                  <Text>• Status: {realInvoiceData.status}</Text>
-                  <Text>• Date: {realInvoiceData.invoice_date}</Text>
-                  <Text>• Due: {realInvoiceData.due_date_option}</Text>
-                  <Text>• Subtotal: £{realInvoiceData.subtotal_amount}</Text>
-                  <Text>• Tax: {realInvoiceData.tax_percentage}%</Text>
-                  <Text>• Total: £{realInvoiceData.total_amount}</Text>
+                <View style={{ marginBottom: 25, padding: 15, backgroundColor: '#f9fafb', borderRadius: 6 }}>
+                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 10 }}>📋 Invoice Details:</Text>
+                  <Text style={{ marginBottom: 3 }}>• Number: {realInvoiceData.invoice_number}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Status: {realInvoiceData.status}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Date: {realInvoiceData.invoice_date}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Due: {realInvoiceData.due_date_option}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Subtotal: £{realInvoiceData.subtotal_amount}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Tax: {realInvoiceData.tax_percentage}%</Text>
+                  <Text style={{ marginBottom: 3 }}>• Total: £{realInvoiceData.total_amount}</Text>
                   <Text>• Notes: {realInvoiceData.notes}</Text>
                 </View>
 
                 {/* Client Details */}
                 {realClientData && (
-                  <View style={{ marginBottom: 15 }}>
-                    <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 5 }}>👤 Client Details:</Text>
-                    <Text>• Name: {realClientData.name}</Text>
-                    <Text>• Email: {realClientData.email}</Text>
+                  <View style={{ marginBottom: 25, padding: 15, backgroundColor: '#f0f9ff', borderRadius: 6 }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 10 }}>👤 Client Details:</Text>
+                    <Text style={{ marginBottom: 3 }}>• Name: {realClientData.name}</Text>
+                    <Text style={{ marginBottom: 3 }}>• Email: {realClientData.email}</Text>
                     <Text>• Address: {realClientData.address_client}</Text>
                   </View>
                 )}
 
                 {/* Line Items */}
-                <View style={{ marginBottom: 15 }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 5 }}>📦 Line Items ({realInvoiceData.invoice_line_items?.length || 0}):</Text>
-                  {realInvoiceData.invoice_line_items?.map((item: any, index: number) => (
-                    <View key={item.id} style={{ marginLeft: 10, marginBottom: 5 }}>
-                      <Text>• {index + 1}. {item.item_name} - Qty: {item.quantity} - £{item.unit_price} each = £{item.total_price}</Text>
+                <View style={{ marginBottom: 25, padding: 15, backgroundColor: '#fefce8', borderRadius: 6 }}>
+                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 10 }}>📦 Line Items ({realInvoiceData.invoice_line_items?.length || 0}):</Text>
+                  {realInvoiceData.invoice_line_items?.slice(0, 5).map((item: any, index: number) => (
+                    <View key={item.id} style={{ marginLeft: 10, marginBottom: 8 }}>
+                      <Text style={{ marginBottom: 2 }}>• {index + 1}. {item.item_name} - Qty: {item.quantity} - £{item.unit_price} each = £{item.total_price}</Text>
                       <Text style={{ color: '#666', fontSize: 12, marginLeft: 15 }}>"{item.item_description}"</Text>
                     </View>
                   ))}
+                  {realInvoiceData.invoice_line_items?.length > 5 && (
+                    <Text style={{ marginLeft: 10, color: '#666', fontStyle: 'italic' }}>
+                      ... and {realInvoiceData.invoice_line_items.length - 5} more items
+                    </Text>
+                  )}
                 </View>
 
                 {/* Business Settings */}
-                <View style={{ marginBottom: 15 }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 5 }}>🏢 Business Settings:</Text>
-                  <Text>• Name: {businessSettings?.business_name || 'Not loaded'}</Text>
-                  <Text>• Email: {businessSettings?.business_email || 'Not loaded'}</Text>
-                  <Text>• Currency: {businessSettings?.currency_code || 'Not loaded'}</Text>
+                <View style={{ marginBottom: 20, padding: 15, backgroundColor: '#f3f4f6', borderRadius: 6 }}>
+                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 10 }}>🏢 Business Settings:</Text>
+                  <Text style={{ marginBottom: 3 }}>• Name: {businessSettings?.business_name || 'Not loaded'}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Email: {businessSettings?.business_email || 'Not loaded'}</Text>
+                  <Text style={{ marginBottom: 3 }}>• Currency: {businessSettings?.currency_code || 'Not loaded'}</Text>
                   <Text>• Logo: {businessSettings?.business_logo_url ? '✅ Available' : '❌ No logo'}</Text>
                 </View>
 
-                <Text style={{ fontSize: 12, color: '#666', marginTop: 10, fontStyle: 'italic' }}>
+                <Text style={{ fontSize: 12, color: '#666', fontStyle: 'italic', paddingTop: 15, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
                   💡 Test: Change invoice data in database and click "Refresh Data" to verify live connection
                 </Text>
               </View>
             ) : (
-              <Text style={{ color: '#666' }}>No data received</Text>
+              <Text style={{ color: '#666', paddingVertical: 20 }}>No data received</Text>
             )}
           </View>
         </View>
