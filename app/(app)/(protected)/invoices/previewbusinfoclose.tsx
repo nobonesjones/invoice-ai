@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useNavigation, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -13,7 +14,7 @@ import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { ChevronLeft } from 'lucide-react-native';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne';
+import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedGestureHandler,
@@ -21,11 +22,30 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import type { PinchGestureHandlerGestureEvent, PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
 
 interface PreviewScreenParams {
   invoiceData?: string; // JSON stringified invoice data
   businessSettings?: string; // JSON stringified business settings
 }
+
+// Currency symbol mapping function
+const getCurrencySymbol = (code: string) => {
+  const mapping: Record<string, string> = {
+    GBP: '£',
+    USD: '$',
+    EUR: '€',
+    AUD: 'A$',
+    CAD: 'C$',
+    JPY: '¥',
+    INR: '₹',
+    // Add more as needed
+  };
+  // Accept both 'GBP' and 'GBP - British Pound' style codes
+  if (!code) return '$';
+  const normalized = code.split(' ')[0];
+  return mapping[normalized] || '$';
+};
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
@@ -46,7 +66,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    backgroundColor: theme.border, // Matches invoice-viewer background for preview
+    backgroundColor: '#f5f5f5', // Light gray background for invoice preview
   },
   gestureContainer: {
     flex: 1,
@@ -58,7 +78,13 @@ const getStyles = (theme: any) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 10,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
   },
   errorContainer: {
     flex: 1,
@@ -92,33 +118,16 @@ export default function PreviewBusinfoCloseScreen() {
   const { invoiceData: invoiceDataParam, businessSettings: businessSettingsParam } = useLocalSearchParams();
 
   // Parse the passed data
-  const [invoiceData, setInvoiceData] = useState<InvoiceForTemplate | null>(() => {
+  const [invoiceData, setInvoiceData] = useState<any | null>(() => {
     try {
       if (invoiceDataParam && typeof invoiceDataParam === 'string') {
         const parsed = JSON.parse(invoiceDataParam);
-        console.log('[PreviewBusinfoCloseScreen] Parsed invoice data:', parsed);
+        console.log('[PreviewBusinfoCloseScreen] Parsed invoice data for Skia:', parsed);
         console.log('[PreviewBusinfoCloseScreen] Client data in parsed:', parsed.clients);
-        console.log('[PreviewBusinfoCloseScreen] Subtotal in parsed:', parsed.subtotal_amount);
-        console.log('[PreviewBusinfoCloseScreen] Total in parsed:', parsed.total_amount);
+        console.log('[PreviewBusinfoCloseScreen] Line items in parsed:', parsed.invoice_line_items);
         console.log('[PreviewBusinfoCloseScreen] Payment methods in parsed - Stripe:', parsed.stripe_active, 'PayPal:', parsed.paypal_active, 'Bank:', parsed.bank_account_active);
         
-        // Transform the form data into InvoiceForTemplate format
-        const transformedData = {
-          ...parsed,
-          id: 'preview-temp-id',
-          user_id: 'preview-user',
-          status: 'draft',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          // Keep clients data as is (already set from create.tsx)
-          // Keep invoice_line_items as is (already set from create.tsx)
-          // Keep all financial data as is (already set with correct field names)
-        } as InvoiceForTemplate;
-        
-        console.log('[PreviewBusinfoCloseScreen] Transformed data:', transformedData);
-        console.log('[PreviewBusinfoCloseScreen] Final client name will be:', transformedData.clients?.name);
-        
-        return transformedData;
+        return parsed;
       }
       return null;
     } catch (error) {
@@ -127,10 +136,12 @@ export default function PreviewBusinfoCloseScreen() {
     }
   });
 
-  const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(() => {
+  const [businessSettings, setBusinessSettings] = useState<any | null>(() => {
     try {
       if (businessSettingsParam && typeof businessSettingsParam === 'string') {
-        return JSON.parse(businessSettingsParam);
+        const parsed = JSON.parse(businessSettingsParam);
+        console.log('[PreviewBusinfoCloseScreen] Parsed business settings for Skia:', parsed);
+        return parsed;
       }
       return null;
     } catch (error) {
@@ -150,17 +161,7 @@ export default function PreviewBusinfoCloseScreen() {
           if (invoiceDataParam && typeof invoiceDataParam === 'string') {
             const parsed = JSON.parse(invoiceDataParam);
             console.log('[PreviewBusinfoCloseScreen] Refreshed invoice data:', parsed);
-            
-            const transformedData = {
-              ...parsed,
-              id: 'preview-temp-id',
-              user_id: 'preview-user',
-              status: 'draft',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            } as InvoiceForTemplate;
-            
-            setInvoiceData(transformedData);
+            setInvoiceData(parsed);
           }
         } catch (error) {
           console.error('[PreviewBusinfoCloseScreen] Error refreshing invoice data:', error);
@@ -188,8 +189,8 @@ export default function PreviewBusinfoCloseScreen() {
   const translateY = useSharedValue(0);
 
   // Pan gesture handler
-  const panGestureHandler = useAnimatedGestureHandler({
-    onStart: (_, context: any) => {
+  const panGestureHandler = useAnimatedGestureHandler<PanGestureHandlerGestureEvent, { translateX: number; translateY: number }>({
+    onStart: (_, context) => {
       context.translateX = translateX.value;
       context.translateY = translateY.value;
     },
@@ -200,8 +201,8 @@ export default function PreviewBusinfoCloseScreen() {
   });
 
   // Pinch gesture handler
-  const pinchGestureHandler = useAnimatedGestureHandler({
-    onStart: (_, context: any) => {
+  const pinchGestureHandler = useAnimatedGestureHandler<PinchGestureHandlerGestureEvent, { scale: number }>({
+    onStart: (_, context) => {
       context.scale = scale.value;
     },
     onActive: (event, context) => {
@@ -271,6 +272,9 @@ export default function PreviewBusinfoCloseScreen() {
     };
   }, [navigation, setIsTabBarVisible]);
 
+  // Get currency symbol from business settings
+  const currencySymbol = businessSettings?.currency_code ? getCurrencySymbol(businessSettings.currency_code) : '$';
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       {/* Main Content Area */}
@@ -281,11 +285,20 @@ export default function PreviewBusinfoCloseScreen() {
               <Animated.View style={styles.panContainer}>
                 <PinchGestureHandler onGestureEvent={pinchGestureHandler}>
                   <Animated.View style={[styles.zoomContainer, animatedStyle]}>
-                    <InvoiceTemplateOne
-                      invoice={invoiceData}
-                      clientName={invoiceData.clients?.name || 'Client Name'}
-                      businessSettings={businessSettings}
-                    />
+                    <ScrollView 
+                      contentContainerStyle={styles.scrollContainer}
+                      showsVerticalScrollIndicator={false}
+                      showsHorizontalScrollIndicator={false}
+                      bounces={false}
+                    >
+                      <SkiaInvoiceCanvas
+                        invoice={invoiceData}
+                        business={businessSettings}
+                        client={invoiceData.clients}
+                        currencySymbol={currencySymbol}
+                        style={{ alignSelf: 'center' }}
+                      />
+                    </ScrollView>
                   </Animated.View>
                 </PinchGestureHandler>
               </Animated.View>

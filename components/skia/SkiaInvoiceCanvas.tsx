@@ -84,7 +84,9 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
   
   // Calculate total canvas height for all pages
   const separatorHeight = actualNeedsPagination ? 30 * (totalPages - 1) : 0; // 30px separator between each page
-  const totalCanvasHeight = (totalPages * canvasHeight) + separatorHeight;
+  // For compact mode (9-11 items), keep original height; for pagination, expand
+  // Add 30px (1 cm) extra space at the end
+  const totalCanvasHeight = isCompactMode ? canvasHeight + 30 : ((totalPages * canvasHeight) + separatorHeight + 30);
   
   console.log(`[SkiaInvoiceCanvas] ADAPTIVE: Items=${totalItems}, Compact=${isCompactMode}, Scale=${scaleFactor}, RowHeight=${scaledRowHeight}px, MaxFirst=${actualMaxItemsFirstPage}, Pages=${totalPages}`);
 
@@ -283,6 +285,19 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
         'In 7 days'
       }`)
       .build();
+
+      // PO Number paragraph (conditional)
+      const poParagraph = invoice?.po_number ? Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Right,
+      })
+      .pushStyle({ 
+        color: Skia.Color('black'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 9, 
+        fontStyle: { weight: 400 }
+      })
+      .addText(`PO: ${invoice.po_number}`)
+      .build() : null;
 
       // Client paragraphs
       const billToParagraph = Skia.ParagraphBuilder.Make({
@@ -534,6 +549,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
         refParagraph, 
         dateParagraph, 
         dueParagraph, 
+        poParagraph,
         billToParagraph, 
         clientNameParagraph, 
         clientAddress1Paragraph,
@@ -563,6 +579,10 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
 
   // Logo handling
   const logoImage = useImage(business?.business_logo_url);
+  
+  // Payment card icons
+  const visaIcon = useImage('https://logos-world.net/wp-content/uploads/2020/04/Visa-Logo.png');
+  const mastercardIcon = useImage('https://logos-world.net/wp-content/uploads/2020/04/Mastercard-Logo.png');
 
   // Original design colors
   const colors = {
@@ -641,7 +661,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
           {/* === HEADER SECTION === */}
           
           {/* Left: Business Logo */}
-          {logoImage ? (
+          {logoImage && business?.business_logo_url ? (
             <Image 
               image={logoImage} 
               x={27} 
@@ -675,6 +695,11 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
               <Paragraph paragraph={rightAlignedParagraphs.dateParagraph} x={220} y={65} width={130} />
               <Paragraph paragraph={rightAlignedParagraphs.dueParagraph} x={220} y={80} width={130} />
             </>
+          )}
+          
+          {/* PO Number - conditional */}
+          {rightAlignedParagraphs && rightAlignedParagraphs.poParagraph && (
+            <Paragraph paragraph={rightAlignedParagraphs.poParagraph} x={220} y={95} width={130} />
           )}
           
           {/* === META SECTION === */}
@@ -717,30 +742,74 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
           {actualFirstPageItems.map((item: any, index: number) => {
             const rowY = scaledFirstItemY + (index * scaledRowHeight);
             
+            // Create paragraphs with same font as business address (fontSize: 9, weight: 400)
+            const qtyParagraph = Skia.ParagraphBuilder.Make({
+              textAlign: TextAlign.Center,
+            })
+            .pushStyle({ 
+              color: Skia.Color('black'), 
+              fontFamilies: ['Helvetica'], 
+              fontSize: 9, 
+              fontStyle: { weight: 400 }
+            })
+            .addText(item.quantity.toString())
+            .build();
+
+            const nameParagraph = Skia.ParagraphBuilder.Make({
+              textAlign: TextAlign.Left,
+            })
+            .pushStyle({ 
+              color: Skia.Color('black'), 
+              fontFamilies: ['Helvetica'], 
+              fontSize: 9, 
+              fontStyle: { weight: 400 }
+            })
+            .addText(item.item_name)
+            .build();
+
+            const priceParagraph = Skia.ParagraphBuilder.Make({
+              textAlign: TextAlign.Left,
+            })
+            .pushStyle({ 
+              color: Skia.Color('black'), 
+              fontFamilies: ['Helvetica'], 
+              fontSize: 9, 
+              fontStyle: { weight: 400 }
+            })
+            .addText(`${currencySymbol}${item.unit_price.toFixed(2)}`)
+            .build();
+
+            const totalParagraph = Skia.ParagraphBuilder.Make({
+              textAlign: TextAlign.Left,
+            })
+            .pushStyle({ 
+              color: Skia.Color('black'), 
+              fontFamilies: ['Helvetica'], 
+              fontSize: 9, 
+              fontStyle: { weight: 400 }
+            })
+            .addText(`${currencySymbol}${item.total_price.toFixed(2)}`)
+            .build();
+            
             return (
               <React.Fragment key={index}>
-                {/* Row separator line */}
-                <Rect x={tableX} y={rowY + scaledRowHeight} width={tableWidth + 5} height={1} color={colors.border} />
-                
-                {/* QTY - center aligned in column */}
-                <Text 
-                  x={qtyX + 15} 
-                  y={rowY + textOffsetY} 
-                  text={item.quantity.toString()} 
-                  font={scaledFonts.body} 
-                  color={colors.text} 
+                {/* QTY - center aligned in column using Paragraph */}
+                <Paragraph 
+                  paragraph={qtyParagraph} 
+                  x={qtyX} 
+                  y={rowY + textOffsetY - 4} 
+                  width={30} 
                 />
                 
-                {/* Description - left aligned */}
-                <Text 
+                {/* Description - left aligned using Paragraph */}
+                <Paragraph 
+                  paragraph={nameParagraph} 
                   x={descX + 5} 
-                  y={rowY + textOffsetY} 
-                  text={item.item_name} 
-                  font={scaledFonts.body} 
-                  color={colors.text} 
+                  y={rowY + textOffsetY - 4} 
+                  width={120} 
                 />
                 
-                {/* Item description in brackets - light grey, smaller */}
+                {/* Item description in brackets - light grey, smaller - keep as Text for now */}
                 {item.item_description && (
                   <Text 
                     x={descX + 5 + (item.item_name.length * 6)} 
@@ -751,22 +820,20 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                   />
                 )}
                 
-                {/* Price - aligned directly under PRICE header - REGULAR WEIGHT */}
-                <Text 
+                {/* Price - aligned directly under PRICE header using Paragraph */}
+                <Paragraph 
+                  paragraph={priceParagraph} 
                   x={priceX + 35} 
-                  y={rowY + textOffsetY} 
-                  text={`${currencySymbol}${item.unit_price.toFixed(2)}`} 
-                  font={scaledFonts.body} 
-                  color={colors.text} 
+                  y={rowY + textOffsetY - 4} 
+                  width={60} 
                 />
                 
-                {/* Total - aligned directly under TOTAL header - REGULAR WEIGHT */}
-                <Text 
+                {/* Total - aligned directly under TOTAL header using Paragraph */}
+                <Paragraph 
+                  paragraph={totalParagraph} 
                   x={totalX + 32} 
-                  y={rowY + textOffsetY} 
-                  text={`${currencySymbol}${item.total_price.toFixed(2)}`} 
-                  font={scaledFonts.body} 
-                  color={colors.text} 
+                  y={rowY + textOffsetY - 4} 
+                  width={60} 
                 />
               </React.Fragment>
             );
@@ -914,40 +981,76 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
               itemsOnThisPage.forEach((item: any, index: number) => {
                 const rowY = pageY + 55 + (index * scaledRowHeight); // Match first page: header(25) + tableY(30) = 55
                 
-                pageElements.push(
-                  <Rect 
-                    key={`page-${pageNum}-item-${index}-line`}
-                    x={tableX} 
-                    y={rowY + scaledRowHeight} 
-                    width={tableWidth + 5} 
-                    height={1} 
-                    color={colors.border} 
-                  />
-                );
+                // Create paragraphs with same font as business address (fontSize: 9, weight: 400)
+                const qtyParagraph = Skia.ParagraphBuilder.Make({
+                  textAlign: TextAlign.Center,
+                })
+                .pushStyle({ 
+                  color: Skia.Color('black'), 
+                  fontFamilies: ['Helvetica'], 
+                  fontSize: 9, 
+                  fontStyle: { weight: 400 }
+                })
+                .addText(item.quantity.toString())
+                .build();
+
+                const nameParagraph = Skia.ParagraphBuilder.Make({
+                  textAlign: TextAlign.Left,
+                })
+                .pushStyle({ 
+                  color: Skia.Color('black'), 
+                  fontFamilies: ['Helvetica'], 
+                  fontSize: 9, 
+                  fontStyle: { weight: 400 }
+                })
+                .addText(item.item_name)
+                .build();
+
+                const priceParagraph = Skia.ParagraphBuilder.Make({
+                  textAlign: TextAlign.Left,
+                })
+                .pushStyle({ 
+                  color: Skia.Color('black'), 
+                  fontFamilies: ['Helvetica'], 
+                  fontSize: 9, 
+                  fontStyle: { weight: 400 }
+                })
+                .addText(`${currencySymbol}${item.unit_price.toFixed(2)}`)
+                .build();
+
+                const totalParagraph = Skia.ParagraphBuilder.Make({
+                  textAlign: TextAlign.Left,
+                })
+                .pushStyle({ 
+                  color: Skia.Color('black'), 
+                  fontFamilies: ['Helvetica'], 
+                  fontSize: 9, 
+                  fontStyle: { weight: 400 }
+                })
+                .addText(`${currencySymbol}${item.total_price.toFixed(2)}`)
+                .build();
                 
                 pageElements.push(
-                  <Text 
+                  <Paragraph 
                     key={`page-${pageNum}-item-${index}-qty`}
-                    x={qtyX + 15} 
-                    y={rowY + textOffsetY} 
-                    text={item.quantity.toString()} 
-                    font={scaledFonts.body} 
-                    color={colors.text} 
+                    paragraph={qtyParagraph} 
+                    x={qtyX} 
+                    y={rowY + textOffsetY - 4} 
+                    width={30} 
                   />
                 );
                 
                 pageElements.push(
-                  <Text 
+                  <Paragraph 
                     key={`page-${pageNum}-item-${index}-desc`}
+                    paragraph={nameParagraph} 
                     x={descX + 5} 
-                    y={rowY + textOffsetY} 
-                    text={item.item_name} 
-                    font={scaledFonts.body} 
-                    color={colors.text} 
+                    y={rowY + textOffsetY - 4} 
+                    width={120} 
                   />
                 );
                 
-                // Add item description in brackets for pagination
+                // Add item description in brackets for pagination - keep as Text for now
                 if (item.item_description) {
                   pageElements.push(
                     <Text 
@@ -962,24 +1065,22 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                 }
                 
                 pageElements.push(
-                  <Text 
+                  <Paragraph 
                     key={`page-${pageNum}-item-${index}-price`}
+                    paragraph={priceParagraph} 
                     x={priceX + 35} 
-                    y={rowY + textOffsetY} 
-                    text={`${currencySymbol}${item.unit_price.toFixed(2)}`} 
-                    font={scaledFonts.body} 
-                    color={colors.text} 
+                    y={rowY + textOffsetY - 4} 
+                    width={60} 
                   />
                 );
                 
                 pageElements.push(
-                  <Text 
+                  <Paragraph 
                     key={`page-${pageNum}-item-${index}-total`}
+                    paragraph={totalParagraph} 
                     x={totalX + 32} 
-                    y={rowY + textOffsetY} 
-                    text={`${currencySymbol}${item.total_price.toFixed(2)}`} 
-                    font={scaledFonts.body} 
-                    color={colors.text} 
+                    y={rowY + textOffsetY - 4} 
+                    width={60} 
                   />
                 );
               });
@@ -1009,12 +1110,14 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                   );
                   
                   invoice.notes.split('\n').filter(line => line.trim()).forEach((line, index) => {
+                    // Constrain text to 50% of page width (185px)
+                    const constrainedText = line.trim().length > 45 ? line.trim().substring(0, 42) + '...' : line.trim();
                     pageElements.push(
                       <Text 
                         key={`page-${pageNum}-notes-line-${index}`}
                         x={27} 
-                        y={lastPageFooterY + 35 + (index * 12)} 
-                        text={line.trim()} 
+                        y={lastPageFooterY + 32 + (index * 12)} 
+                        text={constrainedText} 
                         font={scaledFonts.body} 
                         color={colors.text} 
                       />
@@ -1048,6 +1151,37 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         color={colors.text} 
                       />
                     );
+                    
+                    // Add Visa icon
+                    if (visaIcon) {
+                      pageElements.push(
+                        <Image 
+                          key={`page-${pageNum}-visa-icon`}
+                          image={visaIcon} 
+                          x={85} 
+                          y={paymentY - 3} 
+                          width={20} 
+                          height={12} 
+                          fit="contain"
+                        />
+                      );
+                    }
+                    
+                    // Add Mastercard icon  
+                    if (mastercardIcon) {
+                      pageElements.push(
+                        <Image 
+                          key={`page-${pageNum}-mastercard-icon`}
+                          image={mastercardIcon} 
+                          x={110} 
+                          y={paymentY - 3} 
+                          width={20} 
+                          height={12} 
+                          fit="contain"
+                        />
+                      );
+                    }
+                    
                     pageElements.push(
                       <Text 
                         key={`page-${pageNum}-stripe-url`}
@@ -1058,7 +1192,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         color={colors.text} 
                       />
                     );
-                    paymentY += 35;
+                    paymentY += 23;
                   }
                   
                   if (invoice?.paypal_active) {
@@ -1072,17 +1206,20 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         color={colors.text} 
                       />
                     );
+                    // Constrain PayPal email to 50% width
+                    const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
+                    const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
                     pageElements.push(
                       <Text 
-                        key={`page-${pageNum}-paypal-email`}
+                        key="paypal-email"
                         x={27} 
                         y={paymentY + 12} 
-                        text={business?.paypal_email || 'nobones@gmail.com'} 
+                        text={constrainedEmail} 
                         font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
-                    paymentY += 35;
+                    paymentY += 23;
                   }
                   
                   if (invoice?.bank_account_active) {
@@ -1095,18 +1232,20 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         x={27} 
                         y={paymentY} 
                         text="Bank Transfer" 
-                        font={scaledFonts.body} 
-                        color={colors.text} 
+                        font={scaledFonts.bodyBold} 
+                        color="black"
                       />
                     );
                     
                     bankLines.forEach((line, index) => {
+                      // Constrain bank details to 50% width and match terms spacing
+                      const constrainedLine = line.trim().length > 25 ? line.trim().substring(0, 22) + '...' : line.trim();
                       pageElements.push(
                         <Text 
                           key={`page-${pageNum}-bank-line-${index}`}
                           x={27} 
-                          y={paymentY + 12 + (index * 8)} 
-                          text={line.trim()} 
+                          y={paymentY + 12 + (index * 12)} 
+                          text={constrainedLine} 
                           font={scaledFonts.body} 
                           color={colors.text} 
                         />
@@ -1220,16 +1359,20 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
               {invoice?.notes && (
                 <>
                   <Text x={27} y={footerY + 20} text="Terms, Instructions & Notes" font={scaledFonts.bodyBold} color={colors.text} />
-                  {invoice.notes.split('\n').filter(line => line.trim()).map((line, index) => (
-                    <Text 
-                      key={index}
-                      x={27} 
-                      y={footerY + 35 + (index * 12)} 
-                      text={line.trim()} 
-                      font={scaledFonts.body} 
-                      color={colors.text} 
-                    />
-                  ))}
+                  {invoice.notes.split('\n').filter(line => line.trim()).map((line, index) => {
+                    // Constrain text to 50% of page width (185px)
+                    const constrainedText = line.trim().length > 45 ? line.trim().substring(0, 42) + '...' : line.trim();
+                    return (
+                      <Text 
+                        key={index}
+                        x={27} 
+                        y={footerY + 32 + (index * 12)} 
+                        text={constrainedText} 
+                        font={scaledFonts.body} 
+                        color={colors.text} 
+                      />
+                    );
+                  })}
                 </>
               )}
               
@@ -1242,6 +1385,31 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                   {invoice?.stripe_active && (
                     <>
                       <Text x={27} y={paymentMethodsY + 12} text="Pay Online" font={scaledFonts.body} color={colors.text} />
+                      
+                      {/* Add Visa icon */}
+                      {visaIcon && (
+                        <Image 
+                          image={visaIcon} 
+                          x={85} 
+                          y={paymentMethodsY + 9} 
+                          width={20} 
+                          height={12} 
+                          fit="contain"
+                        />
+                      )}
+                      
+                      {/* Add Mastercard icon */}
+                      {mastercardIcon && (
+                        <Image 
+                          image={mastercardIcon} 
+                          x={110} 
+                          y={paymentMethodsY + 9} 
+                          width={20} 
+                          height={12} 
+                          fit="contain"
+                        />
+                      )}
+                      
                       <Text x={27} y={paymentMethodsY + 24} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
                     </>
                   )}
@@ -1249,8 +1417,21 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                   {/* PayPal Payment Method */}
                   {invoice?.paypal_active && (
                     <>
-                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 35 : 12)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
-                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 47 : 24)} text={business?.paypal_email || 'nobones@gmail.com'} font={scaledFonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 23 : 12)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
+                      {(() => {
+                        const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
+                        const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
+                        return (
+                          <Text 
+                            key="paypal-email"
+                            x={27} 
+                            y={paymentMethodsY + (invoice?.stripe_active ? 35 : 24)} 
+                            text={constrainedEmail} 
+                            font={scaledFonts.body} 
+                            color={colors.text} 
+                          />
+                        );
+                      })()}
                     </>
                   )}
                   
@@ -1259,25 +1440,29 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     <>
                       {(() => {
                         const baseY = paymentMethodsY + 12 + 
-                          (invoice?.stripe_active ? 35 : 0) + 
-                          (invoice?.paypal_active ? 35 : 0);
+                          (invoice?.stripe_active ? 23 : 0) + 
+                          (invoice?.paypal_active ? 23 : 0);
                         
                         const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
                         const bankLines = bankDetails.split('\n');
                         
                         return (
                           <>
-                            <Text x={27} y={baseY} text="Bank Transfer" font={scaledFonts.body} color={colors.text} />
-                            {bankLines.map((line, index) => (
-                              <Text 
-                                key={index}
-                                x={27} 
-                                y={baseY + 12 + (index * 8)} 
-                                text={line.trim()} 
-                                font={scaledFonts.body} 
-                                color={colors.text} 
-                              />
-                            ))}
+                            <Text x={27} y={baseY} text="Bank Transfer" font={scaledFonts.bodyBold} color="black" />
+                            {bankLines.map((line, index) => {
+                              // Constrain bank details to 50% width and match terms spacing
+                              const constrainedLine = line.trim().length > 25 ? line.trim().substring(0, 22) + '...' : line.trim();
+                              return (
+                                <Text 
+                                  key={index}
+                                  x={27} 
+                                  y={baseY + 12 + (index * 12)} 
+                                  text={constrainedLine} 
+                                  font={scaledFonts.body} 
+                                  color={colors.text} 
+                                />
+                              );
+                            })}
                           </>
                         );
                       })()}
@@ -1346,4 +1531,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default SkiaInvoiceCanvas; 
+export default SkiaInvoiceCanvas;
