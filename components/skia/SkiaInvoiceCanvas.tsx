@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, forwardRef } from 'react';
 import { Canvas, Rect, Text, Skia, matchFont, Circle, Paragraph, TextAlign, Image, useImage } from '@shopify/react-native-skia';
 import { View, StyleSheet, Platform } from 'react-native';
 
@@ -8,27 +8,30 @@ interface SkiaInvoiceCanvasProps {
   client?: any;
   currencySymbol?: string;
   style?: any;
+  renderSinglePage?: number; // NEW: If provided, only render this specific page (0-indexed)
 }
 
-const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({ 
+const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({ 
   invoice, 
   business, 
   client, 
   currencySymbol = '£',
-  style 
-}) => {
+  style,
+  renderSinglePage
+}, ref) => {
   console.log('[SkiaInvoiceCanvas] Rendering Real Invoice INV-710231');
 
-  // Original design dimensions: maxWidth: 370, compact mobile-first
+  // MOBILE-OPTIMIZED CANVAS DIMENSIONS - prioritizing on-screen appearance
+  // Original design dimensions that looked great: maxWidth: 370, compact mobile-first
   const canvasWidth = 370;
-  const canvasHeight = 560; // Single page height
+  const canvasHeight = 560; // Original height that looked perfect on mobile
   
-  // Pagination calculations
+  // Pagination calculations with original spacing
   const itemRowHeight = 20;
   const tableHeaderY = 220;
   const tableHeaderHeight = 25;
   const firstItemY = 245;
-  const footerStartY = 410;
+  const footerStartY = 410; // Back to original footer position that looked good
   
   // Calculate how many items fit on first page
   const availableSpaceFirstPage = footerStartY - firstItemY;
@@ -629,7 +632,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
   return (
     <View style={[styles.container, style]}>
       <View style={styles.pageContainer}>
-        <Canvas style={{ width: canvasWidth, height: totalCanvasHeight }}>
+        <Canvas style={{ width: canvasWidth, height: totalCanvasHeight }} ref={ref}>
           {/* === PAGE 1 === */}
           {/* Container background */}
           <Rect x={0} y={0} width={canvasWidth} height={canvasHeight} color={colors.background} />
@@ -1320,7 +1323,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
