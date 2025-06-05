@@ -492,32 +492,44 @@ export default function InvoiceDashboardScreen() {
             <Text style={[styles.title, { color: themeColors.foreground }]}>
               Invoices
             </Text>
-            <TouchableOpacity
-              style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
-              onPress={() => router.push("/invoices/create" as any)}
-            >
-              <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
-                <LinearGradient
-                  colors={['transparent', 'rgba(255,255,255,0.3)', 'transparent']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.shineGradient}
-                />
-              </Animated.View>
-              <PlusCircle
-                size={18}
-                color={themeColors.primaryForeground}
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                style={[
-                  styles.headerButtonText,
-                  { color: themeColors.primaryForeground },
-                ]}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {/* Developer Test Button */}
+              <TouchableOpacity
+                style={[styles.testButton, { backgroundColor: themeColors.muted, borderColor: themeColors.border }]}
+                onPress={() => router.push("/skia-test" as any)}
               >
-                Create Invoice
-              </Text>
-            </TouchableOpacity>
+                <Text style={[styles.testButtonText, { color: themeColors.foreground }]}>
+                  🧪 Test
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
+                onPress={() => router.push("/invoices/create" as any)}
+              >
+                <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
+                  <LinearGradient
+                    colors={['transparent', 'rgba(255,255,255,0.3)', 'transparent']}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.shineGradient}
+                  />
+                </Animated.View>
+                <PlusCircle
+                  size={18}
+                  color={themeColors.primaryForeground}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.headerButtonText,
+                    { color: themeColors.primaryForeground },
+                  ]}
+                >
+                  Create Invoice
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View
@@ -787,5 +799,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     // color is set dynamically
+  },
+  testButton: {
+    padding: 8,
+    borderWidth: 1,
+    borderRadius: 6,
+  },
+  testButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
