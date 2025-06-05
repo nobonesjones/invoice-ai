@@ -58,16 +58,32 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
   const firstPageItems = lineItems.slice(0, maxItemsFirstPage);
   const remainingItems = lineItems.slice(maxItemsFirstPage);
   
+  // ADAPTIVE SCALING LOGIC for 9-11 items
+  const isCompactMode = totalItems >= 9 && totalItems <= 11;
+  const scaleFactor = isCompactMode ? 0.75 : 1.0; // 25% reduction for 9-11 items
+  
+  // Scaled dimensions
+  const scaledRowHeight = Math.floor(itemRowHeight * scaleFactor); // 15px for compact, 20px normal
+  const scaledFirstItemY = firstItemY;
+  const scaledItemSpacing = scaledRowHeight;
+  const textOffsetY = 13; // Consistent text positioning within each row
+  
+  // Recalculate pagination with scaled dimensions
+  const actualMaxItemsFirstPage = isCompactMode ? 11 : maxItemsFirstPage; // Force 11 max in compact mode
+  const actualNeedsPagination = totalItems > actualMaxItemsFirstPage;
+  const actualFirstPageItems = lineItems.slice(0, actualMaxItemsFirstPage);
+  const actualRemainingItems = lineItems.slice(actualMaxItemsFirstPage);
+  
   // Calculate number of pages
-  const itemsPerSubsequentPage = Math.floor((canvasHeight - 50) / itemRowHeight); // Leave space for page margins
-  const totalPages = needsPagination ? 
-    1 + Math.ceil(remainingItems.length / itemsPerSubsequentPage) : 1;
+  const itemsPerSubsequentPage = Math.floor((canvasHeight - 50) / scaledRowHeight); // Use scaled row height
+  const totalPages = actualNeedsPagination ? 
+    1 + Math.ceil(actualRemainingItems.length / itemsPerSubsequentPage) : 1;
   
   // Calculate total canvas height for all pages
-  const separatorHeight = needsPagination ? 30 * (totalPages - 1) : 0; // 30px separator between each page
+  const separatorHeight = actualNeedsPagination ? 30 * (totalPages - 1) : 0; // 30px separator between each page
   const totalCanvasHeight = (totalPages * canvasHeight) + separatorHeight;
   
-  console.log(`[SkiaInvoiceCanvas] PAGINATION: Items=${totalItems}, Space=${availableSpaceFirstPage}px, MaxFirstPage=${maxItemsFirstPage}, Pages=${totalPages}`);
+  console.log(`[SkiaInvoiceCanvas] ADAPTIVE: Items=${totalItems}, Compact=${isCompactMode}, Scale=${scaleFactor}, RowHeight=${scaledRowHeight}px, MaxFirst=${actualMaxItemsFirstPage}, Pages=${totalPages}`);
 
   // Calculate discount values outside useMemo so they can be used in both places
   const hasDiscount = invoice?.discount_value && invoice?.discount_value > 0;
@@ -150,9 +166,63 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
     }
   }, []);
 
+  // Scaled fonts for compact mode (9-11 items)
+  const scaledFonts = useMemo(() => {
+    if (!isCompactMode || !fonts.body) return fonts;
+    
+    try {
+      const fontFamily = Platform.select({ 
+        ios: "Helvetica", 
+        android: "sans-serif",
+        default: "sans-serif" 
+      });
+      
+      return {
+        // Scale down fonts by 25% for compact mode
+        tiny: matchFont({
+          fontFamily,
+          fontSize: Math.round(7 * scaleFactor), // 5px
+          fontStyle: "normal" as const,
+          fontWeight: "normal" as const,
+        }),
+        small: matchFont({
+          fontFamily,
+          fontSize: Math.round(8 * scaleFactor), // 6px
+          fontStyle: "normal" as const,
+          fontWeight: "normal" as const,
+        }),
+        smallBold: matchFont({
+          fontFamily,
+          fontSize: Math.round(8 * scaleFactor), // 6px
+          fontStyle: "normal" as const,
+          fontWeight: "bold" as const,
+        }),
+        body: matchFont({
+          fontFamily,
+          fontSize: Math.round(9 * scaleFactor), // 7px
+          fontStyle: "normal" as const,
+          fontWeight: "normal" as const,
+        }),
+        bodyBold: matchFont({
+          fontFamily,
+          fontSize: Math.round(9 * scaleFactor), // 7px
+          fontStyle: "normal" as const,
+          fontWeight: "bold" as const,
+        }),
+        // Keep header fonts normal size
+        medium: fonts.medium,
+        large: fonts.large,
+        title: fonts.title
+      };
+    } catch (e) {
+      console.log('[SkiaInvoiceCanvas] Scaled font creation failed:', e);
+      return fonts;
+    }
+  }, [fonts, isCompactMode, scaleFactor]);
+
   // Create right-aligned paragraphs using Skia's TextAlign.Right
   const rightAlignedParagraphs = useMemo(() => {
-    if (!fonts.medium) return null;
+    if (!scaledFonts.medium) return null;
     
     try {
       // Header paragraphs
@@ -486,7 +556,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
       console.log('Paragraph creation failed:', e);
       return null;
     }
-  }, [fonts.medium, invoice, business, client, hasDiscount, discountAmount]);
+  }, [scaledFonts, invoice, business, client, hasDiscount, discountAmount]);
 
   // Logo handling
   const logoImage = useImage(business?.business_logo_url);
@@ -501,7 +571,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
     orange: '#ff8c00' // For logo
   };
 
-  if (!fonts.body || !fonts.title || !fonts.small) {
+  if (!scaledFonts.body || !scaledFonts.title || !scaledFonts.small) {
     console.log('[SkiaInvoiceCanvas] Fonts not available, skipping render');
     return <View style={[styles.container, style]} />;
   }
@@ -585,7 +655,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                 x={businessInitials.length === 1 ? 51 : 45} 
                 y={64} 
                 text={businessInitials} 
-                font={businessInitials.length === 1 ? fonts.title : fonts.large} 
+                font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
                 color="white" 
               />
             </>
@@ -635,35 +705,35 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
           <Rect x={tableX} y={220} width={tableWidth + 5} height={25} color={colors.greenAccent} />
           
           {/* Table headers - PERFECTLY ALIGNED */}
-          <Text x={qtyX + 10} y={237} text="QTY" font={fonts.bodyBold} color={colors.text} />
-          <Text x={descX + 5} y={237} text="DESCRIPTION" font={fonts.bodyBold} color={colors.text} />
-          <Text x={priceX + 35} y={237} text="PRICE" font={fonts.bodyBold} color={colors.text} />
-          <Text x={totalX + 32} y={237} text="TOTAL" font={fonts.bodyBold} color={colors.text} />
+          <Text x={qtyX + 10} y={237} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
+          <Text x={descX + 5} y={237} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
+          <Text x={priceX + 35} y={237} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
+          <Text x={totalX + 32} y={237} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
           
           {/* Line Items - First Page */}
-          {firstPageItems.map((item: any, index: number) => {
-            const rowY = 245 + (index * itemRowHeight);
+          {actualFirstPageItems.map((item: any, index: number) => {
+            const rowY = scaledFirstItemY + (index * scaledRowHeight);
             
             return (
               <React.Fragment key={index}>
                 {/* Row separator line */}
-                <Rect x={tableX} y={rowY + 20} width={tableWidth + 5} height={1} color={colors.border} />
+                <Rect x={tableX} y={rowY + scaledRowHeight} width={tableWidth + 5} height={1} color={colors.border} />
                 
                 {/* QTY - center aligned in column */}
                 <Text 
                   x={qtyX + 15} 
-                  y={rowY + 13} 
+                  y={rowY + textOffsetY} 
                   text={item.quantity.toString()} 
-                  font={fonts.body} 
+                  font={scaledFonts.body} 
                   color={colors.text} 
                 />
                 
                 {/* Description - left aligned */}
                 <Text 
                   x={descX + 5} 
-                  y={rowY + 13} 
+                  y={rowY + textOffsetY} 
                   text={item.item_name} 
-                  font={fonts.body} 
+                  font={scaledFonts.body} 
                   color={colors.text} 
                 />
                 
@@ -671,9 +741,9 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                 {item.item_description && (
                   <Text 
                     x={descX + 5 + (item.item_name.length * 6)} 
-                    y={rowY + 13} 
+                    y={rowY + textOffsetY} 
                     text={` (${item.item_description})`} 
-                    font={fonts.tiny} 
+                    font={scaledFonts.tiny} 
                     color="#999" 
                   />
                 )}
@@ -681,18 +751,18 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                 {/* Price - aligned directly under PRICE header - REGULAR WEIGHT */}
                 <Text 
                   x={priceX + 35} 
-                  y={rowY + 13} 
+                  y={rowY + textOffsetY} 
                   text={`${currencySymbol}${item.unit_price.toFixed(2)}`} 
-                  font={fonts.body} 
+                  font={scaledFonts.body} 
                   color={colors.text} 
                 />
                 
                 {/* Total - aligned directly under TOTAL header - REGULAR WEIGHT */}
                 <Text 
                   x={totalX + 32} 
-                  y={rowY + 13} 
+                  y={rowY + textOffsetY} 
                   text={`${currencySymbol}${item.total_price.toFixed(2)}`} 
-                  font={fonts.body} 
+                  font={scaledFonts.body} 
                   color={colors.text} 
                 />
               </React.Fragment>
@@ -700,28 +770,28 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
           })}
 
           {/* Page 1 label when there's pagination */}
-          {needsPagination && (
+          {actualNeedsPagination && (
             <>
               <Text 
                 x={canvasWidth / 2 - 20} 
                 y={canvasHeight - 20} 
                 text="Page 1" 
-                font={fonts.body} 
+                font={scaledFonts.body} 
                 color="#666" 
               />
             </>
           )}
 
           {/* === ADDITIONAL PAGES FOR REMAINING ITEMS === */}
-          {needsPagination && (() => {
-            let currentItemIndex = maxItemsFirstPage;
+          {actualNeedsPagination && (() => {
+            let currentItemIndex = actualMaxItemsFirstPage;
             const pageElements = [];
             
             for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
               const pageY = (pageNum - 1) * canvasHeight + (pageNum - 1) * 30; // Include separator space
-              const itemsOnThisPage = remainingItems.slice(
-                currentItemIndex - maxItemsFirstPage, 
-                currentItemIndex - maxItemsFirstPage + itemsPerSubsequentPage
+              const itemsOnThisPage = actualRemainingItems.slice(
+                currentItemIndex - actualMaxItemsFirstPage, 
+                currentItemIndex - actualMaxItemsFirstPage + itemsPerSubsequentPage
               );
               
               // PAGE SEPARATOR - Visual break between pages
@@ -743,7 +813,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   x={canvasWidth / 2 - 20} 
                   y={pageY - 10} 
                   text={`Page ${pageNum}`} 
-                  font={fonts.body} 
+                  font={scaledFonts.body} 
                   color="#666" 
                 />
               );
@@ -802,7 +872,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   x={qtyX + 10} 
                   y={pageY + 47} 
                   text="QTY" 
-                  font={fonts.bodyBold} 
+                  font={scaledFonts.bodyBold} 
                   color={colors.text} 
                 />
               );
@@ -812,7 +882,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   x={descX + 5} 
                   y={pageY + 47} 
                   text="DESCRIPTION" 
-                  font={fonts.bodyBold} 
+                  font={scaledFonts.bodyBold} 
                   color={colors.text} 
                 />
               );
@@ -822,7 +892,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   x={priceX + 35} 
                   y={pageY + 47} 
                   text="PRICE" 
-                  font={fonts.bodyBold} 
+                  font={scaledFonts.bodyBold} 
                   color={colors.text} 
                 />
               );
@@ -832,20 +902,20 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   x={totalX + 32} 
                   y={pageY + 47} 
                   text="TOTAL" 
-                  font={fonts.bodyBold} 
+                  font={scaledFonts.bodyBold} 
                   color={colors.text} 
                 />
               );
               
               // Items on this page
               itemsOnThisPage.forEach((item: any, index: number) => {
-                const rowY = pageY + 65 + (index * itemRowHeight);
+                const rowY = pageY + 55 + (index * scaledRowHeight); // Match first page: header(25) + tableY(30) = 55
                 
                 pageElements.push(
                   <Rect 
                     key={`page-${pageNum}-item-${index}-line`}
                     x={tableX} 
-                    y={rowY + 20} 
+                    y={rowY + scaledRowHeight} 
                     width={tableWidth + 5} 
                     height={1} 
                     color={colors.border} 
@@ -856,9 +926,9 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   <Text 
                     key={`page-${pageNum}-item-${index}-qty`}
                     x={qtyX + 15} 
-                    y={rowY + 13} 
+                    y={rowY + textOffsetY} 
                     text={item.quantity.toString()} 
-                    font={fonts.body} 
+                    font={scaledFonts.body} 
                     color={colors.text} 
                   />
                 );
@@ -867,9 +937,9 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   <Text 
                     key={`page-${pageNum}-item-${index}-desc`}
                     x={descX + 5} 
-                    y={rowY + 13} 
+                    y={rowY + textOffsetY} 
                     text={item.item_name} 
-                    font={fonts.body} 
+                    font={scaledFonts.body} 
                     color={colors.text} 
                   />
                 );
@@ -880,9 +950,9 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                     <Text 
                       key={`page-${pageNum}-item-${index}-desc-detail`}
                       x={descX + 5 + (item.item_name.length * 6)} 
-                      y={rowY + 13} 
+                      y={rowY + textOffsetY} 
                       text={` (${item.item_description})`} 
-                      font={fonts.tiny} 
+                      font={scaledFonts.tiny} 
                       color="#999" 
                     />
                   );
@@ -892,9 +962,9 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   <Text 
                     key={`page-${pageNum}-item-${index}-price`}
                     x={priceX + 35} 
-                    y={rowY + 13} 
+                    y={rowY + textOffsetY} 
                     text={`${currencySymbol}${item.unit_price.toFixed(2)}`} 
-                    font={fonts.body} 
+                    font={scaledFonts.body} 
                     color={colors.text} 
                   />
                 );
@@ -903,9 +973,9 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                   <Text 
                     key={`page-${pageNum}-item-${index}-total`}
                     x={totalX + 32} 
-                    y={rowY + 13} 
+                    y={rowY + textOffsetY} 
                     text={`${currencySymbol}${item.total_price.toFixed(2)}`} 
-                    font={fonts.body} 
+                    font={scaledFonts.body} 
                     color={colors.text} 
                   />
                 );
@@ -915,7 +985,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
               
               // If this is the last page, add footer content
               if (pageNum === totalPages) {
-                const lastPageFooterY = pageY + 65 + (itemsOnThisPage.length * 25) + 30;
+                const lastPageFooterY = pageY + 55 + (itemsOnThisPage.length * scaledRowHeight) + 30;
                 
                 // Calculate dynamic positioning for Payment Methods based on notes
                 const notesLineCount = invoice?.notes ? invoice.notes.split('\n').filter(line => line.trim()).length : 0;
@@ -930,7 +1000,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                       x={27} 
                       y={lastPageFooterY + 20} 
                       text="Terms, Instructions & Notes" 
-                      font={fonts.bodyBold} 
+                      font={scaledFonts.bodyBold} 
                       color={colors.text} 
                     />
                   );
@@ -942,7 +1012,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         x={27} 
                         y={lastPageFooterY + 35 + (index * 12)} 
                         text={line.trim()} 
-                        font={fonts.body} 
+                        font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
@@ -957,7 +1027,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                       x={27} 
                       y={paymentMethodsY} 
                       text="Payment Methods" 
-                      font={fonts.bodyBold} 
+                      font={scaledFonts.bodyBold} 
                       color={colors.text} 
                     />
                   );
@@ -971,7 +1041,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         x={27} 
                         y={paymentY} 
                         text="Pay Online" 
-                        font={fonts.body} 
+                        font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
@@ -981,7 +1051,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         x={27} 
                         y={paymentY + 12} 
                         text="www.stripelink.com" 
-                        font={fonts.body} 
+                        font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
@@ -995,7 +1065,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         x={27} 
                         y={paymentY} 
                         text="Pay with PayPal" 
-                        font={fonts.body} 
+                        font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
@@ -1005,7 +1075,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         x={27} 
                         y={paymentY + 12} 
                         text={business?.paypal_email || 'nobones@gmail.com'} 
-                        font={fonts.body} 
+                        font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
@@ -1022,7 +1092,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         x={27} 
                         y={paymentY} 
                         text="Bank Transfer" 
-                        font={fonts.body} 
+                        font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
@@ -1034,7 +1104,7 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                           x={27} 
                           y={paymentY + 12 + (index * 8)} 
                           text={line.trim()} 
-                          font={fonts.body} 
+                          font={scaledFonts.body} 
                           color={colors.text} 
                         />
                       );
@@ -1141,19 +1211,19 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
           })()}
 
           {/* === FOOTER SECTION (only on single page invoices) === */}
-          {!needsPagination && (
+          {!actualNeedsPagination && (
             <>
               {/* Left: Notes and Payment Methods */}
               {invoice?.notes && (
                 <>
-                  <Text x={27} y={footerY + 20} text="Terms, Instructions & Notes" font={fonts.bodyBold} color={colors.text} />
+                  <Text x={27} y={footerY + 20} text="Terms, Instructions & Notes" font={scaledFonts.bodyBold} color={colors.text} />
                   {invoice.notes.split('\n').filter(line => line.trim()).map((line, index) => (
                     <Text 
                       key={index}
                       x={27} 
                       y={footerY + 35 + (index * 12)} 
                       text={line.trim()} 
-                      font={fonts.body} 
+                      font={scaledFonts.body} 
                       color={colors.text} 
                     />
                   ))}
@@ -1163,21 +1233,21 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
               {/* Payment Methods - Dynamic based on invoice flags */}
               {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
                 <>
-                  <Text x={27} y={paymentMethodsY} text="Payment Methods" font={fonts.bodyBold} color={colors.text} />
+                  <Text x={27} y={paymentMethodsY} text="Payment Methods" font={scaledFonts.bodyBold} color={colors.text} />
                   
                   {/* Stripe Payment Method */}
                   {invoice?.stripe_active && (
                     <>
-                      <Text x={27} y={paymentMethodsY + 12} text="Pay Online" font={fonts.body} color={colors.text} />
-                      <Text x={27} y={paymentMethodsY + 24} text="www.stripelink.com" font={fonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + 12} text="Pay Online" font={scaledFonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + 24} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
                     </>
                   )}
                   
                   {/* PayPal Payment Method */}
                   {invoice?.paypal_active && (
                     <>
-                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 35 : 12)} text="Pay with PayPal" font={fonts.body} color={colors.text} />
-                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 47 : 24)} text={business?.paypal_email || 'nobones@gmail.com'} font={fonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 35 : 12)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 47 : 24)} text={business?.paypal_email || 'nobones@gmail.com'} font={scaledFonts.body} color={colors.text} />
                     </>
                   )}
                   
@@ -1194,14 +1264,14 @@ const SkiaInvoiceCanvas: React.FC<SkiaInvoiceCanvasProps> = ({
                         
                         return (
                           <>
-                            <Text x={27} y={baseY} text="Bank Transfer" font={fonts.body} color={colors.text} />
+                            <Text x={27} y={baseY} text="Bank Transfer" font={scaledFonts.body} color={colors.text} />
                             {bankLines.map((line, index) => (
                               <Text 
                                 key={index}
                                 x={27} 
                                 y={baseY + 12 + (index * 8)} 
                                 text={line.trim()} 
-                                font={fonts.body} 
+                                font={scaledFonts.body} 
                                 color={colors.text} 
                               />
                             ))}
