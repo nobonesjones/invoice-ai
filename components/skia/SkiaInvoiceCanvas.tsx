@@ -82,14 +82,21 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
   const scaledItemSpacing = scaledRowHeight;
   const textOffsetY = 13; // Consistent text positioning within each row
   
-  // Recalculate pagination with scaled dimensions
-  const actualMaxItemsFirstPage = isCompactMode ? 11 : maxItemsFirstPage; // Force 11 max in compact mode
-  const actualNeedsPagination = totalItems > actualMaxItemsFirstPage;
-  const actualFirstPageItems = lineItems.slice(0, actualMaxItemsFirstPage);
-  const actualRemainingItems = lineItems.slice(actualMaxItemsFirstPage);
+  // Calculate how many pages we'd need with current logic
+  const itemsPerSubsequentPage = Math.floor((canvasHeight - 50) / scaledRowHeight);
+  const preliminaryTotalPages = totalItems > maxItemsFirstPage ? 
+    1 + Math.ceil((totalItems - maxItemsFirstPage) / itemsPerSubsequentPage) : 1;
   
-  // Calculate number of pages
-  const itemsPerSubsequentPage = Math.floor((canvasHeight - 50) / scaledRowHeight); // Use scaled row height
+  // Special case: if we have exactly 2 pages, allow 12 items on first page
+  const isTwoPageInvoice = preliminaryTotalPages === 2;
+  const adjustedMaxItemsFirstPage = isTwoPageInvoice ? 12 : (isCompactMode ? 11 : maxItemsFirstPage);
+  
+  // Recalculate pagination with adjusted logic
+  const actualNeedsPagination = totalItems > adjustedMaxItemsFirstPage;
+  const actualFirstPageItems = lineItems.slice(0, adjustedMaxItemsFirstPage);
+  const actualRemainingItems = lineItems.slice(adjustedMaxItemsFirstPage);
+  
+  // Calculate number of pages with adjusted logic
   const totalPages = actualNeedsPagination ? 
     1 + Math.ceil(actualRemainingItems.length / itemsPerSubsequentPage) : 1;
   
@@ -99,7 +106,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
   // Add 30px (1 cm) extra space at the end
   const totalCanvasHeight = isCompactMode ? canvasHeight + 30 : ((totalPages * canvasHeight) + separatorHeight + 30);
   
-  console.log(`[SkiaInvoiceCanvas] ADAPTIVE: Items=${totalItems}, Compact=${isCompactMode}, Scale=${scaleFactor}, RowHeight=${scaledRowHeight}px, MaxFirst=${actualMaxItemsFirstPage}, Pages=${totalPages}`);
+  console.log(`[SkiaInvoiceCanvas] PAGINATION: Items=${totalItems}, IsTwoPage=${isTwoPageInvoice}, MaxFirst=${adjustedMaxItemsFirstPage}, Pages=${totalPages}, Compact=${isCompactMode}, Scale=${scaleFactor}`);
 
   // Calculate discount values outside useMemo so they can be used in both places
   const hasDiscount = invoice?.discount_value && invoice?.discount_value > 0;
@@ -929,14 +936,14 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
 
           {/* === ADDITIONAL PAGES FOR REMAINING ITEMS === */}
           {actualNeedsPagination && (() => {
-            let currentItemIndex = actualMaxItemsFirstPage;
+            let currentItemIndex = adjustedMaxItemsFirstPage;
             const pageElements = [];
             
             for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
               const pageY = (pageNum - 1) * canvasHeight + (pageNum - 1) * 30; // Include separator space
               const itemsOnThisPage = actualRemainingItems.slice(
-                currentItemIndex - actualMaxItemsFirstPage, 
-                currentItemIndex - actualMaxItemsFirstPage + itemsPerSubsequentPage
+                currentItemIndex - adjustedMaxItemsFirstPage, 
+                currentItemIndex - adjustedMaxItemsFirstPage + itemsPerSubsequentPage
               );
               
               // PAGE SEPARATOR - Visual break between pages
@@ -1218,7 +1225,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       <Text 
                         key={index}
                         x={27} 
-                        y={lastPageFooterY + 32 + (index * 12)} 
+                        y={lastPageFooterY + 27 + (index * 12)} 
                         text={line} 
                         font={scaledFonts.body} 
                         color={colors.text} 
@@ -1240,14 +1247,13 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     />
                   );
                   
-                  let paymentY = paymentMethodsY + 14;
-                  
+                  // Stripe Payment Method - use same logic as single page
                   if (invoice?.stripe_active) {
                     pageElements.push(
                       <Text 
                         key={`page-${pageNum}-stripe-label`}
                         x={27} 
-                        y={paymentY} 
+                        y={paymentMethodsY + 14} 
                         text="Pay Online" 
                         font={scaledFonts.body} 
                         color={colors.text} 
@@ -1255,48 +1261,54 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     );
                     
                     // Add Visa icon - inline with Pay Online text
-                    {visaIcon && (
-                      <Image 
-                        image={visaIcon} 
-                        x={85} 
-                        y={paymentY + 6} 
-                        width={24} 
-                        height={14} 
-                        fit="contain"
-                      />
-                    )}
+                    if (visaIcon) {
+                      pageElements.push(
+                        <Image 
+                          key={`page-${pageNum}-visa-icon`}
+                          image={visaIcon} 
+                          x={85} 
+                          y={paymentMethodsY + 6} 
+                          width={24} 
+                          height={14} 
+                          fit="contain"
+                        />
+                      );
+                    }
                     
-                    {/* Add Mastercard icon - inline with Pay Online text */}
-                    {mastercardIcon && (
-                      <Image 
-                        image={mastercardIcon} 
-                        x={110} 
-                        y={paymentY + 6} 
-                        width={24} 
-                        height={14} 
-                        fit="contain"
-                      />
-                    )}
+                    // Add Mastercard icon - inline with Pay Online text
+                    if (mastercardIcon) {
+                      pageElements.push(
+                        <Image 
+                          key={`page-${pageNum}-mastercard-icon`}
+                          image={mastercardIcon} 
+                          x={110} 
+                          y={paymentMethodsY + 6} 
+                          width={24} 
+                          height={14} 
+                          fit="contain"
+                        />
+                      );
+                    }
                     
                     pageElements.push(
                       <Text 
                         key={`page-${pageNum}-stripe-url`}
                         x={27} 
-                        y={paymentY + 26} 
+                        y={paymentMethodsY + 26} 
                         text="www.stripelink.com" 
                         font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
-                    paymentY += 26;
                   }
                   
+                  // PayPal Payment Method - use same logic as single page
                   if (invoice?.paypal_active) {
                     pageElements.push(
                       <Text 
                         key={`page-${pageNum}-paypal-label`}
                         x={27} 
-                        y={paymentY} 
+                        y={paymentMethodsY + (invoice?.stripe_active ? 40 : 14)} 
                         text="Pay with PayPal" 
                         font={scaledFonts.body} 
                         color={colors.text} 
@@ -1304,16 +1316,19 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     );
                     
                     // PayPal icon inline with text
-                    {paypalIcon && (
-                      <Image 
-                        image={paypalIcon} 
-                        x={109} 
-                        y={paymentY + (invoice?.stripe_active ? 32 : 6)} 
-                        width={24} 
-                        height={16} 
-                        fit="contain"
-                      />
-                    )}
+                    if (paypalIcon) {
+                      pageElements.push(
+                        <Image 
+                          key={`page-${pageNum}-paypal-icon`}
+                          image={paypalIcon} 
+                          x={109} 
+                          y={paymentMethodsY + (invoice?.stripe_active ? 32 : 6)} 
+                          width={24} 
+                          height={16} 
+                          fit="contain"
+                        />
+                      );
+                    }
                     
                     {(() => {
                       const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
@@ -1322,7 +1337,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         <Text 
                           key="paypal-email"
                           x={27} 
-                          y={paymentY + (invoice?.stripe_active ? 52 : 26)} 
+                          y={paymentMethodsY + (invoice?.stripe_active ? 52 : 26)} 
                           text={constrainedEmail} 
                           font={scaledFonts.body} 
                           color={colors.text} 
@@ -1331,46 +1346,50 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     })()}
                   }
                   
+                  // Bank Transfer Payment Method - use same logic as single page
                   if (invoice?.bank_account_active) {
-                    const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
-                    const bankLines = bankDetails.split('\n');
-                    
-                    pageElements.push(
-                      <Text 
-                        key={`page-${pageNum}-bank-label`}
-                        x={27} 
-                        y={paymentY} 
-                        text="Bank Transfer" 
-                        font={scaledFonts.bodyBold} 
-                        color="black"
-                      />
-                    );
-                    
-                    bankLines.forEach((line, index) => {
-                      // Constrain bank details to 50% width and match terms spacing
-                      const constrainedLine = line.trim().length > 25 ? line.trim().substring(0, 22) + '...' : line.trim();
-                      pageElements.push(
-                        <Text 
-                          key={index}
-                          x={27} 
-                          y={paymentY + 12 + (index * 12)} 
-                          text={constrainedLine} 
-                          font={scaledFonts.body} 
-                          color={colors.text} 
-                        />
+                    {(() => {
+                      const baseY = paymentMethodsY + 14 + 
+                        (invoice?.stripe_active ? 26 : 0) + 
+                        (invoice?.paypal_active ? 38 : 0);
+                      
+                      const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
+                      const bankLines = bankDetails.split('\n');
+                      
+                      return (
+                        <>
+                          <Text x={27} y={baseY} text="Bank Transfer" font={scaledFonts.bodyBold} color="black" />
+                          {bankLines.map((line, index) => {
+                            // Constrain bank details to 50% width and match terms spacing
+                            const constrainedLine = line.trim().length > 25 ? line.trim().substring(0, 22) + '...' : line.trim();
+                            return (
+                              <Text 
+                                key={index}
+                                x={27} 
+                                y={baseY + 12 + (index * 12)} 
+                                text={constrainedLine} 
+                                font={scaledFonts.body} 
+                                color={colors.text} 
+                              />
+                            );
+                          })}
+                        </>
                       );
-                    });
+                    })()}
                   }
                 }
                 
                 // Totals section on the last page
                 if (rightAlignedParagraphs) {
+                  // Use exact same positioning logic as single page
+                  const footerY = lastPageFooterY; // Use same variable name for consistency
+                  
                   pageElements.push(
                     <Paragraph 
                       key={`page-${pageNum}-subtotal-label`}
                       paragraph={rightAlignedParagraphs.subtotalLabelParagraph} 
                       x={220} 
-                      y={lastPageFooterY + 15} 
+                      y={footerY + 15} 
                       width={70} 
                     />
                   );
@@ -1379,7 +1398,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-subtotal-value`}
                       paragraph={rightAlignedParagraphs.subtotalValueParagraph} 
                       x={290} 
-                      y={lastPageFooterY + 15} 
+                      y={footerY + 15} 
                       width={60} 
                     />
                   );
@@ -1390,7 +1409,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         key={`page-${pageNum}-discount-label`}
                         paragraph={rightAlignedParagraphs.discountLabelParagraph} 
                         x={220} 
-                        y={lastPageFooterY + 35} 
+                        y={footerY + 35} 
                         width={70} 
                       />
                     );
@@ -1399,7 +1418,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         key={`page-${pageNum}-discount-value`}
                         paragraph={rightAlignedParagraphs.discountValueParagraph} 
                         x={290} 
-                        y={lastPageFooterY + 35} 
+                        y={footerY + 35} 
                         width={60} 
                       />
                     );
@@ -1410,7 +1429,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-tax-label`}
                       paragraph={rightAlignedParagraphs.taxLabelParagraph} 
                       x={220} 
-                      y={lastPageFooterY + 55} 
+                      y={footerY + 55} 
                       width={70} 
                     />
                   );
@@ -1419,19 +1438,19 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-tax-value`}
                       paragraph={rightAlignedParagraphs.taxValueParagraph} 
                       x={290} 
-                      y={lastPageFooterY + 55} 
+                      y={footerY + 55} 
                       width={60} 
                     />
                   );
                   
-                  // Paid row (conditional - between VAT and Balance Due)
+                  // Paid row (conditional - between VAT and Balance Due) - exact same logic as single page
                   if (rightAlignedParagraphs.paidLabelParagraph) {
                     pageElements.push(
                       <Paragraph 
                         key={`page-${pageNum}-paid-label`}
                         paragraph={rightAlignedParagraphs.paidLabelParagraph} 
                         x={220} 
-                        y={lastPageFooterY + 75} 
+                        y={footerY + 75} 
                         width={70} 
                       />
                     );
@@ -1440,18 +1459,18 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         key={`page-${pageNum}-paid-value`}
                         paragraph={rightAlignedParagraphs.paidValueParagraph} 
                         x={290} 
-                        y={lastPageFooterY + 75} 
+                        y={footerY + 75} 
                         width={60} 
                       />
                     );
                     
-                    // Balance Due row (directly under Paid)
+                    // Balance Due row (directly under Paid) - exact same logic as single page
                     pageElements.push(
                       <Paragraph 
                         key={`page-${pageNum}-balance-due-label`}
                         paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} 
                         x={220} 
-                        y={lastPageFooterY + 95} 
+                        y={footerY + 95} 
                         width={70} 
                       />
                     );
@@ -1460,18 +1479,18 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         key={`page-${pageNum}-balance-due-value`}
                         paragraph={rightAlignedParagraphs.balanceDueValueParagraph} 
                         x={290} 
-                        y={lastPageFooterY + 95} 
+                        y={footerY + 95} 
                         width={60} 
                       />
                     );
                   }
                   
-                  // Grand Total Box with green background - positioned after Balance Due line if present
+                  // Grand Total Box with green background - exact same positioning logic as single page
                   pageElements.push(
                     <Rect 
                       key={`page-${pageNum}-total-bg`}
                       x={220} 
-                      y={lastPageFooterY + (hasDiscount ? 85 : 65) + (rightAlignedParagraphs.paidLabelParagraph ? 30 : 0)} 
+                      y={footerY + (hasDiscount ? 85 : 65) + (rightAlignedParagraphs?.paidLabelParagraph ? 30 : 0)} 
                       width={135} 
                       height={20} 
                       color={colors.greenAccent} 
@@ -1483,7 +1502,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-total-label`}
                       paragraph={rightAlignedParagraphs.totalLabelParagraph} 
                       x={220} 
-                      y={lastPageFooterY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs.paidLabelParagraph ? 30 : 0)} 
+                      y={footerY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs?.paidLabelParagraph ? 30 : 0)} 
                       width={70} 
                     />
                   );
@@ -1492,7 +1511,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-total-value`}
                       paragraph={rightAlignedParagraphs.totalValueParagraph} 
                       x={288} 
-                      y={lastPageFooterY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs.paidLabelParagraph ? 30 : 0)} 
+                      y={footerY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs?.paidLabelParagraph ? 30 : 0)} 
                       width={65} 
                     />
                   );
