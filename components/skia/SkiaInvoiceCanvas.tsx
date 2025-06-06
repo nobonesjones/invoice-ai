@@ -21,6 +21,17 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
 }, ref) => {
   console.log('[SkiaInvoiceCanvas] Rendering Real Invoice INV-710231');
 
+  // DEBUG: Add payment status logging
+  console.log('[SkiaInvoiceCanvas] Payment Debug Info:', {
+    invoice_id: invoice?.id,
+    invoice_number: invoice?.invoice_number,
+    paid_amount: invoice?.paid_amount,
+    payment_date: invoice?.payment_date,
+    payment_notes: invoice?.payment_notes,
+    status: invoice?.status,
+    total_amount: invoice?.total_amount
+  });
+
   // MOBILE-OPTIMIZED CANVAS DIMENSIONS - prioritizing on-screen appearance
   // Original design dimensions that looked great: maxWidth: 370, compact mobile-first
   const canvasWidth = 370;
@@ -526,7 +537,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, // +1 bigger than other totals
         fontStyle: { weight: 700 }
       })
       .addText(`Total:`)
@@ -538,11 +549,70 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, // +1 bigger than other totals
         fontStyle: { weight: 700 }
       })
       .addText(`${currencySymbol}${(invoice?.total_amount || 480.00).toFixed(2)}`)
       .build();
+
+      // Payment status paragraphs (conditional - only if payment has been made)
+      const hasPaidAmount = invoice?.paid_amount && invoice.paid_amount > 0;
+      
+      console.log('[SkiaInvoiceCanvas] Payment Status Debug:', {
+        hasPaidAmount,
+        paid_amount: invoice?.paid_amount,
+        total_amount: invoice?.total_amount,
+        balance_due: (invoice?.total_amount || 0) - (invoice?.paid_amount || 0)
+      });
+      
+      const paidLabelParagraph = hasPaidAmount ? Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Left,
+      })
+      .pushStyle({ 
+        color: Skia.Color('black'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 9, 
+        fontStyle: { weight: 700 }
+      })
+      .addText(`Paid:`)
+      .build() : null;
+
+      const paidValueParagraph = hasPaidAmount ? Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Right,
+      })
+      .pushStyle({ 
+        color: Skia.Color('#10B981'), // Green color for paid amount
+        fontFamilies: ['Helvetica'], 
+        fontSize: 9, 
+        fontStyle: { weight: 400 }
+      })
+      .addText(`-${currencySymbol}${(invoice?.paid_amount || 0).toFixed(2)}`)
+      .build() : null;
+
+      // Balance Due as regular line item (conditional - only if payment exists)
+      const balanceDueLabelParagraph = hasPaidAmount ? Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Left,
+      })
+      .pushStyle({ 
+        color: Skia.Color('black'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 9, 
+        fontStyle: { weight: 700 }
+      })
+      .addText(`Balance Due:`)
+      .build() : null;
+
+      const balanceDueValueParagraph = hasPaidAmount ? Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Right,
+      })
+      .pushStyle({ 
+        color: Skia.Color('black'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 9, 
+        fontStyle: { weight: 400 }
+      })
+      .addText(`${currencySymbol}${((invoice?.total_amount || 0) - (invoice?.paid_amount || 0)).toFixed(2)}`)
+      .build() : null;
 
       return { 
         invoiceParagraph, 
@@ -569,7 +639,11 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
         taxLabelParagraph,
         taxValueParagraph,
         totalLabelParagraph,
-        totalValueParagraph
+        totalValueParagraph,
+        paidLabelParagraph,
+        paidValueParagraph,
+        balanceDueLabelParagraph,
+        balanceDueValueParagraph
       };
     } catch (e) {
       console.log('Paragraph creation failed:', e);
@@ -580,9 +654,10 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
   // Logo handling
   const logoImage = useImage(business?.business_logo_url);
   
-  // Payment card icons
-  const visaIcon = useImage('https://logos-world.net/wp-content/uploads/2020/04/Visa-Logo.png');
-  const mastercardIcon = useImage('https://logos-world.net/wp-content/uploads/2020/04/Mastercard-Logo.png');
+  // Payment card icons - using local assets
+  const visaIcon = useImage(require('../../assets/visaicon.png'));
+  const mastercardIcon = useImage(require('../../assets/mastercardicon.png'));
+  const paypalIcon = useImage(require('../../assets/paypalicon.png'));
 
   // Original design colors
   const colors = {
@@ -1109,20 +1184,47 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     />
                   );
                   
-                  invoice.notes.split('\n').filter(line => line.trim()).forEach((line, index) => {
-                    // Constrain text to 50% of page width (185px)
-                    const constrainedText = line.trim().length > 45 ? line.trim().substring(0, 42) + '...' : line.trim();
-                    pageElements.push(
+                  {(() => {
+                    // Word wrapping function for terms/notes text
+                    const wrapText = (text: string, maxWidth: number = 36) => {
+                      const words = text.split(' ');
+                      const lines = [];
+                      let currentLine = '';
+                      
+                      for (const word of words) {
+                        const testLine = currentLine ? `${currentLine} ${word}` : word;
+                        if (testLine.length <= maxWidth) {
+                          currentLine = testLine;
+                        } else {
+                          if (currentLine) {
+                            lines.push(currentLine);
+                            currentLine = word;
+                          } else {
+                            lines.push(word); // Single word longer than max width
+                          }
+                        }
+                      }
+                      if (currentLine) {
+                        lines.push(currentLine);
+                      }
+                      return lines;
+                    };
+                    
+                    // Process all notes text and wrap it
+                    const allNotesText = invoice.notes.replace(/\n/g, ' ').trim();
+                    const wrappedLines = wrapText(allNotesText, 36); // ~50% width constraint
+                    
+                    return wrappedLines.map((line, index) => (
                       <Text 
-                        key={`page-${pageNum}-notes-line-${index}`}
+                        key={index}
                         x={27} 
                         y={lastPageFooterY + 32 + (index * 12)} 
-                        text={constrainedText} 
+                        text={line} 
                         font={scaledFonts.body} 
                         color={colors.text} 
                       />
-                    );
-                  });
+                    ));
+                  })()}
                 }
                 
                 // Payment Methods
@@ -1138,7 +1240,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                     />
                   );
                   
-                  let paymentY = paymentMethodsY + 12;
+                  let paymentY = paymentMethodsY + 14;
                   
                   if (invoice?.stripe_active) {
                     pageElements.push(
@@ -1152,47 +1254,41 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       />
                     );
                     
-                    // Add Visa icon
-                    if (visaIcon) {
-                      pageElements.push(
-                        <Image 
-                          key={`page-${pageNum}-visa-icon`}
-                          image={visaIcon} 
-                          x={85} 
-                          y={paymentY - 3} 
-                          width={20} 
-                          height={12} 
-                          fit="contain"
-                        />
-                      );
-                    }
+                    // Add Visa icon - inline with Pay Online text
+                    {visaIcon && (
+                      <Image 
+                        image={visaIcon} 
+                        x={85} 
+                        y={paymentY + 6} 
+                        width={24} 
+                        height={14} 
+                        fit="contain"
+                      />
+                    )}
                     
-                    // Add Mastercard icon  
-                    if (mastercardIcon) {
-                      pageElements.push(
-                        <Image 
-                          key={`page-${pageNum}-mastercard-icon`}
-                          image={mastercardIcon} 
-                          x={110} 
-                          y={paymentY - 3} 
-                          width={20} 
-                          height={12} 
-                          fit="contain"
-                        />
-                      );
-                    }
+                    {/* Add Mastercard icon - inline with Pay Online text */}
+                    {mastercardIcon && (
+                      <Image 
+                        image={mastercardIcon} 
+                        x={110} 
+                        y={paymentY + 6} 
+                        width={24} 
+                        height={14} 
+                        fit="contain"
+                      />
+                    )}
                     
                     pageElements.push(
                       <Text 
                         key={`page-${pageNum}-stripe-url`}
                         x={27} 
-                        y={paymentY + 12} 
+                        y={paymentY + 26} 
                         text="www.stripelink.com" 
                         font={scaledFonts.body} 
                         color={colors.text} 
                       />
                     );
-                    paymentY += 23;
+                    paymentY += 26;
                   }
                   
                   if (invoice?.paypal_active) {
@@ -1206,20 +1302,33 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         color={colors.text} 
                       />
                     );
-                    // Constrain PayPal email to 50% width
-                    const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
-                    const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
-                    pageElements.push(
-                      <Text 
-                        key="paypal-email"
-                        x={27} 
-                        y={paymentY + 12} 
-                        text={constrainedEmail} 
-                        font={scaledFonts.body} 
-                        color={colors.text} 
+                    
+                    // PayPal icon inline with text
+                    {paypalIcon && (
+                      <Image 
+                        image={paypalIcon} 
+                        x={109} 
+                        y={paymentY + (invoice?.stripe_active ? 32 : 6)} 
+                        width={24} 
+                        height={16} 
+                        fit="contain"
                       />
-                    );
-                    paymentY += 23;
+                    )}
+                    
+                    {(() => {
+                      const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
+                      const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
+                      return (
+                        <Text 
+                          key="paypal-email"
+                          x={27} 
+                          y={paymentY + (invoice?.stripe_active ? 52 : 26)} 
+                          text={constrainedEmail} 
+                          font={scaledFonts.body} 
+                          color={colors.text} 
+                        />
+                      );
+                    })()}
                   }
                   
                   if (invoice?.bank_account_active) {
@@ -1242,7 +1351,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       const constrainedLine = line.trim().length > 25 ? line.trim().substring(0, 22) + '...' : line.trim();
                       pageElements.push(
                         <Text 
-                          key={`page-${pageNum}-bank-line-${index}`}
+                          key={index}
                           x={27} 
                           y={paymentY + 12 + (index * 12)} 
                           text={constrainedLine} 
@@ -1261,7 +1370,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-subtotal-label`}
                       paragraph={rightAlignedParagraphs.subtotalLabelParagraph} 
                       x={220} 
-                      y={lastPageFooterY + 20} 
+                      y={lastPageFooterY + 15} 
                       width={70} 
                     />
                   );
@@ -1270,7 +1379,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-subtotal-value`}
                       paragraph={rightAlignedParagraphs.subtotalValueParagraph} 
                       x={290} 
-                      y={lastPageFooterY + 20} 
+                      y={lastPageFooterY + 15} 
                       width={60} 
                     />
                   );
@@ -1281,7 +1390,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         key={`page-${pageNum}-discount-label`}
                         paragraph={rightAlignedParagraphs.discountLabelParagraph} 
                         x={220} 
-                        y={lastPageFooterY + 40} 
+                        y={lastPageFooterY + 35} 
                         width={70} 
                       />
                     );
@@ -1290,7 +1399,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                         key={`page-${pageNum}-discount-value`}
                         paragraph={rightAlignedParagraphs.discountValueParagraph} 
                         x={290} 
-                        y={lastPageFooterY + 40} 
+                        y={lastPageFooterY + 35} 
                         width={60} 
                       />
                     );
@@ -1301,7 +1410,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-tax-label`}
                       paragraph={rightAlignedParagraphs.taxLabelParagraph} 
                       x={220} 
-                      y={lastPageFooterY + 60} 
+                      y={lastPageFooterY + 55} 
                       width={70} 
                     />
                   );
@@ -1310,17 +1419,59 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-tax-value`}
                       paragraph={rightAlignedParagraphs.taxValueParagraph} 
                       x={290} 
-                      y={lastPageFooterY + 60} 
+                      y={lastPageFooterY + 55} 
                       width={60} 
                     />
                   );
                   
-                  // Grand Total Box
+                  // Paid row (conditional - between VAT and Balance Due)
+                  if (rightAlignedParagraphs.paidLabelParagraph) {
+                    pageElements.push(
+                      <Paragraph 
+                        key={`page-${pageNum}-paid-label`}
+                        paragraph={rightAlignedParagraphs.paidLabelParagraph} 
+                        x={220} 
+                        y={lastPageFooterY + 75} 
+                        width={70} 
+                      />
+                    );
+                    pageElements.push(
+                      <Paragraph 
+                        key={`page-${pageNum}-paid-value`}
+                        paragraph={rightAlignedParagraphs.paidValueParagraph} 
+                        x={290} 
+                        y={lastPageFooterY + 75} 
+                        width={60} 
+                      />
+                    );
+                    
+                    // Balance Due row (directly under Paid)
+                    pageElements.push(
+                      <Paragraph 
+                        key={`page-${pageNum}-balance-due-label`}
+                        paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} 
+                        x={220} 
+                        y={lastPageFooterY + 95} 
+                        width={70} 
+                      />
+                    );
+                    pageElements.push(
+                      <Paragraph 
+                        key={`page-${pageNum}-balance-due-value`}
+                        paragraph={rightAlignedParagraphs.balanceDueValueParagraph} 
+                        x={290} 
+                        y={lastPageFooterY + 95} 
+                        width={60} 
+                      />
+                    );
+                  }
+                  
+                  // Grand Total Box with green background - positioned after Balance Due line if present
                   pageElements.push(
                     <Rect 
                       key={`page-${pageNum}-total-bg`}
                       x={220} 
-                      y={lastPageFooterY + (hasDiscount ? 90 : 70)} 
+                      y={lastPageFooterY + (hasDiscount ? 85 : 65) + (rightAlignedParagraphs.paidLabelParagraph ? 30 : 0)} 
                       width={135} 
                       height={20} 
                       color={colors.greenAccent} 
@@ -1332,7 +1483,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-total-label`}
                       paragraph={rightAlignedParagraphs.totalLabelParagraph} 
                       x={220} 
-                      y={lastPageFooterY + (hasDiscount ? 95 : 75)} 
+                      y={lastPageFooterY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs.paidLabelParagraph ? 30 : 0)} 
                       width={70} 
                     />
                   );
@@ -1341,7 +1492,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                       key={`page-${pageNum}-total-value`}
                       paragraph={rightAlignedParagraphs.totalValueParagraph} 
                       x={288} 
-                      y={lastPageFooterY + (hasDiscount ? 95 : 75)} 
+                      y={lastPageFooterY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs.paidLabelParagraph ? 30 : 0)} 
                       width={65} 
                     />
                   );
@@ -1358,21 +1509,48 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
               {/* Left: Notes and Payment Methods */}
               {invoice?.notes && (
                 <>
-                  <Text x={27} y={footerY + 20} text="Terms, Instructions & Notes" font={scaledFonts.bodyBold} color={colors.text} />
-                  {invoice.notes.split('\n').filter(line => line.trim()).map((line, index) => {
-                    // Constrain text to 50% of page width (185px)
-                    const constrainedText = line.trim().length > 45 ? line.trim().substring(0, 42) + '...' : line.trim();
-                    return (
+                  <Text x={27} y={footerY + 15} text="Terms, Instructions & Notes" font={scaledFonts.bodyBold} color={colors.text} />
+                  {(() => {
+                    // Word wrapping function for terms/notes text
+                    const wrapText = (text: string, maxWidth: number = 36) => {
+                      const words = text.split(' ');
+                      const lines = [];
+                      let currentLine = '';
+                      
+                      for (const word of words) {
+                        const testLine = currentLine ? `${currentLine} ${word}` : word;
+                        if (testLine.length <= maxWidth) {
+                          currentLine = testLine;
+                        } else {
+                          if (currentLine) {
+                            lines.push(currentLine);
+                            currentLine = word;
+                          } else {
+                            lines.push(word); // Single word longer than max width
+                          }
+                        }
+                      }
+                      if (currentLine) {
+                        lines.push(currentLine);
+                      }
+                      return lines;
+                    };
+                    
+                    // Process all notes text and wrap it
+                    const allNotesText = invoice.notes.replace(/\n/g, ' ').trim();
+                    const wrappedLines = wrapText(allNotesText, 36); // ~50% width constraint
+                    
+                    return wrappedLines.map((line, index) => (
                       <Text 
                         key={index}
                         x={27} 
-                        y={footerY + 32 + (index * 12)} 
-                        text={constrainedText} 
+                        y={footerY + 27 + (index * 12)} 
+                        text={line} 
                         font={scaledFonts.body} 
                         color={colors.text} 
                       />
-                    );
-                  })}
+                    ));
+                  })()}
                 </>
               )}
               
@@ -1384,40 +1562,53 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                   {/* Stripe Payment Method */}
                   {invoice?.stripe_active && (
                     <>
-                      <Text x={27} y={paymentMethodsY + 12} text="Pay Online" font={scaledFonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + 14} text="Pay Online" font={scaledFonts.body} color={colors.text} />
                       
-                      {/* Add Visa icon */}
+                      {/* Add Visa icon - inline with Pay Online text */}
                       {visaIcon && (
                         <Image 
                           image={visaIcon} 
                           x={85} 
-                          y={paymentMethodsY + 9} 
-                          width={20} 
-                          height={12} 
+                          y={paymentMethodsY + 6} 
+                          width={24} 
+                          height={14} 
                           fit="contain"
                         />
                       )}
                       
-                      {/* Add Mastercard icon */}
+                      {/* Add Mastercard icon - inline with Pay Online text */}
                       {mastercardIcon && (
                         <Image 
                           image={mastercardIcon} 
                           x={110} 
-                          y={paymentMethodsY + 9} 
-                          width={20} 
-                          height={12} 
+                          y={paymentMethodsY + 6} 
+                          width={24} 
+                          height={14} 
                           fit="contain"
                         />
                       )}
                       
-                      <Text x={27} y={paymentMethodsY + 24} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + 26} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
                     </>
                   )}
                   
                   {/* PayPal Payment Method */}
                   {invoice?.paypal_active && (
                     <>
-                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 23 : 12)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
+                      <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 40 : 14)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
+                      
+                      {/* PayPal icon inline with text */}
+                      {paypalIcon && (
+                        <Image 
+                          image={paypalIcon} 
+                          x={109} 
+                          y={paymentMethodsY + (invoice?.stripe_active ? 32 : 6)} 
+                          width={24} 
+                          height={16} 
+                          fit="contain"
+                        />
+                      )}
+                      
                       {(() => {
                         const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
                         const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
@@ -1425,7 +1616,7 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                           <Text 
                             key="paypal-email"
                             x={27} 
-                            y={paymentMethodsY + (invoice?.stripe_active ? 35 : 24)} 
+                            y={paymentMethodsY + (invoice?.stripe_active ? 52 : 26)} 
                             text={constrainedEmail} 
                             font={scaledFonts.body} 
                             color={colors.text} 
@@ -1439,9 +1630,9 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
                   {invoice?.bank_account_active && (
                     <>
                       {(() => {
-                        const baseY = paymentMethodsY + 12 + 
-                          (invoice?.stripe_active ? 23 : 0) + 
-                          (invoice?.paypal_active ? 23 : 0);
+                        const baseY = paymentMethodsY + 14 + 
+                          (invoice?.stripe_active ? 26 : 0) + 
+                          (invoice?.paypal_active ? 38 : 0);
                         
                         const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
                         const bankLines = bankDetails.split('\n');
@@ -1473,35 +1664,47 @@ const SkiaInvoiceCanvas = forwardRef<any, SkiaInvoiceCanvasProps>(({
               
               {/* Right: Totals section aligned with Terms section */}
               
-              {rightAlignedParagraphs && (
+              {rightAlignedParagraphs ? (
                 <>
                   {/* Subtotal row */}
-                  <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={220} y={footerY + 20} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={290} y={footerY + 20} width={60} />
+                  <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={220} y={footerY + 15} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={290} y={footerY + 15} width={60} />
                   
                   {/* Discount row */}
-                  {rightAlignedParagraphs.discountLabelParagraph && (
+                  {rightAlignedParagraphs.discountLabelParagraph ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={220} y={footerY + 40} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={290} y={footerY + 40} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={220} y={footerY + 35} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={290} y={footerY + 35} width={60} />
                     </>
-                  )}
+                  ) : null}
                   
                   {/* Tax row */}
-                  <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={220} y={footerY + 60} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={290} y={footerY + 60} width={60} />
+                  <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={220} y={footerY + 55} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={290} y={footerY + 55} width={60} />
+                  
+                  {/* Paid row (conditional - between VAT and Balance Due) */}
+                  {rightAlignedParagraphs.paidLabelParagraph ? (
+                    <>
+                      <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={220} y={footerY + 75} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={290} y={footerY + 75} width={60} />
+                      
+                      {/* Balance Due row (directly under Paid) */}
+                      <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={220} y={footerY + 95} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={290} y={footerY + 95} width={60} />
+                    </>
+                  ) : null}
                 </>
-              )}
+              ) : null}
               
-              {/* Grand Total Box with green background - aligned with Terms section */}
-              <Rect x={220} y={footerY + (hasDiscount ? 90 : 70)} width={135} height={20} color={colors.greenAccent} />
+              {/* Grand Total Box with green background - positioned after Balance Due line if present */}
+              <Rect x={220} y={footerY + (hasDiscount ? 85 : 65) + (rightAlignedParagraphs?.paidLabelParagraph ? 30 : 0)} width={135} height={20} color={colors.greenAccent} />
               
-              {rightAlignedParagraphs && (
+              {rightAlignedParagraphs ? (
                 <>
-                  <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={220} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={288} y={footerY + (hasDiscount ? 95 : 75)} width={65} />
+                  <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={220} y={footerY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs?.paidLabelParagraph ? 30 : 0)} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={288} y={footerY + (hasDiscount ? 90 : 70) + (rightAlignedParagraphs?.paidLabelParagraph ? 30 : 0)} width={65} />
                 </>
-              )}
+              ) : null}
             </>
           )}
         </Canvas>

@@ -100,6 +100,17 @@ const REAL_INVOICE_710231 = {
   currency_symbol: '£'
 };
 
+// Test invoice with partial payment for testing payment status functionality
+const REAL_INVOICE_710231_PARTIAL_PAID = {
+  ...REAL_INVOICE_710231,
+  id: 'ea512ea5-e222-4bdb-8e3b-ab66a9f26598', // Different ID
+  invoice_number: 'INV-710232',
+  status: 'partial',
+  paid_amount: 200.00, // Half paid - should show "Paid: -£200.00" and "Balance Due: £280.00"
+  payment_date: '2025-06-04T10:30:00.000Z',
+  payment_notes: 'Partial payment via credit card'
+};
+
 // Sample invoice with many items for pagination testing
 const SAMPLE_LONG_INVOICE = {
   ...REAL_INVOICE_710231,
@@ -130,6 +141,7 @@ export default function SkiaTestScreen() {
   const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
   const [showLongInvoice, setShowLongInvoice] = useState(false);
   const [showComparison, setShowComparison] = useState(true);
+  const [showPaymentTest, setShowPaymentTest] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
   // ADD DYNAMIC DATA STATES
@@ -148,7 +160,9 @@ export default function SkiaTestScreen() {
   const invoiceSkiaRef = useCanvasRef();
   
   const { supabase, user } = useSupabase();
-  const currentInvoice = showLongInvoice ? SAMPLE_LONG_INVOICE : REAL_INVOICE_710231;
+  const currentInvoice = showPaymentTest ? REAL_INVOICE_710231_PARTIAL_PAID : 
+                        showLongInvoice ? SAMPLE_LONG_INVOICE : 
+                        REAL_INVOICE_710231;
   const currencySymbol = businessSettings ? getCurrencySymbol(businessSettings.currency_code) : '$';
 
   // FETCH REAL LIVE DATA FROM DATABASE
@@ -1235,13 +1249,14 @@ export default function SkiaTestScreen() {
 
           {/* Pagination Testing Controls */}
           <View style={{ marginBottom: 30, padding: 15, backgroundColor: '#fef3c7', borderRadius: 8, borderWidth: 1, borderColor: '#f59e0b' }}>
-            <Text style={{ fontWeight: 'bold', marginBottom: 15, color: '#92400e' }}>📄 Pagination Testing</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 15, color: '#92400e' }}>📄 Invoice Testing Controls</Text>
+            
+            {/* Long Invoice Toggle */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }}>
               <View>
-                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Current Invoice:</Text>
-                <Text style={{ marginBottom: 8 }}>{showLongInvoice ? 'INV-740196 (15 items - Long)' : 'INV-710231 (2 items - Short)'}</Text>
+                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Pagination Test:</Text>
                 <Text style={{ fontSize: 12, color: '#666' }}>
-                  {showLongInvoice ? '✅ Testing pagination with 15+ items' : '⭐ Standard invoice layout'}
+                  {showLongInvoice ? '✅ Testing pagination with 15+ items' : '⭐ Standard invoice layout (2 items)'}
                 </Text>
               </View>
               <View style={{ alignItems: 'center' }}>
@@ -1251,6 +1266,32 @@ export default function SkiaTestScreen() {
                   onValueChange={setShowLongInvoice}
                 />
               </View>
+            </View>
+            
+            {/* Payment Status Toggle */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Payment Status Test:</Text>
+                <Text style={{ fontSize: 12, color: '#666' }}>
+                  {showPaymentTest ? '💰 Testing partial payment (£200 paid)' : '📄 No payment recorded'}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ marginBottom: 8 }}>Partial Payment</Text>
+                <Switch 
+                  value={showPaymentTest} 
+                  onValueChange={setShowPaymentTest}
+                />
+              </View>
+            </View>
+            
+            <View style={{ marginTop: 15, padding: 10, backgroundColor: '#f59e0b20', borderRadius: 6 }}>
+              <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Current Test Invoice:</Text>
+              <Text style={{ marginBottom: 8 }}>
+                {showPaymentTest ? 'INV-710232 (2 items - £200 paid of £480 total)' : 
+                 showLongInvoice ? 'INV-740196 (15 items - Long)' : 
+                 'INV-710231 (2 items - Standard)'}
+              </Text>
             </View>
           </View>
 

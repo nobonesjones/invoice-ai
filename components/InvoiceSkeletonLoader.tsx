@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, StyleSheet, useColorScheme } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useTheme } from '@/context/theme-provider';
+import { colors as globalColors } from '@/constants/colors';
 
 const InvoiceSkeletonLoader = () => {
-  const theme = useTheme();
-  const styles = getStyles(theme);
+  const { isLightMode } = useTheme();
+  const themeColors = isLightMode ? globalColors.light : globalColors.dark;
+  const styles = getStyles(themeColors);
 
   const SkeletonBlock = ({ height, width, style }: { height?: number | string, width?: number | string, style?: any }) => (
     <View style={[styles.skeletonBlock, { height: height || 16, width: width || '100%' }, style]} />
@@ -57,17 +59,17 @@ const InvoiceSkeletonLoader = () => {
   );
 };
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
-    backgroundColor: theme.colors.card, // Or theme.background based on where it's used
+    backgroundColor: themeColors.card, // Or theme.background based on where it's used
     padding: 20,
     borderRadius: 8,
     opacity: 0.7, // Make it slightly transparent to indicate loading
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: themeColors.border,
   },
   skeletonBlock: {
-    backgroundColor: theme.colors.border, // A muted color for skeleton blocks
+    backgroundColor: themeColors.border, // A muted color for skeleton blocks
     borderRadius: 4,
     marginBottom: 8, // Default margin
   },
@@ -99,7 +101,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 10,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: themeColors.border,
     paddingTop: 10,
   },
 });

@@ -116,7 +116,7 @@ const preparePdfData = (invoiceData: InvoiceForTemplate, businessSettingsData: B
   // Create a properly typed invoice object for PDF generation
   const htmlInvoiceData: InvoiceForTemplate & { payment_terms?: string } = {
     ...invoiceData, 
-    payment_terms: 'Payment due upon receipt.',
+    payment_terms: 'Payment due upon receipt.', 
     // Ensure all fields are properly typed - these are already handled in fetchInvoiceData
     due_date: invoiceData.due_date,
     custom_headline: invoiceData.custom_headline,
@@ -415,7 +415,7 @@ function InvoiceViewerScreen() {
       
       console.log(`[SKIA_PDF_EXPORT] PDF export completed successfully for ${invoice.invoice_number}`);
       
-    } catch (error: any) {
+    } catch (error: any) { 
       console.error('[SKIA_PDF_EXPORT] Error:', error);
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
