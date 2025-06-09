@@ -63,11 +63,11 @@ export function useAIChat(): UseAIChatReturn {
         // Load messages from Chat Completions API (legacy)
         console.log('[useAIChat] Loading messages from Chat Completions API...');
         
-        const conv = await ChatService.getOrCreateConversation(user.id);
-        setConversation(conv);
+      const conv = await ChatService.getOrCreateConversation(user.id);
+      setConversation(conv);
 
-        const existingMessages = await ChatService.getConversationMessages(conv.id);
-        setMessages(existingMessages);
+      const existingMessages = await ChatService.getConversationMessages(conv.id);
+      setMessages(existingMessages);
         console.log('[useAIChat] Loaded', existingMessages.length, 'messages from conversation');
       }
 
@@ -116,7 +116,7 @@ export function useAIChat(): UseAIChatReturn {
       } else if (result.conversation) {
         // Chat Completions API result
         console.log('[useAIChat] Received Chat Completions API result');
-        setConversation(result.conversation);
+      setConversation(result.conversation);
         setMessages(result.messages); // This will replace the optimistic message with real ones
         setIsUsingAssistants(false);
       }
@@ -158,8 +158,8 @@ export function useAIChat(): UseAIChatReturn {
         // Clear Chat Completions conversation
         console.log('[useAIChat] Clearing chat completions conversation...');
         await ChatService.clearConversationMessages(conversation.id);
-        setConversation(null);
-        setMessages([]);
+      setConversation(null);
+      setMessages([]);
       }
 
       console.log('[useAIChat] Conversation/thread cleared successfully');

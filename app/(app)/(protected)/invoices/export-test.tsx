@@ -468,20 +468,25 @@ function ExportTestScreen() {
                 📄 Maximum Invoice View
               </Text>
               
-              <SkiaInvoiceCanvas
-                ref={a4ExportRef}
-                invoice={invoice}
-                client={client}
-                business={businessSettings}
-                currencySymbol={currencySymbol}
-                renderSinglePage={0}
-                style={{ 
-                  width: displayWidth, 
-                  height: displayHeight,
-                  backgroundColor: 'white',
-                  alignSelf: 'center',
-                }}
-              />
+              <View style={{
+                transform: [{ scale: 1.84 }],
+                alignSelf: 'center',
+                marginTop: 150,
+              }}>
+                <SkiaInvoiceCanvas
+                  ref={a4ExportRef}
+                  invoice={invoice}
+                  client={client}
+                  business={businessSettings}
+                  currencySymbol={currencySymbol}
+                  renderSinglePage={0}
+                  style={{ 
+                    width: displayWidth, 
+                    height: displayHeight,
+                    backgroundColor: 'white',
+                  }}
+                />
+              </View>
               
               <Text style={[styles.dimensionText, { color: themeColors.mutedForeground, textAlign: 'center', marginTop: 4 }]}>
                 {Math.round(displayWidth)}×{Math.round(displayHeight)}px (Compact Export Size)

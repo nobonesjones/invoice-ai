@@ -617,106 +617,106 @@ export default function AiScreen() {
 				behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
 				keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
 			>
-				{/* Header */}
+			{/* Header */}
+			<View 
+				style={{
+					flex: 1,
+					paddingHorizontal: 0,
+					paddingTop: 16,
+					backgroundColor: theme.background,
+				}}
+			>
 				<View 
 					style={{
-						flex: 1,
-						paddingHorizontal: 0,
-						paddingTop: 16,
-						backgroundColor: theme.background,
+						flexDirection: "row",
+						justifyContent: "space-between",
+						alignItems: "center",
+						paddingHorizontal: 16,
+						marginBottom: 16,
 					}}
 				>
-					<View 
+					<Text 
 						style={{
-							flexDirection: "row",
-							justifyContent: "space-between",
-							alignItems: "center",
-							paddingHorizontal: 16,
-							marginBottom: 16,
+							fontSize: 30,
+							fontWeight: "bold",
+							color: theme.foreground,
 						}}
 					>
-						<Text 
-							style={{
-								fontSize: 30,
-								fontWeight: "bold",
-								color: theme.foreground,
-							}}
-						>
-							AI Assistant
-						</Text>
+						AI Assistant
+					</Text>
 						{messages.length > 0 && (
-							<TouchableOpacity onPress={handleRefresh} disabled={isLoading}>
-								<RefreshCw 
-									size={20} 
-									color={isLoading ? theme.mutedForeground : theme.foreground} 
-								/>
-							</TouchableOpacity>
-						)}
-					</View>
-
-					{/* Error Banner */}
-					{error && (
-						<View 
-							style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
-							className="mx-4 mb-4 p-3 rounded-lg border"
-						>
-							<Text style={{ color: '#DC2626', fontSize: 14 }}>
-								{error}
-							</Text>
-							<TouchableOpacity onPress={clearError} className="mt-2">
-								<Text style={{ color: '#DC2626', fontSize: 12, textDecorationLine: 'underline' }}>
-									Dismiss
-								</Text>
-							</TouchableOpacity>
-						</View>
+						<TouchableOpacity onPress={handleRefresh} disabled={isLoading}>
+							<RefreshCw 
+								size={20} 
+								color={isLoading ? theme.mutedForeground : theme.foreground} 
+							/>
+						</TouchableOpacity>
 					)}
+				</View>
 
-					{/* Messages */}
-					<ScrollView 
-						ref={scrollViewRef}
-						className="flex-1 px-4"
-						contentContainerStyle={{ paddingBottom: 20 }}
-						showsVerticalScrollIndicator={false}
+				{/* Error Banner */}
+				{error && (
+					<View 
+						style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
+						className="mx-4 mb-4 p-3 rounded-lg border"
 					>
-						{displayMessages.map((message) => (
+						<Text style={{ color: '#DC2626', fontSize: 14 }}>
+							{error}
+						</Text>
+						<TouchableOpacity onPress={clearError} className="mt-2">
+							<Text style={{ color: '#DC2626', fontSize: 12, textDecorationLine: 'underline' }}>
+								Dismiss
+							</Text>
+						</TouchableOpacity>
+					</View>
+				)}
+
+				{/* Messages */}
+				<ScrollView 
+					ref={scrollViewRef}
+					className="flex-1 px-4"
+					contentContainerStyle={{ paddingBottom: 20 }}
+					showsVerticalScrollIndicator={false}
+				>
+					{displayMessages.map((message) => (
+						<View
+							key={message.id}
+							className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+						>
 							<View
-								key={message.id}
-								className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+								style={{
+									backgroundColor: message.role === 'user' ? theme.primary : theme.card,
+									maxWidth: '90%',
+									paddingHorizontal: 16,
+									paddingVertical: 12,
+									borderRadius: 16,
+									borderBottomRightRadius: message.role === 'user' ? 4 : 16,
+									borderBottomLeftRadius: message.role === 'user' ? 16 : 4,
+								}}
 							>
-								<View
+								<Text
 									style={{
-										backgroundColor: message.role === 'user' ? theme.primary : theme.card,
-										maxWidth: '90%',
-										paddingHorizontal: 16,
-										paddingVertical: 12,
-										borderRadius: 16,
-										borderBottomRightRadius: message.role === 'user' ? 4 : 16,
-										borderBottomLeftRadius: message.role === 'user' ? 16 : 4,
+										color: message.role === 'user' ? '#FFFFFF' : theme.foreground,
+										fontSize: 16,
+										lineHeight: 22,
 									}}
 								>
-									<Text
-										style={{
-											color: message.role === 'user' ? '#FFFFFF' : theme.foreground,
-											fontSize: 16,
-											lineHeight: 22,
-										}}
-									>
-										{message.content}
-									</Text>
+									{message.content}
+								</Text>
 
 									{/* Show invoice and client previews if this message has attachment data */}
 									{message.role === 'assistant' && (message as any).attachments && (message as any).attachments.length > 0 && (
 										(message as any).attachments.map((attachment: any, index: number) => {
-											// Check if attachment has invoice data
-											if (attachment && attachment.invoice && attachment.line_items) {
-												return (
-													<InvoicePreview 
+										// Check if attachment has invoice data
+										if (attachment && attachment.invoice && attachment.line_items) {
+											return (
+												<InvoicePreview 
 														key={`invoice-${index}`}
-														invoiceData={attachment} 
-														theme={theme} 
-													/>
-												);
-											}
+													invoiceData={attachment} 
+													theme={theme} 
+												/>
+											);
+										}
 											
 											// Check if attachment has client data
 											if (attachment && attachment.type === 'client' && attachment.client) {
@@ -729,118 +729,118 @@ export default function AiScreen() {
 												);
 											}
 											
-											return null;
-										})
-									)}
+										return null;
+									})
+								)}
 
-									{/* Show timestamp for saved messages */}
-									{message.id !== 'welcome' && message.id !== 'setup' && (
-										<Text
-											style={{
-												color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : theme.mutedForeground,
-												fontSize: 12,
-												marginTop: 4,
-											}}
-										>
-											{new Date(message.created_at).toLocaleTimeString([], { 
-												hour: '2-digit', 
-												minute: '2-digit' 
-											})}
-										</Text>
-									)}
-								</View>
-							</View>
-						))}
-
-						{/* Loading indicator */}
-						{isLoading && (
-							<View className="items-start mb-4">
-								<View
-									style={{
-										backgroundColor: theme.card,
-										paddingHorizontal: 16,
-										paddingVertical: 12,
-										borderRadius: 16,
-										borderBottomLeftRadius: 4,
-									}}
-								>
-									<Text style={{ color: theme.mutedForeground }}>
-										AI is thinking...
+								{/* Show timestamp for saved messages */}
+								{message.id !== 'welcome' && message.id !== 'setup' && (
+									<Text
+										style={{
+											color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : theme.mutedForeground,
+											fontSize: 12,
+											marginTop: 4,
+										}}
+									>
+										{new Date(message.created_at).toLocaleTimeString([], { 
+											hour: '2-digit', 
+											minute: '2-digit' 
+										})}
 									</Text>
-								</View>
+								)}
 							</View>
-						)}
-					</ScrollView>
+						</View>
+					))}
 
-					{/* Input Area */}
-					<View 
-						style={{ 
-							backgroundColor: theme.card,
-							padding: 12,
-							borderTopWidth: 1,
-							borderTopColor: theme.border
-						}}
-					>
-						<View className="flex-row items-center space-x-3">
-							{/* Voice Input Button (placeholder for now) */}
-							<TouchableOpacity
+					{/* Loading indicator */}
+					{isLoading && (
+						<View className="items-start mb-4">
+							<View
 								style={{
-									padding: 12,
-									borderRadius: 24,
-									backgroundColor: theme.muted
-								}}
-								onPress={() => Alert.alert('Coming Soon', 'Voice input will be available in the next update!')}
-								disabled={isLoading}
-							>
-								<Mic size={20} color={isLoading ? theme.mutedForeground : theme.foreground} />
-							</TouchableOpacity>
-
-							{/* Text Input */}
-							<TextInput
-								value={inputText}
-								onChangeText={setInputText}
-								placeholder={showSetupMessage ? "Configure API key first..." : "Type your message..."}
-								placeholderTextColor={theme.mutedForeground}
-								style={{
-									flex: 1,
-									backgroundColor: theme.background,
-									color: theme.foreground,
+									backgroundColor: theme.card,
 									paddingHorizontal: 16,
 									paddingVertical: 12,
-									borderRadius: 24,
-									borderWidth: 1,
-									borderColor: theme.border,
-									fontSize: 16,
-								}}
-								multiline
-								maxLength={1000}
-								returnKeyType="default"
-								editable={!isLoading && !showSetupMessage}
-							/>
-
-							{/* Send Button */}
-							<TouchableOpacity
-								onPress={() => {
-									console.log('[AI Screen] Send button pressed');
-									console.log('[AI Screen] inputText.trim():', !!inputText.trim());
-									console.log('[AI Screen] isLoading:', isLoading);
-									console.log('[AI Screen] showSetupMessage:', showSetupMessage);
-									console.log('[AI Screen] Button disabled:', !inputText.trim() || isLoading || showSetupMessage);
-									handleSendMessage();
-								}}
-								disabled={!inputText.trim() || isLoading || showSetupMessage}
-								style={{
-									padding: 12,
-									borderRadius: 24,
-									backgroundColor: (inputText.trim() && !isLoading && !showSetupMessage) ? theme.primary : theme.muted
+									borderRadius: 16,
+									borderBottomLeftRadius: 4,
 								}}
 							>
-								<Send 
-									size={20} 
-									color={(inputText.trim() && !isLoading && !showSetupMessage) ? '#FFFFFF' : theme.mutedForeground} 
-								/>
-							</TouchableOpacity>
+								<Text style={{ color: theme.mutedForeground }}>
+									AI is thinking...
+								</Text>
+							</View>
 						</View>
+					)}
+				</ScrollView>
+
+				{/* Input Area */}
+				<View 
+					style={{ 
+						backgroundColor: theme.card,
+							padding: 12,
+						borderTopWidth: 1,
+						borderTopColor: theme.border
+					}}
+				>
+					<View className="flex-row items-center space-x-3">
+						{/* Voice Input Button (placeholder for now) */}
+						<TouchableOpacity
+							style={{
+								padding: 12,
+								borderRadius: 24,
+								backgroundColor: theme.muted
+							}}
+							onPress={() => Alert.alert('Coming Soon', 'Voice input will be available in the next update!')}
+							disabled={isLoading}
+						>
+							<Mic size={20} color={isLoading ? theme.mutedForeground : theme.foreground} />
+						</TouchableOpacity>
+
+						{/* Text Input */}
+						<TextInput
+							value={inputText}
+							onChangeText={setInputText}
+							placeholder={showSetupMessage ? "Configure API key first..." : "Type your message..."}
+							placeholderTextColor={theme.mutedForeground}
+							style={{
+								flex: 1,
+								backgroundColor: theme.background,
+								color: theme.foreground,
+								paddingHorizontal: 16,
+								paddingVertical: 12,
+								borderRadius: 24,
+								borderWidth: 1,
+								borderColor: theme.border,
+								fontSize: 16,
+							}}
+							multiline
+							maxLength={1000}
+								returnKeyType="default"
+							editable={!isLoading && !showSetupMessage}
+						/>
+
+						{/* Send Button */}
+						<TouchableOpacity
+							onPress={() => {
+								console.log('[AI Screen] Send button pressed');
+								console.log('[AI Screen] inputText.trim():', !!inputText.trim());
+								console.log('[AI Screen] isLoading:', isLoading);
+								console.log('[AI Screen] showSetupMessage:', showSetupMessage);
+								console.log('[AI Screen] Button disabled:', !inputText.trim() || isLoading || showSetupMessage);
+								handleSendMessage();
+							}}
+							disabled={!inputText.trim() || isLoading || showSetupMessage}
+							style={{
+								padding: 12,
+								borderRadius: 24,
+								backgroundColor: (inputText.trim() && !isLoading && !showSetupMessage) ? theme.primary : theme.muted
+							}}
+						>
+							<Send 
+								size={20} 
+								color={(inputText.trim() && !isLoading && !showSetupMessage) ? '#FFFFFF' : theme.mutedForeground} 
+							/>
+						</TouchableOpacity>
+					</View>
 					</View>
 				</View>
 			</KeyboardAvoidingView>
