@@ -292,12 +292,12 @@ export default function PreviewBusinfoCloseScreen() {
                       bounces={false}
                     >
                       <SkiaInvoiceCanvas
-                        invoice={invoiceData}
+                      invoice={invoiceData}
                         business={businessSettings}
                         client={invoiceData.clients}
                         currencySymbol={currencySymbol}
                         style={{ alignSelf: 'center' }}
-                      />
+                    />
                     </ScrollView>
                   </Animated.View>
                 </PinchGestureHandler>

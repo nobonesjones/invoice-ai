@@ -227,15 +227,65 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log('[handleSendByEmail] Generating PDF for email sharing:', invoice.id);
+      console.log('[handleSendByEmail] Generating Skia PDF for email sharing:', invoice.id);
       
-      // Generate PDF using expo-print
-      const dataForHtml = preparePdfData(invoice, businessSettings, businessSettings);
-      const html = generateInvoiceTemplateOneHtml(dataForHtml as any);
+      // Use Skia canvas to generate PDF (same as handleSendPDF)
+      const image = skiaInvoiceRef.current?.makeImageSnapshot();
       
-      console.log('[handleSendByEmail] Generating PDF with expo-print');
+      if (!image) {
+        throw new Error('Failed to create image snapshot from invoice canvas');
+      }
+      
+      console.log('[handleSendByEmail] Skia canvas captured successfully');
+      
+      // Encode to bytes and convert to base64
+      const bytes = image.encodeToBytes();
+      
+      const chunkSize = 8192;
+      let binaryString = '';
+      
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.slice(i, i + chunkSize);
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      
+      const base64String = btoa(binaryString);
+      
+             // Create HTML that uses the exact canvas dimensions (no scaling or margins)
+       const htmlContent = `
+         <!DOCTYPE html>
+         <html>
+         <head>
+           <meta charset="utf-8">
+           <style>
+             @page {
+               margin: 0;
+               size: ${image.width()}px ${image.height()}px;
+             }
+             body {
+               margin: 0;
+               padding: 0;
+               width: ${image.width()}px;
+               height: ${image.height()}px;
+               overflow: hidden;
+             }
+             .invoice-image {
+               width: ${image.width()}px;
+               height: ${image.height()}px;
+               display: block;
+               object-fit: none;
+             }
+           </style>
+         </head>
+         <body>
+           <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoice.invoice_number}" />
+         </body>
+         </html>
+       `;
+      
+      console.log('[handleSendByEmail] Generating PDF with Skia image');
       const { uri } = await Print.printToFileAsync({
-        html,
+        html: htmlContent,
         base64: false,
       });
       console.log('[handleSendByEmail] PDF generated successfully at:', uri);
@@ -349,7 +399,7 @@ function InvoiceViewerScreen() {
       const maxItemsFirstPage = totalItems >= 9 && totalItems <= 11 ? 11 : 8;
       const needsPagination = totalItems > maxItemsFirstPage;
       
-      // Create HTML that embeds the Skia canvas image in A4 PDF
+      // Create HTML that uses the exact canvas dimensions (pixel-perfect match)
       const htmlContent = `
         <!DOCTYPE html>
         <html>
@@ -357,37 +407,26 @@ function InvoiceViewerScreen() {
           <meta charset="utf-8">
           <style>
             @page {
-              margin: 40mm 15mm 15mm 15mm; /* Increased top margin to 40mm */
-              size: A4 portrait;
+              margin: 0;
+              size: ${image.width()}px ${image.height()}px;
             }
             body {
               margin: 0;
-              padding: 20mm 0 0 0; /* Additional 20mm top padding */
-              font-family: Arial, sans-serif;
-              width: 100%;
-              height: 100%;
-              box-sizing: border-box;
-            }
-            .invoice-container {
-              width: 100%;
-              height: 100%;
-              display: flex;
-              justify-content: center;
-              align-items: flex-start;
-              padding-top: 20mm; /* Increased container top padding to 20mm */
+              padding: 0;
+              width: ${image.width()}px;
+              height: ${image.height()}px;
+              overflow: hidden;
             }
             .invoice-image {
-              width: 90%; /* Slightly smaller to ensure it fits well */
-              height: auto;
-              max-width: 90%;
-              object-fit: contain;
+              width: ${image.width()}px;
+              height: ${image.height()}px;
+              display: block;
+              object-fit: none;
             }
           </style>
         </head>
         <body>
-          <div class="invoice-container">
-            <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoice.invoice_number}" />
-          </div>
+          <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoice.invoice_number}" />
         </body>
         </html>
       `;

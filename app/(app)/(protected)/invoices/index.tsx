@@ -16,7 +16,8 @@ import {
 	TextInput,
 	RefreshControl,
 	Animated,
-  ActivityIndicator, 
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -493,13 +494,25 @@ export default function InvoiceDashboardScreen() {
               Invoices
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              {/* Developer Test Button */}
+              {/* TEMPORARY: Export Test Button */}
               <TouchableOpacity
-                style={[styles.testButton, { backgroundColor: themeColors.muted, borderColor: themeColors.border }]}
-                onPress={() => router.push("/skia-test" as any)}
+                style={[styles.testButton, { 
+                  backgroundColor: themeColors.card, 
+                  borderColor: themeColors.border 
+                }]}
+                onPress={() => {
+                  // Navigate to export test with a sample invoice ID
+                  // Get the first invoice from the list for testing
+                  const testInvoiceId = invoices.length > 0 ? invoices[0].id : null;
+                  if (testInvoiceId) {
+                    router.push(`/invoices/export-test?id=${testInvoiceId}` as any);
+                  } else {
+                    Alert.alert('No Invoices', 'Create an invoice first to test exports.');
+                  }
+                }}
               >
-                <Text style={[styles.testButtonText, { color: themeColors.foreground }]}>
-                  🧪 Test
+                <Text style={[styles.testButtonText, { color: themeColors.primary }]}>
+                  🧪 Export Test
                 </Text>
               </TouchableOpacity>
               

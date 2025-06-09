@@ -252,9 +252,9 @@ export default function NewSettingsScreen() {
             filteredSections.map((section, index) => (
               <React.Fragment key={section.section}>
                 <Text style={[styles.sectionTitleText, { color: theme.mutedForeground }]}>{section.section}</Text>
-                <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
+          <View style={[styles.sectionCard, { backgroundColor: theme.card }]}>
                   {section.items.map((item, itemIndex) => (
-                    <SettingsListItem
+            <SettingsListItem
                       key={item.id}
                       icon={item.icon}
                       label={item.label}
@@ -263,7 +263,7 @@ export default function NewSettingsScreen() {
                       rightContent={item.rightContent}
                     />
                   ))}
-                </View>
+          </View>
               </React.Fragment>
             ))
           ) : (
@@ -271,7 +271,7 @@ export default function NewSettingsScreen() {
               <Text style={[{ color: theme.mutedForeground, fontSize: 16 }]}>
                 No settings found matching "{searchTerm}"
               </Text>
-            </View>
+          </View>
           )}
         </ScrollView>
       </View>

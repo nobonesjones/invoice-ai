@@ -365,7 +365,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       font-size: 10px; 
       color: #666; 
       margin-top: 1mm; 
-      display: block;
+      display: block; 
     }
 
     /* Summary Section - compact */
@@ -409,22 +409,22 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       display: flex; 
       align-items: center; 
       gap: 1.5mm; 
-      margin-bottom: 1mm; 
+      margin-bottom: 1mm;
     }
     .logo-container img { 
       width: 6mm; 
       height: 4mm; 
-      object-fit: contain; 
+      object-fit: contain;
     }
-    .payment-method-text { 
+    .payment-method-text {
       font-size: 11px; 
       color: #000;
     }
 
     /* Totals styling - compact */
     .total-line { 
-      display: flex; 
-      justify-content: space-between; 
+      display: flex;
+      justify-content: space-between;
       margin-bottom: 1.5mm; 
       font-size: 11px; 
       color: #000;
@@ -436,8 +436,8 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
       font-weight: bold; 
     }
     .grand-total-row { 
-      display: flex; 
-      justify-content: space-between; 
+      display: flex;
+      justify-content: space-between;
       align-items: center;
       background-color: rgba(76, 175, 80, 0.15) !important; 
       padding: 2mm;
@@ -467,7 +467,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
           </tbody>
         </table>
       </div>
-    `;
+      `;
   } else {
     // Generate pages
     pages.forEach((pageItems, pageIndex) => {
@@ -506,7 +506,7 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
                 <div class="total-line">
                   <span class="total-line-label">Subtotal:</span>
                   <span class="total-line-value">${formatCurrency(invoice.subtotal_amount, invoice.currency_symbol)}</span>
-                </div>
+          </div>
                 ${invoice.discount_value && invoice.discount_value > 0 ? `
                 <div class="total-line">
                   <span class="total-line-label">Discount ${invoice.discount_type === 'percentage' ? `(${invoice.discount_value}%)` : ''}:</span>
@@ -588,9 +588,9 @@ export const generateInvoiceTemplateOneHtml = (data: PdfInvoiceData): string => 
 
           ${invoice.custom_headline ? `<div class="custom-headline"><p>${invoice.custom_headline}</p></div>` : ''}
 
-          ${lineItemsHtml}
+                ${lineItemsHtml}
         </div>
       </body>
     </html>
   `;
-};
+}; 

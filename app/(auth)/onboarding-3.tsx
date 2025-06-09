@@ -3,10 +3,10 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState, useRef, useEffect } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
+	View,
+	Text,
+	StyleSheet,
+	SafeAreaView,
   TextInput,
   Platform,
   ScrollView,
@@ -50,17 +50,17 @@ const REGIONS = [
 ];
 
 export default function OnboardingScreen3() {
-  const router = useRouter();
+	const router = useRouter();
   const { theme } = useTheme();
   const { updateBusinessInfo, onboardingData, loadOnboardingData } = useOnboarding();
   const nameInputRef = useRef<TextInput>(null);
-  
+
   const [businessName, setBusinessName] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('');
   const [showRegionPicker, setShowRegionPicker] = useState(false);
 
   // Auto-focus name input when screen loads
-  useEffect(() => {
+	useEffect(() => {
     if (nameInputRef.current) {
       nameInputRef.current.focus();
     }
@@ -90,7 +90,7 @@ export default function OnboardingScreen3() {
 
   const styles = getStyles(theme);
 
-  return (
+	return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.backgroundContainer}>
         {/* Background - placeholder gradient, replace with actual image */}
@@ -109,7 +109,7 @@ export default function OnboardingScreen3() {
                 {/* Header */}
                 <View style={styles.headerContent}>
                   <Text style={[styles.headline, { color: theme.foreground }]}>Business Info</Text>
-                </View>
+				</View>
 
                 {/* Form */}
                 <View style={styles.formContainer}>
@@ -142,7 +142,7 @@ export default function OnboardingScreen3() {
                   {/* Region Picker */}
                   <View style={styles.inputContainer}>
                     <Pressable 
-                      style={[
+						style={[
                         styles.inputWrapper, 
                         styles.pickerWrapper,
                         { backgroundColor: theme.card, borderColor: selectedRegion ? theme.primary : theme.border }
@@ -175,14 +175,14 @@ export default function OnboardingScreen3() {
                       Required, helps us tailor your experience
                     </Text>
                   </View>
-                </View>
+				</View>
 
                 {/* Spacer */}
-                <View style={styles.spacer} />
+				<View style={styles.spacer} />
 
                 {/* Button */}
                 <View style={styles.buttonContainer}>
-                  <Button
+				<Button
                     onPress={handleContinue}
                     style={[
                       styles.primaryButton,
@@ -196,8 +196,8 @@ export default function OnboardingScreen3() {
                     ]}>
                       Continue
                     </Text>
-                  </Button>
-                </View>
+				</Button>
+			</View>
               </View>
             </ScrollView>
           </View>
@@ -238,8 +238,8 @@ export default function OnboardingScreen3() {
           </View>
         </View>
       )}
-    </SafeAreaView>
-  );
+		</SafeAreaView>
+	);
 }
 
 const getStyles = (theme: any) => StyleSheet.create({
@@ -274,8 +274,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     textAlign: 'center',
   },
   formContainer: {
-    flex: 1,
-  },
+		flex: 1,
+	},
   inputContainer: {
     marginBottom: 24,
   },
@@ -302,26 +302,26 @@ const getStyles = (theme: any) => StyleSheet.create({
     marginRight: 12,
   },
   textInput: {
-    flex: 1,
+		flex: 1,
     fontSize: 16,
   },
   pickerWrapper: {
     justifyContent: 'space-between',
-  },
+	},
   pickerText: {
     flex: 1,
-    fontSize: 16,
+		fontSize: 16,
   },
   chevronIcon: {
     marginLeft: 8,
-  },
+	},
   helperText: {
     fontSize: 12,
     marginTop: 6,
     marginLeft: 4,
-  },
-  spacer: {
-    flex: 1,
+	},
+	spacer: {
+		flex: 1,
     minHeight: 20,
   },
   buttonContainer: {
@@ -382,5 +382,5 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   picker: {
     height: 200,
-  },
-}); 
+	},
+});

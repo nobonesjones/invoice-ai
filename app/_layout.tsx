@@ -115,11 +115,11 @@ export default function AppLayout() {
 						<ThemeProvider>
 							<UsageProvider>
 								<OnboardingProvider>
-									<BottomSheetModalProvider>
-										<TabBarVisibilityProvider>
-											<RootLayoutNav />
-										</TabBarVisibilityProvider>
-									</BottomSheetModalProvider>
+							<BottomSheetModalProvider>
+								<TabBarVisibilityProvider>
+									<RootLayoutNav />
+								</TabBarVisibilityProvider>
+							</BottomSheetModalProvider>
 								</OnboardingProvider>
 							</UsageProvider>
 						</ThemeProvider>
