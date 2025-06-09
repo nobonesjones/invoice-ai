@@ -22,10 +22,14 @@ import { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
 
 // NEW SKIA IMPORTS
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import { useCanvasRef } from '@shopify/react-native-skia';
+
+// NEW PDF-LIB IMPORT FOR TESTING
+import { PDFDocument } from 'pdf-lib';
 
 type ClientRow = Tables<'clients'>;
 
@@ -298,6 +302,152 @@ function ExportTestScreen() {
     }
   };
 
+  // SIMPLIFIED PDF-LIB TEST FOR DEBUGGING
+  const handleSimplePdfTest = async () => {
+    try {
+      console.log('[SIMPLE_PDF_TEST] Starting simple test');
+      
+      const image = a4ExportRef.current?.makeImageSnapshot();
+      if (!image) {
+        Alert.alert('Error', 'No image captured');
+        return;
+      }
+      
+      console.log('[SIMPLE_PDF_TEST] Image captured:', image.width(), 'x', image.height());
+      
+      // Calculate proper aspect ratio to avoid stretching
+      const originalWidth = image.width();   // 1200
+      const originalHeight = image.height(); // 1554
+      const aspectRatio = originalWidth / originalHeight; // ~0.77
+      
+      // Set desired width and calculate proportional height
+      const desiredWidth = 300;
+      const proportionalHeight = Math.round(desiredWidth / aspectRatio); // 300 / 0.77 ≈ 390
+      
+      console.log('[SIMPLE_PDF_TEST] PDF will be:', desiredWidth, 'x', proportionalHeight, 'aspect ratio:', aspectRatio.toFixed(3));
+      
+      // Create PDF with proper proportions (no stretching)
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([desiredWidth, proportionalHeight]);
+      
+      // Embed image directly 
+      const imageBytes = image.encodeToBytes();
+      const pdfImage = await pdfDoc.embedPng(imageBytes);
+      
+      // Draw image at exact proportional size (no stretching)
+      page.drawImage(pdfImage, { 
+        x: 0, 
+        y: 0, 
+        width: desiredWidth, 
+        height: proportionalHeight 
+      });
+      
+      // Save
+      const pdfBytes = await pdfDoc.save();
+      const fileUri = `${FileSystem.documentDirectory}simple-scaled-test.pdf`;
+      
+      await FileSystem.writeAsStringAsync(
+        fileUri,
+        btoa(String.fromCharCode(...pdfBytes)),
+        { encoding: FileSystem.EncodingType.Base64 }
+      );
+      
+      await Sharing.shareAsync(fileUri);
+      console.log('[SIMPLE_PDF_TEST] Done');
+      
+    } catch (error) {
+      console.error('[SIMPLE_PDF_TEST] Error:', error);
+      Alert.alert('Simple Test Error', error.message);
+    }
+  };
+
+  // NEW: PDF-LIB TEST FUNCTION
+  const handlePdfLibTest = async () => {
+    if (!invoice || !businessSettings) {
+      Alert.alert('Error', 'Cannot export PDF - invoice data not loaded');
+      return;
+    }
+
+    try {
+      console.log('[PDF_LIB_TEST] Testing pdf-lib with exact dimension control');
+      
+      const image = a4ExportRef.current?.makeImageSnapshot();
+      
+      if (!image) {
+        throw new Error('Failed to create image snapshot from canvas');
+      }
+      
+      console.log('[PDF_LIB_TEST] Canvas dimensions:', image.width(), 'x', image.height());
+      
+      // Use actual image dimensions for PDF (not display dimensions)
+      const actualWidth = image.width();
+      const actualHeight = image.height();
+      
+      // Use direct byte embedding (simpler than base64 conversion)
+      const imageBytes = image.encodeToBytes();
+      console.log('[PDF_LIB_TEST] Image encoded, bytes length:', imageBytes.length);
+      
+      const pdfDoc = await PDFDocument.create();
+      
+      // EXACT size control - set PDF page to actual canvas dimensions  
+      const page = pdfDoc.addPage([actualWidth, actualHeight]);
+      
+      console.log('[PDF_LIB_TEST] PDF page size set to:', actualWidth, 'x', actualHeight);
+      
+      // Use direct byte embedding (simpler than base64 conversion)
+      const pdfImage = await pdfDoc.embedPng(imageBytes);
+      console.log('[PDF_LIB_TEST] PNG image embedded successfully');
+      
+      // Draw image at full page size (1:1 mapping)
+      page.drawImage(pdfImage, {
+        x: 0,
+        y: 0,
+        width: actualWidth,
+        height: actualHeight,
+      });
+      
+      console.log('[PDF_LIB_TEST] Image drawn to PDF page at full size');
+      
+      // Save PDF
+      const pdfBytes = await pdfDoc.save();
+      
+      // Write to file system using the same method as simple test (proven to work)
+      const fileName = `invoice-pdflib-${invoice.invoice_number}-${actualWidth}x${actualHeight}.pdf`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      
+      // Use the same base64 conversion as the working simple test
+      // But handle large files with proper chunking (like expo-print version)
+      const chunkSize = 8192;
+      let binaryString = '';
+      
+      for (let i = 0; i < pdfBytes.length; i += chunkSize) {
+        const chunk = pdfBytes.slice(i, i + chunkSize);
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      
+      const base64String = btoa(binaryString);
+      
+      await FileSystem.writeAsStringAsync(
+        fileUri,
+        base64String,
+        { encoding: FileSystem.EncodingType.Base64 }
+      );
+      
+      console.log('[PDF_LIB_TEST] PDF-lib PDF generated at:', fileUri);
+      
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `PDF-lib Test - ${invoice.invoice_number}`
+      });
+      
+      console.log('[PDF_LIB_TEST] PDF-lib export test completed successfully');
+      
+    } catch (error: any) { 
+      console.error('[PDF_LIB_TEST] Export error:', error);
+      Alert.alert('PDF-lib Export Error', `Export failed: ${error.message}`);
+    }
+  };
+
   const getStyles = (themeColors: any) => StyleSheet.create({
     safeArea: {
       flex: 1,
@@ -398,8 +548,8 @@ function ExportTestScreen() {
   const totalPadding = 8; // Just 4px margin on each side
   const displayWidth = 200; // Even smaller width for compact PDF export
   
-  // Screen display height - adjusted to match PDF export exactly
-  const displayHeight = 259; // Reduced by 3px more to fine-tune canvas height
+  // Screen display height - increased by 1cm for better visual length
+  const displayHeight = 295; // Increased by 38px (1cm) from 257px
   
   // These are the actual export dimensions (what gets saved to PDF)
   const a4ExportWidth = displayWidth;
@@ -455,9 +605,31 @@ function ExportTestScreen() {
                 style={[styles.testButton, { marginTop: 12 }]} 
                 onPress={handleExportTest}
               >
-                <Text style={styles.testButtonText}>📄 Export This Exact Layout</Text>
+                <Text style={styles.testButtonText}>📄 Export This Exact Layout (Expo-Print)</Text>
                 <Text style={[styles.testButtonText, { fontSize: 10 }]}>
                   What you see = what you get
+                </Text>
+              </TouchableOpacity>
+
+              {/* NEW PDF-LIB TEST BUTTON */}
+              <TouchableOpacity 
+                style={[styles.testButton, { marginTop: 8, backgroundColor: '#9333ea' }]} 
+                onPress={handlePdfLibTest}
+              >
+                <Text style={styles.testButtonText}>🚀 PDF-LIB Test (Exact Control)</Text>
+                <Text style={[styles.testButtonText, { fontSize: 10 }]}>
+                  Direct PDF creation - better control
+                </Text>
+              </TouchableOpacity>
+
+              {/* SIMPLE DEBUG TEST BUTTON */}
+              <TouchableOpacity 
+                style={[styles.testButton, { marginTop: 8, backgroundColor: '#dc2626' }]} 
+                onPress={handleSimplePdfTest}
+              >
+                <Text style={styles.testButtonText}>🔧 Simple Debug Test</Text>
+                <Text style={[styles.testButtonText, { fontSize: 10 }]}>
+                  Basic PDF test with logs
                 </Text>
               </TouchableOpacity>
             </View>
@@ -479,6 +651,7 @@ function ExportTestScreen() {
                   transform: [{ scale: 0.882 }],
                   marginLeft: -175,
                 }}>
+                  {/* Canvas back to original size + 2cm */}
                   <SkiaInvoiceCanvas
                     ref={a4ExportRef}
                     invoice={invoice}
@@ -488,10 +661,11 @@ function ExportTestScreen() {
                     renderSinglePage={0}
                     style={{ 
                       width: displayWidth, 
-                      height: displayHeight,
+                      height: 295, // Increased by 38px (1cm) from 257px
                       backgroundColor: 'white',
                     }}
                   />
+
                 </View>
               </View>
               
