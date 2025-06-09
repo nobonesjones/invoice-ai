@@ -469,23 +469,30 @@ function ExportTestScreen() {
               </Text>
               
               <View style={{
-                transform: [{ scale: 1.84 }],
-                alignSelf: 'center',
-                marginTop: 150,
+                flex: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: 50,
+                width: '100%',
               }}>
-                <SkiaInvoiceCanvas
-                  ref={a4ExportRef}
-                  invoice={invoice}
-                  client={client}
-                  business={businessSettings}
-                  currencySymbol={currencySymbol}
-                  renderSinglePage={0}
-                  style={{ 
-                    width: displayWidth, 
-                    height: displayHeight,
-                    backgroundColor: 'white',
-                  }}
-                />
+                <View style={{
+                  transform: [{ scale: 0.882 }],
+                  marginLeft: -175,
+                }}>
+                  <SkiaInvoiceCanvas
+                    ref={a4ExportRef}
+                    invoice={invoice}
+                    client={client}
+                    business={businessSettings}
+                    currencySymbol={currencySymbol}
+                    renderSinglePage={0}
+                    style={{ 
+                      width: displayWidth, 
+                      height: displayHeight,
+                      backgroundColor: 'white',
+                    }}
+                  />
+                </View>
               </View>
               
               <Text style={[styles.dimensionText, { color: themeColors.mutedForeground, textAlign: 'center', marginTop: 4 }]}>

@@ -1,5 +1,5 @@
 import React, { useMemo, forwardRef, RefObject } from 'react';
-import { Canvas, Rect, Text, Skia, matchFont, Circle, Paragraph, TextAlign, Image, useImage } from '@shopify/react-native-skia';
+import { Canvas, Rect, Text, Skia, matchFont, Circle, Paragraph, TextAlign, Image, useImage, Group } from '@shopify/react-native-skia';
 import { View, StyleSheet, Platform } from 'react-native';
 
 interface SkiaInvoiceCanvasProps {
@@ -35,8 +35,12 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
 
   // CANVAS DIMENSIONS - control export size by limiting Canvas dimensions
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  const baseCanvasWidth = renderSinglePage !== undefined ? 200 : (style?.width || 370); // Much smaller for export
-  const baseCanvasHeight = renderSinglePage !== undefined ? (style?.height || 250) : (style?.height || 560); // Use style height for export
+  console.log('[SkiaInvoiceCanvas] DEBUG: devicePixelRatio =', devicePixelRatio);
+  
+  // Try larger canvas for better text quality
+  const renderScale = 2; // 2x larger canvas for crisp text
+  const baseCanvasWidth = renderSinglePage !== undefined ? 200 * renderScale : (style?.width || 370); // Scaled up
+  const baseCanvasHeight = renderSinglePage !== undefined ? (style?.height || 250) * renderScale : (style?.height || 560); // Scaled up
   
   // COORDINATE OFFSET: No offset needed for smaller Canvas
   const OFFSET_X = 0; // No left margin needed
@@ -416,7 +420,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 12, 
         fontStyle: { weight: 700 }
       })
       .addText(`From:`)
@@ -428,7 +432,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 12, 
         fontStyle: { weight: 700 }
       })
       .addText(`${business?.business_name || 'Hello mate'}`)
@@ -440,7 +444,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 12, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[0] || '101'}`)
@@ -452,7 +456,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 12, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[1] || 'Beefy Road'}`)
@@ -464,7 +468,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 12, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[2] || 'Rochester'}`)
@@ -476,7 +480,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 12, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[3] || 'Uk'}`)
