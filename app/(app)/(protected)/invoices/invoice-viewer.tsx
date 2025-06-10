@@ -66,6 +66,9 @@ import { InvoiceShareService } from '../../../../services/invoiceShareService';
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import { useCanvasRef } from '@shopify/react-native-skia';
 
+// PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
+import { PDFDocument } from 'pdf-lib';
+
 type ClientRow = Tables<'clients'>;
 
 type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
@@ -363,10 +366,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log('[SKIA_PDF_EXPORT] Starting Skia-based PDF export for invoice:', invoice.invoice_number);
-      
-      // Import expo-print for PDF generation
-      const { printToFileAsync } = require('expo-print');
+      console.log('[PDF_LIB_EXPORT] Starting pdf-lib export for invoice:', invoice.invoice_number);
       
       // Get the Skia canvas snapshot
       const image = skiaInvoiceRef.current?.makeImageSnapshot();
@@ -375,76 +375,66 @@ function InvoiceViewerScreen() {
         throw new Error('Failed to create image snapshot from invoice canvas');
       }
       
-      console.log('[SKIA_PDF_EXPORT] Skia canvas captured successfully');
-      console.log('[SKIA_PDF_EXPORT] Image dimensions:', image.width(), 'x', image.height());
+      console.log('[PDF_LIB_EXPORT] Canvas captured successfully');
+      console.log('[PDF_LIB_EXPORT] Image dimensions:', image.width(), 'x', image.height());
       
-      // Encode to bytes and convert to base64
-      const bytes = image.encodeToBytes();
+      // Use actual image dimensions for PDF (exact control)
+      const actualWidth = image.width();
+      const actualHeight = image.height();
       
-      // Convert to base64 using chunked approach
+      // Use direct byte embedding (simpler than base64 conversion)
+      const imageBytes = image.encodeToBytes();
+      console.log('[PDF_LIB_EXPORT] Image encoded, bytes length:', imageBytes.length);
+      
+      const pdfDoc = await PDFDocument.create();
+      
+      // EXACT size control - set PDF page to actual canvas dimensions  
+      const page = pdfDoc.addPage([actualWidth, actualHeight]);
+      
+      console.log('[PDF_LIB_EXPORT] PDF page size set to:', actualWidth, 'x', actualHeight);
+      
+      // Embed PNG image directly
+      const pdfImage = await pdfDoc.embedPng(imageBytes);
+      console.log('[PDF_LIB_EXPORT] PNG image embedded successfully');
+      
+      // Draw image at full page size (1:1 mapping)
+      page.drawImage(pdfImage, {
+        x: 0,
+        y: 0,
+        width: actualWidth,
+        height: actualHeight,
+      });
+      
+      console.log('[PDF_LIB_EXPORT] Image drawn to PDF page at full size');
+      
+      // Save PDF
+      const pdfBytes = await pdfDoc.save();
+      
+      // Write to file system using chunked base64 conversion for large files
+      const fileName = `invoice-${invoice.invoice_number}.pdf`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      
+      // Handle large files with proper chunking
       const chunkSize = 8192;
       let binaryString = '';
       
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.slice(i, i + chunkSize);
+      for (let i = 0; i < pdfBytes.length; i += chunkSize) {
+        const chunk = pdfBytes.slice(i, i + chunkSize);
         binaryString += String.fromCharCode.apply(null, Array.from(chunk));
       }
       
       const base64String = btoa(binaryString);
-      console.log('[SKIA_PDF_EXPORT] Base64 conversion completed');
       
-      // Calculate pagination for proper page sizing
-      const lineItems = invoice?.invoice_line_items || [];
-      const totalItems = lineItems.length;
-      const maxItemsFirstPage = totalItems >= 9 && totalItems <= 11 ? 11 : 8;
-      const needsPagination = totalItems > maxItemsFirstPage;
+      await FileSystem.writeAsStringAsync(
+        fileUri,
+        base64String,
+        { encoding: FileSystem.EncodingType.Base64 }
+      );
       
-      // Create HTML that uses the exact canvas dimensions (pixel-perfect match)
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            @page {
-              margin: 0;
-              size: ${image.width()}px ${image.height()}px;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              width: ${image.width()}px;
-              height: ${image.height()}px;
-              overflow: hidden;
-            }
-            .invoice-image {
-              width: ${image.width()}px;
-              height: ${image.height()}px;
-              display: block;
-              object-fit: none;
-            }
-          </style>
-        </head>
-        <body>
-          <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoice.invoice_number}" />
-        </body>
-        </html>
-      `;
-      
-      // Generate PDF using expo-print
-      const { uri } = await printToFileAsync({
-        html: htmlContent,
-        base64: false,
-      });
-      
-      console.log('[SKIA_PDF_EXPORT] PDF generated successfully:', uri);
-      
-      // Get file info
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      console.log('[SKIA_PDF_EXPORT] Final PDF info:', fileInfo);
+      console.log('[PDF_LIB_EXPORT] PDF generated successfully at:', fileUri);
       
       // Share the PDF
-      await Sharing.shareAsync(uri, {
+      await Sharing.shareAsync(fileUri, {
         mimeType: 'application/pdf',
         dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`
       });
@@ -452,10 +442,10 @@ function InvoiceViewerScreen() {
       // Close the modal after successful export
       handleCloseSendModal();
       
-      console.log(`[SKIA_PDF_EXPORT] PDF export completed successfully for ${invoice.invoice_number}`);
+      console.log(`[PDF_LIB_EXPORT] PDF-lib export completed successfully for ${invoice.invoice_number}`);
       
     } catch (error: any) { 
-      console.error('[SKIA_PDF_EXPORT] Error:', error);
+      console.error('[PDF_LIB_EXPORT] Error:', error);
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -1394,8 +1384,9 @@ ${analytics.countries.length > 0 ?
     scrollViewContent: { 
       flexGrow: 1,
       paddingHorizontal: 0, 
-      paddingTop: 0, 
-      paddingBottom: 200, 
+      paddingTop: 10, // Restored to not affect header size
+      paddingBottom: 200,
+      paddingHorizontal: 10 // Add horizontal padding for better framing
     },
     newTopSectionContainer: { 
       paddingHorizontal: 16,
@@ -1720,7 +1711,7 @@ ${analytics.countries.length > 0 ?
           styles.scrollViewContent, 
           { 
             backgroundColor: themeColors.border, 
-            paddingTop: invoice?.invoice_line_items && invoice.invoice_line_items.length >= 12 ? 30 : 10, // 10px for single page (including compact 9-11), 30px for multi-page (12+)
+            paddingTop: 10, // Restored to not affect header size
             paddingBottom: 200,
             paddingHorizontal: 10 // Add horizontal padding for better framing
           }
@@ -1736,26 +1727,31 @@ ${analytics.countries.length > 0 ?
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : invoice ? (
-          <View style={{ alignItems: 'center' }}>
-            <SkiaInvoiceCanvas
-              ref={skiaInvoiceRef}
-              invoice={invoice}
-              client={client}
-              business={businessSettings}
-              currencySymbol={currencySymbol}
-              style={{ 
-                width: 370, 
-                height: invoice?.invoice_line_items && invoice.invoice_line_items.length >= 12 ? 800 : 560,
-                backgroundColor: 'white',
-                borderRadius: 8,
-                marginTop: invoice?.invoice_line_items && invoice.invoice_line_items.length >= 12 ? 20 : 0,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              }}
-            />
+          <View style={{ alignItems: 'center', marginTop: -30 }}>
+            <View style={{
+              transform: [{ scale: 0.882 }],
+              marginLeft: -175,
+            }}>
+              <SkiaInvoiceCanvas
+                ref={skiaInvoiceRef}
+                invoice={invoice}
+                client={client}
+                business={businessSettings}
+                currencySymbol={currencySymbol}
+                renderSinglePage={0}
+                style={{ 
+                  width: 200, 
+                  height: 295,
+                  backgroundColor: 'white',
+                  borderRadius: 8,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 3,
+                }}
+              />
+            </View>
           </View>
         ) : (
           <View style={styles.centeredMessageContainer}>

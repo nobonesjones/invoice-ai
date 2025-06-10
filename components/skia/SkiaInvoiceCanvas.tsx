@@ -56,7 +56,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
   const itemRowHeight = 20;
   const tableHeaderY = 180;
   const tableHeaderHeight = 25;
-  const firstItemY = 205;
+  const firstItemY = 210;
   const footerStartY = 410; // Back to original footer position that looked good
   
   // Calculate how many items fit on first page
@@ -289,7 +289,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 7, // Scaled down from 9 to 7
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`Ref: ${invoice?.invoice_number || 'INV-000000'}`)
@@ -301,7 +301,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 7, // Scaled down from 9 to 7
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`Date: ${invoice?.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-GB') : '03/06/2025'}`)
@@ -313,7 +313,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 7, // Scaled down from 9 to 7
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`Due: ${
@@ -333,7 +333,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 7, // Scaled down from 9 to 7
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`PO: ${invoice.po_number}`)
@@ -346,7 +346,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, 
         fontStyle: { weight: 700 }
       })
       .addText(`Bill To:`)
@@ -358,7 +358,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, 
         fontStyle: { weight: 700 }
       })
       .addText(`${client?.name || 'Chill Free Ltd'}`)
@@ -371,7 +371,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${client?.address_client?.split('\n')[0] || ''}`)
@@ -383,7 +383,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${client?.address_client?.split('\n')[1] || ''}`)
@@ -395,7 +395,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${client?.address_client?.split('\n')[2] || ''}`)
@@ -407,7 +407,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 9, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${client?.tax_number ? `${business?.tax_name || 'Tax'}: ${client.tax_number}` : ''}`)
@@ -420,7 +420,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 12, 
+        fontSize: 10, 
         fontStyle: { weight: 700 }
       })
       .addText(`From:`)
@@ -432,7 +432,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 12, 
+        fontSize: 10, 
         fontStyle: { weight: 700 }
       })
       .addText(`${business?.business_name || 'Hello mate'}`)
@@ -444,7 +444,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 12, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[0] || '101'}`)
@@ -456,7 +456,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 12, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[1] || 'Beefy Road'}`)
@@ -468,7 +468,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 12, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[2] || 'Rochester'}`)
@@ -480,7 +480,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 12, 
+        fontSize: 10, 
         fontStyle: { weight: 400 }
       })
       .addText(`${business?.business_address?.split('\n')[3] || 'Uk'}`)
@@ -566,7 +566,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 10, // +1 bigger than other totals
+        fontSize: 10, 
         fontStyle: { weight: 700 }
       })
       .addText(`Total:`)
@@ -578,8 +578,8 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .pushStyle({ 
         color: Skia.Color('black'), 
         fontFamilies: ['Helvetica'], 
-        fontSize: 10, // +1 bigger than other totals
-        fontStyle: { weight: 700 }
+        fontSize: 10, 
+        fontStyle: { weight: 400 }
       })
       .addText(`${currencySymbol}${(invoice?.total_amount || 480.00).toFixed(2)}`)
       .build();
@@ -807,16 +807,16 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
           {/* RIGHT-ALIGNED paragraphs using Skia's TextAlign.Right */}
           {rightAlignedParagraphs && (
             <>
-              <Paragraph paragraph={rightAlignedParagraphs.invoiceParagraph} x={OFFSET_X + 160} y={10} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.refParagraph} x={OFFSET_X + 160} y={30} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.dateParagraph} x={OFFSET_X + 160} y={45} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.dueParagraph} x={OFFSET_X + 160} y={60} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.invoiceParagraph} x={OFFSET_X + 240} y={25} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.refParagraph} x={OFFSET_X + 240} y={37} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.dateParagraph} x={OFFSET_X + 240} y={49} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.dueParagraph} x={OFFSET_X + 240} y={61} width={130} />
             </>
           )}
           
           {/* PO Number - conditional */}
           {rightAlignedParagraphs && rightAlignedParagraphs.poParagraph && (
-            <Paragraph paragraph={rightAlignedParagraphs.poParagraph} x={OFFSET_X + 160} y={75} width={130} />
+            <Paragraph paragraph={rightAlignedParagraphs.poParagraph} x={OFFSET_X + 240} y={73} width={130} />
           )}
           
           {/* === META SECTION === */}
@@ -836,24 +836,24 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
           {/* Right: Bill To section using RIGHT-ALIGNED paragraphs */}
           {rightAlignedParagraphs && (
             <>
-              <Paragraph paragraph={rightAlignedParagraphs.billToParagraph} x={220} y={105} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientNameParagraph} x={220} y={117} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientAddress1Paragraph} x={220} y={129} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientAddress2Paragraph} x={220} y={141} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientAddress3Paragraph} x={220} y={153} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientTaxNumberParagraph} x={220} y={165} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.billToParagraph} x={OFFSET_X + 240} y={105} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientNameParagraph} x={OFFSET_X + 240} y={117} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientAddress1Paragraph} x={OFFSET_X + 240} y={129} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientAddress2Paragraph} x={OFFSET_X + 240} y={141} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientAddress3Paragraph} x={OFFSET_X + 240} y={153} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientTaxNumberParagraph} x={OFFSET_X + 240} y={165} width={130} />
             </>
           )}
           
           {/* === LINE ITEMS TABLE - PAGE 1 === */}
-          {/* Table header with green background */}
-          <Rect x={tableX} y={180} width={tableWidth + 5} height={25} color={colors.greenAccent} />
-          
-          {/* Table headers - PERFECTLY ALIGNED */}
-          <Text x={qtyX + 10} y={197} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
-          <Text x={descX + 5} y={197} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
-          <Text x={priceX + 35} y={197} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
-          <Text x={totalX + 32} y={197} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
+                     {/* Table header with green background */}
+           <Rect x={tableX + 15} y={195} width={tableWidth - 35} height={18} color={colors.greenAccent} />
+           
+           {/* Table headers - PERFECTLY ALIGNED */}
+           <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
           
           {/* Line Items - First Page */}
           {actualFirstPageItems.map((item: any, index: number) => {
@@ -913,7 +913,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {/* QTY - center aligned in column using Paragraph */}
                 <Paragraph 
                   paragraph={qtyParagraph} 
-                  x={qtyX} 
+                  x={qtyX + 10} 
                   y={rowY + textOffsetY - 4} 
                   width={30} 
                 />
@@ -921,7 +921,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {/* Description - left aligned using Paragraph */}
                 <Paragraph 
                   paragraph={nameParagraph} 
-                  x={descX + 5} 
+                  x={descX + 30} 
                   y={rowY + textOffsetY - 4} 
                   width={160} 
                 />
@@ -929,7 +929,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {/* Item description subtitle - smaller gray text */}
                 {item.item_description && (
                   <Text 
-                    x={descX + 5 + (item.item_name.length * 6)} 
+                    x={descX + 30 + (item.item_name.length * 6)} 
                     y={rowY + textOffsetY} 
                     text={` (${item.item_description})`} 
                     font={scaledFonts.tiny} 
@@ -940,7 +940,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {/* Price - left aligned using Paragraph */}
                 <Paragraph 
                   paragraph={priceParagraph} 
-                  x={priceX + 5} 
+                  x={priceX + 65} 
                   y={rowY + textOffsetY - 4} 
                   width={80} 
                 />
@@ -948,7 +948,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {/* Total - left aligned using Paragraph */}
                 <Paragraph 
                   paragraph={totalParagraph} 
-                  x={totalX + 5} 
+                  x={totalX + 62} 
                   y={rowY + textOffsetY - 4} 
                   width={80} 
                 />
@@ -1115,47 +1115,47 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 </>
               )}
               
-              {/* Right: Totals section aligned with Terms section */}
+              {/* Right: Totals section aligned with TOTAL column */}
               
               {rightAlignedParagraphs ? (
                 <>
                   {/* Subtotal row */}
-                  <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={220} y={footerY + 15} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={290} y={footerY + 15} width={60} />
+                  <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 31} y={footerY + 15} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 29} y={footerY + 15} width={60} />
                   
                   {/* Discount row (conditional) */}
                   {rightAlignedParagraphs.discountLabelParagraph ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={220} y={footerY + 35} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={290} y={footerY + 35} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 31} y={footerY + 35} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 29} y={footerY + 35} width={60} />
                     </>
                   ) : null}
                   
                   {/* Tax row - adjusts position based on discount presence */}
-                  <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={220} y={footerY + (hasDiscount ? 55 : 35)} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={290} y={footerY + (hasDiscount ? 55 : 35)} width={60} />
+                  <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 55 : 35)} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 29} y={footerY + (hasDiscount ? 55 : 35)} width={60} />
                   
                   {/* Paid row (conditional - between VAT and Balance Due) */}
                   {rightAlignedParagraphs.paidLabelParagraph ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={220} y={footerY + (hasDiscount ? 75 : 55)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={290} y={footerY + (hasDiscount ? 75 : 55)} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 75 : 55)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 29} y={footerY + (hasDiscount ? 75 : 55)} width={60} />
                       
                       {/* Balance Due row (directly under Paid) */}
-                      <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={220} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={290} y={footerY + (hasDiscount ? 95 : 75)} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 29} y={footerY + (hasDiscount ? 95 : 75)} width={60} />
                     </>
                   ) : null}
                 </>
               ) : null}
               
               {/* Grand Total Box with green background - positioned after Balance Due line if present */}
-              <Rect x={220} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={135} height={20} color={colors.greenAccent} />
+                             <Rect x={totalX - 33} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
               
               {rightAlignedParagraphs ? (
                 <>
-                  <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={220} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                  <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={288} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                  <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
+                  <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 27} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                 </>
               ) : null}
             </>
