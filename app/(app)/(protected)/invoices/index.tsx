@@ -24,7 +24,7 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import InvoiceOverviewDatesSheet from './InvoiceOverviewDatesSheet';
 import { StatusBadge } from '@/components/StatusBadge';
 import { InvoiceStatus } from '@/constants/invoice-status';
-import { TrialIndicator } from '@/components/ui/trial-indicator';
+
 
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
@@ -328,7 +328,7 @@ export default function InvoiceDashboardScreen() {
         invoice_number: invoice.invoice_number,
         client_name: invoice.clients?.name || 'N/A',
         total_amount: invoice.total_amount,
-        invoice_date: invoice.due_date,
+        invoice_date: invoice.created_at,
         status: invoice.status,
         client_email: invoice.clients?.email,
         client_avatar_url: invoice.clients?.avatar_url,
@@ -493,30 +493,7 @@ export default function InvoiceDashboardScreen() {
             <Text style={[styles.title, { color: themeColors.foreground }]}>
               Invoices
             </Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              {/* TEMPORARY: Export Test Button */}
-              <TouchableOpacity
-                style={[styles.testButton, { 
-                  backgroundColor: themeColors.card, 
-                  borderColor: themeColors.border 
-                }]}
-                onPress={() => {
-                  // Navigate to export test with a sample invoice ID
-                  // Get the first invoice from the list for testing
-                  const testInvoiceId = invoices.length > 0 ? invoices[0].id : null;
-                  if (testInvoiceId) {
-                    router.push(`/invoices/export-test?id=${testInvoiceId}` as any);
-                  } else {
-                    Alert.alert('No Invoices', 'Create an invoice first to test exports.');
-                  }
-                }}
-              >
-                <Text style={[styles.testButtonText, { color: themeColors.primary }]}>
-                  🧪 Export Test
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
+            <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={() => router.push("/invoices/create" as any)}
               >
@@ -542,7 +519,6 @@ export default function InvoiceDashboardScreen() {
                   Create Invoice
                 </Text>
               </TouchableOpacity>
-            </View>
           </View>
 
           <View
@@ -566,8 +542,6 @@ export default function InvoiceDashboardScreen() {
               autoCapitalize="none"
             />
           </View>
-
-          <TrialIndicator />
 
           <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} />
 
@@ -812,14 +786,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     // color is set dynamically
-  },
-  testButton: {
-    padding: 8,
-    borderWidth: 1,
-    borderRadius: 6,
-  },
-  testButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
   },
 });

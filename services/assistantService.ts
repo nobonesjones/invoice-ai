@@ -105,8 +105,19 @@ export class AssistantService {
   }
 
   // Enhanced system instructions for Assistant
-  private static async getSystemInstructions(userId?: string): Promise<string> {
-    const baseInstructions = `You are an AI assistant for invoice management. Be friendly, concise, and helpful.
+  private static async getSystemInstructions(userId?: string, currencyContext?: { currency: string; symbol: string }): Promise<string> {
+    const currencyInstruction = currencyContext 
+      ? `\n\nCURRENCY CONTEXT - CRITICAL:
+The user's business currency is ${currencyContext.currency} (${currencyContext.symbol}). 
+ALWAYS use ${currencyContext.symbol} when displaying prices, amounts, or totals.
+NEVER use $ if the user's currency is different.
+Examples:
+• If user currency is GBP (£): "Total: £250" not "Total: $250"
+• If user currency is EUR (€): "Total: €180" not "Total: $180"
+• If user currency is USD ($): "Total: $150" is correct\n`
+      : '';
+
+    const baseInstructions = `You are an AI assistant for invoice management. Be friendly, concise, and helpful.${currencyInstruction}
 
 RESPONSE STYLE:
 • Keep responses brief and to the point
@@ -367,7 +378,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   }
 
   // Send message and get response
-  static async sendMessage(userId: string, message: string): Promise<AssistantRunResult> {
+  static async sendMessage(userId: string, message: string, currencyContext?: { currency: string; symbol: string }): Promise<AssistantRunResult> {
     try {
       // Ensure assistant is initialized
       await this.initialize();
@@ -418,10 +429,17 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Save message to our database for UI display
       await this.saveMessageToDatabase(userId, threadId, 'user', message);
 
-      // Create and run the assistant
-      const run = await openai.beta.threads.runs.create(threadId, {
+      // Create and run the assistant with currency context if provided
+      const runOptions: any = {
         assistant_id: this.assistantId
-      });
+      };
+
+      // Add currency-specific instructions if provided
+      if (currencyContext) {
+        runOptions.additional_instructions = `CURRENCY CONTEXT: User's business currency is ${currencyContext.currency} (${currencyContext.symbol}). ALWAYS use ${currencyContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`;
+      }
+
+      const run = await openai.beta.threads.runs.create(threadId, runOptions);
 
       // Wait for completion and handle tool calls
       const result = await this.waitForRunCompletion(threadId, run.id, userId);
@@ -461,9 +479,15 @@ Use tools to take action. Reference previous conversation naturally.`;
 
           await this.saveMessageToDatabase(userId, newThreadId, 'user', message);
 
-          const run = await openai.beta.threads.runs.create(newThreadId, {
+          const recoveryRunOptions: any = {
             assistant_id: this.assistantId
-          });
+          };
+
+          if (currencyContext) {
+            recoveryRunOptions.additional_instructions = `CURRENCY CONTEXT: User's business currency is ${currencyContext.currency} (${currencyContext.symbol}). ALWAYS use ${currencyContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`;
+          }
+
+          const run = await openai.beta.threads.runs.create(newThreadId, recoveryRunOptions);
 
           const result = await this.waitForRunCompletion(newThreadId, run.id, userId);
 

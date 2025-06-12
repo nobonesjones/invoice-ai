@@ -10,7 +10,7 @@ interface UseAIChatReturn {
   isLoading: boolean;
   conversation: ChatConversation | null;
   thread: AssistantThread | null;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, currencyContext?: { currency: string; symbol: string }) => Promise<void>;
   loadMessages: () => Promise<void>;
   clearConversation: () => Promise<void>;
   error: string | null;
@@ -81,7 +81,7 @@ export function useAIChat(): UseAIChatReturn {
     }
   }, [user?.id, isUsingAssistants]);
 
-  const sendMessage = useCallback(async (messageContent: string) => {
+  const sendMessage = useCallback(async (messageContent: string, currencyContext?: { currency: string; symbol: string }) => {
     if (!user?.id || !messageContent.trim()) return;
 
     // Create optimistic user message to show immediately in UI
@@ -105,7 +105,7 @@ export function useAIChat(): UseAIChatReturn {
       console.log('[useAIChat] Sending message via ChatService...');
       
       // ChatService automatically routes to the appropriate API
-      const result = await ChatService.processUserMessage(user.id, messageContent.trim());
+      const result = await ChatService.processUserMessage(user.id, messageContent.trim(), currencyContext);
       
       if (result.thread) {
         // Assistants API result

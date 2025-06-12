@@ -514,7 +514,36 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       .addText(`${client?.name || 'Chill Free Ltd'}`)
       .build();
 
-      // Client address paragraphs
+      // Client address paragraphs - handle both newline and comma-separated formats
+      const getClientAddressLines = (address: string | null | undefined): string[] => {
+        if (!address) return ['', '', ''];
+        
+        // If address contains newlines, split on those
+        if (address.includes('\n')) {
+          const lines = address.split('\n');
+          return [
+            lines[0] || '',
+            lines[1] || '',
+            lines[2] || ''
+          ];
+        }
+        
+        // If address contains commas, split on those and trim whitespace
+        if (address.includes(',')) {
+          const lines = address.split(',').map(line => line.trim());
+          return [
+            lines[0] || '',
+            lines[1] || '',
+            lines[2] || ''
+          ];
+        }
+        
+        // Single line address
+        return [address, '', ''];
+      };
+
+      const clientAddressLines = getClientAddressLines(client?.address_client);
+
       const clientAddress1Paragraph = Skia.ParagraphBuilder.Make({
         textAlign: TextAlign.Right,
       })
@@ -524,7 +553,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${client?.address_client?.split('\n')[0] || ''}`)
+      .addText(clientAddressLines[0])
       .build();
 
       const clientAddress2Paragraph = Skia.ParagraphBuilder.Make({
@@ -536,7 +565,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${client?.address_client?.split('\n')[1] || ''}`)
+      .addText(clientAddressLines[1])
       .build();
 
       const clientAddress3Paragraph = Skia.ParagraphBuilder.Make({
@@ -548,7 +577,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${client?.address_client?.split('\n')[2] || ''}`)
+      .addText(clientAddressLines[2])
       .build();
 
       const clientTaxNumberParagraph = Skia.ParagraphBuilder.Make({

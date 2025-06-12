@@ -151,7 +151,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "update_client",
-    description: "Update an existing client's details like email, phone, address, or notes. Use this when user wants to edit or update client information.",
+    description: "Update an existing client's details like name, email, phone, address, tax number, or notes. Use this when user wants to edit or update client information.",
     parameters: {
       type: "object",
       properties: {
@@ -179,6 +179,10 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         address: {
           type: "string",
           description: "New address (optional)"
+        },
+        tax_number: {
+          type: "string",
+          description: "New tax number/VAT number/TIN for the client (optional)"
         },
         notes: {
           type: "string",
@@ -2098,7 +2102,7 @@ Would you like to view the updated invoice or make more changes?`;
 
   private static async updateClient(params: any, userId: string): Promise<FunctionResult> {
     try {
-      const { client_name, client_id, new_name, email, phone, address, notes } = params;
+      const { client_name, client_id, new_name, email, phone, address, tax_number, notes } = params;
 
       if (!client_name && !client_id) {
         return {
@@ -2234,6 +2238,9 @@ If you just created an invoice for this client, please try again in a moment, or
       if (address) {
         updateData.address_client = address;
       }
+      if (tax_number) {
+        updateData.tax_number = tax_number;
+      }
       if (notes) {
         updateData.notes = notes;
       }
@@ -2268,7 +2275,16 @@ If you just created an invoice for this client, please try again in a moment, or
             console.log('[Update Client] Successfully updated client with specific query');
             const updatedClientData = specificUpdate[0];
             
-            let message = `Successfully updated ${existingClient.name}'s ${updatedFields.join(', ')}.`;
+            // Build updated fields list for specific update case
+            const specificUpdatedFields = [];
+            if (new_name) specificUpdatedFields.push(`name to "${new_name}"`);
+            if (email) specificUpdatedFields.push(`email to "${email}"`);
+            if (phone) specificUpdatedFields.push(`phone to "${phone}"`);
+            if (address) specificUpdatedFields.push(`address to "${address}"`);
+            if (tax_number) specificUpdatedFields.push(`tax number to "${tax_number}"`);
+            if (notes) specificUpdatedFields.push(`notes`);
+            
+            let message = `Successfully updated ${existingClient.name}'s ${specificUpdatedFields.join(', ')}.`;
             
             if (address) {
               message += `\n\nThis address will now appear on all invoices for ${existingClient.name}.`;
@@ -2296,6 +2312,7 @@ If you just created an invoice for this client, please try again in a moment, or
       if (email) updatedFields.push(`email to "${email}"`);
       if (phone) updatedFields.push(`phone to "${phone}"`);
       if (address) updatedFields.push(`address to "${address}"`);
+      if (tax_number) updatedFields.push(`tax number to "${tax_number}"`);
       if (notes) updatedFields.push(`notes`);
 
       let message = `Successfully updated ${existingClient.name}'s ${updatedFields.join(', ')}.`;

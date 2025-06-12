@@ -42,17 +42,18 @@ export class ChatService {
   // Main entry point - routes to appropriate service
   static async processUserMessage(
     userId: string,
-    userMessage: string
+    userMessage: string,
+    currencyContext?: { currency: string; symbol: string }
   ): Promise<{ conversation?: ChatConversation; thread?: any; messages: any[] }> {
     try {
       const useAssistants = await this.shouldUseAssistants(userId);
       
       if (useAssistants) {
         console.log('[ChatService] Using Assistants API');
-        return await this.processWithAssistants(userId, userMessage);
+        return await this.processWithAssistants(userId, userMessage, currencyContext);
       } else {
         console.log('[ChatService] Using Chat Completions API');
-        return await this.processWithChatCompletions(userId, userMessage);
+        return await this.processWithChatCompletions(userId, userMessage, currencyContext);
       }
     } catch (error) {
       console.error('[ChatService] Error processing message:', error);
@@ -63,7 +64,8 @@ export class ChatService {
   // New Assistants API flow
   private static async processWithAssistants(
     userId: string,
-    userMessage: string
+    userMessage: string,
+    currencyContext?: { currency: string; symbol: string }
   ): Promise<{ thread: any; messages: any[] }> {
     try {
       // Check if Assistants API is configured
@@ -71,8 +73,8 @@ export class ChatService {
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
-      // Send message via Assistants API
-      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage);
+      // Send message via Assistants API with currency context
+      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext);
 
       // Get updated messages for UI
       const messages = await AssistantService.getThreadMessages(userId);
@@ -105,7 +107,8 @@ export class ChatService {
   // Existing Chat Completions flow (for backward compatibility)
   private static async processWithChatCompletions(
     userId: string,
-    userMessage: string
+    userMessage: string,
+    currencyContext?: { currency: string; symbol: string }
   ): Promise<{ conversation: ChatConversation; messages: ChatMessage[] }> {
     try {
       // Check if OpenAI is configured

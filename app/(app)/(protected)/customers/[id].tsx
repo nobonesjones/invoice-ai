@@ -397,16 +397,7 @@ export default function ClientProfileScreen() {
 	};
 
 	const formatAddress = (client: Client): string => {
-		const parts = [
-			client.address_line1,
-			client.address_line2,
-			client.city,
-			client.state_province_region,
-			client.postal_zip_code,
-			client.country
-		].filter(Boolean);
-		
-		return parts.length > 0 ? parts.join(', ') : 'No address on file';
+		return client.address_client || 'No address on file';
 	};
 
 	const getStyles = () => StyleSheet.create({

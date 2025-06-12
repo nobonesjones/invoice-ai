@@ -73,12 +73,10 @@ const CustomerListItem: React.FC<CustomerListItemProps> = ({
 					>
 						{customer.name}
 					</Text>
-					{customer.lastActivity ? (
+					{customer.lastActivity && (
 						<Text style={styles.lastActivityText}>
 							{`$${customer.lastActivity.amount} · ${customer.lastActivity.status} · ${customer.lastActivity.date}`}
 						</Text>
-					) : (
-						<Text style={styles.lastActivityText}>No activity yet</Text>
 					)}
 				</View>
 

@@ -3,7 +3,6 @@ import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingV
 import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin } from "lucide-react-native";
 import { router } from 'expo-router';
 
-
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Text } from "@/components/ui/text";
 import { H1 } from "@/components/ui/typography";
@@ -12,7 +11,7 @@ import { useTheme } from "@/context/theme-provider";
 import { ChatService } from "@/services/chatService";
 import { OpenAIService } from "@/services/openaiService";
 import { useAIChat } from "@/hooks/useAIChat";
-import { SkiaInvoiceCanvas } from "@/components/skia/SkiaInvoiceCanvas";
+import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
 import { SkiaInvoiceCanvasSimple } from "@/components/skia/SkiaInvoiceCanvasSimple";
 import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
@@ -25,13 +24,49 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }) => {
 	const { invoice, line_items, client_id } = invoiceData;
 	const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
+	const [fullClientData, setFullClientData] = useState<any>(null);
 	const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
+	
 	const { supabase } = useSupabase();
 	
-	// Load business settings on mount
+	// Load business settings and client data on mount and when client_id or invoice changes
 	useEffect(() => {
 		loadBusinessSettings();
-	}, []);
+		loadFullClientData();
+	}, [client_id, invoice.id]); // Re-run when client_id or invoice.id changes
+
+	const loadFullClientData = async () => {
+		if (!client_id) {
+			console.log('[AI Invoice Preview] No client_id provided, clearing client data');
+			setFullClientData(null);
+			return;
+		}
+		
+		try {
+			console.log('[AI Invoice Preview] Loading full client data for client_id:', client_id);
+			console.log('[AI Invoice Preview] Invoice client_name for comparison:', invoice.client_name);
+			
+			const { data: clientData, error } = await supabase
+				.from('clients')
+				.select('*')
+				.eq('id', client_id)
+				.single();
+
+			if (error) {
+				console.error('Error loading client data:', error);
+				// If we can't load client data, clear it to force fallback to invoice data
+				setFullClientData(null);
+			} else {
+				console.log('[AI Invoice Preview] Loaded full client data:', clientData);
+				console.log('[AI Invoice Preview] DB client name vs invoice client name:', clientData.name, 'vs', invoice.client_name);
+				setFullClientData(clientData);
+			}
+		} catch (error) {
+			console.error('[AI Invoice Preview] Error loading client data:', error);
+			console.error('[AI Invoice Preview] Failed to load client for client_id:', client_id);
+			setFullClientData(null);
+		}
+	};
 
 	const loadBusinessSettings = async () => {
 		try {
@@ -123,27 +158,54 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 		return mapping[normalized] || '$';
 	};
 
+	// DEBUG: Log the invoice data to see what fields are available
+	console.log('[AI Invoice Preview] Available invoice fields:', Object.keys(invoice));
+	console.log('[AI Invoice Preview] Full invoiceData structure:', invoiceData);
+	console.log('[AI Invoice Preview] Invoice data:', {
+		client_name: invoice.client_name,
+		client_email: invoice.client_email,
+		client_phone: invoice.client_phone,
+		client_address: invoice.client_address,
+		client_tax_number: invoice.client_tax_number,
+		all_client_fields: Object.keys(invoice).filter(key => key.startsWith('client_'))
+	});
+	console.log('[AI Invoice Preview] client_id from invoiceData:', client_id);
 
-
-	// Transform data for our modal
+	// Transform data for our modal - separate client from invoice like the invoice viewer
 	const transformedInvoice = {
 		...invoice,
 		invoice_line_items: line_items || [],
-		clients: invoice.client_name ? {
+	};
+
+	// Use the full client data from database but prefer current invoice client name if different
+	let transformedClient = null;
+	if (fullClientData) {
+		// Use database client data but update the name if invoice has a different one
+		transformedClient = {
+			...fullClientData,
+			name: invoice.client_name || fullClientData.name, // Prefer invoice name
+			email: invoice.client_email || fullClientData.email, // Prefer invoice email if available
+		};
+	} else if (invoice.client_name) {
+		// Fallback to invoice data only
+		transformedClient = {
 			id: client_id,
 			user_id: invoice.user_id,
 			name: invoice.client_name,
 			email: invoice.client_email,
-			phone: null,
-			address_client: null,
+			phone: invoice.client_phone || null,
+			address_client: invoice.client_address || null,
+			tax_number: invoice.client_tax_number || null,
 			notes: null,
 			avatar_url: null,
 			created_at: new Date().toISOString(),
 			updated_at: new Date().toISOString(),
-		} : null,
-	};
+		};
+	}
 
-	const transformedClient = transformedInvoice.clients;
+	// DEBUG: Log the transformed client to see what we're passing
+	console.log('[AI Invoice Preview] Transformed client:', transformedClient);
+	console.log('[AI Invoice Preview] Using full client data:', !!fullClientData);
 
 	const handleTapToView = () => {
 		invoicePreviewModalRef.current?.present();
@@ -190,28 +252,61 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 						</Text>
 					</View>
 
-					{/* Scaled down invoice preview */}
+					{/* Scaled down invoice preview - using exact same approach as InvoicePreviewModal */}
 					<View 
 						style={{
-							transform: [{ scale: 0.5 }],
-							height: 380,
+							height: 200,
 							width: '100%',
 							alignItems: 'center',
+							justifyContent: 'center',
 							overflow: 'hidden',
-							marginTop: -20,
-							marginBottom: -20,
+							marginTop: 10,
+							marginBottom: 10,
 						}}
 					>
-						<SafeSkiaInvoiceCanvas
-							invoice={transformedInvoice}
-							business={businessSettings}
-							client={transformedClient}
-							currencySymbol={businessSettings?.currency_symbol || '$'}
-							style={{ width: 370, height: 460 }}
-							theme={theme}
-							isPreview={true}
-						/>
+						{businessSettings && transformedInvoice ? (
+							<View style={{
+								transform: [{ scale: 0.6 }], // Slightly smaller than modal for chat preview
+								marginLeft: -120, // Center the invoice by shifting left
+							}}>
+								<SkiaInvoiceCanvas
+									renderSinglePage={0}
+									style={{
+										width: 200,
+										height: 280,
+										backgroundColor: 'white',
+										borderRadius: 8,
+										shadowColor: '#000',
+										shadowOffset: { width: 0, height: 4 },
+										shadowOpacity: 0.15,
+										shadowRadius: 8,
+										elevation: 5,
+									}}
+									invoice={transformedInvoice}
+									business={businessSettings}
+									client={transformedClient}
+									currencySymbol={businessSettings?.currency_symbol || '$'}
+								/>
+							</View>
+						) : (
+							<View style={{
+								width: 120,
+								height: 168,
+								backgroundColor: 'white',
+								borderRadius: 8,
+								justifyContent: 'center',
+								alignItems: 'center',
+								shadowColor: '#000',
+								shadowOffset: { width: 0, height: 4 },
+								shadowOpacity: 0.15,
+								shadowRadius: 8,
+								elevation: 5,
+							}}>
+								<Text style={{ color: '#666', fontSize: 12 }}>Loading...</Text>
+							</View>
+						)}
 					</View>
+
 				</View>
 			</TouchableOpacity>
 
@@ -251,181 +346,63 @@ const ClientPreview = ({ clientData, theme }: { clientData: any; theme: any }) =
 					borderWidth: 1,
 					borderColor: theme.border,
 					borderRadius: 12,
-					padding: 16,
+					padding: 12,
 					marginTop: 8,
 				}}
 			>
 				{/* Tap to view hint */}
-				<View style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-					<Text style={{ color: theme.mutedForeground, fontSize: 12, backgroundColor: theme.background + 'E6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+				<View style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }}>
+					<Text style={{ color: theme.mutedForeground, fontSize: 10, backgroundColor: theme.background + 'E6', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
 						Tap to view
 					</Text>
 				</View>
 
-				{/* Client Header */}
-				<View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+				{/* Client Header - Compact */}
+				<View style={{ flexDirection: 'row', alignItems: 'center' }}>
 					<View 
 						style={{
-							width: 48,
-							height: 48,
-							borderRadius: 24,
+							width: 32,
+							height: 32,
+							borderRadius: 16,
 							backgroundColor: theme.primary,
 							justifyContent: 'center',
 							alignItems: 'center',
-							marginRight: 12,
+							marginRight: 10,
 						}}
 					>
-						<Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }}>
+						<Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' }}>
 							{getInitials(client.name)}
 						</Text>
 					</View>
 					<View style={{ flex: 1 }}>
-						<Text style={{ color: theme.foreground, fontSize: 16, fontWeight: 'bold', marginBottom: 2 }}>
+						<Text style={{ color: theme.foreground, fontSize: 14, fontWeight: 'bold', marginBottom: 2 }}>
 							{client.name}
 						</Text>
-						<View style={{ flexDirection: 'row', alignItems: 'center' }}>
-							<User size={12} color={theme.mutedForeground} />
-							<Text style={{ color: theme.mutedForeground, fontSize: 12, marginLeft: 4 }}>
-								Client
-							</Text>
-						</View>
-					</View>
-				</View>
-
-				{/* Client Details */}
-				<View style={{ gap: 8 }}>
 					{client.email && (
-						<View style={{ flexDirection: 'row', alignItems: 'center' }}>
-							<Mail size={14} color={theme.mutedForeground} />
-							<Text style={{ color: theme.foreground, fontSize: 14, marginLeft: 8 }}>
+							<Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
 								{client.email}
 							</Text>
+						)}
 						</View>
-					)}
-					
-					{client.phone && (
-						<View style={{ flexDirection: 'row', alignItems: 'center' }}>
-							<Phone size={14} color={theme.mutedForeground} />
-							<Text style={{ color: theme.foreground, fontSize: 14, marginLeft: 8 }}>
-								{client.phone}
-							</Text>
-						</View>
-					)}
-					
-					{client.address_client && (
-						<View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-							<MapPin size={14} color={theme.mutedForeground} style={{ marginTop: 2 }} />
-							<Text style={{ color: theme.foreground, fontSize: 14, marginLeft: 8, flex: 1 }}>
-								{client.address_client}
-							</Text>
-						</View>
-					)}
 				</View>
 			</View>
 		</TouchableOpacity>
 	);
 };
 
-// Safe wrapper for SkiaInvoiceCanvas that falls back to simple view
-const SafeSkiaInvoiceCanvas = ({ invoice, business, client, currencySymbol, style, theme, isPreview = false }: any) => {
-	const [hasFailed, setHasFailed] = useState(false);
+// Removed SafeSkiaInvoiceCanvas - now using SkiaInvoiceCanvas directly with renderSinglePage prop
 
-	// Reset failed state when props change
-	useEffect(() => {
-		setHasFailed(false);
-	}, [invoice?.id, business?.id]);
-
-	if (hasFailed) {
-		// Fallback to simple view
-		if (isPreview) {
-			return (
-				<View style={{ padding: 20, backgroundColor: '#f9f9f9', borderRadius: 8 }}>
-					<Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: theme.foreground }}>
-						Invoice #{invoice?.invoice_number || 'N/A'}
-					</Text>
-					<Text style={{ fontSize: 12, color: theme.mutedForeground, marginBottom: 4 }}>
-						{invoice?.client_name || 'No client'}
-					</Text>
-					<Text style={{ fontSize: 12, color: theme.mutedForeground, marginBottom: 8 }}>
-						{currencySymbol}{invoice?.total_amount || '0'}
-					</Text>
-					<Text style={{ fontSize: 10, color: theme.mutedForeground }}>
-						{invoice?.invoice_line_items?.length || 0} items
-					</Text>
-				</View>
-			);
-		} else {
-			return (
-				<View style={{ padding: 40, backgroundColor: '#ffffff', borderRadius: 12, width: 350 }}>
-					<Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 16, color: '#000' }}>
-						Invoice #{invoice?.invoice_number || 'N/A'}
-					</Text>
-					<Text style={{ fontSize: 16, color: '#666', marginBottom: 8 }}>
-						Client: {invoice?.client_name || 'No client'}
-					</Text>
-					<Text style={{ fontSize: 16, color: '#666', marginBottom: 8 }}>
-						Total: {currencySymbol}{invoice?.total_amount || '0'}
-					</Text>
-					<Text style={{ fontSize: 14, color: '#888' }}>
-						Items: {invoice?.invoice_line_items?.length || 0}
-					</Text>
-				</View>
-			);
-		}
-	}
-
-	// Try to render SkiaInvoiceCanvas
-	try {
-		return (
-			<SimpleErrorBoundary onError={() => setHasFailed(true)}>
-				<SkiaInvoiceCanvasWorking
-					invoice={invoice}
-					business={business}
-					client={client}
-					currencySymbol={currencySymbol}
-					style={style}
-				/>
-			</SimpleErrorBoundary>
-		);
-	} catch (error) {
-		console.log('[SafeSkiaInvoiceCanvas] Render failed:', error);
-		setHasFailed(true);
-		return null;
-	}
-};
-
-// Simple Error Boundary Component
-class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode; onError?: () => void }, { hasError: boolean }> {
-	constructor(props: any) {
-		super(props);
-		this.state = { hasError: false };
-	}
-
-	static getDerivedStateFromError(error: any) {
-		return { hasError: true };
-	}
-
-	componentDidCatch(error: any, errorInfo: any) {
-		console.log('[SimpleErrorBoundary] Caught error:', error, errorInfo);
-		this.props.onError?.();
-	}
-
-	render() {
-		if (this.state.hasError) {
-			return null; // Return null to trigger fallback in parent
-		}
-		return this.props.children;
-	}
-}
+// Removed SimpleErrorBoundary - using SkiaInvoiceCanvas directly with proper error handling
 
 export default function AiScreen() {
-	const { user } = useSupabase();
+	const { user, supabase } = useSupabase();
 	const { theme } = useTheme();
 	const scrollViewRef = useRef<ScrollView>(null);
 	const [inputText, setInputText] = useState('');
 	const [showSetupMessage, setShowSetupMessage] = useState(false);
+	const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
 
-	// Use our custom hook for chat functionality - this might be the issue!
+	// Use our custom hook for chat functionality
 	const { 
 		messages, 
 		isLoading,
@@ -437,9 +414,72 @@ export default function AiScreen() {
 		clearError 
 	} = useAIChat();
 
-	// Test OpenAI configuration on mount
+	// Load business settings for currency context
+	const loadBusinessSettings = async () => {
+		if (!user?.id) return;
+		
+		try {
+			console.log('[AI Screen] Loading business settings for currency context...');
+			
+			const { data: settings, error } = await supabase
+				.from('business_settings')
+				.select('*')
+				.eq('user_id', user.id)
+				.single();
+
+			if (error) {
+				console.log('[AI Screen] No business settings found, using default USD');
+				// Default to USD if no settings found
+				const defaultSettings: BusinessSettingsRow = {
+					id: 'default',
+					user_id: user.id,
+					business_name: 'Your Business',
+					business_address: 'Your Address',
+					business_logo_url: null,
+					currency: 'USD',
+					currency_symbol: '$',
+					paypal_enabled: true,
+					stripe_enabled: true,
+					bank_transfer_enabled: true,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+				};
+				setBusinessSettings(defaultSettings);
+			} else {
+				// Map currency_code to currency_symbol
+				const getCurrencySymbol = (code: string) => {
+					const mapping: Record<string, string> = {
+						GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥',
+						INR: '₹', CHF: 'Fr', CNY: '¥', NZD: 'NZ$', SEK: 'kr', NOK: 'kr',
+						DKK: 'kr', SGD: 'S$', HKD: 'HK$'
+					};
+					if (!code) return '$';
+					const normalized = code.split(' ')[0];
+					return mapping[normalized] || '$';
+				};
+				
+				const currencySymbol = getCurrencySymbol(settings.currency_code || 'USD');
+				const enhancedSettings: BusinessSettingsRow = {
+					...settings,
+					currency: settings.currency_code || 'USD',
+					currency_symbol: currencySymbol,
+				};
+				
+				console.log('[AI Screen] Loaded currency:', enhancedSettings.currency, 'symbol:', currencySymbol);
+				setBusinessSettings(enhancedSettings);
+			}
+		} catch (error) {
+			console.error('[AI Screen] Error loading business settings:', error);
+		}
+	};
+
+	// Load business settings and test OpenAI configuration on mount
 	useEffect(() => {
-		const testOpenAI = () => {
+		const initialize = async () => {
+			// Load business settings for currency context
+			await loadBusinessSettings();
+			
+			// Test OpenAI configuration
 			console.log('[AI Screen] Testing OpenAI configuration...');
 			const isConfigured = OpenAIService.isConfigured();
 			console.log('[AI Screen] OpenAI configured:', isConfigured);
@@ -449,8 +489,10 @@ export default function AiScreen() {
 			}
 		};
 
-		testOpenAI();
-	}, []);
+		if (user?.id) {
+			initialize();
+		}
+	}, [user?.id]);
 
 	// Auto-scroll to bottom when new messages arrive
 	useEffect(() => {
@@ -503,7 +545,14 @@ export default function AiScreen() {
 
 		try {
 			console.log('[AI Screen] Sending message via useAIChat...');
-			await sendMessage(messageToSend);
+			
+			// Prepare currency context if business settings are loaded
+			const currencyContext = businessSettings ? {
+				currency: businessSettings.currency,
+				symbol: businessSettings.currency_symbol
+			} : undefined;
+
+			await sendMessage(messageToSend, currencyContext);
 			console.log('[AI Screen] Message sent successfully');
 		} catch (error) {
 			console.error('[AI Screen] Failed to send message:', error);
@@ -526,7 +575,7 @@ export default function AiScreen() {
 
 	return (
 		<BottomSheetModalProvider>
-			<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
+		<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
 			<KeyboardAvoidingView 
 				style={{ flex: 1 }}
 				behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
