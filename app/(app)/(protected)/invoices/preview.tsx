@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Component } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne';
+import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
+import { BusinessSettingsRow } from './InvoiceTemplateOne';
 import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedGestureHandler,
@@ -28,6 +29,37 @@ interface PreviewScreenParams {
   businessSettings: string; // JSON stringified business settings
 }
 
+// Simple error boundary for Skia canvas
+class SkiaErrorBoundary extends Component<{ children: React.ReactNode; onError?: () => void }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('SkiaInvoiceCanvas error in preview:', error, errorInfo);
+    this.props.onError?.();
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 16, color: '#666', textAlign: 'center' }}>
+            Unable to render invoice preview
+          </Text>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function PreviewScreen() {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
@@ -35,12 +67,12 @@ export default function PreviewScreen() {
   const navigation = useNavigation();
   const { invoiceData: invoiceDataParam, businessSettings: businessSettingsParam } = useLocalSearchParams<PreviewScreenParams>();
 
-  // Parse the passed data
-  const [invoiceData, setInvoiceData] = useState<InvoiceForTemplate | null>(() => {
+  // Parse the passed data and transform for SkiaInvoiceCanvas
+  const [invoiceData, setInvoiceData] = useState<any>(() => {
     try {
       if (invoiceDataParam) {
         const parsed = JSON.parse(invoiceDataParam);
-        // Transform the form data into InvoiceForTemplate format
+        // Transform the form data into SkiaInvoiceCanvas format
         return {
           ...parsed,
           id: 'preview-temp-id',
@@ -48,12 +80,11 @@ export default function PreviewScreen() {
           status: 'draft',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          clients: null, // Will be set if client data available
+          // Transform items to invoice_line_items for SkiaInvoiceCanvas
           invoice_line_items: parsed.items || [],
-          currency: 'USD', // Default, will be overridden by business settings
-          currency_symbol: '$',
-          invoice_tax_label: parsed.invoice_tax_label || 'Tax',
-        } as InvoiceForTemplate;
+          // Client data handling
+          clients: parsed.clients || null,
+        };
       }
       return null;
     } catch (error) {
@@ -152,11 +183,26 @@ export default function PreviewScreen() {
               <Animated.View style={styles.panContainer}>
                 <PinchGestureHandler onGestureEvent={pinchGestureHandler}>
                   <Animated.View style={[styles.zoomContainer, animatedStyle]}>
-                    <InvoiceTemplateOne
-                      invoice={invoiceData}
-                      clientName={invoiceData.clients?.name || 'Client Name'}
-                      businessSettings={businessSettings}
-                    />
+                    <SkiaErrorBoundary>
+                      <SkiaInvoiceCanvas
+                        invoice={invoiceData}
+                        client={invoiceData.clients}
+                        business={businessSettings}
+                        currencySymbol={businessSettings?.currency_symbol || invoiceData?.currency_symbol || '$'}
+                        renderSinglePage={0}
+                        style={{ 
+                          width: 350, 
+                          height: 500,
+                          backgroundColor: 'white',
+                          borderRadius: 8,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 4,
+                          elevation: 3,
+                        }}
+                      />
+                    </SkiaErrorBoundary>
                   </Animated.View>
                 </PinchGestureHandler>
               </Animated.View>

@@ -76,6 +76,8 @@ import { KeyboardAvoidingView } from 'react-native';
 import { INVOICE_STATUSES, InvoiceStatus, getStatusConfig, isEditable } from '@/constants/invoice-status';
 import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
 import { UsageService } from '@/services/usageService'; // Added UsageService import
+import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal'; // Added InvoicePreviewModal import
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -921,6 +923,13 @@ export default function CreateInvoiceScreen() {
     }
   };
 
+  // State for preview modal data
+  const [previewData, setPreviewData] = useState<{
+    invoiceData: any;
+    businessSettings: any;
+    clientData: any;
+  } | null>(null);
+
   const handlePreviewInvoice = async () => {
     console.log('[handlePreviewInvoice] Preview requested');
     
@@ -1020,18 +1029,16 @@ export default function CreateInvoiceScreen() {
         bank_account_active: formData.bank_account_active_on_invoice || false,
       };
       
-      // Navigate to preview screen with actual data
-      console.log('[handlePreviewInvoice] Navigating to preview with complete data');
+      // Set preview data and open modal
+      console.log('[handlePreviewInvoice] Opening preview modal with data');
       console.log('[handlePreviewInvoice] Client data:', clientData);
       console.log('[handlePreviewInvoice] Totals - Subtotal:', displaySubtotal, 'Total:', displayInvoiceTotal);
-      console.log('[handlePreviewInvoice] Payment methods - Stripe:', formData.stripe_active_on_invoice, 'PayPal:', formData.paypal_active_on_invoice, 'Bank:', formData.bank_account_active_on_invoice);
-    router.push({
-        pathname: '/(app)/(protected)/invoices/previewbusinfoclose',
-      params: {
-          invoiceData: JSON.stringify(enhancedFormData),
-          businessSettings: JSON.stringify(businessSettingsForPreview),
-      },
-    });
+      setPreviewData({
+        invoiceData: enhancedFormData,
+        businessSettings: businessSettingsForPreview,
+        clientData: clientData,
+      });
+      invoicePreviewModalRef.current?.present();
     } catch (error: any) {
       console.error('[handlePreviewInvoice] Error preparing preview:', error);
       Alert.alert('Preview Error', 'Failed to load preview data. Please try again.');
@@ -1374,6 +1381,7 @@ export default function CreateInvoiceScreen() {
   const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for new sheet
   const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
   const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null); // Ref for new sheet
+  const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null); // Ref for preview modal
 
   const handlePresentSelectDiscountTypeSheet = () => {
     // Pass current discount values to pre-fill the modal if needed
@@ -1708,11 +1716,12 @@ export default function CreateInvoiceScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // Adjust offset if header is present
-    >
+    <BottomSheetModalProvider>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // Adjust offset if header is present
+      >
       <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
         <Stack.Screen
           options={{
@@ -2081,8 +2090,18 @@ export default function CreateInvoiceScreen() {
           invoiceTotal={displayInvoiceTotal} // Use actual total
           previouslyPaidAmount={totalPaidAmount} // Use actual paid amount
         />
+
+        {/* Invoice Preview Modal */}
+        <InvoicePreviewModal
+          ref={invoicePreviewModalRef}
+          invoiceData={previewData?.invoiceData}
+          businessSettings={previewData?.businessSettings}
+          clientData={previewData?.clientData}
+          onClose={() => setPreviewData(null)}
+        />
       </SafeAreaView>
     </KeyboardAvoidingView>
+    </BottomSheetModalProvider>
   );
 }
 

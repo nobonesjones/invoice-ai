@@ -202,7 +202,7 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
                   onChangeText={setTaxName}
                   placeholder="e.g. VAT, Sales Tax"
                   placeholderTextColor={themeColors.mutedForeground}
-                  returnKeyType="next"
+                  returnKeyType="none"
                 />
               </View>
 
@@ -217,7 +217,7 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
                   placeholder="e.g. 20"
                   placeholderTextColor={themeColors.mutedForeground}
                   keyboardType="decimal-pad"
-                  returnKeyType="done"
+                  returnKeyType="none"
                 />
               </View>
             </View>

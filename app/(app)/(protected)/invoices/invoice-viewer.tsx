@@ -178,6 +178,11 @@ function InvoiceViewerScreen() {
 
   // Add ref for Skia canvas export
   const skiaInvoiceRef = useCanvasRef();
+  
+  // Add refs and state for multi-page export
+  const exportCanvasRefs = useRef<any[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportTotalPages, setExportTotalPages] = useState(1);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
 
@@ -366,55 +371,151 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log('[PDF_LIB_EXPORT] Starting pdf-lib export for invoice:', invoice.invoice_number);
+      console.log('[PDF_MULTIPAGE_EXPORT] Starting multi-page export for invoice:', invoice.invoice_number);
       
-      // Get the Skia canvas snapshot
-      const image = skiaInvoiceRef.current?.makeImageSnapshot();
+      // First, check if this invoice needs pagination using same logic as canvas
+      const lineItems = invoice?.invoice_line_items || [];
+      const totalItems = lineItems.length;
+      const maxItemsFirstPage = 10; // Same as canvas calculation
+      const adjustedMaxItemsFirstPage = 12; // Two-page special case
+      const needsPagination = totalItems > adjustedMaxItemsFirstPage;
       
-      if (!image) {
+      if (!needsPagination) {
+        console.log('[PDF_MULTIPAGE_EXPORT] Single page invoice - using standard export');
+        // Single page - use existing logic
+        const image = skiaInvoiceRef.current?.makeImageSnapshot();
+        
+        if (!image) {
+          throw new Error('Failed to create image snapshot from invoice canvas');
+        }
+        
+        const actualWidth = image.width();
+        const actualHeight = image.height();
+        const imageBytes = image.encodeToBytes();
+        
+        const pdfDoc = await PDFDocument.create();
+        const page = pdfDoc.addPage([actualWidth, actualHeight]);
+        const pdfImage = await pdfDoc.embedPng(imageBytes);
+        
+        page.drawImage(pdfImage, {
+          x: 0,
+          y: 0,
+          width: actualWidth,
+          height: actualHeight,
+        });
+        
+        const pdfBytes = await pdfDoc.save();
+        const fileName = `invoice-${invoice.invoice_number}.pdf`;
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        const chunkSize = 8192;
+        let binaryString = '';
+        
+        for (let i = 0; i < pdfBytes.length; i += chunkSize) {
+          const chunk = pdfBytes.slice(i, i + chunkSize);
+          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        
+        const base64String = btoa(binaryString);
+        
+        await FileSystem.writeAsStringAsync(
+          fileUri,
+          base64String,
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+        
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`
+        });
+        
+        handleCloseSendModal();
+        return;
+      }
+      
+      // Multi-page invoice - calculate pages
+      console.log('[PDF_MULTIPAGE_EXPORT] Multi-page invoice detected, total items:', totalItems);
+      
+      const remainingItems = totalItems - adjustedMaxItemsFirstPage;
+      const itemsPerSubsequentPage = Math.floor((295 - 50) / 20); // Use actual display canvas height
+      const totalPages = remainingItems > 0 ? 
+        1 + Math.ceil(remainingItems / itemsPerSubsequentPage) : 1;
+      
+      console.log('[PDF_MULTIPAGE_EXPORT] Calculated pages:', totalPages);
+      
+      const pdfDoc = await PDFDocument.create();
+      const pageImages: any[] = [];
+      
+      // For now, we'll capture the full canvas and split it manually
+      // This is a temporary solution until we implement proper page-by-page rendering
+      console.log('[PDF_MULTIPAGE_EXPORT] Capturing full canvas for splitting');
+      const fullImage = skiaInvoiceRef.current?.makeImageSnapshot();
+      
+      if (!fullImage) {
         throw new Error('Failed to create image snapshot from invoice canvas');
       }
       
-      console.log('[PDF_LIB_EXPORT] Canvas captured successfully');
-      console.log('[PDF_LIB_EXPORT] Image dimensions:', image.width(), 'x', image.height());
+      const fullImageBytes = fullImage.encodeToBytes();
+      const canvasWidth = fullImage.width();
+      const fullCanvasHeight = fullImage.height();
       
-      // Use actual image dimensions for PDF (exact control)
-      const actualWidth = image.width();
-      const actualHeight = image.height();
+      // CRITICAL FIX: Use actual captured dimensions, not display dimensions
+      // The captured canvas is scaled up (device pixel ratio = 3x in this case)
+      const actualSinglePageHeight = Math.round(fullCanvasHeight / totalPages); // Calculate from actual captured dimensions
       
-      // Use direct byte embedding (simpler than base64 conversion)
-      const imageBytes = image.encodeToBytes();
-      console.log('[PDF_LIB_EXPORT] Image encoded, bytes length:', imageBytes.length);
+      console.log('[PDF_MULTIPAGE_EXPORT] === CANVAS ANALYSIS ===');
+      console.log('[PDF_MULTIPAGE_EXPORT] Full canvas dimensions:', canvasWidth, 'x', fullCanvasHeight);
+      console.log('[PDF_MULTIPAGE_EXPORT] ACTUAL single page height (calculated):', actualSinglePageHeight);
+      console.log('[PDF_MULTIPAGE_EXPORT] Scale factor detected:', fullCanvasHeight / (totalPages * 590)); // 590 is logical canvas height per page
+      console.log('[PDF_MULTIPAGE_EXPORT] Expected Page 1 Y-range: 0 to', actualSinglePageHeight);
+      console.log('[PDF_MULTIPAGE_EXPORT] Expected Page 2 Y-range:', (actualSinglePageHeight), 'to', (2 * actualSinglePageHeight));
+      console.log('[PDF_MULTIPAGE_EXPORT] Total pages to generate:', totalPages);
+      console.log('[PDF_MULTIPAGE_EXPORT] === PAGE NUMBER POSITIONING ANALYSIS ===');
+      console.log('[PDF_MULTIPAGE_EXPORT] Page 1 number should be at Y:', '(canvasHeight - 30) = (560 - 30) = 530');
+      console.log('[PDF_MULTIPAGE_EXPORT] Page 2 number should be at Y:', '(pageYOffset + canvasHeight - 30) = (590 + 560 - 30) = 1120');
+      console.log('[PDF_MULTIPAGE_EXPORT] Page 1 crop range: 0 to', actualSinglePageHeight, '(includes 530? =', 530 < actualSinglePageHeight, ')');
+      console.log('[PDF_MULTIPAGE_EXPORT] Page 2 crop range:', actualSinglePageHeight, 'to', (2 * actualSinglePageHeight), '(includes 1120? =', 1120 >= actualSinglePageHeight && 1120 < (2 * actualSinglePageHeight), ')');
+      console.log('[PDF_MULTIPAGE_EXPORT] === END ANALYSIS ===');
       
-      const pdfDoc = await PDFDocument.create();
+      // For each page, we'll create a standard-sized PDF page
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        console.log(`[PDF_MULTIPAGE_EXPORT] Creating PDF page ${pageNum} of ${totalPages}`);
+        
+        // Create a page with increased height (60px longer for multi-page invoices)
+        const page = pdfDoc.addPage([612, 852]);
+        const pdfImage = await pdfDoc.embedPng(fullImageBytes);
+        
+        // Use the same positioning method for ALL pages (it works perfectly for Page 2)
+        // FIXED: Invert the page logic since canvas structure is opposite of expected
+        const pageYOffset = (totalPages - pageNum) * actualSinglePageHeight; // Inverted: Page 1 gets last section, Page 2 gets first section
+        const scaleToFitWidth = 612 / canvasWidth;
+        const scaledWidth = canvasWidth * scaleToFitWidth;
+        const scaledHeight = fullCanvasHeight * scaleToFitWidth;
+        const scaledPageYOffset = pageYOffset * scaleToFitWidth;
+        
+        // Position image so the TOP of the relevant section appears at TOP of PDF page
+        // PDF coordinate system: Y=0 is bottom, Y=852 is top (increased by 60px)
+        // We want the section top to appear at PDF top (Y=852)
+        const scaledPageHeight = actualSinglePageHeight * scaleToFitWidth;
+        const yPosition = 852 - scaledPageHeight - scaledPageYOffset; // Position to show section top at PDF top
+        
+        console.log(`[PDF_MULTIPAGE_EXPORT] Page ${pageNum} positioning (FIXED): pageYOffset=${pageYOffset}, scaledPageYOffset=${scaledPageYOffset}, scaledPageHeight=${scaledPageHeight}, yPosition=${yPosition}`);
+        
+        page.drawImage(pdfImage, {
+          x: 0,
+          y: yPosition,
+          width: scaledWidth,
+          height: scaledHeight, // Use full height for all pages
+        });
+        
+        console.log(`[PDF_MULTIPAGE_EXPORT] Added page ${pageNum} to PDF`);
+      }
       
-      // EXACT size control - set PDF page to actual canvas dimensions  
-      const page = pdfDoc.addPage([actualWidth, actualHeight]);
-      
-      console.log('[PDF_LIB_EXPORT] PDF page size set to:', actualWidth, 'x', actualHeight);
-      
-      // Embed PNG image directly
-      const pdfImage = await pdfDoc.embedPng(imageBytes);
-      console.log('[PDF_LIB_EXPORT] PNG image embedded successfully');
-      
-      // Draw image at full page size (1:1 mapping)
-      page.drawImage(pdfImage, {
-        x: 0,
-        y: 0,
-        width: actualWidth,
-        height: actualHeight,
-      });
-      
-      console.log('[PDF_LIB_EXPORT] Image drawn to PDF page at full size');
-      
-      // Save PDF
+      console.log('[PDF_MULTIPAGE_EXPORT] Finalizing PDF with', totalPages, 'pages');
       const pdfBytes = await pdfDoc.save();
-      
-      // Write to file system using chunked base64 conversion for large files
       const fileName = `invoice-${invoice.invoice_number}.pdf`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
       
-      // Handle large files with proper chunking
       const chunkSize = 8192;
       let binaryString = '';
       
@@ -431,21 +532,17 @@ function InvoiceViewerScreen() {
         { encoding: FileSystem.EncodingType.Base64 }
       );
       
-      console.log('[PDF_LIB_EXPORT] PDF generated successfully at:', fileUri);
-      
-      // Share the PDF
       await Sharing.shareAsync(fileUri, {
         mimeType: 'application/pdf',
-        dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`
+        dialogTitle: `Share Invoice ${invoice.invoice_number} PDF (${totalPages} pages)`
       });
       
-      // Close the modal after successful export
       handleCloseSendModal();
       
-      console.log(`[PDF_LIB_EXPORT] PDF-lib export completed successfully for ${invoice.invoice_number}`);
+      console.log(`[PDF_MULTIPAGE_EXPORT] Export completed for ${invoice.invoice_number} with ${totalPages} pages`);
       
     } catch (error: any) { 
-      console.error('[PDF_LIB_EXPORT] Error:', error);
+      console.error('[PDF_MULTIPAGE_EXPORT] Error:', error);
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };

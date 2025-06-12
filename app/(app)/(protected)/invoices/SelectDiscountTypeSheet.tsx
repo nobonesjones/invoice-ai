@@ -327,9 +327,9 @@ const SelectDiscountTypeSheet = forwardRef<
                         selectedType === 'percentage' ? 'e.g. 10' : 'e.g. 5.00'
                       }
                       placeholderTextColor={themeColors.mutedForeground}
-                      keyboardType="number-pad" // Changed to number-pad
-                      returnKeyType="done"
-                      autoFocus={true} // Auto-focus when input appears
+                      keyboardType="number-pad"
+                      returnKeyType="none"
+                      autoFocus={true}
                     />
                   </View>
                 </>

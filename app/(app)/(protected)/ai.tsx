@@ -1,14 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, Alert, Modal, KeyboardAvoidingView, Platform } from "react-native";
-import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, X, User, Mail, Phone, MapPin } from "lucide-react-native";
-import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler } from 'react-native-gesture-handler';
-import Animated, {
-	useAnimatedGestureHandler,
-	useAnimatedStyle,
-	useSharedValue,
-	withSpring,
-} from 'react-native-reanimated';
+import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin } from "lucide-react-native";
 import { router } from 'expo-router';
+
 
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Text } from "@/components/ui/text";
@@ -18,183 +12,20 @@ import { useTheme } from "@/context/theme-provider";
 import { ChatService } from "@/services/chatService";
 import { OpenAIService } from "@/services/openaiService";
 import { useAIChat } from "@/hooks/useAIChat";
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
+import { SkiaInvoiceCanvas } from "@/components/skia/SkiaInvoiceCanvas";
+import { SkiaInvoiceCanvasSimple } from "@/components/skia/SkiaInvoiceCanvasSimple";
+import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
+import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
+import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
-// Full-screen Invoice Modal Component
-const InvoiceModal = ({ 
-	visible, 
-	onClose, 
-	invoiceData, 
-	businessSettings, 
-	theme 
-}: { 
-	visible: boolean; 
-	onClose: () => void; 
-	invoiceData: any; 
-	businessSettings: BusinessSettingsRow | null; 
-	theme: any; 
-}) => {
-	// Zoom and pan animation values
-	const scale = useSharedValue(1);
-	const translateX = useSharedValue(0);
-	const translateY = useSharedValue(0);
-
-	// Reset animation values when modal opens
-	useEffect(() => {
-		if (visible) {
-			scale.value = 1;
-			translateX.value = 0;
-			translateY.value = 0;
-		}
-	}, [visible]);
-
-	// Pan gesture handler
-	const panGestureHandler = useAnimatedGestureHandler({
-		onStart: (_, context: any) => {
-			context.translateX = translateX.value;
-			context.translateY = translateY.value;
-		},
-		onActive: (event, context) => {
-			translateX.value = context.translateX + event.translationX;
-			translateY.value = context.translateY + event.translationY;
-		},
-	});
-
-	// Pinch gesture handler
-	const pinchGestureHandler = useAnimatedGestureHandler({
-		onStart: (_, context: any) => {
-			context.scale = scale.value;
-		},
-		onActive: (event, context) => {
-			scale.value = Math.max(0.5, Math.min(context.scale * event.scale, 3));
-		},
-		onEnd: () => {
-			// Snap back if zoomed out too much
-			if (scale.value < 0.8) {
-				scale.value = withSpring(1);
-				translateX.value = withSpring(0);
-				translateY.value = withSpring(0);
-			}
-		},
-	});
-
-	const animatedStyle = useAnimatedStyle(() => {
-		return {
-			transform: [
-				{ translateX: translateX.value },
-				{ translateY: translateY.value },
-				{ scale: scale.value },
-			],
-		};
-	});
-
-	if (!invoiceData || !businessSettings) return null;
-
-	const { invoice, line_items, client_id } = invoiceData;
-
-	// Transform data to InvoiceForTemplate format
-	const transformedInvoice: InvoiceForTemplate = {
-		...invoice,
-		currency: businessSettings?.currency || 'USD',
-		currency_symbol: businessSettings?.currency_symbol || '$',
-		clients: invoice.client_name ? {
-			id: client_id,
-			user_id: invoice.user_id,
-			name: invoice.client_name,
-			email: invoice.client_email,
-			phone: null,
-			address_client: null,
-			notes: null,
-			avatar_url: null,
-			created_at: new Date().toISOString(),
-			updated_at: new Date().toISOString(),
-		} : null,
-		invoice_line_items: line_items.map((item: any) => ({
-			id: `temp-${Math.random()}`,
-			invoice_id: invoice.id,
-			user_id: invoice.user_id,
-			item_name: item.item_name,
-			item_description: item.item_description,
-			quantity: item.quantity,
-			unit_price: item.unit_price,
-			total_price: item.total_price,
-			line_item_discount_type: null,
-			line_item_discount_value: null,
-			item_image_url: null,
-			created_at: new Date().toISOString(),
-			updated_at: new Date().toISOString(),
-		})),
-	};
-
-	return (
-		<Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-			<View style={{ flex: 1, backgroundColor: theme.background, height: '90%' }}>
-				{/* Header with close button */}
-				<View 
-					style={{
-						flexDirection: 'row',
-						alignItems: 'center',
-						justifyContent: 'space-between',
-						paddingHorizontal: 16,
-						paddingVertical: 12,
-						borderBottomWidth: 1,
-						borderBottomColor: theme.border,
-					}}
-				>
-					<Text style={{ color: theme.foreground, fontSize: 18, fontWeight: 'bold' }}>
-						Invoice Preview
-					</Text>
-					<TouchableOpacity onPress={onClose} style={{ padding: 8 }}>
-						<X size={24} color={theme.foreground} />
-					</TouchableOpacity>
-				</View>
-
-				{/* Invoice content with gestures */}
-				<View style={{ flex: 1, backgroundColor: theme.border }}>
-					<GestureHandlerRootView style={{ flex: 1 }}>
-						<PanGestureHandler onGestureEvent={panGestureHandler}>
-							<Animated.View style={{ flex: 1 }}>
-								<PinchGestureHandler onGestureEvent={pinchGestureHandler}>
-									<Animated.View 
-										style={[
-											{
-												flex: 1,
-												justifyContent: 'flex-start',
-												alignItems: 'center',
-												padding: 20,
-												paddingTop: 20,
-											},
-											animatedStyle
-										]}
-									>
-										<InvoiceTemplateOne
-											invoice={transformedInvoice}
-											clientName={invoice.client_name}
-											businessSettings={businessSettings}
-										/>
-									</Animated.View>
-								</PinchGestureHandler>
-							</Animated.View>
-						</PanGestureHandler>
-					</GestureHandlerRootView>
-				</View>
-
-				{/* Help text */}
-				<View style={{ padding: 16, alignItems: 'center' }}>
-					<Text style={{ color: theme.mutedForeground, fontSize: 12, textAlign: 'center' }}>
-						Pinch to zoom • Drag to pan • Tap X to close
-					</Text>
-				</View>
-			</View>
-		</Modal>
-	);
-};
+// Simple Invoice Modal using our new InvoicePreviewModal component
 
 // Invoice Preview Component for Chat
 const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }) => {
 	const { invoice, line_items, client_id } = invoiceData;
 	const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
-	const [showModal, setShowModal] = useState(false);
+	const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
 	const { supabase } = useSupabase();
 	
 	// Load business settings on mount
@@ -292,11 +123,12 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 		return mapping[normalized] || '$';
 	};
 
-	// Transform data to InvoiceForTemplate format
-	const transformedInvoice: InvoiceForTemplate = {
+
+
+	// Transform data for our modal
+	const transformedInvoice = {
 		...invoice,
-		currency: businessSettings?.currency || 'USD',
-		currency_symbol: businessSettings?.currency_symbol || '$',
+		invoice_line_items: line_items || [],
 		clients: invoice.client_name ? {
 			id: client_id,
 			user_id: invoice.user_id,
@@ -309,25 +141,12 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			created_at: new Date().toISOString(),
 			updated_at: new Date().toISOString(),
 		} : null,
-		invoice_line_items: line_items.map((item: any) => ({
-			id: `temp-${Math.random()}`,
-			invoice_id: invoice.id,
-			user_id: invoice.user_id,
-			item_name: item.item_name,
-			item_description: item.item_description,
-			quantity: item.quantity,
-			unit_price: item.unit_price,
-			total_price: item.total_price,
-			line_item_discount_type: null,
-			line_item_discount_value: null,
-			item_image_url: null,
-			created_at: new Date().toISOString(),
-			updated_at: new Date().toISOString(),
-		})),
 	};
 
+	const transformedClient = transformedInvoice.clients;
+
 	const handleTapToView = () => {
-		setShowModal(true);
+		invoicePreviewModalRef.current?.present();
 	};
 
 	if (!businessSettings) {
@@ -374,7 +193,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					{/* Scaled down invoice preview */}
 					<View 
 						style={{
-							transform: [{ scale: 0.85 }],
+							transform: [{ scale: 0.5 }],
 							height: 380,
 							width: '100%',
 							alignItems: 'center',
@@ -383,22 +202,25 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 							marginBottom: -20,
 						}}
 					>
-						<InvoiceTemplateOne
+						<SafeSkiaInvoiceCanvas
 							invoice={transformedInvoice}
-							clientName={invoice.client_name}
-							businessSettings={businessSettings}
+							business={businessSettings}
+							client={transformedClient}
+							currencySymbol={businessSettings?.currency_symbol || '$'}
+							style={{ width: 370, height: 460 }}
+							theme={theme}
+							isPreview={true}
 						/>
 					</View>
 				</View>
 			</TouchableOpacity>
 
-			{/* Full-screen modal */}
-			<InvoiceModal
-				visible={showModal}
-				onClose={() => setShowModal(false)}
-				invoiceData={invoiceData}
+			{/* Invoice Preview Modal */}
+			<InvoicePreviewModal
+				ref={invoicePreviewModalRef}
+				invoiceData={transformedInvoice}
 				businessSettings={businessSettings}
-				theme={theme}
+				clientData={transformedClient}
 			/>
 		</>
 	);
@@ -503,6 +325,98 @@ const ClientPreview = ({ clientData, theme }: { clientData: any; theme: any }) =
 		</TouchableOpacity>
 	);
 };
+
+// Safe wrapper for SkiaInvoiceCanvas that falls back to simple view
+const SafeSkiaInvoiceCanvas = ({ invoice, business, client, currencySymbol, style, theme, isPreview = false }: any) => {
+	const [hasFailed, setHasFailed] = useState(false);
+
+	// Reset failed state when props change
+	useEffect(() => {
+		setHasFailed(false);
+	}, [invoice?.id, business?.id]);
+
+	if (hasFailed) {
+		// Fallback to simple view
+		if (isPreview) {
+			return (
+				<View style={{ padding: 20, backgroundColor: '#f9f9f9', borderRadius: 8 }}>
+					<Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: theme.foreground }}>
+						Invoice #{invoice?.invoice_number || 'N/A'}
+					</Text>
+					<Text style={{ fontSize: 12, color: theme.mutedForeground, marginBottom: 4 }}>
+						{invoice?.client_name || 'No client'}
+					</Text>
+					<Text style={{ fontSize: 12, color: theme.mutedForeground, marginBottom: 8 }}>
+						{currencySymbol}{invoice?.total_amount || '0'}
+					</Text>
+					<Text style={{ fontSize: 10, color: theme.mutedForeground }}>
+						{invoice?.invoice_line_items?.length || 0} items
+					</Text>
+				</View>
+			);
+		} else {
+			return (
+				<View style={{ padding: 40, backgroundColor: '#ffffff', borderRadius: 12, width: 350 }}>
+					<Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 16, color: '#000' }}>
+						Invoice #{invoice?.invoice_number || 'N/A'}
+					</Text>
+					<Text style={{ fontSize: 16, color: '#666', marginBottom: 8 }}>
+						Client: {invoice?.client_name || 'No client'}
+					</Text>
+					<Text style={{ fontSize: 16, color: '#666', marginBottom: 8 }}>
+						Total: {currencySymbol}{invoice?.total_amount || '0'}
+					</Text>
+					<Text style={{ fontSize: 14, color: '#888' }}>
+						Items: {invoice?.invoice_line_items?.length || 0}
+					</Text>
+				</View>
+			);
+		}
+	}
+
+	// Try to render SkiaInvoiceCanvas
+	try {
+		return (
+			<SimpleErrorBoundary onError={() => setHasFailed(true)}>
+				<SkiaInvoiceCanvasWorking
+					invoice={invoice}
+					business={business}
+					client={client}
+					currencySymbol={currencySymbol}
+					style={style}
+				/>
+			</SimpleErrorBoundary>
+		);
+	} catch (error) {
+		console.log('[SafeSkiaInvoiceCanvas] Render failed:', error);
+		setHasFailed(true);
+		return null;
+	}
+};
+
+// Simple Error Boundary Component
+class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode; onError?: () => void }, { hasError: boolean }> {
+	constructor(props: any) {
+		super(props);
+		this.state = { hasError: false };
+	}
+
+	static getDerivedStateFromError(error: any) {
+		return { hasError: true };
+	}
+
+	componentDidCatch(error: any, errorInfo: any) {
+		console.log('[SimpleErrorBoundary] Caught error:', error, errorInfo);
+		this.props.onError?.();
+	}
+
+	render() {
+		if (this.state.hasError) {
+			return null; // Return null to trigger fallback in parent
+		}
+		return this.props.children;
+	}
+}
 
 export default function AiScreen() {
 	const { user } = useSupabase();
@@ -611,7 +525,8 @@ export default function AiScreen() {
 	};
 
 	return (
-		<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
+		<BottomSheetModalProvider>
+			<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
 			<KeyboardAvoidingView 
 				style={{ flex: 1 }}
 				behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -845,5 +760,6 @@ export default function AiScreen() {
 				</View>
 			</KeyboardAvoidingView>
 		</SafeAreaView>
+		</BottomSheetModalProvider>
 	);
 }

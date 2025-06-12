@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { supabase } from '@/config/supabase';
 import { INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
+import { MemoryService } from '@/services/memoryService';
 
 // OpenAI client
 const openai = new OpenAI({
@@ -82,8 +83,8 @@ export class AssistantService {
     
     const assistant = await openai.beta.assistants.create({
       name: "Invoice AI Assistant",
-      instructions: this.getSystemInstructions(),
-      model: "gpt-4.1-nano", // Fastest and cheapest GPT-4.1 model (April 2025)
+      instructions: await this.getSystemInstructions(), // Use base instructions for assistant creation
+      model: "gpt-4o-mini", // Use the correct model name
       tools: this.convertFunctionsToTools()
     });
 
@@ -104,8 +105,8 @@ export class AssistantService {
   }
 
   // Enhanced system instructions for Assistant
-  private static getSystemInstructions(): string {
-    return `You are an AI assistant for invoice management. Be friendly, concise, and helpful.
+  private static async getSystemInstructions(userId?: string): Promise<string> {
+    const baseInstructions = `You are an AI assistant for invoice management. Be friendly, concise, and helpful.
 
 RESPONSE STYLE:
 • Keep responses brief and to the point
@@ -171,8 +172,46 @@ User: "Add consulting work for 150 to latest invoice"
 ✅ Good: Extract consulting work ($150) → UPDATE INVOICE
 ❌ Bad: Ask "what's the price for consulting work?"
 
+INVOICE CREATION WORKFLOW - CRITICAL:
+When users request to create an invoice:
+
+STEP 1: ALWAYS search for client first
+1. Extract client name from request
+2. Use search_clients function with the client name
+3. Wait for search results
+
+STEP 2A: If client(s) found
+- Show client card(s) with "I found [number] client(s) matching '[name]'. Is this the client you want to invoice?"
+- Wait for user confirmation before proceeding
+- After confirmation, create invoice with confirmed client
+
+STEP 2B: If no client found  
+- "I couldn't find a client named '[name]' in your system. I'll add them as a new client first."
+- Create client with basic info from request
+- Show client card and ask if they want to add more details
+- Then create the invoice
+
+EXAMPLES:
+User: "Create invoice for John Smith, $500 for hedge trimming"
+✅ Good Flow:
+   1. search_clients(name: "John Smith")
+   2. IF FOUND: "I found 1 client matching 'John Smith'. Is this the client? [client card]"
+   3. User confirms: "Yes"
+   4. create_invoice(client_name: "John Smith", line_items: [{"item_name": "hedge trimming", "unit_price": 500}])
+   
+User: "Bill Sarah for logo design $750"
+✅ Good Flow:
+   1. search_clients(name: "Sarah")
+   2. IF NOT FOUND: "I couldn't find a client named 'Sarah'. I'll add them first."
+   3. create_client(name: "Sarah")
+   4. "Added Sarah as new client. Do you have email/phone to add?"
+   5. create_invoice(client_name: "Sarah", line_items: [{"item_name": "logo design", "unit_price": 750}])
+
+❌ Avoid: Creating invoice without searching clients first
+❌ Avoid: Creating invoice without client confirmation when multiple matches
+
 CLIENT CREATION WORKFLOW - CRITICAL:
-When users want to create a client:
+When users want to create a client (not invoice):
 1. IMMEDIATELY create client with just the name using create_client
 2. Show confirmation and client card
 3. Ask if they want to add more details (only missing fields)
@@ -186,16 +225,6 @@ User: "Add new client Ben"
       • Email?
       • Phone number? 
       • Address?"
-
-User: "Create client Sarah with email sarah@email.com"
-✅ Good Response:
-   1. Call create_client with name: "Sarah", email: "sarah@email.com"
-   2. "Perfect! I created Sarah as a new client. [client card shows]
-      Would you like to add:
-      • Phone number?
-      • Address?"
-
-❌ Avoid: Asking for all details upfront before creating the client
 
 CLIENT UPDATE WORKFLOW - CRITICAL:
 When users want to update/edit client details:
@@ -273,6 +302,19 @@ User: "Add consulting to the latest invoice" (no price mentioned)
 ❌ Avoid: Calling update_invoice_line_items without a price
 
 Use tools to take action. Reference previous conversation naturally.`;
+
+    // Enhance with user-specific patterns if available
+    if (userId) {
+      try {
+        const enhancedInstructions = await MemoryService.generateEnhancedPrompt(userId, baseInstructions);
+        return enhancedInstructions;
+      } catch (error) {
+        console.error('[AssistantService] Error loading user patterns:', error);
+        return baseInstructions;
+      }
+    }
+
+    return baseInstructions;
   }
 
   // Get or create thread for user
@@ -387,6 +429,18 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Save assistant response to database
       if (result.content) {
         await this.saveMessageToDatabase(userId, threadId, 'assistant', result.content, result.attachments);
+      }
+
+      // Extract and save memory facts from the conversation
+      try {
+        const messages = await this.getThreadMessages(userId);
+        if (messages.length >= 2) { // At least user message + assistant response
+          const recentMessages = messages.slice(-2); // Get last 2 messages
+          await MemoryService.extractFactsFromConversation(userId, threadId, recentMessages);
+        }
+      } catch (memoryError) {
+        console.error('[AssistantService] Error extracting memory facts:', memoryError);
+        // Don't fail the conversation if memory extraction fails
       }
 
       return result;
