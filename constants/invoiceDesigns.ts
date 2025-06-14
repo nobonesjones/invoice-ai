@@ -1,6 +1,7 @@
 import React from 'react';
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
+import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
 
 // Define the structure for invoice design templates
 export interface InvoiceDesign {
@@ -97,6 +98,20 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
       headerPosition: 'center',
       sectionsLayout: 'side-by-side',
       spacing: 'normal',
+    },
+  },
+  {
+    id: 'simple',
+    name: 'simple',
+    displayName: 'Simple',
+    description: 'Minimalist design with clean lines',
+    thumbnail: '/assets/invoice-designs/simple-thumb.png',
+    component: SkiaInvoiceCanvasSimple,
+    colorScheme: COLOR_SCHEMES.minimal,
+    layoutConfig: {
+      headerPosition: 'top',
+      sectionsLayout: 'standard',
+      spacing: 'compact',
     },
   },
   // Additional designs will be added here

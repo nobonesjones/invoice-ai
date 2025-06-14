@@ -644,6 +644,28 @@ export default function CreateInvoiceScreen() {
       console.log('[handleSaveInvoice] formData.due_date:', formData.due_date);
       console.log('[handleSaveInvoice] formData.due_date_option:', formData.due_date_option);
 
+      // Get default design and color from business settings for new invoices
+      let defaultDesign = 'classic';
+      let defaultAccentColor = '#14B8A6';
+      
+      if (!isEditMode) {
+        try {
+          const { data: businessSettings } = await supabase
+            .from('business_settings')
+            .select('default_invoice_design, default_accent_color')
+            .eq('user_id', user.id)
+            .single();
+          
+          if (businessSettings) {
+            defaultDesign = businessSettings.default_invoice_design || 'classic';
+            defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
+            console.log('[handleSaveInvoice] Using default design:', defaultDesign, 'color:', defaultAccentColor);
+          }
+        } catch (error) {
+          console.log('[handleSaveInvoice] Could not load business settings, using defaults');
+        }
+      }
+
       // 1. Prepare main invoice data
       const invoiceData = {
         user_id: user.id,
@@ -665,6 +687,11 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
+        // Add design and color fields for new invoices
+        ...(isEditMode ? {} : {
+          invoice_design: defaultDesign,
+          accent_color: defaultAccentColor,
+        }),
       };
 
       let savedInvoice;
@@ -2097,6 +2124,7 @@ export default function CreateInvoiceScreen() {
           invoiceData={previewData?.invoiceData}
           businessSettings={previewData?.businessSettings}
           clientData={previewData?.clientData}
+          invoiceId={currentInvoiceId || undefined}
           onClose={() => setPreviewData(null)}
         />
       </SafeAreaView>

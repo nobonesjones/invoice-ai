@@ -976,10 +976,10 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
           {/* === MODERN HEADER BLOCK === */}
           {/* Large header block spanning full width */}
           <Rect x={0} y={0} width={canvasWidth} height={95} color={colors.headerBlock} />
-          
+
           {/* Slim turquoise accent line under header */}
           <Rect x={0} y={95} width={canvasWidth} height={3} color={colors.greenAccent} />
-
+          
           {/* === HEADER SECTION === */}
           
           {/* Left: Business Logo - Centered in header block */}

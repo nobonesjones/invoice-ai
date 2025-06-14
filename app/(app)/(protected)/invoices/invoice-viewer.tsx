@@ -64,6 +64,8 @@ import { InvoiceShareService } from '../../../../services/invoiceShareService';
 
 // NEW SKIA IMPORTS
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
+import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
+import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
 import { useCanvasRef } from '@shopify/react-native-skia';
 
 // PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
@@ -144,6 +146,7 @@ function InvoiceViewerScreen() {
   const [client, setClient] = useState<ClientRow | null>(null);
   const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInvoiceReady, setIsInvoiceReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPreviewingFromCreate, setIsPreviewingFromCreate] = useState(false); 
   const [showShareOptions, setShowShareOptions] = useState(false);
@@ -325,6 +328,14 @@ function InvoiceViewerScreen() {
       Alert.alert('Invoice Ready', 'Choose your email app from the share options to send the invoice.');
       handleCloseSendModal(); // Close the send modal
       
+      // Refresh invoice data to reflect status change
+      if (invoiceId) {
+        const refreshedInvoice = await fetchInvoiceData(invoiceId);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+        }
+      }
+      
     } catch (error: any) {
       console.error('[handleSendByEmail] Error generating PDF or sharing:', error);
       Alert.alert('Error', `Failed to prepare invoice for email: ${error.message}`);
@@ -358,6 +369,14 @@ function InvoiceViewerScreen() {
 
       Alert.alert('Link Shared', 'Invoice link has been shared.');
       handleCloseSendModal(); // Close the send modal
+      
+      // Refresh invoice data to reflect status change
+      if (invoiceId) {
+        const refreshedInvoice = await fetchInvoiceData(invoiceId);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+        }
+      }
     } catch (error: any) {
       console.error('[handleSendLink] Unexpected error:', error);
       Alert.alert('Error', 'An unexpected error occurred while sharing the invoice link.');
@@ -424,12 +443,38 @@ function InvoiceViewerScreen() {
           { encoding: FileSystem.EncodingType.Base64 }
         );
         
+              // Update invoice status to sent
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'sent' })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleSendPDF] Error updating status:', updateError);
+        Alert.alert('Error', 'Failed to update invoice status.');
+        return;
+      }
+
+      // Log the send activity
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'pdf');
+
+      // Update local state
+      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
+        
         await Sharing.shareAsync(fileUri, {
           mimeType: 'application/pdf',
           dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`
         });
         
         handleCloseSendModal();
+      
+      // Refresh invoice data to reflect status change
+      if (invoiceId) {
+        const refreshedInvoice = await fetchInvoiceData(invoiceId);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+        }
+      }
         return;
       }
       
@@ -532,12 +577,38 @@ function InvoiceViewerScreen() {
         { encoding: FileSystem.EncodingType.Base64 }
       );
       
+      // Update invoice status to sent
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'sent' })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('[handleSendPDF] Error updating status:', updateError);
+        Alert.alert('Error', 'Failed to update invoice status.');
+        return;
+      }
+
+      // Log the send activity
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'pdf');
+
+      // Update local state
+      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
+      
       await Sharing.shareAsync(fileUri, {
         mimeType: 'application/pdf',
         dialogTitle: `Share Invoice ${invoice.invoice_number} PDF (${totalPages} pages)`
       });
       
       handleCloseSendModal();
+      
+      // Refresh invoice data to reflect status change
+      if (invoiceId) {
+        const refreshedInvoice = await fetchInvoiceData(invoiceId);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+        }
+      }
       
       console.log(`[PDF_MULTIPAGE_EXPORT] Export completed for ${invoice.invoice_number} with ${totalPages} pages`);
       
@@ -627,7 +698,7 @@ function InvoiceViewerScreen() {
   };
 
   const fetchInvoiceData = async (invoiceId: string): Promise<Database['public']['Tables']['invoices']['Row'] | null> => {
-    setIsLoading(true);
+    // Don't set loading state here - let the caller manage it
     try {
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('invoices')
@@ -643,14 +714,12 @@ function InvoiceViewerScreen() {
         console.error('[fetchInvoiceData] Supabase invoiceError:', invoiceError);
         setError('Failed to load invoice data.');
         setInvoice(null);
-        setIsLoading(false);
         return null;
       }
 
       if (!invoiceData) {
         setError('Invoice not found.');
         setInvoice(null);
-        setIsLoading(false);
         return null;
       }
       
@@ -695,13 +764,11 @@ function InvoiceViewerScreen() {
         setClient(invoiceData.clients as ClientRow);
       }
       setError(null);
-      setIsLoading(false);
       return fetchedInvoiceForTemplate as any; // Use type assertion to bypass type conflicts
     } catch (e: any) {
       console.error('[fetchInvoiceData] Exception:', e.message);
       setError('An unexpected error occurred while fetching invoice data.');
       setInvoice(null);
-      setIsLoading(false);
       return null;
     }
   };
@@ -710,17 +777,30 @@ function InvoiceViewerScreen() {
     console.log(`[EFFECT START] InvoiceViewerScreen useEffect triggered.`);
     console.log(`[EFFECT PARAMS] id: ${invoiceId}`);
     setIsLoading(true); // Start loading
+    setIsInvoiceReady(false); // Reset invoice ready state
 
     const processData = async () => {
       if (invoiceId) {
         console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchInvoiceData with invoiceId:', invoiceId); 
         try {
+          // Start timing for minimum loading duration
+          const startTime = Date.now();
+          const minLoadingTime = 800; // Minimum 800ms loading time
+          
           const fetchedInvoice = await fetchInvoiceData(invoiceId);
           if (fetchedInvoice && fetchedInvoice.user_id) {
             const targetUserId = fetchedInvoice.user_id;
             console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchBusinessSettings with targetUserId (from fetched invoiceData):', targetUserId); 
             if (targetUserId) await fetchBusinessSettings(targetUserId); // Await this operation too
           }
+          
+          // Ensure minimum loading time has passed
+          const elapsedTime = Date.now() - startTime;
+          if (elapsedTime < minLoadingTime) {
+            console.log(`[InvoiceViewerScreen] Waiting additional ${minLoadingTime - elapsedTime}ms for minimum loading time`);
+            await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+          }
+          
         } catch (error) {
           console.error('[processData] Error:', error);
           setError('Failed to load invoice data.');
@@ -737,6 +817,27 @@ function InvoiceViewerScreen() {
     processData();
   }, [invoiceId, supabase]);
 
+  // Track when invoice is ready to render
+  useEffect(() => {
+    if (invoice && businessSettings && !isLoading) {
+      console.log('[InvoiceViewerScreen] Invoice and business settings loaded, preparing to render...');
+      // Add a small delay to ensure Skia canvas has time to render
+      const timer = setTimeout(() => {
+        console.log('[InvoiceViewerScreen] Setting invoice ready to true');
+        setIsInvoiceReady(true);
+      }, 300); // 300ms delay for Skia rendering
+      
+      return () => clearTimeout(timer);
+    } else {
+      console.log('[InvoiceViewerScreen] Invoice not ready:', { 
+        hasInvoice: !!invoice, 
+        hasBusinessSettings: !!businessSettings, 
+        isLoading 
+      });
+      setIsInvoiceReady(false);
+    }
+  }, [invoice, businessSettings, isLoading]);
+
   // Refresh data when screen comes back into focus (e.g., after editing)
   useFocusEffect(
     useCallback(() => {
@@ -752,6 +853,7 @@ function InvoiceViewerScreen() {
           } catch (error) {
             console.error('[useFocusEffect] Error refreshing data:', error);
           }
+          // Note: Don't set loading state here as this is a background refresh
         }
       };
 
@@ -781,6 +883,34 @@ function InvoiceViewerScreen() {
 
   // Calculate currency symbol for Skia canvas
   const currencySymbol = invoice?.currency ? getCurrencySymbol(invoice.currency) : '$';
+
+  // Get the correct design component based on invoice-specific settings
+  const getInvoiceDesignComponent = () => {
+    const designType = invoice?.invoice_design || 'classic';
+    console.log('[InvoiceViewer] Selected design type for invoice:', designType);
+    
+    switch (designType.toLowerCase()) {
+      case 'modern':
+        console.log('[InvoiceViewer] Using SkiaInvoiceCanvasModern');
+        return SkiaInvoiceCanvasModern;
+      case 'simple':
+        console.log('[InvoiceViewer] Using SkiaInvoiceCanvasSimple');
+        return SkiaInvoiceCanvasSimple;
+      case 'classic':
+      default:
+        console.log('[InvoiceViewer] Using SkiaInvoiceCanvas (classic)');
+        return SkiaInvoiceCanvas;
+    }
+  };
+
+  const InvoiceDesignComponent = getInvoiceDesignComponent();
+
+  // Get the accent color from invoice-specific settings
+  const getAccentColor = () => {
+    const savedColor = invoice?.accent_color || '#14B8A6';
+    console.log('[InvoiceViewer] Using accent color for invoice:', savedColor);
+    return savedColor;
+  };
 
   const addAlpha = (color: string, opacity: number): string => {
     if (typeof color !== 'string' || !color.startsWith('#') || (color.length !== 7 && color.length !== 4)) {
@@ -1815,8 +1945,8 @@ ${analytics.countries.length > 0 ?
         ]} 
         showsVerticalScrollIndicator={false}
       >
-        {isLoading ? (
-          <View style={{ alignItems: 'center', paddingTop: 20 }}> 
+        {isLoading || (!isInvoiceReady && invoice && businessSettings) ? (
+          <View style={{ alignItems: 'center', paddingTop: -10 }}> 
             <InvoiceSkeletonLoader />
           </View>
         ) : error ? (
@@ -1829,12 +1959,13 @@ ${analytics.countries.length > 0 ?
               transform: [{ scale: 0.882 }],
               marginLeft: -175,
             }}>
-              <SkiaInvoiceCanvas
+              <InvoiceDesignComponent
                 ref={skiaInvoiceRef}
                 invoice={invoice}
                 client={client}
                 business={businessSettings}
                 currencySymbol={currencySymbol}
+                accentColor={getAccentColor()}
                 renderSinglePage={0}
                 style={{ 
                   width: 200, 

@@ -19,7 +19,7 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
-import { useInvoiceDesign } from '@/hooks/useInvoiceDesign';
+import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoiceDesign';
 import { ColorSelector } from '@/components/ColorSelector';
 import { SegmentedControl } from '@/components/SegmentedControl';
 
@@ -32,35 +32,42 @@ interface InvoicePreviewModalProps {
   invoiceData?: any;
   businessSettings?: any;
   clientData?: any;
+  invoiceId?: string; // Add invoice ID for individual design management
   onClose?: () => void;
 }
 
 export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePreviewModalProps>(
-  ({ invoiceData, businessSettings, clientData, onClose }, ref) => {
+  ({ invoiceData, businessSettings, clientData, invoiceId, onClose }, ref) => {
     const colorScheme = useColorScheme();
     const isLightMode = colorScheme === 'light';
     const themeColors = colors[colorScheme || 'light'];
     
     const [isVisible, setIsVisible] = useState(false);
-    const { supabase } = useSupabase();
+    const { supabase, user } = useSupabase();
     
     // Tab state for design/color selection
     const [activeTab, setActiveTab] = useState<'design' | 'color'>('design');
-    const [selectedAccentColor, setSelectedAccentColor] = useState<string>('#14B8A6'); // Default turquoise
     
     // Swipe gesture state
     const [isMinimized, setIsMinimized] = useState(false);
     const translateY = useRef(new Animated.Value(0)).current;
     const gestureRef = useRef<PanGestureHandler>(null);
     
-    // Design selection hook
+    // Design selection hook - use invoice-specific hook if we have an invoice ID
     const {
       currentDesign,
       availableDesigns,
+      currentAccentColor,
       isLoading: isDesignLoading,
       selectDesign,
-      saveAsDefault,
-    } = useInvoiceDesign();
+      selectAccentColor,
+      saveToInvoice,
+      updateDefaultForNewInvoices,
+    } = useInvoiceDesignForInvoice(
+      invoiceId,
+      invoiceData?.invoice_design,
+      invoiceData?.accent_color
+    );
     
     // Send modal refs and setup
     const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
@@ -132,10 +139,20 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     // Handle saving design changes and closing modal
     const handleSave = useCallback(async () => {
       try {
-        // Save the current design as user's default
-        const success = await saveAsDefault(currentDesign.id);
-        if (success) {
-          console.log('Design preference saved successfully');
+        if (invoiceId) {
+          // Save design and color to specific invoice
+          const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
+          if (success) {
+            console.log('Invoice design and color saved successfully');
+            // Also update default for new invoices
+            await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+          }
+        } else {
+          // For new invoices, just update the default
+          const success = await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+          if (success) {
+            console.log('Default design and color preferences saved successfully');
+          }
         }
       } catch (error) {
         console.error('Error saving design preference:', error);
@@ -144,7 +161,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         setIsVisible(false);
         onClose?.();
       }
-    }, [currentDesign.id, saveAsDefault, onClose]);
+    }, [invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose]);
 
     // Send modal handlers
     const handleOpenSendModal = useCallback(() => {
@@ -236,6 +253,24 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           return;
         }
 
+        // Log the send activity
+        const { error: activityError } = await supabase
+          .from('invoice_activities')
+          .insert({
+            invoice_id: invoiceData.id,
+            user_id: user?.id,
+            activity_type: 'sent',
+            description: `Invoice ${invoiceData.invoice_number} was sent via email`,
+            activity_data: { 
+              invoice_number: invoiceData.invoice_number, 
+              send_method: 'email' 
+            }
+          });
+
+        if (activityError) {
+          console.warn('[Modal handleSendByEmail] Failed to log activity:', activityError);
+        }
+
         await Sharing.shareAsync(uri, { 
           mimeType: 'application/pdf', 
           dialogTitle: 'Send Invoice via Email' 
@@ -265,6 +300,24 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           console.error('[Modal handleSendLink] Error updating status:', updateError);
           Alert.alert('Error', 'Failed to update invoice status.');
           return;
+        }
+
+        // Log the send activity
+        const { error: activityError } = await supabase
+          .from('invoice_activities')
+          .insert({
+            invoice_id: invoiceData.id,
+            user_id: user?.id,
+            activity_type: 'sent',
+            description: `Invoice ${invoiceData.invoice_number} was sent via link`,
+            activity_data: { 
+              invoice_number: invoiceData.invoice_number, 
+              send_method: 'link' 
+            }
+          });
+
+        if (activityError) {
+          console.warn('[Modal handleSendLink] Failed to log activity:', activityError);
         }
 
         Alert.alert('Link Shared', 'Invoice link has been shared.');
@@ -326,6 +379,36 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           base64: false,
         });
         
+        // Update invoice status to sent
+        const { error: updateError } = await supabase
+          .from('invoices')
+          .update({ status: 'sent' })
+          .eq('id', invoiceData.id);
+
+        if (updateError) {
+          console.error('[Modal handleSendPDF] Error updating status:', updateError);
+          Alert.alert('Error', 'Failed to update invoice status.');
+          return;
+        }
+
+        // Log the send activity (using the same pattern as other send functions)
+        const { error: activityError } = await supabase
+          .from('invoice_activities')
+          .insert({
+            invoice_id: invoiceData.id,
+            user_id: user?.id,
+            activity_type: 'sent',
+            description: `Invoice ${invoiceData.invoice_number} was sent via PDF`,
+            activity_data: { 
+              invoice_number: invoiceData.invoice_number, 
+              send_method: 'pdf' 
+            }
+          });
+
+        if (activityError) {
+          console.warn('[Modal handleSendPDF] Failed to log activity:', activityError);
+        }
+
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
           dialogTitle: `Share Invoice ${invoiceData.invoice_number} PDF`
@@ -421,7 +504,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                     business: businessSettings,
                     client: clientData,
                     currencySymbol: businessSettings?.currency_symbol || '$',
-                    accentColor: selectedAccentColor
+                    accentColor: currentAccentColor
                   })}
                 </View>
               </View>
@@ -480,8 +563,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                   />
                 ) : (
                   <ColorSelector
-                    selectedColor={selectedAccentColor}
-                    onColorSelect={setSelectedAccentColor}
+                                      selectedColor={currentAccentColor}
+                  onColorSelect={selectAccentColor}
                   />
                 )}
               </View>
