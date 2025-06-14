@@ -8,6 +8,7 @@ interface SkiaInvoiceCanvasSimpleProps {
   client?: any;
   currencySymbol?: string;
   style?: any;
+  accentColor?: string; // NEW: Dynamic accent color for customization
 }
 
 const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps, ref: any) => {
@@ -16,7 +17,8 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps,
     business, 
     client, 
     currencySymbol = '£',
-    style
+    style,
+    accentColor = '#14B8A6' // Default turquoise
   } = props;
 
   console.log('[SkiaInvoiceCanvasSimple] Starting FULL INVOICE render test...');

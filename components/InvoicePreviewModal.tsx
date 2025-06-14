@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, forwardRef, useImperativeHandle, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Modal, SafeAreaView, ScrollView } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Modal, SafeAreaView, ScrollView, Animated } from 'react-native';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import {
   BottomSheetModal,
   BottomSheetView,
@@ -20,6 +20,8 @@ import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { useInvoiceDesign } from '@/hooks/useInvoiceDesign';
+import { ColorSelector } from '@/components/ColorSelector';
+import { SegmentedControl } from '@/components/SegmentedControl';
 
 export interface InvoicePreviewModalRef {
   present: () => void;
@@ -42,6 +44,15 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const [isVisible, setIsVisible] = useState(false);
     const { supabase } = useSupabase();
     
+    // Tab state for design/color selection
+    const [activeTab, setActiveTab] = useState<'design' | 'color'>('design');
+    const [selectedAccentColor, setSelectedAccentColor] = useState<string>('#14B8A6'); // Default turquoise
+    
+    // Swipe gesture state
+    const [isMinimized, setIsMinimized] = useState(false);
+    const translateY = useRef(new Animated.Value(0)).current;
+    const gestureRef = useRef<PanGestureHandler>(null);
+    
     // Design selection hook
     const {
       currentDesign,
@@ -55,6 +66,50 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
     const skiaInvoiceRef = useCanvasRef();
     const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []);
+
+    // Gesture handler for swipe functionality
+    const onGestureEvent = Animated.event(
+      [{ nativeEvent: { translationY: translateY } }],
+      { useNativeDriver: true }
+    );
+
+    const onHandlerStateChange = useCallback((event: any) => {
+      if (event.nativeEvent.oldState === State.ACTIVE) {
+        const { translationY, velocityY } = event.nativeEvent;
+        
+        // Determine if should minimize or expand based on gesture
+        const shouldMinimize = translationY > 50 || velocityY > 500;
+        const shouldExpand = translationY < -50 || velocityY < -500;
+        
+        if (shouldMinimize && !isMinimized) {
+          // Minimize - slide down
+          setIsMinimized(true);
+          Animated.spring(translateY, {
+            toValue: 120, // Height to slide down
+            useNativeDriver: true,
+            tension: 100,
+            friction: 8,
+          }).start();
+        } else if (shouldExpand && isMinimized) {
+          // Expand - slide up
+          setIsMinimized(false);
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 8,
+          }).start();
+        } else {
+          // Return to current state
+          Animated.spring(translateY, {
+            toValue: isMinimized ? 120 : 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 8,
+          }).start();
+        }
+      }
+    }, [isMinimized, translateY]);
 
     useImperativeHandle(ref, () => ({
       present: () => setIsVisible(true),
@@ -365,7 +420,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                     invoice: invoiceData,
                     business: businessSettings,
                     client: clientData,
-                    currencySymbol: businessSettings?.currency_symbol || '$'
+                    currencySymbol: businessSettings?.currency_symbol || '$',
+                    accentColor: selectedAccentColor
                   })}
                 </View>
               </View>
@@ -383,15 +439,54 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
             </TouchableOpacity>
           )}
 
-          {/* Design Selector - Absolute bottom */}
-          <View style={styles.designSelectorContainer}>
-            <InvoiceDesignSelector
-              designs={availableDesigns}
-              selectedDesignId={currentDesign.id}
-              onDesignSelect={selectDesign}
-              isLoading={isDesignLoading}
-            />
-          </View>
+          {/* Design/Color Selector - Swipeable bottom panel */}
+          <PanGestureHandler
+            ref={gestureRef}
+            onGestureEvent={onGestureEvent}
+            onHandlerStateChange={onHandlerStateChange}
+            activeOffsetY={[-10, 10]}
+          >
+            <Animated.View 
+              style={[
+                styles.designSelectorContainer,
+                {
+                  transform: [{ translateY: translateY }],
+                }
+              ]}
+            >
+              {/* Swipe indicator */}
+              <View style={styles.swipeIndicator}>
+                <View style={styles.swipeHandle} />
+              </View>
+              
+              {/* Tab Selector Header */}
+              <View style={styles.selectorHeader}>
+                <SegmentedControl
+                  options={['Choose Design', 'Choose Colour']}
+                  selectedIndex={activeTab === 'design' ? 0 : 1}
+                  onSelectionChange={(index) => setActiveTab(index === 0 ? 'design' : 'color')}
+                  style={styles.tabSelectorBottom}
+                />
+              </View>
+              
+              {/* Content */}
+              <View style={styles.selectorContent}>
+                {activeTab === 'design' ? (
+                  <InvoiceDesignSelector
+                    designs={availableDesigns}
+                    selectedDesignId={currentDesign.id}
+                    onDesignSelect={selectDesign}
+                    isLoading={isDesignLoading}
+                  />
+                ) : (
+                  <ColorSelector
+                    selectedColor={selectedAccentColor}
+                    onColorSelect={setSelectedAccentColor}
+                  />
+                )}
+              </View>
+            </Animated.View>
+          </PanGestureHandler>
         </Modal>
 
         {/* Quick Send Modal */}
@@ -486,7 +581,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 3,
     borderBottomWidth: 1,
     backgroundColor: 'white',
   },
@@ -501,7 +596,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: -2,
     paddingBottom: Platform.OS === 'ios' ? 120 : 100, // Extra space for design section
     paddingHorizontal: 0,
   },
@@ -554,13 +649,12 @@ const styles = StyleSheet.create({
   },
   designSelectorContainer: {
     position: 'absolute',
-    bottom: 15,
+    bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: 'white',
-    paddingBottom: 0,
-    paddingTop: 20,
-    minHeight: 150,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Safe area padding
+    paddingTop: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
@@ -569,7 +663,7 @@ const styles = StyleSheet.create({
   },
   quickSendIcon: {
     position: 'absolute',
-    bottom: 237,
+    bottom: Platform.OS === 'ios' ? 222 : 208, // Adjusted for new selector position
     right: 20,
     width: 44,
     height: 44,
@@ -589,5 +683,29 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  selectorHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 10,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  tabSelectorBottom: {
+    width: 250,
+  },
+  selectorContent: {
+    flex: 1,
+  },
+  swipeIndicator: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  swipeHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
   },
 }); 

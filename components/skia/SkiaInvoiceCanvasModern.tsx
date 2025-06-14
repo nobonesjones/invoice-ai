@@ -10,6 +10,7 @@ interface SkiaInvoiceCanvasProps {
   style?: any;
   renderSinglePage?: number; // NEW: If provided, only render this specific page (0-indexed)
   exportPageNumber?: number; // NEW: For export - render only this page (1-indexed) at standard size
+  accentColor?: string; // NEW: Dynamic accent color for customization
 }
 
 const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) => {
@@ -20,7 +21,8 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     currencySymbol = '£',
     style,
     renderSinglePage,
-    exportPageNumber
+    exportPageNumber,
+    accentColor = '#14B8A6' // Default turquoise
   } = props;
   console.log('[SkiaInvoiceCanvasModern] Rendering Modern Design');
 
@@ -743,7 +745,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         textAlign: TextAlign.Left,
       })
       .pushStyle({ 
-        color: Skia.Color('black'), 
+        color: Skia.Color('white'), 
         fontFamilies: ['Helvetica'], 
         fontSize: 10, 
         fontStyle: { weight: 700 }
@@ -755,7 +757,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         textAlign: TextAlign.Right,
       })
       .pushStyle({ 
-        color: Skia.Color('black'), 
+        color: Skia.Color('white'), 
         fontFamilies: ['Helvetica'], 
         fontSize: 10, 
         fontStyle: { weight: 400 }
@@ -872,9 +874,9 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     background: '#fff',
     text: 'black',
     border: '#eee',
-    greenAccent: '#14B8A6', // Modern teal color instead of green
+    greenAccent: accentColor, // Dynamic accent color from props
     shadow: '#f0f0f0',
-    orange: '#14B8A6', // Teal for logo instead of orange
+    orange: accentColor, // Dynamic accent color for logo instead of orange
     headerBlock: '#333333' // Light black header block
   };
 
@@ -1052,10 +1054,10 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
            {/* Table headers - PERFECTLY ALIGNED */}
            {scaledFonts.bodyBold && (
              <>
-           <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
-           <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
-           <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
-           <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color="white" />
+           <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
+           <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color="white" />
+           <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
              </>
            )}
           
@@ -1196,10 +1198,10 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                   
                   {/* Table header for this page */}
                   <Rect x={tableX + 15} y={pageHeaderY} width={tableWidth - 35} height={18} color={colors.greenAccent} />
-                  <Text x={qtyX + 20} y={pageHeaderY + 13} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
-                  <Text x={descX + 30} y={pageHeaderY + 13} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
-                  <Text x={priceX + 65} y={pageHeaderY + 13} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
-                  <Text x={totalX + 62} y={pageHeaderY + 13} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
+                  <Text x={qtyX + 20} y={pageHeaderY + 13} text="QTY" font={scaledFonts.bodyBold} color="white" />
+                  <Text x={descX + 30} y={pageHeaderY + 13} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
+                  <Text x={priceX + 65} y={pageHeaderY + 13} text="PRICE" font={scaledFonts.bodyBold} color="white" />
+                  <Text x={totalX + 62} y={pageHeaderY + 13} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
                   
                   {/* Line items for this page */}
                   {itemsThisPage.map((item: any, index: number) => {

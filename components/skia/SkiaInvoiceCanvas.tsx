@@ -10,6 +10,7 @@ interface SkiaInvoiceCanvasProps {
   style?: any;
   renderSinglePage?: number; // NEW: If provided, only render this specific page (0-indexed)
   exportPageNumber?: number; // NEW: For export - render only this page (1-indexed) at standard size
+  accentColor?: string; // NEW: Dynamic accent color for customization
 }
 
 const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) => {
@@ -20,7 +21,8 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
     currencySymbol = '£',
     style,
     renderSinglePage,
-    exportPageNumber
+    exportPageNumber,
+    accentColor = '#14B8A6' // Default turquoise
   } = props;
   console.log('[SkiaInvoiceCanvas] Rendering Real Invoice INV-710231');
 

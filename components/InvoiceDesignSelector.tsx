@@ -42,10 +42,6 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.title, { color: themeColors.foreground }]}>
-        Choose Design
-      </Text>
-      
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -141,8 +137,8 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
 
 const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
-    paddingTop: 0,
-    paddingBottom: 4,
+    paddingTop: 31,
+    paddingBottom: -2,
     paddingHorizontal: 20,
     backgroundColor: 'white',
   },
@@ -155,6 +151,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   },
   scrollView: {
     flexGrow: 0,
+    height: 140, // Increased height to use available space
   },
   scrollContent: {
     paddingRight: 20,
