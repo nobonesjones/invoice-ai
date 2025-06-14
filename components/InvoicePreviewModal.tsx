@@ -10,7 +10,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { colors } from '@/constants/colors';
 import { useColorScheme } from 'react-native';
-import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
+
 import { Ionicons } from '@expo/vector-icons';
 import { Send, Mail, FileText, Link2, X as XIcon } from 'lucide-react-native';
 import { useCanvasRef } from '@shopify/react-native-skia';
@@ -348,10 +348,10 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                   transform: [{ scale: 0.882 }],
                   marginLeft: -175,
                 }}>
-                  <SkiaInvoiceCanvas
-                    ref={skiaInvoiceRef}
-                    renderSinglePage={0}
-                    style={{
+                  {React.createElement(currentDesign.component, {
+                    ref: skiaInvoiceRef,
+                    renderSinglePage: 0,
+                    style: {
                       width: 200,
                       height: 280,
                       backgroundColor: 'white',
@@ -361,12 +361,12 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                       shadowOpacity: 0.25,
                       shadowRadius: 12,
                       elevation: 10,
-                    }}
-                    invoice={invoiceData}
-                    business={businessSettings}
-                    client={clientData}
-                    currencySymbol={businessSettings?.currency_symbol || '$'}
-                  />
+                    },
+                    invoice: invoiceData,
+                    business: businessSettings,
+                    client: clientData,
+                    currencySymbol: businessSettings?.currency_symbol || '$'
+                  })}
                 </View>
               </View>
             </ScrollView>

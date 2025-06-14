@@ -1,5 +1,6 @@
 import React from 'react';
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
+import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
 
 // Define the structure for invoice design templates
 export interface InvoiceDesign {
@@ -90,7 +91,7 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
     displayName: 'Modern',
     description: 'Clean and contemporary with green accents',
     thumbnail: '/assets/invoice-designs/modern-thumb.png',
-    component: SkiaInvoiceCanvas, // Will be replaced with ModernSkiaInvoiceCanvas
+    component: SkiaInvoiceCanvasModern, // Now using the Modern component
     colorScheme: COLOR_SCHEMES.modern,
     layoutConfig: {
       headerPosition: 'center',

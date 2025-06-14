@@ -122,4 +122,4 @@ Screen 6 (Social Proof / Rating Teaser):
 avatar_placeholder_1.png, avatar_placeholder_2.png, avatar_placeholder_3.png (For the cluster of user profile photos)
 Screen 8 (Account Created Confirmation):
 account_created_preview.png (Small, stylized preview of an invoice or relevant success graphic)
-AI Coder Note for all background images: Ensure images are optimized for mobile and consider providing different resolutions if necessary. They should be subtle enough not to overpower the UI text and elements. Use images that align with your app's brand and target audience. Your design document should specify exact styling for overlays and text on these images.
+AI Coder Note for all background images: Ensure images are optimized for mobile and consider providing different resolutions if necessary. They should be subtle enough not to overpower the UI text and elements. Use images that align with your app's brand and target audience. Your design document should specify exact styling for overlays and text on these images.qeer4
