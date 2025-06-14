@@ -292,11 +292,11 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
 
   // Create exact font system matching original design typography with fallbacks
   const fonts = useMemo(() => {
-    const fontFamily = Platform.select({ 
-      ios: "Helvetica", 
-      android: "sans-serif",
-      default: "sans-serif" 
-    });
+      const fontFamily = Platform.select({ 
+        ios: "Helvetica", 
+        android: "sans-serif",
+        default: "sans-serif" 
+      });
 
     // Helper function to create font with fallback
     const createFontWithFallback = (fontSize: number, fontWeight: "normal" | "bold" = "normal") => {
@@ -334,37 +334,37 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         return null;
       }
     };
-    
-    return {
-      // Original: fontSize: 6, itemSubtitle + textPlaceholder
+      
+      return {
+        // Original: fontSize: 6, itemSubtitle + textPlaceholder
       tiny: createFontWithFallback(7),
-      // Original: fontSize: 7, tableHeader + lineItemCellText  
+        // Original: fontSize: 7, tableHeader + lineItemCellText  
       small: createFontWithFallback(8),
-      // Bold version for table headers
+        // Bold version for table headers
       smallBold: createFontWithFallback(8, "bold"),
-      // Original: fontSize: 8, label + text + paymentTermsHeader/Body
+        // Original: fontSize: 8, label + text + paymentTermsHeader/Body
       body: createFontWithFallback(9),
-      // Original: fontSize: 8, bold labels
+        // Original: fontSize: 8, bold labels
       bodyBold: createFontWithFallback(9, "bold"),
-      // Original: fontSize: 9, headerTextDetail
+        // Original: fontSize: 9, headerTextDetail
       medium: createFontWithFallback(10),
-      // Original: fontSize: 10, businessNameText + clientNameText + logoPlaceholder
+        // Original: fontSize: 10, businessNameText + clientNameText + logoPlaceholder
       large: createFontWithFallback(11, "bold"),
-      // Original: fontSize: 16, invoiceLabel  
+        // Original: fontSize: 16, invoiceLabel  
       title: createFontWithFallback(17, "bold")
-    };
+      };
   }, []);
 
   // Scaled fonts for compact mode (9-11 items)
   const scaledFonts = useMemo(() => {
     if (!isCompactMode) return fonts;
     
-    const fontFamily = Platform.select({ 
-      ios: "Helvetica", 
-      android: "sans-serif",
-      default: "sans-serif" 
-    });
-
+      const fontFamily = Platform.select({ 
+        ios: "Helvetica", 
+        android: "sans-serif",
+        default: "sans-serif" 
+      });
+      
     // Helper function to create scaled font with fallback
     const createScaledFontWithFallback = (fontSize: number, fontWeight: "normal" | "bold" = "normal") => {
       // Try multiple font families as fallbacks
@@ -379,7 +379,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
           return matchFont({
             fontFamily: fallbackFont,
             fontSize: Math.round(fontSize * scaleFactor),
-            fontStyle: "normal" as const,
+          fontStyle: "normal" as const,
             fontWeight: fontWeight as const,
           });
         } catch (e) {
@@ -409,11 +409,11 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
       smallBold: createScaledFontWithFallback(8, "bold"), // 6px
       body: createScaledFontWithFallback(9), // 7px
       bodyBold: createScaledFontWithFallback(9, "bold"), // 7px
-      // Keep header fonts normal size
-      medium: fonts.medium,
-      large: fonts.large,
-      title: fonts.title
-    };
+        // Keep header fonts normal size
+        medium: fonts.medium,
+        large: fonts.large,
+        title: fonts.title
+      };
   }, [fonts, isCompactMode, scaleFactor]);
 
   // Create right-aligned paragraphs using Skia's TextAlign.Right
@@ -1049,10 +1049,10 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
            {/* Table headers - PERFECTLY ALIGNED */}
            {scaledFonts.bodyBold && (
              <>
-               <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
-               <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
-               <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
-               <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color={colors.text} />
+           <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color={colors.text} />
              </>
            )}
           

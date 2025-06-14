@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import React, { useCallback, useRef, forwardRef, useImperativeHandle, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Modal, SafeAreaView, ScrollView } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   BottomSheetModal,
@@ -18,6 +18,8 @@ import { useSupabase } from '@/context/supabase-provider';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
+import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
+import { useInvoiceDesign } from '@/hooks/useInvoiceDesign';
 
 export interface InvoicePreviewModalRef {
   present: () => void;
@@ -37,8 +39,17 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const isLightMode = colorScheme === 'light';
     const themeColors = colors[colorScheme || 'light'];
     
-    const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+    const [isVisible, setIsVisible] = useState(false);
     const { supabase } = useSupabase();
+    
+    // Design selection hook
+    const {
+      currentDesign,
+      availableDesigns,
+      isLoading: isDesignLoading,
+      selectDesign,
+      saveAsDefault,
+    } = useInvoiceDesign();
     
     // Send modal refs and setup
     const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
@@ -46,20 +57,39 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []);
 
     useImperativeHandle(ref, () => ({
-      present: () => bottomSheetModalRef.current?.present(),
-      dismiss: () => bottomSheetModalRef.current?.dismiss(),
+      present: () => setIsVisible(true),
+      dismiss: () => setIsVisible(false),
     }));
 
-    const handleSheetChanges = useCallback((index: number) => {
-      console.log('handleSheetChanges', index);
-      if (index === -1) {
-        onClose?.();
-      }
+    const handleClose = useCallback(() => {
+      setIsVisible(false);
+      onClose?.();
     }, [onClose]);
 
-    const handleClose = useCallback(() => {
-      bottomSheetModalRef.current?.dismiss();
-    }, []);
+    // Handle discarding changes and closing modal
+    const handleDiscard = useCallback(() => {
+      // Reset to original design if user had made changes
+      // For now, just close the modal without saving
+      setIsVisible(false);
+      onClose?.();
+    }, [onClose]);
+
+    // Handle saving design changes and closing modal
+    const handleSave = useCallback(async () => {
+      try {
+        // Save the current design as user's default
+        const success = await saveAsDefault(currentDesign.id);
+        if (success) {
+          console.log('Design preference saved successfully');
+        }
+      } catch (error) {
+        console.error('Error saving design preference:', error);
+      } finally {
+        // Close modal regardless of save success/failure
+        setIsVisible(false);
+        onClose?.();
+      }
+    }, [currentDesign.id, saveAsDefault, onClose]);
 
     // Send modal handlers
     const handleOpenSendModal = useCallback(() => {
@@ -279,40 +309,34 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
       []
     );
 
-    const snapPoints = React.useMemo(() => ["90%"], []);
+    const snapPoints = React.useMemo(() => ["99%"], []);
 
     return (
       <>
-        <BottomSheetModal
-          ref={bottomSheetModalRef}
-          index={0}
-          snapPoints={snapPoints}
-          onChange={handleSheetChanges}
-          enableDynamicSizing={false}
-          backgroundStyle={{ backgroundColor: 'white' }}
-          handleIndicatorStyle={{ backgroundColor: themeColors.text + '40' }}
-          backdropComponent={renderBackdrop}
-          enablePanDownToClose={true}
-          enableContentPanningGesture={false}
+        <Modal
+          visible={isVisible}
+          transparent={false}
+          animationType="slide"
+          presentationStyle="fullScreen"
         >
-          <BottomSheetView style={[styles.container, { backgroundColor: 'white' }]}>
-            {/* Header with close button */}
+          <SafeAreaView style={[styles.container, { backgroundColor: 'white' }]}>
             <View style={[styles.header, { borderBottomColor: themeColors.border }]}>
-              <View style={styles.headerSpacer} />
-              <Text style={[styles.headerTitle, { color: themeColors.text }]}>
-                Invoice Preview
-              </Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <TouchableOpacity onPress={handleDiscard} style={styles.closeButton}>
                 <Ionicons 
                   name="close" 
                   size={24} 
-                  color={themeColors.text} 
+                  color={themeColors.foreground} 
                 />
+              </TouchableOpacity>
+              <Text style={[styles.headerTitle, { color: themeColors.foreground }]}>
+                Invoice Preview
+              </Text>
+              <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
+                <Text style={[styles.saveButtonText, { color: '#22c55e' }]}>Save</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Scrollable content with invoice preview */}
-            <BottomSheetScrollView 
+            <ScrollView 
               contentContainerStyle={[
                 styles.scrollContent,
                 { backgroundColor: 'white' }
@@ -345,21 +369,30 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                   />
                 </View>
               </View>
-            </BottomSheetScrollView>
+            </ScrollView>
+          </SafeAreaView>
 
-            {/* Floating Quick Send Button - pill-shaped */}
-            {invoiceData && businessSettings && (
-              <TouchableOpacity
-                onPress={handleOpenSendModal}
-                style={styles.floatingButton}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.buttonText}>Quick Send</Text>
-                <Send size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-            )}
-          </BottomSheetView>
-        </BottomSheetModal>
+          {/* Quick Send Icon - positioned above design selector */}
+          {invoiceData && businessSettings && (
+            <TouchableOpacity
+              onPress={handleOpenSendModal}
+              style={styles.quickSendIcon}
+              activeOpacity={0.8}
+            >
+              <Send size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          {/* Design Selector - Absolute bottom */}
+          <View style={styles.designSelectorContainer}>
+            <InvoiceDesignSelector
+              designs={availableDesigns}
+              selectedDesignId={currentDesign.id}
+              onDesignSelect={selectDesign}
+              isLoading={isDesignLoading}
+            />
+          </View>
+        </Modal>
 
         {/* Quick Send Modal */}
         <BottomSheetModal
@@ -367,7 +400,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           index={0}
           snapPoints={sendInvoiceSnapPoints}
           backdropComponent={renderSendBackdrop}
-          handleIndicatorStyle={{ backgroundColor: themeColors.text + '40' }}
+          handleIndicatorStyle={{ backgroundColor: themeColors.foreground + '40' }}
           backgroundStyle={{ backgroundColor: 'white' }}
           onDismiss={() => console.log('Modal Send Invoice Modal Dismissed')}
         >
@@ -385,14 +418,14 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
               <Text style={{
                 fontSize: 18,
                 fontWeight: 'bold',
-                color: themeColors.text,
+                color: themeColors.foreground,
                 flex: 1,
                 textAlign: 'center'
               }}>
                 Send Invoice
               </Text>
               <TouchableOpacity onPress={handleCloseSendModal} style={{ padding: 4 }}>
-                <XIcon size={24} color={themeColors.text + '80'} />
+                <XIcon size={24} color={themeColors.foreground + '80'} />
               </TouchableOpacity>
             </View>
 
@@ -406,8 +439,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
               }}
               onPress={handleSendByEmail}
             >
-              <Mail size={22} color={themeColors.text} style={{ marginRight: 16 }} />
-              <Text style={{ fontSize: 16, color: themeColors.text }}>Send by Email</Text>
+              <Mail size={22} color={themeColors.foreground} style={{ marginRight: 16 }} />
+              <Text style={{ fontSize: 16, color: themeColors.foreground }}>Send by Email</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: themeColors.border, marginLeft: 16 }} />
 
@@ -420,8 +453,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
               }}
               onPress={handleSendLink}
             >
-              <Link2 size={22} color={themeColors.text} style={{ marginRight: 16 }} />
-              <Text style={{ fontSize: 16, color: themeColors.text }}>Send Link</Text>
+              <Link2 size={22} color={themeColors.foreground} style={{ marginRight: 16 }} />
+              <Text style={{ fontSize: 16, color: themeColors.foreground }}>Send Link</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: themeColors.border, marginLeft: 16 }} />
 
@@ -434,8 +467,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
               }}
               onPress={handleSendPDF}
             >
-              <FileText size={22} color={themeColors.text} style={{ marginRight: 16 }} />
-              <Text style={{ fontSize: 16, color: themeColors.text }}>Send PDF</Text>
+              <FileText size={22} color={themeColors.foreground} style={{ marginRight: 16 }} />
+              <Text style={{ fontSize: 16, color: themeColors.foreground }}>Send PDF</Text>
             </TouchableOpacity>
           </BottomSheetView>
         </BottomSheetModal>
@@ -455,9 +488,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderBottomWidth: 1,
-  },
-  headerSpacer: {
-    width: 32, // Same width as close button to balance the title in the center
+    backgroundColor: 'white',
   },
   headerTitle: {
     fontSize: 18,
@@ -470,25 +501,25 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 120 : 100, // Extra space for design section
     paddingHorizontal: 0,
   },
   previewContainer: {
     alignItems: 'center',
     justifyContent: 'flex-start',
+    flex: 1,
+    width: '100%',
   },
   floatingButton: {
     position: 'absolute',
-    bottom: 30,
+    bottom: Platform.OS === 'ios' ? 40 : 20,
     right: 20,
-    height: 44,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 22,
-    backgroundColor: '#22C55E', // Green color
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -497,8 +528,66 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   buttonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  quickSendContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  inlineQuickSendButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    minWidth: 140,
+    justifyContent: 'center',
+  },
+  designSelectorContainer: {
+    position: 'absolute',
+    bottom: 15,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    paddingBottom: 0,
+    paddingTop: 20,
+    minHeight: 150,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  quickSendIcon: {
+    position: 'absolute',
+    bottom: 237,
+    right: 20,
+    width: 44,
+    height: 44,
+    backgroundColor: '#22c55e',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  saveButton: {
+    padding: 4,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

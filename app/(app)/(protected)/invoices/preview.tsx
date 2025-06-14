@@ -185,7 +185,7 @@ export default function PreviewScreen() {
                   <Animated.View style={[styles.zoomContainer, animatedStyle]}>
                     <SkiaErrorBoundary>
                       <SkiaInvoiceCanvas
-                        invoice={invoiceData}
+                      invoice={invoiceData}
                         client={invoiceData.clients}
                         business={businessSettings}
                         currencySymbol={businessSettings?.currency_symbol || invoiceData?.currency_symbol || '$'}
@@ -201,7 +201,7 @@ export default function PreviewScreen() {
                           shadowRadius: 4,
                           elevation: 3,
                         }}
-                      />
+                    />
                     </SkiaErrorBoundary>
                   </Animated.View>
                 </PinchGestureHandler>

@@ -282,7 +282,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 										shadowRadius: 8,
 										elevation: 5,
 									}}
-									invoice={transformedInvoice}
+							invoice={transformedInvoice}
 									business={businessSettings}
 									client={transformedClient}
 									currencySymbol={businessSettings?.currency_symbol || '$'}
