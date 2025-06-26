@@ -286,6 +286,13 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 									business={businessSettings}
 									client={transformedClient}
 									currencySymbol={businessSettings?.currency_symbol || '$'}
+									displaySettings={{
+										show_business_logo: businessSettings?.show_business_logo ?? true,
+										show_business_name: businessSettings?.show_business_name ?? true,
+										show_business_address: businessSettings?.show_business_address ?? true,
+										show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
+										show_notes_section: businessSettings?.show_notes_section ?? true,
+									}}
 								/>
 							</View>
 						) : (

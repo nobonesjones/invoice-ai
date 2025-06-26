@@ -543,7 +543,7 @@ export default function InvoiceSettingsScreen() {
             />
           </View>
 
-          <View style={[styles.settingRow, styles.lastSettingRow]}>
+          <View style={styles.settingRow}>
             <View style={styles.settingLeft}>
               <Text style={styles.settingLabel}>Show Notes Section</Text>
               <Text style={styles.settingDescription}>Include a notes field on new invoices</Text>
@@ -555,6 +555,14 @@ export default function InvoiceSettingsScreen() {
               thumbColor={settings.show_notes_section ? theme.primary : theme.foreground}
             />
           </View>
+
+          <TouchableOpacity style={[styles.settingRow, styles.lastSettingRow]} onPress={() => console.log('Reference Schema pressed')}>
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingLabel}>Invoice Reference Format</Text>
+              <Text style={styles.settingDescription}>Customize how invoice numbers are generated</Text>
+            </View>
+            <ChevronRight size={20} color={theme.mutedForeground} style={styles.chevronIcon} />
+          </TouchableOpacity>
         </View>
 
         {/* Estimates Section - Coming Soon */}

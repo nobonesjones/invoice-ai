@@ -9,6 +9,13 @@ interface SkiaInvoiceCanvasSimpleProps {
   currencySymbol?: string;
   style?: any;
   accentColor?: string; // NEW: Dynamic accent color for customization
+  displaySettings?: {
+    show_business_logo?: boolean;
+    show_business_name?: boolean;
+    show_business_address?: boolean;
+    show_business_tax_number?: boolean;
+    show_notes_section?: boolean;
+  };
 }
 
 const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps, ref: any) => {
@@ -18,7 +25,14 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps,
     client, 
     currencySymbol = '£',
     style,
-    accentColor = '#14B8A6' // Default turquoise
+    accentColor = '#14B8A6', // Default turquoise
+    displaySettings = {
+      show_business_logo: true,
+      show_business_name: true,
+      show_business_address: true,
+      show_business_tax_number: true,
+      show_notes_section: true,
+    }
   } = props;
 
   console.log('[SkiaInvoiceCanvasSimple] Starting FULL INVOICE render test...');

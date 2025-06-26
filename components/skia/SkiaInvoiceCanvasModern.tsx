@@ -11,6 +11,13 @@ interface SkiaInvoiceCanvasProps {
   renderSinglePage?: number; // NEW: If provided, only render this specific page (0-indexed)
   exportPageNumber?: number; // NEW: For export - render only this page (1-indexed) at standard size
   accentColor?: string; // NEW: Dynamic accent color for customization
+  displaySettings?: {
+    show_business_logo?: boolean;
+    show_business_name?: boolean;
+    show_business_address?: boolean;
+    show_business_tax_number?: boolean;
+    show_notes_section?: boolean;
+  };
 }
 
 const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) => {
@@ -22,7 +29,14 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     style,
     renderSinglePage,
     exportPageNumber,
-    accentColor = '#14B8A6' // Default turquoise
+    accentColor = '#14B8A6', // Default turquoise
+    displaySettings = {
+      show_business_logo: true,
+      show_business_name: true,
+      show_business_address: true,
+      show_business_tax_number: true,
+      show_notes_section: true,
+    }
   } = props;
   console.log('[SkiaInvoiceCanvasModern] Rendering Modern Design');
 
@@ -616,7 +630,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 16, // Made bigger for prominence in header
         fontStyle: { weight: 700 }
       })
-      .addText(`${business?.business_name || 'Hello mate'}`)
+      .addText(`${displaySettings.show_business_name ? (business?.business_name || 'Hello mate') : ''}`)
       .build();
 
       // Business address for header - single line, same width as INVOICE, smaller text
@@ -629,7 +643,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 8, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address ? business.business_address.replace(/\n/g, ', ') : ''}`)
+      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.replace(/\n/g, ', ') : ''}`)
       .build();
 
       const businessAddress1Paragraph = Skia.ParagraphBuilder.Make({
@@ -641,7 +655,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address ? business.business_address.split('\n')[0] || '' : ''}`)
+      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[0] || '' : ''}`)
       .build();
 
       const businessAddress2Paragraph = Skia.ParagraphBuilder.Make({
@@ -653,7 +667,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address ? business.business_address.split('\n')[1] || '' : ''}`)
+      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[1] || '' : ''}`)
       .build();
 
       const businessAddress3Paragraph = Skia.ParagraphBuilder.Make({
@@ -665,7 +679,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address ? business.business_address.split('\n')[2] || '' : ''}`)
+      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[2] || '' : ''}`)
       .build();
 
       const businessAddress4Paragraph = Skia.ParagraphBuilder.Make({
@@ -677,7 +691,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address ? business.business_address.split('\n')[3] || '' : ''}`)
+      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[3] || '' : ''}`)
       .build();
 
       const businessTaxNumberParagraph = Skia.ParagraphBuilder.Make({
@@ -689,7 +703,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : ''}`)
+      .addText(`${displaySettings.show_business_tax_number && business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : ''}`)
       .build();
 
       // Totals paragraphs - separate labels and values for better spacing
@@ -1010,27 +1024,29 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
           {/* === HEADER SECTION === */}
           
           {/* Left: Business Logo - Centered in header block */}
-          {logoImage && business?.business_logo_url ? (
-            <Image 
-              image={logoImage} 
-              x={OFFSET_X + 27} 
-              y={15} 
-              width={65} 
-              height={65} 
-              fit="contain"
-            />
-          ) : (
-            <>
-              {/* Fallback logo with dynamic business initials - Centered in header block */}
-              <Circle cx={OFFSET_X + 59} cy={47} r={32} color={colors.orange} />
-              <Text 
-                x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
-                y={56} 
-                text={businessInitials} 
-                font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
-                color="white" 
+          {displaySettings.show_business_logo && (
+            logoImage && business?.business_logo_url ? (
+              <Image 
+                image={logoImage} 
+                x={OFFSET_X + 27} 
+                y={15} 
+                width={65} 
+                height={65} 
+                fit="contain"
               />
-            </>
+            ) : (
+              <>
+                {/* Fallback logo with dynamic business initials - Centered in header block */}
+                <Circle cx={OFFSET_X + 59} cy={47} r={32} color={colors.orange} />
+                <Text 
+                  x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
+                  y={56} 
+                  text={businessInitials} 
+                  font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
+                  color="white" 
+                />
+              </>
+            )
           )}
           
           {/* Right: Invoice title and RIGHT-ALIGNED details using Paragraph */}

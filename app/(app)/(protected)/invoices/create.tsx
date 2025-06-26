@@ -2039,6 +2039,12 @@ export default function CreateInvoiceScreen() {
             />
           </FormSection>
 
+          <FormSection title="" themeColors={themeColors}>
+            <TouchableOpacity onPress={handlePreviewInvoice} style={styles.changeDesignSelector}>
+              <Text style={styles.changeDesignText}>Change Invoice Design</Text>
+            </TouchableOpacity>
+          </FormSection>
+
           <FormSection title="OTHER SETTINGS" themeColors={themeColors}>
             <ActionRow
               label="Add images & PDFs (0)"
@@ -2611,6 +2617,16 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       color: themeColors.mutedForeground, // Example: a muted color
       fontWeight: 'normal',
       marginLeft: 2,
+    },
+    changeDesignSelector: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 16,
+    },
+    changeDesignText: {
+      fontSize: 17,
+      fontWeight: '500',
+      color: themeColors.primary,
     },
   });
 }

@@ -984,15 +984,17 @@ export class InvoiceFunctionService {
       // The limit is now on sending, not creating
       console.log('[AI Invoice Create] Creating invoice (unlimited creation in freemium model)');
 
-      // Step 0: Get user's business settings for default tax rate
+      // Step 0: Get user's business settings for default tax rate, design, and color
       let defaultTaxRate = 0;
       let businessCurrency = 'USD';
       let businessCurrencySymbol = '$';
+      let defaultDesign = 'classic';
+      let defaultAccentColor = '#14B8A6';
       
       try {
         const { data: businessSettings } = await supabase
           .from('business_settings')
-          .select('default_tax_rate, auto_apply_tax, currency_code')
+          .select('default_tax_rate, auto_apply_tax, currency_code, default_invoice_design, default_accent_color, show_business_logo, show_business_name, show_business_address, show_business_tax_number, show_notes_section')
           .eq('user_id', userId)
           .single();
           
@@ -1007,6 +1009,23 @@ export class InvoiceFunctionService {
             businessCurrencySymbol = this.getCurrencySymbol(businessSettings.currency_code);
             console.log('[AI Invoice Create] Using business currency:', businessCurrency, businessCurrencySymbol);
           }
+          if (businessSettings.default_invoice_design) {
+            defaultDesign = businessSettings.default_invoice_design;
+            console.log('[AI Invoice Create] Using default design:', defaultDesign);
+          }
+          if (businessSettings.default_accent_color) {
+            defaultAccentColor = businessSettings.default_accent_color;
+            console.log('[AI Invoice Create] Using default accent color:', defaultAccentColor);
+          }
+          
+          // Log display settings for reference
+          console.log('[AI Invoice Create] Display settings:', {
+            show_business_logo: businessSettings.show_business_logo,
+            show_business_name: businessSettings.show_business_name,
+            show_business_address: businessSettings.show_business_address,
+            show_business_tax_number: businessSettings.show_business_tax_number,
+            show_notes_section: businessSettings.show_notes_section
+          });
         }
       } catch (settingsError) {
         console.log('[AI Invoice Create] No business settings found, using defaults');
@@ -1148,7 +1167,9 @@ export class InvoiceFunctionService {
           discount_value: params.discount_value || 0,
           tax_percentage: taxPercentage || 0,
           total_amount: totalAmount,
-          notes: params.notes || null
+          notes: params.notes || null,
+          invoice_design: defaultDesign,
+          accent_color: defaultAccentColor
         })
         .select('*')
         .single();
@@ -1187,6 +1208,10 @@ ${lineItems.map((item: any, index: number) =>
 ).join('\n')}
 
 Total: $${totalAmount.toFixed(2)}${invoice.due_date ? ` • Due: ${new Date(invoice.due_date).toLocaleDateString()}` : ''}
+
+I've applied your default design settings:
+• Design: ${defaultDesign}
+• Accent Color: ${defaultAccentColor}
 
 Would you like me to help you send this invoice or make any changes?`;
 

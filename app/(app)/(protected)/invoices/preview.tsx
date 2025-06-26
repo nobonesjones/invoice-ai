@@ -190,6 +190,13 @@ export default function PreviewScreen() {
                         business={businessSettings}
                         currencySymbol={businessSettings?.currency_symbol || invoiceData?.currency_symbol || '$'}
                         renderSinglePage={0}
+                        displaySettings={{
+                          show_business_logo: businessSettings?.show_business_logo ?? true,
+                          show_business_name: businessSettings?.show_business_name ?? true,
+                          show_business_address: businessSettings?.show_business_address ?? true,
+                          show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
+                          show_notes_section: businessSettings?.show_notes_section ?? true,
+                        }}
                         style={{ 
                           width: 350, 
                           height: 500,

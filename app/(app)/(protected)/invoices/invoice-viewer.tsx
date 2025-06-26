@@ -1967,6 +1967,13 @@ ${analytics.countries.length > 0 ?
                 currencySymbol={currencySymbol}
                 accentColor={getAccentColor()}
                 renderSinglePage={0}
+                displaySettings={{
+                  show_business_logo: businessSettings?.show_business_logo ?? true,
+                  show_business_name: businessSettings?.show_business_name ?? true,
+                  show_business_address: businessSettings?.show_business_address ?? true,
+                  show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
+                  show_notes_section: businessSettings?.show_notes_section ?? true,
+                }}
                 style={{ 
                   width: 200, 
                   height: 295,
