@@ -47,6 +47,10 @@ export default function NewSettingsScreen() {
     setIsTabBarVisible(false);
     router.push('/business-information');
   };
+  const handleInvoiceSettingsPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/invoice-settings');
+  };
   const handleTaxCurrencyPress = () => {
     setIsTabBarVisible(false);
     router.push('/tax-currency');
@@ -98,6 +102,13 @@ export default function NewSettingsScreen() {
           label: 'Business Information',
           onPress: handleBusinessInformationPress,
           searchTerms: ['business', 'information', 'company', 'details']
+        },
+        {
+          id: 'invoice-settings',
+          icon: <FileText color={theme.foreground} size={24} />,
+          label: 'Invoice Settings',
+          onPress: handleInvoiceSettingsPress,
+          searchTerms: ['invoice', 'settings', 'template', 'design', 'defaults']
         },
         {
           id: 'tax-currency',

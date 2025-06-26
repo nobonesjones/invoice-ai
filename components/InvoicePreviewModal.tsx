@@ -34,10 +34,15 @@ interface InvoicePreviewModalProps {
   clientData?: any;
   invoiceId?: string; // Add invoice ID for individual design management
   onClose?: () => void;
+  // New props for settings mode
+  mode?: 'preview' | 'settings';
+  onDesignSaved?: (designId: string, accentColor: string) => void;
+  initialDesign?: string;
+  initialAccentColor?: string;
 }
 
 export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePreviewModalProps>(
-  ({ invoiceData, businessSettings, clientData, invoiceId, onClose }, ref) => {
+  ({ invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor }, ref) => {
     const colorScheme = useColorScheme();
     const isLightMode = colorScheme === 'light';
     const themeColors = colors[colorScheme || 'light'];
@@ -65,8 +70,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
       updateDefaultForNewInvoices,
     } = useInvoiceDesignForInvoice(
       invoiceId,
-      invoiceData?.invoice_design,
-      invoiceData?.accent_color
+      mode === 'settings' ? initialDesign : invoiceData?.invoice_design,
+      mode === 'settings' ? initialAccentColor : invoiceData?.accent_color
     );
     
     // Send modal refs and setup
@@ -139,7 +144,10 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     // Handle saving design changes and closing modal
     const handleSave = useCallback(async () => {
       try {
-        if (invoiceId) {
+        if (mode === 'settings') {
+          // In settings mode, call the callback instead of saving to database
+          onDesignSaved?.(currentDesign.id, currentAccentColor);
+        } else if (invoiceId) {
           // Save design and color to specific invoice
           const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
           if (success) {
@@ -161,7 +169,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         setIsVisible(false);
         onClose?.();
       }
-    }, [invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose]);
+    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose]);
 
     // Send modal handlers
     const handleOpenSendModal = useCallback(() => {
@@ -467,7 +475,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                 />
               </TouchableOpacity>
               <Text style={[styles.headerTitle, { color: themeColors.foreground }]}>
-                Invoice Preview
+                {mode === 'settings' ? 'Default Design Settings' : 'Invoice Preview'}
               </Text>
               <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
                 <Text style={[styles.saveButtonText, { color: '#22c55e' }]}>Save</Text>
@@ -512,7 +520,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           </SafeAreaView>
 
           {/* Quick Send Icon - positioned above design selector */}
-          {invoiceData && businessSettings && (
+          {invoiceData && businessSettings && mode !== 'settings' && (
             <TouchableOpacity
               onPress={handleOpenSendModal}
               style={styles.quickSendIcon}

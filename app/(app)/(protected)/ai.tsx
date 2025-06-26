@@ -503,6 +503,28 @@ export default function AiScreen() {
 		}
 	}, [messages]);
 
+	// Helper function to extract first name from user's display name
+	const getFirstName = () => {
+		if (!user) return '';
+		
+		// Try to get display name from user metadata first
+		const displayName = user.user_metadata?.display_name;
+		if (displayName && typeof displayName === 'string') {
+			// Extract first name (everything before the first space)
+			const firstName = displayName.trim().split(' ')[0];
+			return firstName;
+		}
+		
+		// Fallback to email username if no display name
+		const emailName = user.email?.split('@')[0];
+		if (emailName) {
+			// Capitalize first letter
+			return emailName.charAt(0).toUpperCase() + emailName.slice(1);
+		}
+		
+		return '';
+	};
+
 	// Show setup message if OpenAI is not configured, otherwise show welcome message
 	const getWelcomeMessage = () => {
 		if (showSetupMessage) {
@@ -516,11 +538,14 @@ export default function AiScreen() {
 			};
 		}
 		
+		const firstName = getFirstName();
+		const greeting = firstName ? `Hi ${firstName}` : 'Hello';
+		
 		return {
 			id: 'welcome',
 			conversation_id: '',
 			role: 'assistant' as const,
-			content: `Hello${user ? ` ${user.email?.split('@')[0]}` : ''}! I'm your AI assistant for invoice management. I can help you create invoices, search for existing ones, mark them as paid, and much more. What would you like to do?`,
+			content: `${greeting}, I'm SupaAI your invoice assistant. I can help create, manage, update or chase unpaid invoices (and much more). You can type or send a voice note and I will understand. What can I help with?`,
 			message_type: 'text' as const,
 			created_at: new Date().toISOString()
 		};

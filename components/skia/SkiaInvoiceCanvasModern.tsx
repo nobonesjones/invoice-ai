@@ -619,6 +619,19 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
       .addText(`${business?.business_name || 'Hello mate'}`)
       .build();
 
+      // Business address for header - single line, same width as INVOICE, smaller text
+      const businessAddressHeaderParagraph = Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Right,
+      })
+      .pushStyle({ 
+        color: Skia.Color('white'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 8, 
+        fontStyle: { weight: 400 }
+      })
+      .addText(`${business?.business_address ? business.business_address.replace(/\n/g, ', ') : ''}`)
+      .build();
+
       const businessAddress1Paragraph = Skia.ParagraphBuilder.Make({
         textAlign: TextAlign.Left,
       })
@@ -628,7 +641,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[0] || '101'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[0] || '' : ''}`)
       .build();
 
       const businessAddress2Paragraph = Skia.ParagraphBuilder.Make({
@@ -640,7 +653,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[1] || 'Beefy Road'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[1] || '' : ''}`)
       .build();
 
       const businessAddress3Paragraph = Skia.ParagraphBuilder.Make({
@@ -652,7 +665,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[2] || 'Rochester'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[2] || '' : ''}`)
       .build();
 
       const businessAddress4Paragraph = Skia.ParagraphBuilder.Make({
@@ -664,7 +677,19 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[3] || 'Uk'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[3] || '' : ''}`)
+      .build();
+
+      const businessTaxNumberParagraph = Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Left,
+      })
+      .pushStyle({ 
+        color: Skia.Color('black'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 10, 
+        fontStyle: { weight: 400 }
+      })
+      .addText(`${business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : ''}`)
       .build();
 
       // Totals paragraphs - separate labels and values for better spacing
@@ -838,10 +863,12 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         clientTaxNumberParagraph,
         fromLabelParagraph,
         businessNameParagraph,
+        businessAddressHeaderParagraph,
         businessAddress1Paragraph,
         businessAddress2Paragraph,
         businessAddress3Paragraph,
         businessAddress4Paragraph,
+        businessTaxNumberParagraph,
         subtotalLabelParagraph,
         subtotalValueParagraph,
         discountLabelParagraph,
@@ -1009,41 +1036,50 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
           {/* Right: Invoice title and RIGHT-ALIGNED details using Paragraph */}
           {/* Remove old text element - now using paragraph */}
           
-          {/* INVOICE title in header with business name below */}
+          {/* INVOICE title in header with business name and address below */}
           {rightAlignedParagraphs && (
             <>
               {/* Large right-aligned INVOICE title - Centered in header */}
               <Paragraph paragraph={rightAlignedParagraphs.invoiceParagraph} x={OFFSET_X + 180} y={25} width={190} />
               {/* Business name under INVOICE in header - Centered */}
               <Paragraph paragraph={rightAlignedParagraphs.businessNameParagraph} x={OFFSET_X + 180} y={60} width={190} />
+              {/* Business address under business name in header - single line */}
+              <Paragraph paragraph={rightAlignedParagraphs.businessAddressHeaderParagraph} x={OFFSET_X + 180} y={75} width={190} />
             </>
           )}
           
-          {/* Invoice details moved to left side (where From section was) */}
+          {/* Left side details aligned with client name - Ref, Date, Due, Sales Tax */}
           {rightAlignedParagraphs && (
             <>
-              <Paragraph paragraph={rightAlignedParagraphs.refParagraph} x={OFFSET_X + 27} y={125} width={150} />
-              <Paragraph paragraph={rightAlignedParagraphs.dateParagraph} x={OFFSET_X + 27} y={137} width={150} />
-              <Paragraph paragraph={rightAlignedParagraphs.dueParagraph} x={OFFSET_X + 27} y={149} width={150} />
+              {/* Ref - aligned with Client Name */}
+              <Paragraph paragraph={rightAlignedParagraphs.refParagraph} x={OFFSET_X + 27} y={115} width={150} />
+              {/* Date */}
+              <Paragraph paragraph={rightAlignedParagraphs.dateParagraph} x={OFFSET_X + 27} y={127} width={150} />
+              {/* Due */}
+              <Paragraph paragraph={rightAlignedParagraphs.dueParagraph} x={OFFSET_X + 27} y={139} width={150} />
+              {/* Sales Tax (Business Tax Number) */}
+              {rightAlignedParagraphs.businessTaxNumberParagraph && (
+                <Paragraph paragraph={rightAlignedParagraphs.businessTaxNumberParagraph} x={OFFSET_X + 27} y={151} width={150} />
+              )}
             </>
           )}
           
-          {/* PO Number - conditional */}
+          {/* PO Number - conditional, after sales tax */}
           {rightAlignedParagraphs && rightAlignedParagraphs.poParagraph && (
-            <Paragraph paragraph={rightAlignedParagraphs.poParagraph} x={OFFSET_X + 27} y={161} width={150} />
+            <Paragraph paragraph={rightAlignedParagraphs.poParagraph} x={OFFSET_X + 27} y={163} width={150} />
           )}
           
           {/* === META SECTION === */}
           
-          {/* Right: Bill To section using RIGHT-ALIGNED paragraphs */}
+          {/* Right: Bill To section with 5px more padding */}
           {rightAlignedParagraphs && (
             <>
-              <Paragraph paragraph={rightAlignedParagraphs.billToParagraph} x={OFFSET_X + 240} y={125} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientNameParagraph} x={OFFSET_X + 240} y={137} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientAddress1Paragraph} x={OFFSET_X + 240} y={149} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientAddress2Paragraph} x={OFFSET_X + 240} y={161} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientAddress3Paragraph} x={OFFSET_X + 240} y={173} width={130} />
-              <Paragraph paragraph={rightAlignedParagraphs.clientTaxNumberParagraph} x={OFFSET_X + 240} y={185} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.billToParagraph} x={OFFSET_X + 240} y={108} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientNameParagraph} x={OFFSET_X + 240} y={120} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientAddress1Paragraph} x={OFFSET_X + 240} y={132} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientAddress2Paragraph} x={OFFSET_X + 240} y={144} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientAddress3Paragraph} x={OFFSET_X + 240} y={156} width={130} />
+              <Paragraph paragraph={rightAlignedParagraphs.clientTaxNumberParagraph} x={OFFSET_X + 240} y={168} width={130} />
             </>
           )}
           

@@ -519,6 +519,151 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       },
       required: ["invoice_number"]
     }
+  },
+  {
+    name: "update_invoice_payment_methods",
+    description: "Enable or disable payment methods (Stripe, PayPal, Bank Transfer) on a specific invoice. Payment methods can only be enabled if they are configured in the user's payment settings.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The invoice number to update payment methods for"
+        },
+        stripe_active: {
+          type: "boolean",
+          description: "Enable/disable Stripe payments on this invoice"
+        },
+        paypal_active: {
+          type: "boolean",
+          description: "Enable/disable PayPal payments on this invoice"
+        },
+        bank_account_active: {
+          type: "boolean",
+          description: "Enable/disable bank transfer payments on this invoice"
+        }
+      },
+      required: ["invoice_number"]
+    }
+  },
+  {
+    name: "setup_paypal_payments",
+    description: "Enable PayPal payments by collecting the PayPal email address and enabling it in user's payment settings. Can optionally enable it on a specific invoice as well.",
+    parameters: {
+      type: "object",
+      properties: {
+        paypal_email: {
+          type: "string",
+          format: "email",
+          description: "PayPal email address for receiving payments"
+        },
+        invoice_number: {
+          type: "string",
+          description: "Optional: Invoice number to also enable PayPal on after setting up"
+        }
+      },
+      required: ["paypal_email"]
+    }
+  },
+  {
+    name: "setup_bank_transfer_payments",
+    description: "Enable bank transfer payments by collecting bank account details and enabling it in user's payment settings. Can optionally enable it on a specific invoice as well.",
+    parameters: {
+      type: "object",
+      properties: {
+        bank_details: {
+          type: "string",
+          description: "Bank account details including bank name, account number, sort code/routing number, IBAN, SWIFT/BIC code as needed"
+        },
+        invoice_number: {
+          type: "string",
+          description: "Optional: Invoice number to also enable bank transfer on after setting up"
+        }
+      },
+      required: ["bank_details"]
+    }
+  },
+  {
+    name: "get_payment_options",
+    description: "Get the user's payment method configuration including PayPal email, bank transfer details, and which payment methods are enabled. This is DIFFERENT from business settings - this shows payment integration settings.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "delete_invoice",
+    description: "Delete an invoice permanently. This action cannot be undone. Use with caution.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The invoice number to delete"
+        }
+      },
+      required: ["invoice_number"]
+    }
+  },
+  {
+    name: "delete_client",
+    description: "Delete a client permanently. This will also delete all associated invoices. This action cannot be undone. Use with extreme caution.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "The name of the client to delete"
+        },
+        confirm_delete_invoices: {
+          type: "boolean",
+          description: "Must be true to confirm deletion of client and all their invoices"
+        }
+      },
+      required: ["client_name", "confirm_delete_invoices"]
+    }
+  },
+  {
+    name: "duplicate_invoice",
+    description: "Create a copy of an existing invoice with a new invoice number. Useful for recurring invoices or similar work.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The invoice number to duplicate"
+        },
+        new_client_name: {
+          type: "string",
+          description: "Optional: Change the client for the duplicated invoice"
+        },
+        new_invoice_date: {
+          type: "string",
+          format: "date",
+          description: "Optional: Set a new date for the duplicated invoice (YYYY-MM-DD)"
+        }
+      },
+      required: ["invoice_number"]
+    }
+  },
+  {
+    name: "duplicate_client",
+    description: "Create a copy of an existing client with a new name. Useful for similar clients or companies with multiple locations.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "The name of the client to duplicate"
+        },
+        new_client_name: {
+          type: "string",
+          description: "The name for the new client copy"
+        }
+      },
+      required: ["client_name", "new_client_name"]
+    }
   }
 ];
 
@@ -583,6 +728,22 @@ export class InvoiceFunctionService {
           return await this.updateClient(parameters, userId);
         case 'get_client_outstanding_amount':
           return await this.getClientOutstandingAmount(parameters, userId);
+        case 'update_invoice_payment_methods':
+          return await this.updateInvoicePaymentMethods(parameters, userId);
+        case 'setup_paypal_payments':
+          return await this.setupPayPalPayments(parameters, userId);
+        case 'setup_bank_transfer_payments':
+          return await this.setupBankTransferPayments(parameters, userId);
+        case 'get_payment_options':
+          return await this.getPaymentOptions(parameters, userId);
+        case 'delete_invoice':
+          return await this.deleteInvoice(parameters, userId);
+        case 'delete_client':
+          return await this.deleteClient(parameters, userId);
+        case 'duplicate_invoice':
+          return await this.duplicateInvoice(parameters, userId);
+        case 'duplicate_client':
+          return await this.duplicateClient(parameters, userId);
         default:
           return {
             success: false,
@@ -2425,6 +2586,957 @@ If you just created an invoice for this client, please try again in a moment, or
       return {
         success: false,
         message: 'Failed to get client outstanding amount. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateInvoicePaymentMethods(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, stripe_active, paypal_active, bank_account_active } = params;
+
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: 'Invoice number is required.',
+          error: 'Missing required parameter: invoice_number'
+        };
+      }
+
+      // Get the current invoice
+      const { data: currentInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (fetchError || !currentInvoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found.`,
+          error: 'Invoice not found'
+        };
+      }
+
+      // Get user's payment settings to validate what's allowed
+      const { data: paymentOptions, error: paymentError } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      // Build update object with only provided fields
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
+
+      const enabledMethods: string[] = [];
+      const disabledMethods: string[] = [];
+      const errors: string[] = [];
+
+      // Handle Stripe
+      if (stripe_active !== undefined) {
+        if (stripe_active && (!paymentOptions?.stripe_enabled)) {
+          errors.push('Stripe is not enabled in your payment settings. Please enable it first in Payment Options.');
+        } else {
+          updateData.stripe_active = stripe_active;
+          if (stripe_active) {
+            enabledMethods.push('Stripe (Pay with Card)');
+          } else {
+            disabledMethods.push('Stripe (Pay with Card)');
+          }
+        }
+      }
+
+      // Handle PayPal
+      if (paypal_active !== undefined) {
+        if (paypal_active && (!paymentOptions?.paypal_enabled)) {
+          errors.push('PayPal is not enabled in your payment settings. Please enable it first in Payment Options.');
+        } else {
+          updateData.paypal_active = paypal_active;
+          if (paypal_active) {
+            enabledMethods.push('PayPal');
+          } else {
+            disabledMethods.push('PayPal');
+          }
+        }
+      }
+
+      // Handle Bank Transfer
+      if (bank_account_active !== undefined) {
+        if (bank_account_active && (!paymentOptions?.bank_transfer_enabled)) {
+          errors.push('Bank Transfer is not enabled in your payment settings. Please enable it first in Payment Options.');
+        } else {
+          updateData.bank_account_active = bank_account_active;
+          if (bank_account_active) {
+            enabledMethods.push('Bank Transfer');
+          } else {
+            disabledMethods.push('Bank Transfer');
+          }
+        }
+      }
+
+      // If there are validation errors, return them
+      if (errors.length > 0) {
+        return {
+          success: false,
+          message: `Cannot update payment methods:\n\n${errors.join('\n\n')}`,
+          error: 'Payment method validation failed'
+        };
+      }
+
+      // If no valid fields to update
+      if (Object.keys(updateData).length <= 1) { // Only updated_at
+        return {
+          success: false,
+          message: 'No valid payment method changes provided.',
+          error: 'No update fields'
+        };
+      }
+
+      // Update the invoice
+      const { data: updatedInvoice, error: updateError } = await supabase
+        .from('invoices')
+        .update(updateData)
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new Error(`Failed to update invoice payment methods: ${updateError.message}`);
+      }
+
+      // Build success message
+      let message = `Successfully updated payment methods for invoice ${invoice_number}.\n\n`;
+      
+      if (enabledMethods.length > 0) {
+        message += `✅ Enabled: ${enabledMethods.join(', ')}\n`;
+      }
+      
+      if (disabledMethods.length > 0) {
+        message += `❌ Disabled: ${disabledMethods.join(', ')}\n`;
+      }
+
+      message += '\nCustomers can now use the enabled payment methods when paying this invoice.';
+
+      return {
+        success: true,
+        data: {
+          invoice: updatedInvoice,
+          enabled_methods: enabledMethods,
+          disabled_methods: disabledMethods
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error updating invoice payment methods:', error);
+      return {
+        success: false,
+        message: 'Failed to update invoice payment methods. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async setupPayPalPayments(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { paypal_email, invoice_number } = params;
+
+      if (!paypal_email) {
+        return {
+          success: false,
+          message: 'PayPal email address is required.',
+          error: 'Missing required parameter: paypal_email'
+        };
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(paypal_email)) {
+        return {
+          success: false,
+          message: 'Please provide a valid email address for PayPal.',
+          error: 'Invalid email format'
+        };
+      }
+
+      // Get or create payment options record
+      let { data: paymentOptions, error: fetchError } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      let isNewRecord = false;
+      if (fetchError && fetchError.code === 'PGRST116') {
+        // No record exists, we'll create one
+        isNewRecord = true;
+        paymentOptions = null;
+      } else if (fetchError) {
+        throw new Error(`Failed to fetch payment options: ${fetchError.message}`);
+      }
+
+      const updateData = {
+        user_id: userId,
+        paypal_enabled: true,
+        paypal_email: paypal_email,
+        stripe_enabled: paymentOptions?.stripe_enabled || false,
+        bank_transfer_enabled: paymentOptions?.bank_transfer_enabled || false,
+        bank_details: paymentOptions?.bank_details || null,
+        invoice_terms_notes: paymentOptions?.invoice_terms_notes || null
+      };
+
+      let savedOptions;
+      if (isNewRecord) {
+        const { data, error } = await supabase
+          .from('payment_options')
+          .insert(updateData)
+          .select()
+          .single();
+        
+        if (error) throw new Error(`Failed to create payment options: ${error.message}`);
+        savedOptions = data;
+      } else {
+        const { data, error } = await supabase
+          .from('payment_options')
+          .update(updateData)
+          .eq('user_id', userId)
+          .select()
+          .single();
+        
+        if (error) throw new Error(`Failed to update payment options: ${error.message}`);
+        savedOptions = data;
+      }
+
+      let message = `🎉 PayPal payments are now set up!\n\n✅ PayPal enabled in your payment settings\n✅ PayPal email: ${paypal_email}`;
+
+      // If invoice_number provided, also enable it on that invoice
+      if (invoice_number) {
+        const invoiceResult = await this.updateInvoicePaymentMethods(
+          { invoice_number, paypal_active: true },
+          userId
+        );
+
+        if (invoiceResult.success) {
+          message += `\n✅ PayPal enabled on invoice ${invoice_number}`;
+        } else {
+          message += `\n⚠️ PayPal enabled in settings, but couldn't enable on invoice ${invoice_number}: ${invoiceResult.message}`;
+        }
+      }
+
+      message += `\n\nCustomers can now pay via PayPal using ${paypal_email}. You can enable PayPal on individual invoices as needed.`;
+
+      return {
+        success: true,
+        data: {
+          payment_options: savedOptions,
+          paypal_email: paypal_email,
+          invoice_updated: !!invoice_number
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error setting up PayPal payments:', error);
+      return {
+        success: false,
+        message: 'Failed to set up PayPal payments. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async setupBankTransferPayments(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { bank_details, invoice_number } = params;
+
+      if (!bank_details) {
+        return {
+          success: false,
+          message: 'Bank account details are required.',
+          error: 'Missing required parameter: bank_details'
+        };
+      }
+
+      // Basic validation - ensure it's not just whitespace
+      if (bank_details.trim().length < 10) {
+        return {
+          success: false,
+          message: 'Please provide complete bank account details including bank name, account number, and routing information.',
+          error: 'Insufficient bank details'
+        };
+      }
+
+      // Get or create payment options record
+      let { data: paymentOptions, error: fetchError } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      let isNewRecord = false;
+      if (fetchError && fetchError.code === 'PGRST116') {
+        // No record exists, we'll create one
+        isNewRecord = true;
+        paymentOptions = null;
+      } else if (fetchError) {
+        throw new Error(`Failed to fetch payment options: ${fetchError.message}`);
+      }
+
+      const updateData = {
+        user_id: userId,
+        bank_transfer_enabled: true,
+        bank_details: bank_details.trim(),
+        paypal_enabled: paymentOptions?.paypal_enabled || false,
+        paypal_email: paymentOptions?.paypal_email || null,
+        stripe_enabled: paymentOptions?.stripe_enabled || false,
+        invoice_terms_notes: paymentOptions?.invoice_terms_notes || null
+      };
+
+      let savedOptions;
+      if (isNewRecord) {
+        const { data, error } = await supabase
+          .from('payment_options')
+          .insert(updateData)
+          .select()
+          .single();
+        
+        if (error) throw new Error(`Failed to create payment options: ${error.message}`);
+        savedOptions = data;
+      } else {
+        const { data, error } = await supabase
+          .from('payment_options')
+          .update(updateData)
+          .eq('user_id', userId)
+          .select()
+          .single();
+        
+        if (error) throw new Error(`Failed to update payment options: ${error.message}`);
+        savedOptions = data;
+      }
+
+      let message = `🏦 Bank transfer payments are now set up!\n\n✅ Bank transfer enabled in your payment settings\n✅ Bank details saved securely`;
+
+      // If invoice_number provided, also enable it on that invoice
+      if (invoice_number) {
+        const invoiceResult = await this.updateInvoicePaymentMethods(
+          { invoice_number, bank_account_active: true },
+          userId
+        );
+
+        if (invoiceResult.success) {
+          message += `\n✅ Bank transfer enabled on invoice ${invoice_number}`;
+        } else {
+          message += `\n⚠️ Bank transfer enabled in settings, but couldn't enable on invoice ${invoice_number}: ${invoiceResult.message}`;
+        }
+      }
+
+      message += `\n\nCustomers can now pay via bank transfer using your provided details. You can enable bank transfer on individual invoices as needed.`;
+
+      return {
+        success: true,
+        data: {
+          payment_options: savedOptions,
+          bank_details_set: true,
+          invoice_updated: !!invoice_number
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error setting up bank transfer payments:', error);
+      return {
+        success: false,
+        message: 'Failed to set up bank transfer payments. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getPaymentOptions(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      // Get payment options from the payment_options table (NOT business_settings)
+      const { data: paymentOptions, error } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // No payment options set up yet
+        return {
+          success: true,
+          data: {
+            payment_methods_configured: false,
+            paypal_enabled: false,
+            paypal_email: null,
+            stripe_enabled: false,
+            bank_transfer_enabled: false,
+            bank_details: null,
+            invoice_terms_notes: null
+          },
+          message: `**Payment Methods Configuration**
+
+❌ **No payment methods set up yet**
+
+Available payment methods:
+• **PayPal** - Not configured
+• **Stripe** - Not configured  
+• **Bank Transfer** - Not configured
+
+I can help you set up PayPal and bank transfer payments. Just let me know which one you'd like to configure!
+
+Note: Stripe requires manual connection through your Payment Options settings.`
+        };
+      } else if (error) {
+        throw new Error(`Failed to fetch payment options: ${error.message}`);
+      }
+
+      // Build status message based on what's configured
+      let message = `**Payment Methods Configuration**\n\n`;
+      const enabledMethods: string[] = [];
+      const disabledMethods: string[] = [];
+
+      // PayPal status
+      if (paymentOptions.paypal_enabled) {
+        enabledMethods.push(`✅ **PayPal** - ${paymentOptions.paypal_email || 'Email not set'}`);
+      } else {
+        disabledMethods.push('❌ **PayPal** - Not enabled');
+      }
+
+      // Stripe status
+      if (paymentOptions.stripe_enabled) {
+        enabledMethods.push('✅ **Stripe** - Connected');
+      } else {
+        disabledMethods.push('❌ **Stripe** - Not connected');
+      }
+
+      // Bank Transfer status
+      if (paymentOptions.bank_transfer_enabled) {
+        enabledMethods.push('✅ **Bank Transfer** - Details configured');
+      } else {
+        disabledMethods.push('❌ **Bank Transfer** - Not enabled');
+      }
+
+      // Build message
+      if (enabledMethods.length > 0) {
+        message += `**Enabled Payment Methods:**\n${enabledMethods.join('\n')}\n\n`;
+      }
+      
+      if (disabledMethods.length > 0) {
+        message += `**Available to Setup:**\n${disabledMethods.join('\n')}\n\n`;
+      }
+
+      // Show bank details if configured
+      if (paymentOptions.bank_transfer_enabled && paymentOptions.bank_details) {
+        message += `**Bank Transfer Details:**\n${paymentOptions.bank_details}\n\n`;
+      }
+
+      // Show invoice terms if configured
+      if (paymentOptions.invoice_terms_notes) {
+        message += `**Payment Instructions & Notes:**\n${paymentOptions.invoice_terms_notes}\n\n`;
+      }
+
+      message += `I can help you set up or modify PayPal and bank transfer payments. Stripe requires manual connection through your Payment Options settings.`;
+
+      return {
+        success: true,
+        data: {
+          payment_methods_configured: true,
+          paypal_enabled: paymentOptions.paypal_enabled,
+          paypal_email: paymentOptions.paypal_email,
+          stripe_enabled: paymentOptions.stripe_enabled,
+          bank_transfer_enabled: paymentOptions.bank_transfer_enabled,
+          bank_details: paymentOptions.bank_details,
+          invoice_terms_notes: paymentOptions.invoice_terms_notes,
+          enabled_count: enabledMethods.length,
+          total_methods: 3
+        },
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error getting payment options:', error);
+      return {
+        success: false,
+        message: 'Failed to retrieve payment options. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async deleteInvoice(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number } = params;
+
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: 'Invoice number is required.',
+          error: 'Missing required parameter: invoice_number'
+        };
+      }
+
+      // Get the invoice first to validate it exists and get the ID
+      const { data: invoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, client_name, total_amount')
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (fetchError || !invoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found.`,
+          error: 'Invoice not found'
+        };
+      }
+
+      // Delete line items first (foreign key constraint)
+      const { error: lineItemsError } = await supabase
+        .from('invoice_line_items')
+        .delete()
+        .eq('invoice_id', invoice.id);
+
+      if (lineItemsError) {
+        throw new Error(`Failed to delete invoice line items: ${lineItemsError.message}`);
+      }
+
+      // Delete invoice activities if any exist
+      const { error: activitiesError } = await supabase
+        .from('invoice_activities')
+        .delete()
+        .eq('invoice_id', invoice.id);
+
+      // Don't fail if activities table doesn't exist or has no records
+      if (activitiesError && !activitiesError.message.includes('does not exist')) {
+        console.warn('Warning: Could not delete invoice activities:', activitiesError.message);
+      }
+
+      // Delete the main invoice record
+      const { error: invoiceError } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', invoice.id);
+
+      if (invoiceError) {
+        throw new Error(`Failed to delete invoice: ${invoiceError.message}`);
+      }
+
+      return {
+        success: true,
+        data: null,
+        message: `✅ **Invoice ${invoice_number} has been permanently deleted.**
+
+Deleted invoice details:
+• Client: ${invoice.client_name}
+• Amount: $${invoice.total_amount?.toFixed(2) || '0.00'}
+
+⚠️ This action cannot be undone.`
+      };
+
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      return {
+        success: false,
+        message: 'Failed to delete invoice. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async deleteClient(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { client_name, confirm_delete_invoices } = params;
+
+      if (!client_name) {
+        return {
+          success: false,
+          message: 'Client name is required.',
+          error: 'Missing required parameter: client_name'
+        };
+      }
+
+      if (!confirm_delete_invoices) {
+        return {
+          success: false,
+          message: 'You must confirm deletion of invoices by setting confirm_delete_invoices to true. This will delete the client AND all their invoices permanently.',
+          error: 'Confirmation required'
+        };
+      }
+
+      // Find the client
+      const { data: clients, error: clientSearchError } = await supabase
+        .from('clients')
+        .select('id, name, email')
+        .eq('user_id', userId)
+        .ilike('name', `%${client_name}%`);
+
+      if (clientSearchError) {
+        throw new Error(`Failed to search for client: ${clientSearchError.message}`);
+      }
+
+      if (!clients || clients.length === 0) {
+        return {
+          success: false,
+          message: `No client found with name "${client_name}".`,
+          error: 'Client not found'
+        };
+      }
+
+      if (clients.length > 1) {
+        return {
+          success: false,
+          message: `Multiple clients found with name "${client_name}". Please be more specific:
+${clients.map(c => `• ${c.name}${c.email ? ` (${c.email})` : ''}`).join('\n')}`,
+          error: 'Multiple clients found'
+        };
+      }
+
+      const client = clients[0];
+
+      // Get all invoices for this client to show what will be deleted
+      const { data: invoices, error: invoicesError } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, total_amount, status')
+        .eq('user_id', userId)
+        .eq('client_id', client.id);
+
+      if (invoicesError) {
+        throw new Error(`Failed to get client invoices: ${invoicesError.message}`);
+      }
+
+      const invoiceCount = invoices?.length || 0;
+      const totalValue = invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0;
+
+      // Delete all invoices and their dependencies
+      if (invoices && invoices.length > 0) {
+        // Delete line items for all invoices
+        const { error: lineItemsError } = await supabase
+          .from('invoice_line_items')
+          .delete()
+          .in('invoice_id', invoices.map(inv => inv.id));
+
+        if (lineItemsError) {
+          throw new Error(`Failed to delete invoice line items: ${lineItemsError.message}`);
+        }
+
+        // Delete invoice activities if any exist
+        const { error: activitiesError } = await supabase
+          .from('invoice_activities')
+          .delete()
+          .in('invoice_id', invoices.map(inv => inv.id));
+
+        // Don't fail if activities table doesn't exist
+        if (activitiesError && !activitiesError.message.includes('does not exist')) {
+          console.warn('Warning: Could not delete invoice activities:', activitiesError.message);
+        }
+
+        // Delete all invoices
+        const { error: invoicesDeleteError } = await supabase
+          .from('invoices')
+          .delete()
+          .eq('client_id', client.id);
+
+        if (invoicesDeleteError) {
+          throw new Error(`Failed to delete invoices: ${invoicesDeleteError.message}`);
+        }
+      }
+
+      // Finally, delete the client
+      const { error: clientDeleteError } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', client.id);
+
+      if (clientDeleteError) {
+        throw new Error(`Failed to delete client: ${clientDeleteError.message}`);
+      }
+
+      return {
+        success: true,
+        data: null,
+        message: `✅ **Client "${client.name}" has been permanently deleted.**
+
+Deleted:
+• **1 client** (${client.name})
+• **${invoiceCount} invoice(s)** worth $${totalValue.toFixed(2)}
+
+⚠️ This action cannot be undone.`
+      };
+
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      return {
+        success: false,
+        message: 'Failed to delete client. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async duplicateInvoice(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, new_client_name, new_invoice_date } = params;
+
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: 'Invoice number is required.',
+          error: 'Missing required parameter: invoice_number'
+        };
+      }
+
+      // Get the original invoice with line items
+      const { data: originalInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          line_items:invoice_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (fetchError || !originalInvoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found.`,
+          error: 'Invoice not found'
+        };
+      }
+
+      // Handle client change if requested
+      let clientId = originalInvoice.client_id;
+      let clientName = originalInvoice.client_name;
+      
+      if (new_client_name) {
+        // Find the new client
+        const { data: newClient, error: clientError } = await supabase
+          .from('clients')
+          .select('id, name')
+          .eq('user_id', userId)
+          .ilike('name', `%${new_client_name}%`)
+          .single();
+
+        if (clientError || !newClient) {
+          return {
+            success: false,
+            message: `Client "${new_client_name}" not found. Please create the client first or use an existing client name.`,
+            error: 'Client not found'
+          };
+        }
+
+        clientId = newClient.id;
+        clientName = newClient.name;
+      }
+
+      // Generate new invoice number
+      const newInvoiceNumber = await this.generateInvoiceNumber(userId);
+
+      // Set dates
+      const invoiceDate = new_invoice_date || new Date().toISOString().split('T')[0];
+      let dueDate = originalInvoice.due_date;
+      
+      // If we're changing the invoice date, recalculate due date based on original payment terms
+      if (new_invoice_date && originalInvoice.due_date && originalInvoice.invoice_date) {
+        const originalInvoiceDate = new Date(originalInvoice.invoice_date);
+        const originalDueDate = new Date(originalInvoice.due_date);
+        const daysDiff = Math.round((originalDueDate.getTime() - originalInvoiceDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const newInvoiceDateObj = new Date(invoiceDate);
+        newInvoiceDateObj.setDate(newInvoiceDateObj.getDate() + daysDiff);
+        dueDate = newInvoiceDateObj.toISOString().split('T')[0];
+      }
+
+      // Create the duplicated invoice
+      const { data: newInvoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert({
+          user_id: userId,
+          client_id: clientId,
+          invoice_number: newInvoiceNumber,
+          status: 'draft', // Always start as draft
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          custom_headline: originalInvoice.custom_headline,
+          subtotal_amount: originalInvoice.subtotal_amount,
+          discount_type: originalInvoice.discount_type,
+          discount_value: originalInvoice.discount_value,
+          tax_percentage: originalInvoice.tax_percentage,
+          total_amount: originalInvoice.total_amount,
+          notes: originalInvoice.notes,
+          // Payment method settings from original
+          stripe_active: originalInvoice.stripe_active,
+          paypal_active: originalInvoice.paypal_active,
+          bank_account_active: originalInvoice.bank_account_active
+        })
+        .select('*')
+        .single();
+
+      if (invoiceError) {
+        throw new Error(`Failed to create duplicated invoice: ${invoiceError.message}`);
+      }
+
+      // Duplicate line items
+      if (originalInvoice.line_items && originalInvoice.line_items.length > 0) {
+        const lineItemsToInsert = originalInvoice.line_items.map((item: any) => ({
+          invoice_id: newInvoice.id,
+          user_id: userId,
+          item_name: item.item_name,
+          item_description: item.item_description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price
+        }));
+
+        const { error: lineItemsError } = await supabase
+          .from('invoice_line_items')
+          .insert(lineItemsToInsert);
+
+        if (lineItemsError) {
+          // If line items fail, clean up the invoice
+          await supabase.from('invoices').delete().eq('id', newInvoice.id);
+          throw new Error(`Failed to duplicate line items: ${lineItemsError.message}`);
+        }
+      }
+
+      const changesSummary = [];
+      if (new_client_name) changesSummary.push(`Client changed to "${clientName}"`);
+      if (new_invoice_date) changesSummary.push(`Date changed to ${new Date(invoiceDate).toLocaleDateString()}`);
+      
+      return {
+        success: true,
+        data: {
+          invoice: {
+            ...newInvoice,
+            client_name: clientName
+          },
+          client_id: clientId,
+          line_items: originalInvoice.line_items || []
+        },
+        message: `✅ **Invoice duplicated successfully!**
+
+**Original:** ${invoice_number}
+**New:** ${newInvoiceNumber}
+**Client:** ${clientName}
+**Total:** $${originalInvoice.total_amount?.toFixed(2) || '0.00'}
+
+${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}`).join('\n')}\n\n` : ''}The duplicated invoice is saved as a draft. Would you like me to help you send it or make any changes?`
+      };
+
+    } catch (error) {
+      console.error('Error duplicating invoice:', error);
+      return {
+        success: false,
+        message: 'Failed to duplicate invoice. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async duplicateClient(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { client_name, new_client_name } = params;
+
+      if (!client_name || !new_client_name) {
+        return {
+          success: false,
+          message: 'Both client_name and new_client_name are required.',
+          error: 'Missing required parameters'
+        };
+      }
+
+      // Find the original client
+      const { data: originalClients, error: searchError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('name', `%${client_name}%`);
+
+      if (searchError) {
+        throw new Error(`Failed to search for client: ${searchError.message}`);
+      }
+
+      if (!originalClients || originalClients.length === 0) {
+        return {
+          success: false,
+          message: `No client found with name "${client_name}".`,
+          error: 'Client not found'
+        };
+      }
+
+      if (originalClients.length > 1) {
+        return {
+          success: false,
+          message: `Multiple clients found with name "${client_name}". Please be more specific:\n${originalClients.map(c => `• ${c.name}${c.email ? ` (${c.email})` : ''}`).join('\n')}`,
+          error: 'Multiple clients found'
+        };
+      }
+
+      const originalClient = originalClients[0];
+
+      // Check if new client name already exists
+      const { data: existingClient } = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', new_client_name)
+        .single();
+
+      if (existingClient) {
+        return {
+          success: false,
+          message: `A client named "${new_client_name}" already exists.`,
+          error: 'Client name already exists'
+        };
+      }
+
+      // Create the duplicated client
+      const { data: newClient, error: createError } = await supabase
+        .from('clients')
+        .insert({
+          user_id: userId,
+          name: new_client_name,
+          email: originalClient.email,
+          phone: originalClient.phone,
+          address_client: originalClient.address_client,
+          tax_number: originalClient.tax_number,
+          notes: originalClient.notes
+        })
+        .select('*')
+        .single();
+
+      if (createError) {
+        throw new Error(`Failed to create duplicated client: ${createError.message}`);
+      }
+
+      return {
+        success: true,
+        data: {
+          client: newClient,
+          type: 'client'
+        },
+        message: `✅ **Client duplicated successfully!**
+
+**Original:** ${originalClient.name}
+**New:** ${new_client_name}
+
+**Copied information:**
+${originalClient.email ? `• Email: ${originalClient.email}` : ''}${originalClient.phone ? `\n• Phone: ${originalClient.phone}` : ''}${originalClient.address_client ? `\n• Address: ${originalClient.address_client}` : ''}${originalClient.tax_number ? `\n• Tax Number: ${originalClient.tax_number}` : ''}
+
+The new client is ready to use for invoices!`
+      };
+
+    } catch (error) {
+      console.error('Error duplicating client:', error);
+      return {
+        success: false,
+        message: 'Failed to duplicate client. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }

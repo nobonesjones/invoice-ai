@@ -16,14 +16,14 @@ interface ColorSelectorProps {
 }
 
 const COLOR_OPTIONS: ColorOption[] = [
-  { id: 'turquoise', name: 'Turquoise', color: '#14B8A6' },
+  { id: 'navy', name: 'Navy', color: '#1E40AF' },
   { id: 'blue', name: 'Blue', color: '#3B82F6' },
   { id: 'purple', name: 'Purple', color: '#8B5CF6' },
   { id: 'green', name: 'Green', color: '#10B981' },
   { id: 'orange', name: 'Orange', color: '#F59E0B' },
   { id: 'red', name: 'Red', color: '#EF4444' },
   { id: 'pink', name: 'Pink', color: '#EC4899' },
-  { id: 'navy', name: 'Navy', color: '#1E40AF' },
+  { id: 'turquoise', name: 'Turquoise', color: '#14B8A6' },
 ];
 
 export const ColorSelector: React.FC<ColorSelectorProps> = ({

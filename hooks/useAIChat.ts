@@ -8,6 +8,7 @@ import { useSupabase } from '@/context/supabase-provider';
 interface UseAIChatReturn {
   messages: ChatMessage[];
   isLoading: boolean;
+  statusMessage: string | null;
   conversation: ChatConversation | null;
   thread: AssistantThread | null;
   sendMessage: (message: string, currencyContext?: { currency: string; symbol: string }) => Promise<void>;
@@ -22,6 +23,7 @@ export function useAIChat(): UseAIChatReturn {
   const { user } = useSupabase();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
   const [thread, setThread] = useState<AssistantThread | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,12 +33,23 @@ export function useAIChat(): UseAIChatReturn {
     setError(null);
   }, []);
 
+  // Helper function to update status with smooth transitions
+  const updateStatus = useCallback((message: string) => {
+    console.log('[useAIChat] Status update:', message);
+    setStatusMessage(message);
+  }, []);
+
+  const clearStatus = useCallback(() => {
+    setStatusMessage(null);
+  }, []);
+
   const loadMessages = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       setIsLoading(true);
       setError(null);
+      updateStatus('Loading conversation...');
 
       if (isUsingAssistants) {
         // Load messages from Assistants API
@@ -78,8 +91,9 @@ export function useAIChat(): UseAIChatReturn {
       Alert.alert('Error', errorMessage);
     } finally {
       setIsLoading(false);
+      clearStatus();
     }
-  }, [user?.id, isUsingAssistants]);
+  }, [user?.id, isUsingAssistants, updateStatus, clearStatus]);
 
   const sendMessage = useCallback(async (messageContent: string, currencyContext?: { currency: string; symbol: string }) => {
     if (!user?.id || !messageContent.trim()) return;
@@ -102,10 +116,18 @@ export function useAIChat(): UseAIChatReturn {
       setIsLoading(true);
       setError(null);
 
+      // Progressive status updates
+      updateStatus('SupaAI is thinking...');
+      
+      // Add small delay to show the first status
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      updateStatus('SupaAI is analyzing your request...');
+
       console.log('[useAIChat] Sending message via ChatService...');
       
-      // ChatService automatically routes to the appropriate API
-      const result = await ChatService.processUserMessage(user.id, messageContent.trim(), currencyContext);
+      // Prepare currency context if business settings are loaded
+      const result = await ChatService.processUserMessage(user.id, messageContent.trim(), currencyContext, updateStatus);
       
       if (result.thread) {
         // Assistants API result
@@ -134,8 +156,9 @@ export function useAIChat(): UseAIChatReturn {
       Alert.alert('Error', errorMessage);
     } finally {
       setIsLoading(false);
+      clearStatus();
     }
-  }, [user?.id, thread?.id, conversation?.id]);
+  }, [user?.id, thread?.id, conversation?.id, updateStatus, clearStatus]);
 
   const clearConversation = useCallback(async () => {
     if (!user?.id) return;
@@ -143,6 +166,7 @@ export function useAIChat(): UseAIChatReturn {
     try {
       setIsLoading(true);
       setError(null);
+      updateStatus('Clearing conversation...');
 
       if (isUsingAssistants) {
         // For Assistants API, properly clear the current thread
@@ -171,8 +195,9 @@ export function useAIChat(): UseAIChatReturn {
       Alert.alert('Error', errorMessage);
     } finally {
       setIsLoading(false);
+      clearStatus();
     }
-  }, [user?.id, conversation?.id, thread?.id, isUsingAssistants]);
+  }, [user?.id, conversation?.id, thread?.id, isUsingAssistants, updateStatus, clearStatus]);
 
   // Load messages on mount and when user changes
   useEffect(() => {
@@ -184,12 +209,14 @@ export function useAIChat(): UseAIChatReturn {
       setConversation(null);
       setThread(null);
       setError(null);
+      clearStatus();
     }
-  }, [user?.id, loadMessages]);
+  }, [user?.id, loadMessages, clearStatus]);
 
   return {
     messages,
     isLoading,
+    statusMessage,
     conversation,
     thread,
     sendMessage,

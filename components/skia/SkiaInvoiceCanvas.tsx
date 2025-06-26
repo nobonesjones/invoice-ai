@@ -628,7 +628,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[0] || '101'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[0] || '' : ''}`)
       .build();
 
       const businessAddress2Paragraph = Skia.ParagraphBuilder.Make({
@@ -640,7 +640,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[1] || 'Beefy Road'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[1] || '' : ''}`)
       .build();
 
       const businessAddress3Paragraph = Skia.ParagraphBuilder.Make({
@@ -652,7 +652,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[2] || 'Rochester'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[2] || '' : ''}`)
       .build();
 
       const businessAddress4Paragraph = Skia.ParagraphBuilder.Make({
@@ -664,7 +664,19 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${business?.business_address?.split('\n')[3] || 'Uk'}`)
+      .addText(`${business?.business_address ? business.business_address.split('\n')[3] || '' : ''}`)
+      .build();
+
+      const businessTaxNumberParagraph = Skia.ParagraphBuilder.Make({
+        textAlign: TextAlign.Left,
+      })
+      .pushStyle({ 
+        color: Skia.Color('black'), 
+        fontFamilies: ['Helvetica'], 
+        fontSize: 10, 
+        fontStyle: { weight: 400 }
+      })
+      .addText(`${business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : ''}`)
       .build();
 
       // Totals paragraphs - separate labels and values for better spacing
@@ -842,6 +854,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         businessAddress2Paragraph,
         businessAddress3Paragraph,
         businessAddress4Paragraph,
+        businessTaxNumberParagraph,
         subtotalLabelParagraph,
         subtotalValueParagraph,
         discountLabelParagraph,
@@ -869,14 +882,14 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
   const mastercardIcon = useImage(require('../../assets/mastercardicon.png'));
   const paypalIcon = useImage(require('../../assets/paypalicon.png'));
 
-  // Original design colors
+  // Original design colors with dynamic accent color
   const colors = {
     background: '#fff',
     text: 'black',
     border: '#eee',
-    greenAccent: 'rgba(76, 175, 80, 0.15)', // Original green background
+    greenAccent: accentColor, // Dynamic accent color for table header
     shadow: '#f0f0f0',
-    orange: '#ff8c00' // For logo
+    orange: accentColor // Dynamic accent color for logo
   };
 
   if (!scaledFonts.body || !scaledFonts.title || !scaledFonts.small) {
@@ -1029,6 +1042,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
               <Paragraph paragraph={rightAlignedParagraphs.businessAddress2Paragraph} x={OFFSET_X + 27} y={141} width={150} />
               <Paragraph paragraph={rightAlignedParagraphs.businessAddress3Paragraph} x={OFFSET_X + 27} y={153} width={150} />
               <Paragraph paragraph={rightAlignedParagraphs.businessAddress4Paragraph} x={OFFSET_X + 27} y={165} width={150} />
+              <Paragraph paragraph={rightAlignedParagraphs.businessTaxNumberParagraph} x={OFFSET_X + 27} y={177} width={150} />
             </>
           )}
           

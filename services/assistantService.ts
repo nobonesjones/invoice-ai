@@ -84,7 +84,7 @@ export class AssistantService {
     const assistant = await openai.beta.assistants.create({
       name: "Invoice AI Assistant",
       instructions: await this.getSystemInstructions(), // Use base instructions for assistant creation
-      model: "gpt-4o-mini", // Use the correct model name
+      model: "gpt-4o-mini", // Keep original model for Assistants API
       tools: this.convertFunctionsToTools()
     });
 
@@ -128,8 +128,41 @@ RESPONSE STYLE:
 CAPABILITIES:
 • Create/search/edit invoices and clients
 • Update existing invoices by adding/removing line items
+• Delete invoices and clients permanently
+• Duplicate invoices and clients for recurring work
 • Mark invoices paid, send invoices
 • Business insights and analytics
+
+DATABASE STRUCTURE - CRITICAL UNDERSTANDING:
+There are TWO SEPARATE data sources for different settings:
+
+1. **BUSINESS SETTINGS** (business_settings table):
+   - Business name, address, email, phone, website
+   - Tax settings (default_tax_rate, tax_name, auto_apply_tax)
+   - Currency and region settings
+   - Business logo, tax number
+   - Invoice design preferences
+   - Function: get_business_settings
+
+2. **PAYMENT OPTIONS** (payment_options table):
+   - PayPal configuration (paypal_enabled, paypal_email)
+   - Stripe configuration (stripe_enabled)
+   - Bank transfer configuration (bank_transfer_enabled, bank_details)
+   - Invoice payment terms/notes (invoice_terms_notes)
+   - Function: get_payment_options
+
+CRITICAL: When users ask about "payment details", "payment methods", "payment settings", "PayPal settings", "bank transfer details" - they want PAYMENT OPTIONS, NOT business settings!
+
+FUNCTION SELECTION EXAMPLES:
+User: "What payment methods are enabled?" → use get_payment_options
+User: "Show me my PayPal settings" → use get_payment_options  
+User: "What are my payment details?" → use get_payment_options
+User: "Is bank transfer set up?" → use get_payment_options
+User: "What's my business address?" → use get_business_settings
+User: "What's my tax rate?" → use get_business_settings
+User: "Show me my business info" → use get_business_settings
+
+NEVER use get_business_settings when they're asking about payment methods!
 
 INTELLIGENT PRICE PARSING - CRITICAL:
 Be smart about extracting prices from natural language. Users often provide prices in these formats:
@@ -285,6 +318,114 @@ TAX SETTINGS - CRITICAL:
 • If user has auto_apply_tax enabled, their default_tax_rate is used automatically
 • Examples: "Create invoice with 15% tax" (overrides default) vs "Create invoice for John" (uses business default)
 
+CONVERSATIONAL CONTEXT UNDERSTANDING - CRITICAL:
+When you've just created an invoice and asked "Would you like to send this invoice or make any changes?", and the user responds with requests like:
+• "Enable bank transfer as well"
+• "Add PayPal payments" 
+• "Turn on Stripe"
+• "Make some changes"
+• "Update the invoice"
+
+These are CLEARLY referring to the invoice you just created. DO NOT assume they want to create a new client or invoice. Use the invoice context from the conversation.
+
+PAYMENT METHODS WORKFLOW - CRITICAL:
+Payment methods (Stripe, PayPal, Bank Transfer) are configured at TWO levels:
+1. USER LEVEL: Payment methods must first be enabled in the user's Payment Options settings
+2. INVOICE LEVEL: Each individual invoice can have payment methods enabled/disabled
+
+IMPORTANT: Payment methods are stored on INVOICES, not on CLIENTS.
+
+SMART PAYMENT SETUP - NEW CAPABILITY:
+When users want to enable payment methods, I can now SET THEM UP COMPLETELY:
+
+FOR PAYPAL:
+- If user says "enable PayPal" or "add PayPal payments", ask for their PayPal email
+- Use setup_paypal_payments function to enable PayPal AND collect email
+- This will enable it in their settings AND optionally on a specific invoice
+- Example: "What's your PayPal email address?" → setup_paypal_payments(paypal_email: "user@example.com", invoice_number: "INV-001")
+
+FOR BANK TRANSFER:
+- If user says "enable bank transfer" or "add bank transfer", ask for their bank details
+- Use setup_bank_transfer_payments function to enable bank transfer AND collect details
+- This will enable it in their settings AND optionally on a specific invoice
+- Example: "Please provide your bank details (bank name, account number, sort code/routing):" → setup_bank_transfer_payments(bank_details: "...", invoice_number: "INV-001")
+
+FOR STRIPE/CARD PAYMENTS:
+- I CANNOT set up Stripe as it requires connecting to Stripe's system
+- If user asks for card payments/Stripe, explain: "Card payments require connecting your Stripe account, which needs to be done manually in your Payment Options settings. I can help set up PayPal and bank transfer payments though!"
+
+PAYMENT METHOD VARIATIONS:
+Users might say any of these - they all mean the same thing:
+• "PayPal" = "PayPal payments" = "PayPal checkout" = "pay with PayPal"
+• "Bank transfer" = "bank payment" = "wire transfer" = "direct transfer" = "bank account"
+• "Card payments" = "credit card" = "Stripe" = "online payments" = "pay with card"
+
+WORKFLOW EXAMPLES:
+User: "Enable bank transfer as well" (after creating invoice)
+✅ Response: "I can set up bank transfer payments for you. What are your bank account details? (Include bank name, account number, sort code/routing number)"
+✅ Then: setup_bank_transfer_payments(bank_details: "provided details", invoice_number: "recent invoice")
+
+User: "Add PayPal to this invoice"  
+✅ Response: "I can set up PayPal payments. What's your PayPal email address?"
+✅ Then: setup_paypal_payments(paypal_email: "user@example.com", invoice_number: "recent invoice")
+
+User: "Can I accept card payments?"
+✅ Response: "Card payments require connecting your Stripe account, which needs to be done manually in Payment Options. However, I can set up PayPal and bank transfer payments right now if you'd like!"
+
+ALREADY CONFIGURED SCENARIOS:
+If payment method is already enabled in settings but user wants to enable on invoice:
+✅ Use update_invoice_payment_methods to just enable it on the specific invoice
+✅ Example: "PayPal is already set up with your email. I'll enable it on this invoice."
+
+DELETE AND DUPLICATE WORKFLOWS - CRITICAL:
+
+DELETION FUNCTIONS:
+Use these functions when users want to permanently remove data:
+
+**DELETE INVOICE:**
+- Use delete_invoice function for requests like "delete invoice INV-123"
+- Requires invoice_number parameter
+- Deletes invoice, line items, and activities permanently
+- Cannot be undone - explain this to user
+- Example: User: "Delete invoice INV-456" → delete_invoice(invoice_number: "INV-456")
+
+**DELETE CLIENT:**
+- Use delete_client function for requests like "delete John Smith"
+- Requires client_name AND confirm_delete_invoices: true
+- WILL DELETE ALL INVOICES for that client too!
+- This is EXTREMELY destructive - make sure user understands
+- Example: User: "Delete client ABC Corp and all their invoices" → delete_client(client_name: "ABC Corp", confirm_delete_invoices: true)
+
+DUPLICATION FUNCTIONS:
+Use these functions for recurring work or similar clients/invoices:
+
+**DUPLICATE INVOICE:**
+- Use duplicate_invoice function for "copy invoice", "duplicate INV-123", "create recurring invoice"
+- Requires invoice_number parameter
+- Optional: new_client_name (to change client), new_invoice_date (to update date)
+- Creates new invoice with new number, always as draft status
+- Copies all line items, payment settings, tax settings
+- Example: User: "Duplicate invoice INV-123 for Sarah" → duplicate_invoice(invoice_number: "INV-123", new_client_name: "Sarah")
+
+**DUPLICATE CLIENT:**
+- Use duplicate_client function for "copy client", "create client like John", "duplicate ABC Corp"
+- Requires client_name AND new_client_name parameters
+- Copies all client details (email, phone, address, tax number, notes)
+- Useful for similar businesses or multiple locations
+- Example: User: "Create a client like ABC Corp called ABC Corp East" → duplicate_client(client_name: "ABC Corp", new_client_name: "ABC Corp East")
+
+SAFETY WARNINGS FOR DELETIONS:
+- Always explain that deletions cannot be undone
+- For delete_client, explicitly mention it will delete ALL their invoices
+- Ask for confirmation if the request seems unclear
+- Show what will be deleted (number of invoices, total value)
+
+DUPLICATION USE CASES:
+- Monthly/recurring invoices: duplicate last month's invoice
+- Similar clients: duplicate existing client with new name
+- Template invoices: duplicate and change client
+- Seasonal work: duplicate previous year's invoice with new date
+
 AUTONOMOUS BEHAVIOR:
 • Use conversation memory to avoid re-asking for info
 • When context is clear, take action without confirmation
@@ -294,6 +435,7 @@ AUTONOMOUS BEHAVIOR:
 • ALWAYS validate required info before function calls
 • CREATE CLIENTS IMMEDIATELY when given a name, then ask for more details
 • PARSE PRICES INTELLIGENTLY from natural language
+• UNDERSTAND CONVERSATIONAL CONTEXT - if just discussing an invoice, assume follow-up requests refer to that invoice
 
 INVOICE UPDATE EXAMPLES:
 User: "Add a $200 consultation to the James Williams invoice"
@@ -378,8 +520,10 @@ Use tools to take action. Reference previous conversation naturally.`;
   }
 
   // Send message and get response
-  static async sendMessage(userId: string, message: string, currencyContext?: { currency: string; symbol: string }): Promise<AssistantRunResult> {
+  static async sendMessage(userId: string, message: string, currencyContext?: { currency: string; symbol: string }, statusCallback?: (status: string) => void): Promise<AssistantRunResult> {
     try {
+      statusCallback?.('SupaAI is initializing...');
+      
       // Ensure assistant is initialized
       await this.initialize();
 
@@ -387,12 +531,14 @@ Use tools to take action. Reference previous conversation naturally.`;
         throw new Error('Assistant not initialized');
       }
 
+      statusCallback?.('SupaAI is connecting...');
+
       // Get or create thread
       let threadId = await this.getOrCreateThread(userId);
 
       // Check for active runs and clean them up
       try {
-        const runs = await openai.beta.threads.runs.list(threadId, { limit: 1 });
+        const runs = await openai.beta.threads.runs.list(threadId, { limit: 5 });
         const activeRun = runs.data.find(run => 
           run.status === 'in_progress' || 
           run.status === 'queued' || 
@@ -405,8 +551,15 @@ Use tools to take action. Reference previous conversation naturally.`;
             await openai.beta.threads.runs.cancel(threadId, activeRun.id);
             console.log(`[AssistantService] Successfully cancelled run ${activeRun.id}`);
             
-            // Wait a moment for the cancellation to process
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait longer for the cancellation to process
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Double-check that it's actually cancelled
+            const checkRun = await openai.beta.threads.runs.retrieve(threadId, activeRun.id);
+            if (checkRun.status === 'in_progress' || checkRun.status === 'queued' || checkRun.status === 'requires_action') {
+              console.log(`[AssistantService] Run ${activeRun.id} still active after cancel, creating new thread...`);
+              threadId = await this.createNewThread(userId);
+            }
           } catch (cancelError) {
             console.error(`[AssistantService] Failed to cancel run ${activeRun.id}:`, cancelError);
             
@@ -417,8 +570,12 @@ Use tools to take action. Reference previous conversation naturally.`;
         }
       } catch (checkError) {
         console.error('[AssistantService] Error checking for active runs:', checkError);
-        // If we can't check, try to continue with existing thread
+        // If we can't check, try creating a new thread to be safe
+        console.log('[AssistantService] Creating new thread due to check error...');
+        threadId = await this.createNewThread(userId);
       }
+
+      statusCallback?.('SupaAI is processing your message...');
 
       // Add user message to thread
       await openai.beta.threads.messages.create(threadId, {
@@ -428,6 +585,8 @@ Use tools to take action. Reference previous conversation naturally.`;
 
       // Save message to our database for UI display
       await this.saveMessageToDatabase(userId, threadId, 'user', message);
+
+      statusCallback?.('SupaAI is generating response...');
 
       // Create and run the assistant with currency context if provided
       const runOptions: any = {
@@ -442,7 +601,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       const run = await openai.beta.threads.runs.create(threadId, runOptions);
 
       // Wait for completion and handle tool calls
-      const result = await this.waitForRunCompletion(threadId, run.id, userId);
+      const result = await this.waitForRunCompletion(threadId, run.id, userId, statusCallback);
 
       // Save assistant response to database
       if (result.content) {
@@ -509,7 +668,8 @@ Use tools to take action. Reference previous conversation naturally.`;
   private static async waitForRunCompletion(
     threadId: string, 
     runId: string, 
-    userId: string
+    userId: string,
+    statusCallback?: (status: string) => void
   ): Promise<AssistantRunResult> {
     let run = await openai.beta.threads.runs.retrieve(threadId, runId);
     let collectedAttachments: any[] = [];
@@ -534,13 +694,33 @@ Use tools to take action. Reference previous conversation naturally.`;
 
     if (run.status === 'requires_action' && run.required_action?.type === 'submit_tool_outputs') {
       // Handle tool calls
+      const toolCalls = run.required_action.submit_tool_outputs.tool_calls;
+      
+      // Determine status message based on function being called
+      if (toolCalls.length > 0) {
+        const functionName = toolCalls[0].function.name;
+        if (functionName.includes('create_invoice')) {
+          statusCallback?.('SupaAI is creating invoice...');
+        } else if (functionName.includes('search')) {
+          statusCallback?.('SupaAI is searching...');
+        } else if (functionName.includes('update')) {
+          statusCallback?.('SupaAI is updating...');
+        } else if (functionName.includes('client')) {
+          statusCallback?.('SupaAI is processing client data...');
+        } else {
+          statusCallback?.('SupaAI is executing action...');
+        }
+      }
+      
       const { toolOutputs, attachments } = await this.handleToolCalls(
-        run.required_action.submit_tool_outputs.tool_calls,
+        toolCalls,
         userId
       );
 
       // Collect attachments from tool calls
       collectedAttachments = attachments;
+
+      statusCallback?.('SupaAI is completing response...');
 
       // Submit tool outputs
       run = await openai.beta.threads.runs.submitToolOutputs(threadId, runId, {
@@ -548,7 +728,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       });
 
       // Wait for completion after tool execution
-      const result = await this.waitForRunCompletion(threadId, runId, userId);
+      const result = await this.waitForRunCompletion(threadId, runId, userId, statusCallback);
       // Merge attachments from recursive calls
       result.attachments = [...collectedAttachments, ...result.attachments];
       return result;

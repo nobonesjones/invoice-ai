@@ -220,7 +220,8 @@ export default function BusinessInformationScreen() {
       mediaTypes: ['images'], 
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.7, // Reduced quality for faster upload
+      compress: 0.7, // Add compression
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -240,8 +241,8 @@ export default function BusinessInformationScreen() {
       let publicLogoUrl = logoUri; 
       console.log('handleSaveChanges: Initial publicLogoUrl:', publicLogoUrl);
 
-      if (logoUri && logoUri.startsWith('file://')) { 
-        console.log('handleSaveChanges: New logo picked, preparing to upload via Edge Function. URI:', logoUri);
+            if (logoUri && logoUri.startsWith('file://')) { 
+        console.log('handleSaveChanges: New logo picked, uploading directly to storage. URI:', logoUri);
         const localUri = logoUri;
         const filename = localUri.split('/').pop() || `logo-${Date.now()}`;
         let fileType = 'image/jpeg';
@@ -251,39 +252,76 @@ export default function BusinessInformationScreen() {
           fileType = 'image/jpeg';
         }
 
-        const base64 = await FileSystem.readAsStringAsync(localUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        try {
+          // Read file as base64 for edge function upload
+          const base64 = await FileSystem.readAsStringAsync(localUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
 
-        if (!base64 || base64.length === 0) {
-          Alert.alert('Error', 'Selected file is empty or could not be read.');
+          if (!base64 || base64.length === 0) {
+            throw new Error('Selected file is empty or could not be read.');
+          }
+
+          console.log('handleSaveChanges: Calling optimized Edge Function upload-logo');
+          const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
+          const apiKey = process.env.EXPO_PUBLIC_API_KEY;
+          
+          if (!supabaseUrl || !apiKey) {
+            throw new Error('Missing Supabase configuration. Please check your environment variables.');
+          }
+          
+          const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload-logo`;
+          const response = await fetch(edgeFunctionUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`,
+              'apikey': apiKey,
+            },
+            body: JSON.stringify({
+              fileName: filename,
+              fileType: fileType,
+              base64: base64,
+            }),
+          });
+
+          const result = await response.json();
+          console.log('handleSaveChanges: Edge Function response:', result);
+
+          if (!response.ok) {
+            console.error('handleSaveChanges: Edge Function HTTP error:', response.status, response.statusText);
+            throw new Error(`Upload failed with status ${response.status}: ${result.error || 'Unknown error'}`);
+          }
+
+          if (result.error) {
+            console.error('handleSaveChanges: Edge Function returned error:', result.error);
+            throw new Error(result.error);
+          }
+
+          if (!result.url || !result.url.startsWith('https://')) {
+            console.error('handleSaveChanges: Invalid URL returned from Edge Function:', result.url);
+            throw new Error('Invalid URL returned from upload service.');
+          }
+
+          publicLogoUrl = result.url;
+          console.log('handleSaveChanges: Edge Function upload successful, URL:', publicLogoUrl);
+        } catch (uploadError: any) {
+          console.error('handleSaveChanges: Logo upload failed:', uploadError);
+          Alert.alert(
+            'Upload Failed', 
+            `Failed to upload logo: ${uploadError.message || 'Unknown error'}. Please try again or select a different image.`
+          );
           setLoading(false);
           return;
         }
+      }
 
-        console.log('handleSaveChanges: Calling Edge Function upload-logo');
-        const edgeFunctionUrl = 'https://wzpuzqzsjdizmpiobsuo.functions.supabase.co/upload-logo'; 
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileName: filename,
-            fileType: fileType,
-            base64: base64,
-          }),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok || result.error) {
-          console.error('handleSaveChanges: Edge Function error response:', result);
-          throw new Error(result.error || 'Failed to upload logo via Edge Function.');
-        }
-
-        publicLogoUrl = result.url;
-        console.log('handleSaveChanges: New publicLogoUrl after Edge Function upload:', publicLogoUrl);
+      // Validate that we're not saving a local file URI
+      if (publicLogoUrl && publicLogoUrl.startsWith('file://')) {
+        console.error('handleSaveChanges: Attempted to save local file URI to database:', publicLogoUrl);
+        Alert.alert('Error', 'Cannot save local file path. Please try uploading the logo again.');
+        setLoading(false);
+        return;
       }
 
       const updates = {
@@ -388,7 +426,7 @@ export default function BusinessInformationScreen() {
           <TouchableOpacity onPress={handleImagePick} style={styles.logoPickerRow}>
             {logoUri ? (
               <Image
-                source={{ uri: logoUri ? `${logoUri}?t=${Date.now()}` : undefined }}
+                source={{ uri: logoUri.startsWith('http') ? `${logoUri}?t=${Date.now()}` : logoUri }}
                 style={styles.logoImagePreview} 
                 onLoadStart={() => {
                   console.log('[ImageComponent] Load STARTING for URI:', logoUri);
@@ -398,6 +436,8 @@ export default function BusinessInformationScreen() {
                 }}
                 onError={(error) => {
                   console.error('[ImageComponent] Load FAILED for URI:', logoUri, 'Error:', error.nativeEvent.error);
+                  // Reset logoUri on error to show placeholder
+                  setLogoUri(null);
                 }}
               />
             ) : (
@@ -407,7 +447,12 @@ export default function BusinessInformationScreen() {
             )}
             <View style={styles.logoPickerTextContainer}>
               <Text style={styles.logoPickerLabel}>Business Logo</Text>
-              <Text style={styles.logoPickerSubtext}>Tap to upload or change logo</Text>
+              <Text style={styles.logoPickerSubtext}>
+                {logoUri && logoUri.startsWith('file://') 
+                  ? 'Tap to save uploaded logo' 
+                  : 'Tap to upload or change logo'
+                }
+              </Text>
             </View>
           </TouchableOpacity>
 
@@ -479,7 +524,12 @@ export default function BusinessInformationScreen() {
       <View style={styles.stickyButtonContainer}>
         <TouchableOpacity onPress={handleSaveChanges} style={styles.saveButton} disabled={loading}>
           {loading ? (
-            <ActivityIndicator color={theme.primaryForeground} />
+            <>
+              <ActivityIndicator color={theme.primaryForeground} />
+              <Text style={[styles.saveButtonText, { marginLeft: 8 }]}>
+                {logoUri && logoUri.startsWith('file://') ? 'Uploading...' : 'Saving...'}
+              </Text>
+            </>
           ) : (
             <Text style={styles.saveButtonText}>Save Changes</Text>
           )}

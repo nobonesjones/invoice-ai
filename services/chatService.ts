@@ -43,17 +43,18 @@ export class ChatService {
   static async processUserMessage(
     userId: string,
     userMessage: string,
-    currencyContext?: { currency: string; symbol: string }
+    currencyContext?: { currency: string; symbol: string },
+    statusCallback?: (status: string) => void
   ): Promise<{ conversation?: ChatConversation; thread?: any; messages: any[] }> {
     try {
       const useAssistants = await this.shouldUseAssistants(userId);
       
       if (useAssistants) {
         console.log('[ChatService] Using Assistants API');
-        return await this.processWithAssistants(userId, userMessage, currencyContext);
+        return await this.processWithAssistants(userId, userMessage, currencyContext, statusCallback);
       } else {
         console.log('[ChatService] Using Chat Completions API');
-        return await this.processWithChatCompletions(userId, userMessage, currencyContext);
+        return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
       }
     } catch (error) {
       console.error('[ChatService] Error processing message:', error);
@@ -65,7 +66,8 @@ export class ChatService {
   private static async processWithAssistants(
     userId: string,
     userMessage: string,
-    currencyContext?: { currency: string; symbol: string }
+    currencyContext?: { currency: string; symbol: string },
+    statusCallback?: (status: string) => void
   ): Promise<{ thread: any; messages: any[] }> {
     try {
       // Check if Assistants API is configured
@@ -73,8 +75,12 @@ export class ChatService {
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
-      // Send message via Assistants API with currency context
-      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext);
+      statusCallback?.('SupaAI is preparing...');
+
+      // Send message via Assistants API with currency context and status updates
+      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext, statusCallback);
+
+      statusCallback?.('SupaAI is finalizing response...');
 
       // Get updated messages for UI
       const messages = await AssistantService.getThreadMessages(userId);
@@ -108,7 +114,8 @@ export class ChatService {
   private static async processWithChatCompletions(
     userId: string,
     userMessage: string,
-    currencyContext?: { currency: string; symbol: string }
+    currencyContext?: { currency: string; symbol: string },
+    statusCallback?: (status: string) => void
   ): Promise<{ conversation: ChatConversation; messages: ChatMessage[] }> {
     try {
       // Check if OpenAI is configured

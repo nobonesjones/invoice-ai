@@ -26,7 +26,8 @@ import {
 	TrendingUp,
 	FileText,
 	CheckCircle,
-	AlertCircle
+	AlertCircle,
+	Trash2
 } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
@@ -34,6 +35,7 @@ import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useSupabase } from '@/context/supabase-provider';
 import { Tables } from '../../../../types/database.types';
 import CreateNewClientSheet, { CreateNewClientSheetRef } from './CreateNewClientSheet';
+import { InvoiceFunctionService } from '@/services/invoiceFunctions';
 
 type Client = Tables<'clients'>;
 type Invoice = Tables<'invoices'>;
@@ -330,9 +332,60 @@ export default function ClientProfileScreen() {
 	};
 
 	const handleEditClient = () => {
-		if (editClientSheetRef.current) {
-			editClientSheetRef.current.present();
-		}
+		console.log('[ClientProfileScreen] Opening edit client sheet');
+		editClientSheetRef.current?.present();
+	};
+
+	const handleDeleteClient = () => {
+		if (!client || !user) return;
+
+		Alert.alert(
+			'Delete Client',
+			`Are you sure you want to delete "${client.name}"?\n\nThis will permanently delete:\n• The client\n• ALL their invoices\n• All associated data\n\nThis action cannot be undone.`,
+			[
+				{
+					text: 'Cancel',
+					style: 'cancel',
+				},
+				{
+					text: 'Delete',
+					style: 'destructive',
+					onPress: async () => {
+						try {
+							const result = await InvoiceFunctionService.executeFunction(
+								'delete_client',
+								{
+									client_name: client.name,
+									confirm_delete_invoices: true
+								},
+								user.id
+							);
+
+							if (result.success) {
+								Alert.alert(
+									'Client Deleted',
+									result.message,
+									[
+										{
+											text: 'OK',
+											onPress: () => {
+												// Navigate back to clients list
+												router.push('/customers/');
+											}
+										}
+									]
+								);
+							} else {
+								Alert.alert('Error', result.message || 'Failed to delete client');
+							}
+						} catch (error) {
+							console.error('Error deleting client:', error);
+							Alert.alert('Error', 'Failed to delete client. Please try again.');
+						}
+					},
+				},
+			]
+		);
 	};
 
 	const handleClientUpdated = (updatedClient: Client) => {
@@ -619,10 +672,24 @@ export default function ClientProfileScreen() {
 			borderTopWidth: StyleSheet.hairlineWidth,
 			borderTopColor: theme.border,
 		},
+		buttonRow: {
+			flexDirection: 'row',
+			gap: 12,
+		},
 		primaryButton: {
+			flex: 1,
 			backgroundColor: theme.primary,
 			borderRadius: 10,
 			paddingVertical: 16,
+			alignItems: 'center',
+			justifyContent: 'center',
+			flexDirection: 'row',
+		},
+		destructiveButton: {
+			backgroundColor: '#EF4444', // Red color for delete
+			borderRadius: 10,
+			paddingVertical: 16,
+			paddingHorizontal: 20,
 			alignItems: 'center',
 			justifyContent: 'center',
 			flexDirection: 'row',
@@ -633,6 +700,12 @@ export default function ClientProfileScreen() {
 			fontWeight: 'bold',
 		marginLeft: 8,
 	},
+		destructiveButtonText: {
+			color: 'white',
+			fontSize: 16,
+			fontWeight: 'bold',
+			marginLeft: 8,
+		},
 
 		// Loading and error states
 		loadingText: {
@@ -804,10 +877,16 @@ export default function ClientProfileScreen() {
 
 					{/* Sticky Bottom Button */}
 					<View style={styles.stickyButtonContainer}>
-						<TouchableOpacity style={styles.primaryButton} onPress={handleNewInvoice}>
-							<Plus size={20} color={theme.primaryForeground} />
-							<Text style={styles.primaryButtonText}>New Invoice</Text>
-						</TouchableOpacity>
+						<View style={styles.buttonRow}>
+							<TouchableOpacity style={styles.primaryButton} onPress={handleNewInvoice}>
+								<Plus size={20} color={theme.primaryForeground} />
+								<Text style={styles.primaryButtonText}>New Invoice</Text>
+							</TouchableOpacity>
+							<TouchableOpacity style={styles.destructiveButton} onPress={handleDeleteClient}>
+								<Trash2 size={18} color="white" />
+								<Text style={styles.destructiveButtonText}>Delete</Text>
+							</TouchableOpacity>
+						</View>
 					</View>
 				</>
 			)}

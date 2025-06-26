@@ -10,7 +10,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: { 
       "Access-Control-Allow-Origin": "*", 
-      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+      "Access-Control-Allow-Methods": "POST, OPTIONS"
     } });
   }
 
@@ -34,14 +35,14 @@ serve(async (req) => {
     // Decode base64 to Uint8Array
     const fileBuffer = base64Decode(base64);
 
-    // Create Supabase client
-    // Ensure EXPO_PUBLIC_API_URL and SERVICE_KEY are set in your Edge Function's environment variables
+    // Create Supabase client with service key for faster uploads
     const supabase = createClient(
       Deno.env.get("EXPO_PUBLIC_API_URL")!,
       Deno.env.get("SERVICE_KEY")!
     );
 
     const filePath = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '')}`;
+    
     const { data, error } = await supabase.storage
       .from("businesslogos")
       .upload(filePath, fileBuffer, {
@@ -50,8 +51,8 @@ serve(async (req) => {
       });
 
     if (error) {
-      console.error('Supabase storage upload error:', error);
-      return new Response(JSON.stringify({ error: error.message, details: error.stack }), {
+      console.error('Upload error:', error);
+      return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });

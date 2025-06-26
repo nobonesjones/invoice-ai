@@ -50,6 +50,8 @@ function RootLayoutNav() {
     // Check for new settings screens directly under (app)
     const isBusinessInformationScreen =
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "business-information";
+    const isInvoiceSettingsScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "invoice-settings";
     const isTaxCurrencyScreen =
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "tax-currency";
     const isAppLanguageScreen =
@@ -70,6 +72,7 @@ function RootLayoutNav() {
 		console.log("[Auth Effect] isInProtectedGroup:", isInProtectedGroup);
     console.log("[Auth Effect] isAccountDetailsScreen:", isAccountDetailsScreen);
     console.log("[Auth Effect] isBusinessInformationScreen:", isBusinessInformationScreen);
+    console.log("[Auth Effect] isInvoiceSettingsScreen:", isInvoiceSettingsScreen);
     console.log("[Auth Effect] isTaxCurrencyScreen:", isTaxCurrencyScreen);
     console.log("[Auth Effect] isAppLanguageScreen:", isAppLanguageScreen);
     console.log("[Auth Effect] isCustomerSupportScreen:", isCustomerSupportScreen);
@@ -80,6 +83,7 @@ function RootLayoutNav() {
         !inAppProtectedRoute && 
         !isAccountDetailsScreen &&
         !isBusinessInformationScreen &&
+        !isInvoiceSettingsScreen &&
         !isTaxCurrencyScreen &&
         !isAppLanguageScreen &&
         !isCustomerSupportScreen &&

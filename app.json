@@ -29,7 +29,7 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone for voice chat with AI assistant and recording meetings",
         "UIBackgroundModes": [
           "audio"
         ],
