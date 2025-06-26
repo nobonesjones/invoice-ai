@@ -75,12 +75,12 @@ export class ChatService {
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
-      statusCallback?.('SupaAI is preparing...');
+      statusCallback?.('SuperAI is preparing...');
 
       // Send message via Assistants API with currency context and status updates
       const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext, statusCallback);
 
-      statusCallback?.('SupaAI is finalizing response...');
+      statusCallback?.('SuperAI is finalizing response...');
 
       // Get updated messages for UI
       const messages = await AssistantService.getThreadMessages(userId);

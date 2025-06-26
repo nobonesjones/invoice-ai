@@ -124,6 +124,8 @@ RESPONSE STYLE:
 • Be warm but not verbose
 • Use 1-2 sentences when possible
 • Ask ONE question at a time if info is missing
+• NEVER use emojis in responses
+• Use **text** for emphasis instead of emojis
 
 CAPABILITIES:
 • Create/search/edit invoices and clients
@@ -301,6 +303,25 @@ When users want to update invoice details, use update_invoice_details for:
 • Due date: "Set due date to 2024-04-15"
 • Tax percentage: "Set tax to 20%"
 • Notes: "Add note: Payment terms 30 days"
+
+⚠️ CRITICAL CLIENT PRESERVATION RULE ⚠️
+NEVER CHANGE CLIENT INFORMATION UNLESS EXPLICITLY REQUESTED:
+- Do NOT pass client_name parameter to update_invoice_details unless user specifically says "change client to X"
+- Do NOT pass client_email parameter unless user specifically says "change client email to X"
+- When user says "edit invoice", "update invoice", "change due date", "duplicate invoice" - PRESERVE the existing client
+- Only change client when user explicitly says: "change client to...", "update client on invoice to...", "switch client to..."
+- If unsure whether user wants to change client, ASK for clarification
+
+Examples of what should NOT change client:
+❌ "Edit the invoice and change the due date" → Do NOT change client
+❌ "Duplicate this invoice" → Do NOT change client (unless they specify new_client_name)
+❌ "Update invoice with new tax rate" → Do NOT change client
+❌ "Change the invoice date" → Do NOT change client
+
+Examples of what SHOULD change client:
+✅ "Change the client on invoice INV-001 to John Smith"
+✅ "Update the invoice client to ABC Corp"
+✅ "Switch the client to Sarah Johnson"
 
 CLIENT VS INVOICE ADDRESS WORKFLOW - CRITICAL:
 When users ask to "update address on invoice" or "change invoice address":
@@ -522,7 +543,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   // Send message and get response
   static async sendMessage(userId: string, message: string, currencyContext?: { currency: string; symbol: string }, statusCallback?: (status: string) => void): Promise<AssistantRunResult> {
     try {
-      statusCallback?.('SupaAI is initializing...');
+      statusCallback?.('SuperAI is initializing...');
       
       // Ensure assistant is initialized
       await this.initialize();
@@ -531,7 +552,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         throw new Error('Assistant not initialized');
       }
 
-      statusCallback?.('SupaAI is connecting...');
+      statusCallback?.('SuperAI is connecting...');
 
       // Get or create thread
       let threadId = await this.getOrCreateThread(userId);
@@ -575,7 +596,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         threadId = await this.createNewThread(userId);
       }
 
-      statusCallback?.('SupaAI is processing your message...');
+      statusCallback?.('SuperAI is processing your message...');
 
       // Add user message to thread
       await openai.beta.threads.messages.create(threadId, {
@@ -586,7 +607,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Save message to our database for UI display
       await this.saveMessageToDatabase(userId, threadId, 'user', message);
 
-      statusCallback?.('SupaAI is generating response...');
+      statusCallback?.('SuperAI is generating response...');
 
       // Create and run the assistant with currency context if provided
       const runOptions: any = {
@@ -700,15 +721,15 @@ Use tools to take action. Reference previous conversation naturally.`;
       if (toolCalls.length > 0) {
         const functionName = toolCalls[0].function.name;
         if (functionName.includes('create_invoice')) {
-          statusCallback?.('SupaAI is creating invoice...');
+          statusCallback?.('SuperAI is creating invoice...');
         } else if (functionName.includes('search')) {
-          statusCallback?.('SupaAI is searching...');
+          statusCallback?.('SuperAI is searching...');
         } else if (functionName.includes('update')) {
-          statusCallback?.('SupaAI is updating...');
+          statusCallback?.('SuperAI is updating...');
         } else if (functionName.includes('client')) {
-          statusCallback?.('SupaAI is processing client data...');
+          statusCallback?.('SuperAI is processing client data...');
         } else {
-          statusCallback?.('SupaAI is executing action...');
+          statusCallback?.('SuperAI is executing action...');
         }
       }
       
@@ -720,7 +741,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Collect attachments from tool calls
       collectedAttachments = attachments;
 
-      statusCallback?.('SupaAI is completing response...');
+      statusCallback?.('SuperAI is completing response...');
 
       // Submit tool outputs
       run = await openai.beta.threads.runs.submitToolOutputs(threadId, runId, {

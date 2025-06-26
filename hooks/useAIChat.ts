@@ -117,12 +117,12 @@ export function useAIChat(): UseAIChatReturn {
       setError(null);
 
       // Progressive status updates
-      updateStatus('SupaAI is thinking...');
+      updateStatus('SuperAI is thinking...');
       
       // Add small delay to show the first status
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      updateStatus('SupaAI is analyzing your request...');
+      updateStatus('SuperAI is analyzing your request...');
 
       console.log('[useAIChat] Sending message via ChatService...');
       

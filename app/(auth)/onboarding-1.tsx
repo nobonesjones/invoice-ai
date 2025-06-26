@@ -49,11 +49,9 @@ export default function OnboardingScreen1() {
             end={{ x: 1, y: 1 }}
             style={styles.gradientBackground}
           >
-            {/* Brand visual placeholder - replace with actual branded element */}
+            {/* Empty branded visual area */}
             <View style={styles.brandVisual}>
-              <View style={styles.logoCircle}>
-                <Text style={styles.logoText}>SI</Text>
-              </View>
+              {/* Removed SI circle */}
             </View>
           </LinearGradient>
         </View>
@@ -65,12 +63,12 @@ export default function OnboardingScreen1() {
             <View style={styles.logoSection}>
               <View style={styles.appLogoContainer}>
                 <View style={[styles.appLogo, { backgroundColor: theme.muted }]}>
-                  <Text style={styles.appLogoText}>📧</Text>
+                  {/* Removed text icon */}
                 </View>
               </View>
-              <Text style={[styles.appName, { color: theme.foreground }]}>SupaInvoice</Text>
+              <Text style={[styles.appName, { color: theme.foreground }]}>SuperInvoice</Text>
               <Text style={[styles.tagline, { color: theme.mutedForeground }]}>
-                Create fast and professional invoices directly from your phone.
+                The fastest way to create invoices and get paid.
               </Text>
             </View>
 
@@ -128,21 +126,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
+
   bottomSide: {
     flex: 1,
   },
@@ -166,9 +150,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  appLogoText: {
-    fontSize: 24,
-  },
+
   appName: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -180,6 +162,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 20,
+    paddingBottom: 6,
   },
   spacer: {
     flex: 1,

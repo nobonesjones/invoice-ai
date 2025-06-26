@@ -1,6 +1,6 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { FlashList } from "@shopify/flash-list";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Search, PlusCircle } from "lucide-react-native";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
@@ -14,6 +14,7 @@ import {
 	Platform,
 	TouchableOpacity,
 	Animated,
+	RefreshControl,
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -35,6 +36,7 @@ export default function CustomersScreen() {
 	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [searchTerm, setSearchTerm] = useState('');
 	const [loading, setLoading] = useState(true);
+	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
 	const params = useLocalSearchParams<{
@@ -55,9 +57,13 @@ export default function CustomersScreen() {
 		return nameMatch || emailMatch || phoneMatch;
 	});
 
-	const fetchClients = useCallback(async () => {
-		console.log("Fetching clients from Supabase...");
-		setLoading(true);
+	const fetchClients = useCallback(async (isRefresh = false) => {
+		console.log("Fetching clients from Supabase...", isRefresh ? "(refresh)" : "(initial)");
+		if (!isRefresh) {
+			setLoading(true);
+		} else {
+			setRefreshing(true);
+		}
 		setError(null);
 		try {
 			const { data: userData, error: userError } =
@@ -65,14 +71,16 @@ export default function CustomersScreen() {
 			if (userError) {
 				console.error("Error getting user:", userError.message);
 				setError("Authentication error. Please log in again.");
-				setLoading(false);
+				if (!isRefresh) setLoading(false);
+				else setRefreshing(false);
 				setCustomers([]);
 				return;
 			}
 			if (!userData || !userData.user) {
 				console.log("No authenticated user found.");
 				setError("User not authenticated. Please log in.");
-				setLoading(false);
+				if (!isRefresh) setLoading(false);
+				else setRefreshing(false);
 				setCustomers([]);
 				return;
 			}
@@ -99,16 +107,26 @@ export default function CustomersScreen() {
 			setError("Failed to load clients. Please try again.");
 			setCustomers([]);
 		}
-		setLoading(false);
+		if (!isRefresh) {
+			setLoading(false);
+		} else {
+			setRefreshing(false);
+		}
 	}, []);
 
-	useEffect(() => {
-		console.log(
-			"CustomersScreen: useEffect calling fetchClients. Selection mode:",
-			params.selectionMode,
-		);
-		fetchClients();
-	}, [fetchClients, params.selectionMode]);
+	// Auto-refresh when screen comes into focus
+	useFocusEffect(
+		useCallback(() => {
+			console.log("CustomersScreen: Screen focused, refreshing clients...");
+			fetchClients();
+		}, [fetchClients])
+	);
+
+	// Handle pull-to-refresh
+	const onRefresh = useCallback(() => {
+		console.log("CustomersScreen: Pull-to-refresh triggered");
+		fetchClients(true);
+	}, [fetchClients]);
 
 	const handleClientAdded = useCallback(() => {
 		console.log("CustomersScreen: Client added, refreshing list...");
@@ -206,6 +224,14 @@ export default function CustomersScreen() {
 					ItemSeparatorComponent={ItemSeparator}
 					contentContainerStyle={styles.listContentContainer}
 					estimatedItemSize={75}
+					refreshControl={
+						<RefreshControl
+							refreshing={refreshing}
+							onRefresh={onRefresh}
+							tintColor={theme.primary}
+							colors={[theme.primary]}
+						/>
+					}
 					ListEmptyComponent={() => {
 						if (loading)
 							return (

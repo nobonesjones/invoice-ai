@@ -1,7 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform } from "react-native";
-import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin } from "lucide-react-native";
-import { router } from 'expo-router';
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Animated } from "react-native";
+import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin, Activity, X, Check } from "lucide-react-native";
+import TranscribeButton, { TranscribeButtonRef } from "@/components/TranscribeButton";
+import VoiceChatButton from "@/components/VoiceChatButton";
+import { VoiceModal } from "@/components/VoiceModal";
+import { useRouter } from 'expo-router';
 
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Text } from "@/components/ui/text";
@@ -11,9 +14,11 @@ import { useTheme } from "@/context/theme-provider";
 import { ChatService } from "@/services/chatService";
 import { OpenAIService } from "@/services/openaiService";
 import { useAIChat } from "@/hooks/useAIChat";
+import { ChatMessage } from "@/services/chatService";
 import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
 import { SkiaInvoiceCanvasSimple } from "@/components/skia/SkiaInvoiceCanvasSimple";
 import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
+import SkiaInvoiceCanvasModern from "@/components/skia/SkiaInvoiceCanvasModern";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -23,9 +28,36 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 // Invoice Preview Component for Chat
 const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }) => {
 	const { invoice, line_items, client_id } = invoiceData;
-	const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
+	const [businessSettings, setBusinessSettings] = useState<(BusinessSettingsRow & {
+		currency: string;
+		currency_symbol: string;
+		show_business_logo?: boolean;
+		show_business_name?: boolean;
+		show_business_address?: boolean;
+		show_business_tax_number?: boolean;
+		show_notes_section?: boolean;
+	}) | null>(null);
 	const [fullClientData, setFullClientData] = useState<any>(null);
 	const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
+
+	// Get the correct invoice design component based on invoice design type
+	const getInvoiceDesignComponent = () => {
+		const designType = invoice?.invoice_design || 'classic';
+		console.log('[AI InvoicePreview] Selected design type for invoice:', designType);
+		
+		switch (designType.toLowerCase()) {
+			case 'modern':
+				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasModern');
+				return SkiaInvoiceCanvasModern;
+			case 'simple':
+				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasSimple');
+				return SkiaInvoiceCanvasSimple;
+			case 'classic':
+			default:
+				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvas (classic)');
+				return SkiaInvoiceCanvas;
+		}
+	};
 	
 	const { supabase } = useSupabase();
 	
@@ -82,19 +114,38 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			if (error) {
 				console.error('Error loading business settings:', error);
 				// Fall back to default settings if no business settings found
-				const defaultSettings: BusinessSettingsRow = {
+				const defaultSettings: BusinessSettingsRow & {
+					currency: string;
+					currency_symbol: string;
+					show_business_logo?: boolean;
+					show_business_name?: boolean;
+					show_business_address?: boolean;
+					show_business_tax_number?: boolean;
+					show_notes_section?: boolean;
+				} = {
 					id: 'default',
 					user_id: invoice.user_id,
 					business_name: 'Your Business',
 					business_address: 'Your Address',
 					business_logo_url: null,
-					currency: 'USD',
-					currency_symbol: '$',
-					paypal_enabled: true,
-					stripe_enabled: true,
-					bank_transfer_enabled: true,
+					business_email: null,
+					business_phone: null,
+									business_website: null,
+				currency_code: 'USD',
+				tax_number: '',
+				tax_name: '',
+					default_tax_rate: null,
+					auto_apply_tax: false,
+					region: null,
 					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString(),
+					currency: 'USD',
+					currency_symbol: '$',
+					show_business_logo: true,
+					show_business_name: true,
+					show_business_address: true,
+					show_business_tax_number: true,
+					show_notes_section: true,
 				};
 				setBusinessSettings(defaultSettings);
 			} else {
@@ -104,10 +155,23 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				// Map currency_code to currency_symbol
 				const currencySymbol = getCurrencySymbol(businessSettings.currency_code || 'USD');
 				
-				const enhancedSettings: BusinessSettingsRow = {
+				const enhancedSettings: BusinessSettingsRow & {
+					currency: string;
+					currency_symbol: string;
+					show_business_logo?: boolean;
+					show_business_name?: boolean;
+					show_business_address?: boolean;
+					show_business_tax_number?: boolean;
+					show_notes_section?: boolean;
+				} = {
 					...businessSettings,
 					currency: businessSettings.currency_code || 'USD',
 					currency_symbol: currencySymbol,
+					show_business_logo: businessSettings.show_business_logo ?? true,
+					show_business_name: businessSettings.show_business_name ?? true,
+					show_business_address: businessSettings.show_business_address ?? true,
+					show_business_tax_number: businessSettings.show_business_tax_number ?? true,
+					show_notes_section: businessSettings.show_notes_section ?? true,
 				};
 				
 				console.log('[AI Invoice Preview] Using currency symbol:', currencySymbol, 'for currency:', businessSettings.currency_code);
@@ -116,19 +180,38 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 		} catch (error) {
 			console.error('Error loading business settings:', error);
 			// Fall back to default settings on error
-			const defaultSettings: BusinessSettingsRow = {
+			const defaultSettings: BusinessSettingsRow & {
+				currency: string;
+				currency_symbol: string;
+				show_business_logo?: boolean;
+				show_business_name?: boolean;
+				show_business_address?: boolean;
+				show_business_tax_number?: boolean;
+				show_notes_section?: boolean;
+			} = {
 				id: 'default',
 				user_id: invoice.user_id,
 				business_name: 'Your Business',
 				business_address: 'Your Address',
 				business_logo_url: null,
-				currency: 'USD',
-				currency_symbol: '$',
-				paypal_enabled: true,
-				stripe_enabled: true,
-				bank_transfer_enabled: true,
+				business_email: null,
+				business_phone: null,
+				business_website: null,
+				currency_code: 'USD',
+				tax_number: '',
+				tax_name: '',
+				default_tax_rate: null,
+				auto_apply_tax: false,
+				region: null,
 				created_at: new Date().toISOString(),
 				updated_at: new Date().toISOString(),
+				currency: 'USD',
+				currency_symbol: '$',
+				show_business_logo: true,
+				show_business_name: true,
+				show_business_address: true,
+				show_business_tax_number: true,
+				show_notes_section: true,
 			};
 			setBusinessSettings(defaultSettings);
 		}
@@ -176,6 +259,9 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 		...invoice,
 		invoice_line_items: line_items || [],
 	};
+
+	// Get the dynamic invoice component
+	const InvoiceDesignComponent = getInvoiceDesignComponent();
 
 	// Use the full client data from database but prefer current invoice client name if different
 	let transformedClient = null;
@@ -269,31 +355,32 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 								transform: [{ scale: 0.6 }], // Slightly smaller than modal for chat preview
 								marginLeft: -120, // Center the invoice by shifting left
 							}}>
-								<SkiaInvoiceCanvas
-									renderSinglePage={0}
-									style={{
-										width: 200,
-										height: 280,
-										backgroundColor: 'white',
-										borderRadius: 8,
-										shadowColor: '#000',
-										shadowOffset: { width: 0, height: 4 },
-										shadowOpacity: 0.15,
-										shadowRadius: 8,
-										elevation: 5,
-									}}
-							invoice={transformedInvoice}
-									business={businessSettings}
-									client={transformedClient}
-									currencySymbol={businessSettings?.currency_symbol || '$'}
-									displaySettings={{
-										show_business_logo: businessSettings?.show_business_logo ?? true,
-										show_business_name: businessSettings?.show_business_name ?? true,
-										show_business_address: businessSettings?.show_business_address ?? true,
-										show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-										show_notes_section: businessSettings?.show_notes_section ?? true,
-									}}
-								/>
+																	<InvoiceDesignComponent
+										renderSinglePage={0}
+										style={{
+											width: 200,
+											height: 280,
+											backgroundColor: 'white',
+											borderRadius: 8,
+											shadowColor: '#000',
+											shadowOffset: { width: 0, height: 4 },
+											shadowOpacity: 0.15,
+											shadowRadius: 8,
+											elevation: 5,
+										}}
+										invoice={transformedInvoice}
+										business={businessSettings}
+										client={transformedClient}
+										currencySymbol={businessSettings?.currency_symbol || '$'}
+										accentColor={invoice?.accent_color || '#14B8A6'}
+										displaySettings={{
+											show_business_logo: businessSettings?.show_business_logo ?? true,
+											show_business_name: businessSettings?.show_business_name ?? true,
+											show_business_address: businessSettings?.show_business_address ?? true,
+											show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
+											show_notes_section: businessSettings?.show_notes_section ?? true,
+										}}
+									/>
 							</View>
 						) : (
 							<View style={{
@@ -333,7 +420,8 @@ const ClientPreview = ({ clientData, theme }: { clientData: any; theme: any }) =
 	const { client } = clientData;
 	
 	const handleClientTap = () => {
-		router.push(`/(app)/(protected)/customers/${client.id}`);
+		// Note: router hook should be used in the parent component
+		console.log('Client tap - navigate to client:', client.id);
 	};
 
 	const getInitials = (name: string) => {
@@ -404,21 +492,47 @@ const ClientPreview = ({ clientData, theme }: { clientData: any; theme: any }) =
 export default function AiScreen() {
 	const { user, supabase } = useSupabase();
 	const { theme } = useTheme();
+	const router = useRouter();
 	const scrollViewRef = useRef<ScrollView>(null);
+	const transcribeButtonRef = useRef<TranscribeButtonRef>(null);
+	
+	// State
 	const [inputText, setInputText] = useState('');
+	const [messages, setMessages] = useState<ChatMessage[]>([]);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [isVoiceModalVisible, setIsVoiceModalVisible] = useState(false);
+	const [isRecording, setIsRecording] = useState(false);
+	const [listeningDots, setListeningDots] = useState(1);
+	const [isTranscribing, setIsTranscribing] = useState(false);
+	const [transcribingDots, setTranscribingDots] = useState(1);
+	const [businessSettings, setBusinessSettings] = useState<any>(null);
 	const [showSetupMessage, setShowSetupMessage] = useState(false);
-	const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
+	const [currentAudioLevel, setCurrentAudioLevel] = useState(0);
+
+	// Animated values for waveform
+	const waveformAnims = useRef([
+		new Animated.Value(0.3),
+		new Animated.Value(0.5),
+		new Animated.Value(0.8),
+		new Animated.Value(0.4),
+		new Animated.Value(0.6),
+		new Animated.Value(0.9),
+		new Animated.Value(0.3),
+		new Animated.Value(0.7),
+	]).current;
 
 	// Use our custom hook for chat functionality
 	const { 
-		messages, 
-		isLoading,
+		messages: aiMessages, 
+		isLoading: aiIsLoading,
+		statusMessage, // This contains the real AI processing status
 		conversation,
 		sendMessage, 
 		loadMessages, 
 		clearConversation,
-		error, 
-		clearError 
+		error: aiError, 
+		clearError: aiClearError 
 	} = useAIChat();
 
 	// Load business settings for currency context
@@ -437,19 +551,38 @@ export default function AiScreen() {
 			if (error) {
 				console.log('[AI Screen] No business settings found, using default USD');
 				// Default to USD if no settings found
-				const defaultSettings: BusinessSettingsRow = {
-					id: 'default',
-					user_id: user.id,
-					business_name: 'Your Business',
-					business_address: 'Your Address',
-					business_logo_url: null,
-					currency: 'USD',
-					currency_symbol: '$',
-					paypal_enabled: true,
-					stripe_enabled: true,
-					bank_transfer_enabled: true,
+				const defaultSettings: BusinessSettingsRow & {
+					currency: string;
+					currency_symbol: string;
+					show_business_logo?: boolean;
+					show_business_name?: boolean;
+					show_business_address?: boolean;
+					show_business_tax_number?: boolean;
+					show_notes_section?: boolean;
+				} = {
+									id: 'default',
+				user_id: user.id,
+				business_name: 'Your Business',
+				business_address: 'Your Address',
+				business_logo_url: null,
+				business_email: null,
+				business_phone: null,
+				business_website: null,
+				currency_code: 'USD',
+				tax_number: '',
+				tax_name: '',
+					default_tax_rate: null,
+					auto_apply_tax: false,
+					region: null,
 					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString(),
+					currency: 'USD',
+					currency_symbol: '$',
+					show_business_logo: true,
+					show_business_name: true,
+					show_business_address: true,
+					show_business_tax_number: true,
+					show_notes_section: true,
 				};
 				setBusinessSettings(defaultSettings);
 			} else {
@@ -466,10 +599,23 @@ export default function AiScreen() {
 				};
 				
 				const currencySymbol = getCurrencySymbol(settings.currency_code || 'USD');
-				const enhancedSettings: BusinessSettingsRow = {
+				const enhancedSettings: BusinessSettingsRow & {
+					currency: string;
+					currency_symbol: string;
+					show_business_logo?: boolean;
+					show_business_name?: boolean;
+					show_business_address?: boolean;
+					show_business_tax_number?: boolean;
+					show_notes_section?: boolean;
+				} = {
 					...settings,
 					currency: settings.currency_code || 'USD',
 					currency_symbol: currencySymbol,
+					show_business_logo: settings.show_business_logo ?? true,
+					show_business_name: settings.show_business_name ?? true,
+					show_business_address: settings.show_business_address ?? true,
+					show_business_tax_number: settings.show_business_tax_number ?? true,
+					show_notes_section: settings.show_notes_section ?? true,
 				};
 				
 				console.log('[AI Screen] Loaded currency:', enhancedSettings.currency, 'symbol:', currencySymbol);
@@ -503,12 +649,47 @@ export default function AiScreen() {
 
 	// Auto-scroll to bottom when new messages arrive
 	useEffect(() => {
-		if (messages.length > 0) {
+		if (aiMessages.length > 0) {
 			setTimeout(() => {
 				scrollViewRef.current?.scrollToEnd({ animated: true });
 			}, 100);
 		}
-	}, [messages]);
+	}, [aiMessages]);
+
+	// Animated listening dots effect
+	useEffect(() => {
+		let interval: ReturnType<typeof setInterval>;
+		if (isRecording) {
+			interval = setInterval(() => {
+				setListeningDots(prev => prev >= 3 ? 1 : prev + 1);
+			}, 500);
+		}
+		return () => {
+			if (interval) clearInterval(interval);
+		};
+	}, [isRecording]);
+
+	// Animated transcribing dots effect
+	useEffect(() => {
+		let interval: ReturnType<typeof setInterval>;
+		if (isTranscribing) {
+			interval = setInterval(() => {
+				setTranscribingDots(prev => prev >= 3 ? 1 : prev + 1);
+			}, 500);
+		}
+		return () => {
+			if (interval) clearInterval(interval);
+		};
+	}, [isTranscribing]);
+
+	// Real-time waveform animation based on audio levels
+	useEffect(() => {
+		// Remove waveform animation logic - keeping it simple
+		if (!isRecording) {
+			// Reset to default values when not recording
+			waveformAnims.forEach(anim => anim.setValue(0.3));
+		}
+	}, [isRecording]);
 
 	// Helper function to extract first name from user's display name
 	const getFirstName = () => {
@@ -552,16 +733,16 @@ export default function AiScreen() {
 			id: 'welcome',
 			conversation_id: '',
 			role: 'assistant' as const,
-			content: `${greeting}, I'm SupaAI your invoice assistant. I can help create, manage, update or chase unpaid invoices (and much more). You can type or send a voice note and I will understand. What can I help with?`,
+			content: `${greeting}, I'm SuperAI your invoice assistant. I can help create, manage, update or chase unpaid invoices (and much more). You can type or send a voice note and I will understand. What can I help with?`,
 			message_type: 'text' as const,
 			created_at: new Date().toISOString()
 		};
 	};
 
-	const displayMessages = messages.length > 0 ? messages : [getWelcomeMessage()];
+	const displayMessages = aiMessages.length > 0 ? aiMessages : [getWelcomeMessage()];
 
 	const handleSendMessage = async () => {
-		if (!inputText.trim() || isLoading) return;
+		if (!inputText.trim() || aiIsLoading) return;
 
 		// Check if API is configured before sending
 		if (showSetupMessage) {
@@ -605,6 +786,181 @@ export default function AiScreen() {
 		}
 	};
 
+	// Handle voice transcription
+	const handleTranscript = (transcript: string) => {
+		console.log('[AI Screen] Received transcript:', transcript);
+		setInputText(transcript);
+		setIsTranscribing(false);
+	};
+
+	const handleRecordingStateChange = (recording: boolean) => {
+		console.log('[AI Screen] Recording state changed:', recording);
+		console.log('[AI Screen] Previous isRecording state:', isRecording);
+		setIsRecording(recording);
+		console.log('[AI Screen] New isRecording state will be:', recording);
+		
+		// Reset listening dots when recording stops
+		if (!recording) {
+			setListeningDots(1);
+		}
+	};
+
+	const handleProcessing = (processing: boolean) => {
+		console.log('[AI Screen] Processing state changed:', processing);
+		setIsTranscribing(processing);
+	};
+
+	// Voice modal handlers
+	const handleOpenVoiceModal = () => {
+		setIsVoiceModalVisible(true);
+	};
+
+	const handleCloseVoiceModal = () => {
+		setIsVoiceModalVisible(false);
+	};
+
+	// Handle voice messages from VoiceChatButton
+	const handleVoiceMessage = (transcript: string) => {
+		if (transcript.trim()) {
+			setInputText(transcript);
+			// Optionally auto-send the voice message
+			// handleSendMessage();
+		}
+	};
+
+	// Generate dynamic placeholder text
+	const getPlaceholderText = () => {
+		if (showSetupMessage) {
+			return "Configure API key first...";
+		}
+		if (isRecording) {
+			const dots = '.'.repeat(listeningDots);
+			return `Listening${dots}`;
+		}
+		if (isTranscribing) {
+			const dots = '.'.repeat(transcribingDots);
+			return `Transcribing${dots}`;
+		}
+		return "Type or speak your message...";
+	};
+
+	// Enhance real AI status messages with emojis and visual flair
+	const getEnhancedStatusText = () => {
+		if (!statusMessage) return "🤔 SuperAI is thinking...";
+		
+		const message = statusMessage.toLowerCase();
+		
+		// Map different status messages to appropriate emojis
+		if (message.includes('initializing')) {
+			return `🚀 ${statusMessage}`;
+		} else if (message.includes('connecting')) {
+			return `🔗 ${statusMessage}`;
+		} else if (message.includes('thinking') || message.includes('analyzing')) {
+			return `🤔 ${statusMessage}`;
+		} else if (message.includes('processing') || message.includes('working')) {
+			return `⚡ ${statusMessage}`;
+		} else if (message.includes('creating') || message.includes('generating')) {
+			return `✨ ${statusMessage}`;
+		} else if (message.includes('searching') || message.includes('finding')) {
+			return `🔍 ${statusMessage}`;
+		} else if (message.includes('updating') || message.includes('modifying')) {
+			return `🔄 ${statusMessage}`;
+		} else if (message.includes('executing') || message.includes('action')) {
+			return `⚙️ ${statusMessage}`;
+		} else if (message.includes('completing') || message.includes('finishing')) {
+			return `🎯 ${statusMessage}`;
+		} else if (message.includes('client')) {
+			return `👤 ${statusMessage}`;
+		} else if (message.includes('invoice')) {
+			return `📄 ${statusMessage}`;
+		} else {
+			// Default emoji for any other status
+			return `🔄 ${statusMessage}`;
+		}
+	};
+
+	// Function to render text with bold formatting
+	const renderFormattedText = (text: string, textColor: string) => {
+		const parts = text.split(/(\*\*.*?\*\*)/g);
+		
+		return (
+			<Text
+				style={{
+					color: textColor,
+					fontSize: 16,
+					lineHeight: 22,
+				}}
+			>
+				{parts.map((part, index) => {
+					if (part.startsWith('**') && part.endsWith('**')) {
+						// Remove the ** and make bold
+						const boldText = part.slice(2, -2);
+						return (
+							<Text key={index} style={{ fontWeight: 'bold' }}>
+								{boldText}
+							</Text>
+						);
+					}
+					return part;
+				})}
+			</Text>
+		);
+	};
+
+	const handleAudioLevel = useCallback((level: number) => {
+		setCurrentAudioLevel(level);
+	}, []);
+
+	const handleCancelRecording = async () => {
+		console.log('[AI Screen] Cancel recording button pressed');
+		console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
+		console.log('[AI Screen] Available methods:', transcribeButtonRef.current ? Object.keys(transcribeButtonRef.current) : 'none');
+		
+		try {
+			if (transcribeButtonRef.current) {
+				console.log('[AI Screen] Calling cancelRecording...');
+				await transcribeButtonRef.current.cancelRecording();
+				console.log('[AI Screen] Cancel recording completed');
+			} else {
+				console.log('[AI Screen] TranscribeButton ref not available');
+			}
+		} catch (error) {
+			console.error('[AI Screen] Error canceling recording:', error);
+		}
+	};
+
+	const handleFinishRecording = async () => {
+		console.log('[AI Screen] Finish recording button pressed');
+		console.log('[AI Screen] Current isRecording state:', isRecording);
+		console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
+		console.log('[AI Screen] Available methods:', transcribeButtonRef.current ? Object.keys(transcribeButtonRef.current) : 'none');
+		
+		try {
+			if (transcribeButtonRef.current) {
+				console.log('[AI Screen] Calling stopRecording...');
+				await transcribeButtonRef.current.stopRecording();
+				console.log('[AI Screen] Finish recording completed');
+				
+				// Force UI update in case the callback doesn't fire
+				setTimeout(() => {
+					console.log('[AI Screen] Force checking recording state after stop...');
+					if (isRecording) {
+						console.log('[AI Screen] Recording state still true, forcing to false');
+						setIsRecording(false);
+						setListeningDots(1);
+					}
+				}, 100);
+			} else {
+				console.log('[AI Screen] TranscribeButton ref not available');
+			}
+		} catch (error) {
+			console.error('[AI Screen] Error finishing recording:', error);
+			// Force reset UI state on error
+			setIsRecording(false);
+			setListeningDots(1);
+		}
+	};
+
 	return (
 		<BottomSheetModalProvider>
 		<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
@@ -640,26 +996,26 @@ export default function AiScreen() {
 					>
 						AI Assistant
 					</Text>
-						{messages.length > 0 && (
-						<TouchableOpacity onPress={handleRefresh} disabled={isLoading}>
+						{aiMessages.length > 0 && (
+						<TouchableOpacity onPress={handleRefresh} disabled={aiIsLoading}>
 							<RefreshCw 
 								size={20} 
-								color={isLoading ? theme.mutedForeground : theme.foreground} 
+								color={aiIsLoading ? theme.mutedForeground : theme.foreground} 
 							/>
 						</TouchableOpacity>
 					)}
 				</View>
 
 				{/* Error Banner */}
-				{error && (
+				{aiError && (
 					<View 
 						style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
 						className="mx-4 mb-4 p-3 rounded-lg border"
 					>
 						<Text style={{ color: '#DC2626', fontSize: 14 }}>
-							{error}
+							{aiError}
 						</Text>
-						<TouchableOpacity onPress={clearError} className="mt-2">
+						<TouchableOpacity onPress={aiClearError} className="mt-2">
 							<Text style={{ color: '#DC2626', fontSize: 12, textDecorationLine: 'underline' }}>
 								Dismiss
 							</Text>
@@ -690,15 +1046,10 @@ export default function AiScreen() {
 									borderBottomLeftRadius: message.role === 'user' ? 16 : 4,
 								}}
 							>
-								<Text
-									style={{
-										color: message.role === 'user' ? '#FFFFFF' : theme.foreground,
-										fontSize: 16,
-										lineHeight: 22,
-									}}
-								>
-									{message.content}
-								</Text>
+								{renderFormattedText(
+									message.content,
+									message.role === 'user' ? '#FFFFFF' : theme.foreground
+								)}
 
 									{/* Show invoice and client previews if this message has attachment data */}
 									{message.role === 'assistant' && (message as any).attachments && (message as any).attachments.length > 0 && (
@@ -748,8 +1099,8 @@ export default function AiScreen() {
 						</View>
 					))}
 
-					{/* Loading indicator */}
-					{isLoading && (
+					{/* Loading indicator - dynamic thinking stages */}
+					{aiIsLoading && (
 						<View className="items-start mb-4">
 							<View
 								style={{
@@ -758,10 +1109,16 @@ export default function AiScreen() {
 									paddingVertical: 12,
 									borderRadius: 16,
 									borderBottomLeftRadius: 4,
+									borderWidth: 1,
+									borderColor: theme.primary + '20', // Subtle primary color border
 								}}
 							>
-								<Text style={{ color: theme.mutedForeground }}>
-									AI is thinking...
+								<Text style={{ 
+									color: theme.primary, // Use primary color for thinking text
+									fontSize: 16,
+									fontWeight: '500'
+								}}>
+									{getEnhancedStatusText()}
 								</Text>
 							</View>
 						</View>
@@ -777,69 +1134,174 @@ export default function AiScreen() {
 						borderTopColor: theme.border
 					}}
 				>
-					<View className="flex-row items-center space-x-3">
-						{/* Voice Input Button (placeholder for now) */}
-						<TouchableOpacity
-							style={{
-								padding: 12,
-								borderRadius: 24,
-								backgroundColor: theme.muted
-							}}
-							onPress={() => Alert.alert('Coming Soon', 'Voice input will be available in the next update!')}
-							disabled={isLoading}
-						>
-							<Mic size={20} color={isLoading ? theme.mutedForeground : theme.foreground} />
-						</TouchableOpacity>
+					{/* Always render TranscribeButton to maintain ref connection */}
+					<View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}>
+						<TranscribeButton
+							ref={transcribeButtonRef}
+							onTranscript={handleTranscript}
+							disabled={aiIsLoading || showSetupMessage}
+							onRecordingStateChange={handleRecordingStateChange}
+							onProcessing={handleProcessing}
+							onAudioLevel={handleAudioLevel}
+						/>
+					</View>
 
-						{/* Text Input */}
-						<TextInput
-							value={inputText}
-							onChangeText={setInputText}
-							placeholder={showSetupMessage ? "Configure API key first..." : "Type your message..."}
-							placeholderTextColor={theme.mutedForeground}
+					{isRecording ? (
+						/* Recording Interface with centralized listening text and control buttons */
+						<View 
 							style={{
-								flex: 1,
+								flexDirection: 'row',
+								alignItems: 'center',
 								backgroundColor: theme.background,
-								color: theme.foreground,
-								paddingHorizontal: 16,
-								paddingVertical: 12,
 								borderRadius: 24,
 								borderWidth: 1,
-								borderColor: theme.border,
-								fontSize: 16,
-							}}
-							multiline
-							maxLength={1000}
-								returnKeyType="default"
-							editable={!isLoading && !showSetupMessage}
-						/>
-
-						{/* Send Button */}
-						<TouchableOpacity
-							onPress={() => {
-								console.log('[AI Screen] Send button pressed');
-								console.log('[AI Screen] inputText.trim():', !!inputText.trim());
-								console.log('[AI Screen] isLoading:', isLoading);
-								console.log('[AI Screen] showSetupMessage:', showSetupMessage);
-								console.log('[AI Screen] Button disabled:', !inputText.trim() || isLoading || showSetupMessage);
-								handleSendMessage();
-							}}
-							disabled={!inputText.trim() || isLoading || showSetupMessage}
-							style={{
-								padding: 12,
-								borderRadius: 24,
-								backgroundColor: (inputText.trim() && !isLoading && !showSetupMessage) ? theme.primary : theme.muted
+								borderColor: theme.primary,
+								paddingHorizontal: 16,
+								paddingVertical: 12,
+								minHeight: 44,
+								gap: 12,
 							}}
 						>
-							<Send 
-								size={20} 
-								color={(inputText.trim() && !isLoading && !showSetupMessage) ? '#FFFFFF' : theme.mutedForeground} 
+							{/* Cancel Button */}
+							<TouchableOpacity
+								onPress={handleCancelRecording}
+								style={{
+									width: 32,
+									height: 32,
+									borderRadius: 16,
+									backgroundColor: theme.destructive,
+									alignItems: 'center',
+									justifyContent: 'center',
+								}}
+								activeOpacity={0.7}
+							>
+								<X size={18} color="#FFFFFF" />
+							</TouchableOpacity>
+
+							{/* Centralized Listening Text with Animated Dots */}
+							<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+								<Text style={{
+									color: theme.primary,
+									fontSize: 16,
+									fontWeight: '600',
+									textAlign: 'center',
+								}}>
+									Listening{'.'.repeat(listeningDots)}
+								</Text>
+							</View>
+
+							{/* Finish/Check Button */}
+							<TouchableOpacity
+								onPress={handleFinishRecording}
+								style={{
+									width: 32,
+									height: 32,
+									borderRadius: 16,
+									backgroundColor: '#22c55e', // Green color
+									alignItems: 'center',
+									justifyContent: 'center',
+								}}
+								activeOpacity={0.7}
+							>
+								<Check size={18} color="#FFFFFF" />
+							</TouchableOpacity>
+						</View>
+					) : (
+						/* Normal Input Interface */
+						<View className="flex-row items-center" style={{ gap: 8 }}>
+							{/* Text Input - optimized width to fit well next to transcribe button */}
+							<TextInput
+								value={inputText}
+								onChangeText={setInputText}
+								placeholder={getPlaceholderText()}
+								placeholderTextColor={theme.mutedForeground}
+								style={{
+									flex: 0.8,
+									backgroundColor: theme.background,
+									color: theme.foreground,
+									paddingHorizontal: 16,
+									paddingVertical: 12,
+									borderRadius: 24,
+									borderWidth: 1,
+									borderColor: theme.border,
+									fontSize: 16,
+									minHeight: 44,
+								}}
+								multiline
+								maxLength={1000}
+								returnKeyType="default"
+								editable={!aiIsLoading && !showSetupMessage}
 							/>
-						</TouchableOpacity>
-					</View>
+
+							{/* Right side buttons - 20% width for single button */}
+							<View style={{ flex: 0.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+								{/* Show voice buttons when no text, send button when there is text */}
+								{!inputText.trim() ? (
+									<>
+										{/* Visible Voice Transcribe Button - for quick transcription */}
+										<TouchableOpacity
+											onPress={() => {
+												console.log('[AI Screen] Visible mic button pressed');
+												console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
+												console.log('[AI Screen] Current isRecording state:', isRecording);
+												transcribeButtonRef.current?.startRecording();
+											}}
+											disabled={aiIsLoading || showSetupMessage}
+											style={{
+												width: 44,
+												height: 44,
+												borderRadius: 22,
+												backgroundColor: theme.primary,
+												alignItems: 'center',
+												justifyContent: 'center',
+												opacity: (aiIsLoading || showSetupMessage) ? 0.5 : 1
+											}}
+										>
+											<Mic size={20} color="#FFFFFF" />
+										</TouchableOpacity>
+									</>
+								) : (
+									/* Send Button - shown when there is text, centered */
+									<View style={{ flex: 1, alignItems: 'center' }}>
+										<TouchableOpacity
+											onPress={() => {
+												console.log('[AI Screen] Send button pressed');
+												console.log('[AI Screen] inputText.trim():', !!inputText.trim());
+												console.log('[AI Screen] aiIsLoading:', aiIsLoading);
+												console.log('[AI Screen] showSetupMessage:', showSetupMessage);
+												console.log('[AI Screen] Button disabled:', !inputText.trim() || aiIsLoading || showSetupMessage);
+												handleSendMessage();
+											}}
+											disabled={!inputText.trim() || aiIsLoading || showSetupMessage}
+											style={{
+												width: 44,
+												height: 44,
+												borderRadius: 22,
+												backgroundColor: (inputText.trim() && !aiIsLoading && !showSetupMessage) ? theme.primary : theme.muted,
+												alignItems: 'center',
+												justifyContent: 'center'
+											}}
+										>
+											<Send 
+												size={20} 
+												color={(inputText.trim() && !aiIsLoading && !showSetupMessage) ? '#FFFFFF' : theme.mutedForeground} 
+											/>
+										</TouchableOpacity>
+									</View>
+								)}
+							</View>
+						</View>
+					)}
 					</View>
 				</View>
 			</KeyboardAvoidingView>
+			
+			{/* Voice Modal */}
+			<VoiceModal
+				isVisible={isVoiceModalVisible}
+				onClose={handleCloseVoiceModal}
+				businessSettings={businessSettings}
+			/>
 		</SafeAreaView>
 		</BottomSheetModalProvider>
 	);

@@ -465,7 +465,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "update_invoice_details",
-    description: "Update basic invoice information like invoice number, client details, dates, tax rates, notes, etc. (not for line items - use update_invoice_line_items for that)",
+    description: "Update basic invoice information like invoice number, dates, tax rates, notes, etc. (not for line items - use update_invoice_line_items for that). ⚠️ IMPORTANT: Only change client information if user explicitly requests it - preserve existing client otherwise.",
     parameters: {
       type: "object",
       properties: {
@@ -479,11 +479,11 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         },
         client_name: {
           type: "string",
-          description: "Update client name"
+          description: "⚠️ ONLY use this if user explicitly says to change the client (e.g., 'change client to John'). Do NOT use for general invoice updates."
         },
         client_email: {
           type: "string",
-          description: "Update client email"
+          description: "⚠️ ONLY use this if user explicitly says to change the client email. Do NOT use for general invoice updates."
         },
         invoice_date: {
           type: "string",
@@ -626,7 +626,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "duplicate_invoice",
-    description: "Create a copy of an existing invoice with a new invoice number. Useful for recurring invoices or similar work.",
+    description: "Create a copy of an existing invoice with a new invoice number. Useful for recurring invoices or similar work. ⚠️ PRESERVES original client unless explicitly told to change it.",
     parameters: {
       type: "object",
       properties: {
@@ -636,7 +636,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         },
         new_client_name: {
           type: "string",
-          description: "Optional: Change the client for the duplicated invoice"
+          description: "⚠️ ONLY use this if user explicitly says to change the client (e.g., 'duplicate for Sarah'). Otherwise, preserve original client."
         },
         new_invoice_date: {
           type: "string",
@@ -2180,9 +2180,11 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
         updateData.invoice_number = new_invoice_number;
       }
       if (client_name) {
+        console.warn('[updateInvoiceDetails] ⚠️ CHANGING CLIENT NAME from', currentInvoice.client_name, 'to', client_name);
         updateData.client_name = client_name;
       }
       if (client_email) {
+        console.warn('[updateInvoiceDetails] ⚠️ CHANGING CLIENT EMAIL from', currentInvoice.client_email, 'to', client_email);
         updateData.client_email = client_email;
       }
       if (invoice_date) {

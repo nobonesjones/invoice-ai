@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -8,6 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  TextInput,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
@@ -15,9 +17,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '@/context/theme-provider';
 import { useSupabase } from '@/context/supabase-provider';
 import { Text } from '@/components/ui/text';
-import { ChevronLeft, ChevronRight, Palette } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Palette, X } from 'lucide-react-native';
 import { INVOICE_DESIGNS, getDesignById, DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import { InvoicePreviewModal } from '@/components/InvoicePreviewModal';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetModalProvider, BottomSheetView, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
@@ -151,6 +154,361 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
 });
 
+// Reference Schema Sheet Component
+const ReferenceSchemaSheet = React.forwardRef<BottomSheetModal, {
+  theme: any;
+  currentFormat: string;
+  onSave: (format: string) => void;
+}>((props, ref) => {
+  const { theme, currentFormat, onSave } = props;
+  const [selectedFormat, setSelectedFormat] = useState(currentFormat);
+  const [customPrefix, setCustomPrefix] = useState('INV');
+  const [numberLength, setNumberLength] = useState(3);
+  const [includeYear, setIncludeYear] = useState(false);
+  const [includeMonth, setIncludeMonth] = useState(false);
+  const [startingNumber, setStartingNumber] = useState(1);
+
+  // Snap points for the modal
+  const snapPoints = useMemo(() => ['75%', '90%'], []);
+
+  // Parse current format to set initial values
+  useEffect(() => {
+    if (currentFormat) {
+      // Extract prefix (everything before the first dash or number)
+      const prefixMatch = currentFormat.match(/^([A-Za-z]+)/);
+      if (prefixMatch) {
+        setCustomPrefix(prefixMatch[1]);
+      }
+      
+      // Check for year and month patterns
+      setIncludeYear(currentFormat.includes('YYYY') || currentFormat.includes(new Date().getFullYear().toString()));
+      setIncludeMonth(currentFormat.includes('MM') || /\d{2}/.test(currentFormat.substring(currentFormat.indexOf('-') + 1, currentFormat.indexOf('-') + 3)));
+      
+      // Extract number length from trailing zeros pattern
+      const numberMatch = currentFormat.match(/(\d+)$/);
+      if (numberMatch) {
+        setNumberLength(numberMatch[1].length);
+        setStartingNumber(parseInt(numberMatch[1]) || 1);
+      }
+    }
+  }, [currentFormat]);
+
+  const presetFormats = [
+    { label: 'INV-001', pattern: 'PREFIX-NNN', description: 'Simple sequential numbering' },
+    { label: 'INV-2024-001', pattern: 'PREFIX-YYYY-NNN', description: 'Include year' },
+    { label: 'INV-01-001', pattern: 'PREFIX-MM-NNN', description: 'Include month' },
+    { label: 'INV-2024-01-001', pattern: 'PREFIX-YYYY-MM-NNN', description: 'Include year and month' },
+    { label: 'QUOTE-001', pattern: 'CUSTOM-NNN', description: 'Custom prefix' },
+  ];
+
+  const generatePreview = () => {
+    let preview = customPrefix;
+    
+    if (includeYear) {
+      preview += `-${new Date().getFullYear()}`;
+    }
+    
+    if (includeMonth) {
+      const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
+      preview += `-${month}`;
+    }
+    
+    const number = startingNumber.toString().padStart(numberLength, '0');
+    preview += `-${number}`;
+    
+    return preview;
+  };
+
+  const handleSave = () => {
+    const newFormat = generatePreview();
+    onSave(newFormat);
+    (ref as any)?.current?.dismiss();
+  };
+
+  const sheetStyles = StyleSheet.create({
+    contentContainer: {
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 80, // Space for sticky button
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    closeButton: {
+      padding: 8,
+      borderRadius: 20,
+      backgroundColor: theme.muted,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.foreground,
+      flex: 1,
+      textAlign: 'center',
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.foreground,
+      marginBottom: 12,
+      marginTop: 20,
+    },
+    presetItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.card,
+      borderRadius: 8,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    selectedPreset: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primaryTransparent,
+    },
+    presetLeft: {
+      flex: 1,
+    },
+    presetLabel: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: theme.foreground,
+    },
+    presetDescription: {
+      fontSize: 14,
+      color: theme.mutedForeground,
+      marginTop: 2,
+    },
+    customSection: {
+      backgroundColor: theme.card,
+      borderRadius: 8,
+      padding: 16,
+      marginTop: 16,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    inputLabel: {
+      flex: 1,
+      fontSize: 16,
+      color: theme.foreground,
+    },
+    textInput: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 16,
+      color: theme.foreground,
+      backgroundColor: theme.background,
+      width: 80,
+    },
+    numberInput: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 16,
+      color: theme.foreground,
+      backgroundColor: theme.background,
+      width: 100,
+    },
+    switchRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    previewSection: {
+      backgroundColor: theme.muted,
+      borderRadius: 8,
+      padding: 16,
+      marginBottom: 16,
+      alignItems: 'center',
+    },
+    previewLabel: {
+      fontSize: 14,
+      color: theme.mutedForeground,
+      marginBottom: 8,
+    },
+    previewText: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.primary,
+    },
+    stickyButtonContainer: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      padding: 16,
+      backgroundColor: theme.background,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+    },
+    stickyButton: {
+      backgroundColor: theme.primary,
+      borderRadius: 8,
+      paddingVertical: 16,
+      alignItems: 'center',
+    },
+    stickyButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.primaryForeground,
+    },
+  });
+
+  // Render backdrop
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+      />
+    ),
+    []
+  );
+
+  return (
+    <BottomSheetModal
+      ref={ref}
+      index={0}
+      snapPoints={snapPoints}
+      enablePanDownToClose
+      backdropComponent={renderBackdrop}
+    >
+      <BottomSheetScrollView 
+        contentContainerStyle={sheetStyles.contentContainer}
+      >
+        {/* Header with X button */}
+        <View style={sheetStyles.header}>
+          <View style={{ width: 40 }} />
+          <Text style={sheetStyles.title}>Invoice Reference Format</Text>
+          <TouchableOpacity
+            style={sheetStyles.closeButton}
+            onPress={() => (ref as any)?.current?.dismiss()}
+          >
+            <X size={20} color={theme.foreground} />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Preview Section - moved to top */}
+        <View style={sheetStyles.previewSection}>
+          <Text style={sheetStyles.previewLabel}>Preview:</Text>
+          <Text style={sheetStyles.previewText}>{generatePreview()}</Text>
+        </View>
+        
+        <Text style={sheetStyles.sectionTitle}>Quick Presets</Text>
+        {presetFormats.map((preset, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[sheetStyles.presetItem, selectedFormat === preset.label && sheetStyles.selectedPreset]}
+            onPress={() => {
+              setSelectedFormat(preset.label);
+              // Parse preset to update custom settings
+              const labelParts = preset.label.split('-');
+              setCustomPrefix(labelParts[0]);
+              setIncludeYear(preset.pattern.includes('YYYY'));
+              setIncludeMonth(preset.pattern.includes('MM'));
+              
+              // Extract number from preset
+              const numberPart = labelParts[labelParts.length - 1];
+              if (numberPart && /^\d+$/.test(numberPart)) {
+                setStartingNumber(parseInt(numberPart));
+                setNumberLength(numberPart.length);
+              }
+            }}
+          >
+            <View style={sheetStyles.presetLeft}>
+              <Text style={sheetStyles.presetLabel}>{preset.label}</Text>
+              <Text style={sheetStyles.presetDescription}>{preset.description}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        <Text style={sheetStyles.sectionTitle}>Custom Format</Text>
+        <View style={sheetStyles.customSection}>
+          <View style={sheetStyles.inputRow}>
+            <Text style={sheetStyles.inputLabel}>Prefix:</Text>
+            <BottomSheetTextInput
+              style={sheetStyles.textInput}
+              value={customPrefix}
+              onChangeText={setCustomPrefix}
+              placeholder="INV"
+              maxLength={10}
+            />
+          </View>
+          
+          <View style={sheetStyles.switchRow}>
+            <Text style={sheetStyles.inputLabel}>Include Year</Text>
+            <Switch
+              value={includeYear}
+              onValueChange={setIncludeYear}
+              trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
+              thumbColor={includeYear ? theme.primary : theme.foreground}
+            />
+          </View>
+          
+          <View style={sheetStyles.switchRow}>
+            <Text style={sheetStyles.inputLabel}>Include Month</Text>
+            <Switch
+              value={includeMonth}
+              onValueChange={setIncludeMonth}
+              trackColor={{ false: theme.muted, true: theme.primaryTransparent }}
+              thumbColor={includeMonth ? theme.primary : theme.foreground}
+            />
+          </View>
+          
+          <View style={sheetStyles.inputRow}>
+            <Text style={sheetStyles.inputLabel}>Number Length:</Text>
+            <BottomSheetTextInput
+              style={sheetStyles.textInput}
+              value={numberLength.toString()}
+              onChangeText={(text) => setNumberLength(Math.max(1, Math.min(6, parseInt(text) || 3)))}
+              keyboardType="numeric"
+              maxLength={1}
+            />
+          </View>
+          
+          <View style={sheetStyles.inputRow}>
+            <Text style={sheetStyles.inputLabel}>Starting Number:</Text>
+            <BottomSheetTextInput
+              style={sheetStyles.numberInput}
+              value={startingNumber.toString()}
+              onChangeText={(text) => setStartingNumber(Math.max(1, parseInt(text) || 1))}
+              keyboardType="numeric"
+              placeholder="1"
+            />
+          </View>
+        </View>
+
+      </BottomSheetScrollView>
+      
+      {/* Sticky Save Button */}
+      <View style={sheetStyles.stickyButtonContainer}>
+        <TouchableOpacity
+          style={sheetStyles.stickyButton}
+          onPress={handleSave}
+        >
+          <Text style={sheetStyles.stickyButtonText}>Save Format</Text>
+        </TouchableOpacity>
+      </View>
+    </BottomSheetModal>
+  );
+});
+
 interface InvoiceSettings {
   default_invoice_design: string;
   default_accent_color: string;
@@ -160,6 +518,7 @@ interface InvoiceSettings {
   show_business_tax_number: boolean;
   show_notes_section: boolean;
   auto_update_default_design: boolean;
+  invoice_reference_format: string;
 }
 
 // Helper function to generate dummy invoice data for preview
@@ -275,6 +634,7 @@ export default function InvoiceSettingsScreen() {
   const { supabase, session } = useSupabase();
   const navigation = useNavigation();
   const previewModalRef = useRef<any>(null);
+  const referenceSchemaRef = useRef<BottomSheetModal>(null);
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -292,6 +652,7 @@ export default function InvoiceSettingsScreen() {
     show_business_tax_number: true,
     show_notes_section: true,
     auto_update_default_design: true,
+    invoice_reference_format: 'INV-001',
   });
 
   const fetchInvoiceSettings = useCallback(async (): Promise<void> => {
@@ -321,6 +682,7 @@ export default function InvoiceSettingsScreen() {
           show_business_tax_number: data.show_business_tax_number ?? true,
           show_notes_section: data.show_notes_section ?? true,
           auto_update_default_design: data.auto_update_default_design ?? true,
+          invoice_reference_format: data.invoice_reference_format || 'INV-001',
         });
       }
     } catch (error) {
@@ -335,6 +697,48 @@ export default function InvoiceSettingsScreen() {
     useCallback(() => {
       fetchInvoiceSettings();
     }, [fetchInvoiceSettings])
+  );
+
+  // Handle back button press and unsaved changes
+  const handleBackPress = useCallback(() => {
+    if (hasChanges) {
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Do you want to save them before leaving?',
+        [
+          {
+            text: 'Don\'t Save',
+            style: 'destructive',
+            onPress: () => router.back()
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Save',
+            onPress: async () => {
+              await handleSaveSettings();
+              router.back();
+            }
+          }
+        ]
+      );
+      return true; // Prevent default back behavior
+    }
+    return false; // Allow default back behavior
+  }, [hasChanges, router, handleSaveSettings]);
+
+  // Handle Android back button
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        return handleBackPress();
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => subscription.remove();
+    }, [handleBackPress])
   );
 
   const updateSetting = (key: keyof InvoiceSettings, value: any) => {
@@ -360,6 +764,7 @@ export default function InvoiceSettingsScreen() {
         show_business_tax_number: settings.show_business_tax_number,
         show_notes_section: settings.show_notes_section,
         auto_update_default_design: settings.auto_update_default_design,
+        invoice_reference_format: settings.invoice_reference_format,
         updated_at: new Date().toISOString(),
       };
 
@@ -392,7 +797,7 @@ export default function InvoiceSettingsScreen() {
       if (responseData) {
         setSettingsId(responseData.id);
         setHasChanges(false);
-        Alert.alert('Success', 'Invoice settings saved successfully!');
+        Alert.alert('Settings Saved', 'Your invoice settings have been saved successfully!');
       }
     } catch (error: any) {
       console.error('Error saving invoice settings:', error);
@@ -414,6 +819,15 @@ export default function InvoiceSettingsScreen() {
     updateSetting('default_accent_color', accentColor);
   };
 
+  const handleOpenReferenceSchema = () => {
+    console.log('Opening reference schema modal...');
+    referenceSchemaRef.current?.present();
+  };
+
+  const handleReferenceFormatSaved = (format: string) => {
+    updateSetting('invoice_reference_format', format);
+  };
+
   const getCurrentDesign = () => {
     return getDesignById(settings.default_invoice_design) || getDesignById(DEFAULT_DESIGN_ID);
   };
@@ -422,7 +836,11 @@ export default function InvoiceSettingsScreen() {
     navigation.setOptions({
       header: () => (
         <View style={[styles.headerContainer, { backgroundColor: theme.card, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border}]}>
-          <TouchableOpacity onPress={() => router.back()} style={{ padding: 6 }}>
+          <TouchableOpacity onPress={() => {
+            if (!handleBackPress()) {
+              router.back();
+            }
+          }} style={{ padding: 6 }}>
             <ChevronLeft size={26} color={theme.foreground} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, {color: theme.foreground}]}>Invoice Settings</Text>
@@ -430,7 +848,7 @@ export default function InvoiceSettingsScreen() {
       ),
       headerShown: true, 
     });
-  }, [navigation, router, theme, styles]);
+  }, [navigation, router, theme, styles, handleBackPress]);
 
   if (initialLoading) {
     return (
@@ -445,11 +863,12 @@ export default function InvoiceSettingsScreen() {
   const currentDesign = getCurrentDesign();
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContentContainer}
-        keyboardShouldPersistTaps="handled"
-      >
+    <BottomSheetModalProvider>
+      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Invoice Design Section */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
@@ -556,10 +975,10 @@ export default function InvoiceSettingsScreen() {
             />
           </View>
 
-          <TouchableOpacity style={[styles.settingRow, styles.lastSettingRow]} onPress={() => console.log('Reference Schema pressed')}>
+          <TouchableOpacity style={[styles.settingRow, styles.lastSettingRow]} onPress={handleOpenReferenceSchema}>
             <View style={styles.settingLeft}>
               <Text style={styles.settingLabel}>Invoice Reference Format</Text>
-              <Text style={styles.settingDescription}>Customize how invoice numbers are generated</Text>
+              <Text style={styles.settingDescription}>Current: {settings.invoice_reference_format}</Text>
             </View>
             <ChevronRight size={20} color={theme.mutedForeground} style={styles.chevronIcon} />
           </TouchableOpacity>
@@ -606,6 +1025,15 @@ export default function InvoiceSettingsScreen() {
         businessSettings={businessSettings}
         clientData={generateDummyClientData()}
       />
-    </SafeAreaView>
+
+      {/* Reference Schema Sheet */}
+      <ReferenceSchemaSheet
+        ref={referenceSchemaRef}
+        theme={theme}
+        currentFormat={settings.invoice_reference_format}
+        onSave={handleReferenceFormatSaved}
+      />
+      </SafeAreaView>
+    </BottomSheetModalProvider>
   );
 } 
