@@ -1026,26 +1026,26 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
           {/* Left: Business Logo - Centered in header block */}
           {displaySettings.show_business_logo && (
             logoImage && business?.business_logo_url ? (
-              <Image 
-                image={logoImage} 
-                x={OFFSET_X + 27} 
-                y={15} 
-                width={65} 
-                height={65} 
-                fit="contain"
+            <Image 
+              image={logoImage} 
+              x={OFFSET_X + 27} 
+              y={15} 
+              width={65} 
+              height={65} 
+              fit="contain"
+            />
+          ) : (
+            <>
+              {/* Fallback logo with dynamic business initials - Centered in header block */}
+              <Circle cx={OFFSET_X + 59} cy={47} r={32} color={colors.orange} />
+              <Text 
+                x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
+                y={56} 
+                text={businessInitials} 
+                font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
+                color="white" 
               />
-            ) : (
-              <>
-                {/* Fallback logo with dynamic business initials - Centered in header block */}
-                <Circle cx={OFFSET_X + 59} cy={47} r={32} color={colors.orange} />
-                <Text 
-                  x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
-                  y={56} 
-                  text={businessInitials} 
-                  font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
-                  color="white" 
-                />
-              </>
+            </>
             )
           )}
           

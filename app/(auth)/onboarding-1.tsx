@@ -1,24 +1,34 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  SafeAreaView,
   Platform,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { AuthModal } from "@/components/auth/auth-modal";
+import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarousel";
 
 export default function OnboardingScreen1() {
   const router = useRouter();
   const { theme } = useTheme();
   const [authModalVisible, setAuthModalVisible] = useState(false);
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   const handleGetStarted = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -39,33 +49,21 @@ export default function OnboardingScreen1() {
   const styles = getStyles(theme);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.splitContainer}>
-        {/* Top Side - Branded Visual */}
+        {/* Top Side - Animated Invoice Carousel */}
         <View style={styles.topSide}>
-          <LinearGradient
-            colors={['#4F46E5', '#7C3AED', '#2563EB']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradientBackground}
-          >
-            {/* Empty branded visual area */}
-            <View style={styles.brandVisual}>
-              {/* Removed SI circle */}
-            </View>
-          </LinearGradient>
+          <View style={styles.carouselBackground}>
+            <OnboardingInvoiceCarousel />
+          </View>
         </View>
 
         {/* Bottom Side - Content Area */}
-        <View style={[styles.bottomSide, { backgroundColor: theme.card }]}>
+        <View style={styles.bottomSide}>
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#fefdfb' }]} />
           <View style={styles.contentArea}>
             {/* App Logo & Name */}
             <View style={styles.logoSection}>
-              <View style={styles.appLogoContainer}>
-                <View style={[styles.appLogo, { backgroundColor: theme.muted }]}>
-                  {/* Removed text icon */}
-                </View>
-              </View>
               <Text style={[styles.appName, { color: theme.foreground }]}>SuperInvoice</Text>
               <Text style={[styles.tagline, { color: theme.mutedForeground }]}>
                 The fastest way to create invoices and get paid.
@@ -102,25 +100,34 @@ export default function OnboardingScreen1() {
         plan="free"
         onSuccess={handleAuthSuccess}
       />
-    </SafeAreaView>
+    </View>
   );
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
   },
   splitContainer: {
     flex: 1,
     flexDirection: 'column',
+    height: '100%',
   },
   topSide: {
     flex: 1,
+    height: '50%',
   },
-  gradientBackground: {
+  carouselBackground: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
+    height: '100%',
+    paddingTop: 45,
   },
   brandVisual: {
     justifyContent: 'center',
@@ -129,16 +136,18 @@ const getStyles = (theme: any) => StyleSheet.create({
 
   bottomSide: {
     flex: 1,
+    height: '50%',
   },
   contentArea: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingBottom: 40,
     justifyContent: 'space-between',
   },
   logoSection: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 55,
   },
   appLogoContainer: {
     marginBottom: 16,

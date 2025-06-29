@@ -260,28 +260,32 @@ export function SignInModal({
       >
         {/* Header */}
         <View style={styles.header}>
-          <LinearGradient
-            colors={['#4F46E5', '#7C3AED', '#2563EB']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradientHeader}
-          >
+          <View style={styles.gradientHeader}>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             
             <View style={styles.headerContent}>
               <View style={styles.logoCircle}>
-                <Text style={styles.logoText}>SI</Text>
+                <Image 
+                  source={require('../../assets/superinvoiceicon.png')} 
+                  style={styles.logoImage}
+                />
               </View>
-              <Text style={styles.headerTitle}>Welcome Back</Text>
-              <Text style={styles.headerSubtitle}>
-                {plan === 'paid' 
-                  ? 'Continue to your Pro subscription' 
-                  : 'Sign in to continue'}
-              </Text>
+              <Text style={styles.headerTitle}>Sign In</Text>
+              <View style={styles.testimonialContainer}>
+                <View style={styles.aiProfileContainer}>
+                  <Image 
+                    source={require('../../assets/onboarding/happyuser.png')} 
+                    style={styles.profileImage}
+                  />
+                </View>
+                <Text style={styles.testimonialText}>
+                  "AI that actually works and saves me hours of paperwork."
+                </Text>
+              </View>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         {/* Content */}
@@ -439,21 +443,25 @@ const getStyles = (theme: any) => StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 180,
+    height: 160,
   },
   gradientHeader: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    backgroundColor: '#25D366',
+    paddingTop: Platform.OS === 'ios' ? 25 : 15,
     paddingHorizontal: 24,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   closeButton: {
     alignSelf: 'flex-end',
     padding: 8,
+    marginBottom: 10,
   },
   headerContent: {
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingBottom: 10,
+    paddingTop: 0,
+    marginTop: -45,
   },
   logoCircle: {
     width: 60,
@@ -465,6 +473,12 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     marginBottom: 12,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   logoText: {
     color: '#FFFFFF',
@@ -475,8 +489,45 @@ const getStyles = (theme: any) => StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 12,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  testimonialContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 0,
+    paddingHorizontal: 10,
+  },
+  aiProfileContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+  },
+  testimonialText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontStyle: 'italic',
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   headerSubtitle: {
     color: 'rgba(255, 255, 255, 0.9)',
@@ -488,6 +539,17 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   contentContainer: {
     paddingHorizontal: 24,

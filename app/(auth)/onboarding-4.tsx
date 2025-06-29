@@ -1,17 +1,18 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   Platform,
   ScrollView,
   Pressable,
   FlatList,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 
@@ -65,6 +66,14 @@ export default function OnboardingScreen4() {
   
   const [searchText, setSearchText] = useState('');
   const [selectedIndustry, setSelectedIndustry] = useState('');
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   // Filter industries based on search text
   const filteredIndustries = INDUSTRIES.filter(industry =>
@@ -124,7 +133,7 @@ export default function OnboardingScreen4() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.backgroundContainer}>
         {/* Background - placeholder gradient, replace with actual image */}
         <LinearGradient
@@ -197,32 +206,41 @@ export default function OnboardingScreen4() {
           </View>
         </LinearGradient>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
   },
   backgroundContainer: {
     flex: 1,
+    height: '100%',
+    width: '100%',
   },
   background: {
     flex: 1,
+    height: '100%',
   },
   overlay: {
     flex: 1,
+    height: '100%',
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: 30,
   },
   headerContent: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 24,
+    marginTop: 35,
+    marginBottom: 20,
   },
   headline: {
     fontSize: 32,
@@ -313,7 +331,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderRadius: 4,
   },
   buttonContainer: {
-    paddingBottom: 20,
+    paddingBottom: 30,
+    paddingTop: 10,
   },
   primaryButton: {
     paddingVertical: 16,

@@ -6,13 +6,14 @@ import {
 	View,
 	Text,
 	StyleSheet,
-	SafeAreaView,
   TextInput,
   Platform,
   ScrollView,
   Pressable,
   Alert,
   Keyboard,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,31 +23,54 @@ import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 
 const REGIONS = [
-  { label: 'Select Region', value: '' },
-  { label: 'United States', value: 'US' },
-  { label: 'Canada', value: 'CA' },
-  { label: 'United Kingdom', value: 'GB' },
-  { label: 'Germany', value: 'DE' },
-  { label: 'France', value: 'FR' },
-  { label: 'Australia', value: 'AU' },
-  { label: 'New Zealand', value: 'NZ' },
-  { label: 'Netherlands', value: 'NL' },
-  { label: 'Sweden', value: 'SE' },
-  { label: 'Norway', value: 'NO' },
-  { label: 'Denmark', value: 'DK' },
-  { label: 'Finland', value: 'FI' },
-  { label: 'Switzerland', value: 'CH' },
-  { label: 'Austria', value: 'AT' },
-  { label: 'Belgium', value: 'BE' },
-  { label: 'Ireland', value: 'IE' },
-  { label: 'Spain', value: 'ES' },
-  { label: 'Italy', value: 'IT' },
-  { label: 'Portugal', value: 'PT' },
-  { label: 'Japan', value: 'JP' },
-  { label: 'South Korea', value: 'KR' },
-  { label: 'Singapore', value: 'SG' },
-  { label: 'Hong Kong', value: 'HK' },
-  { label: 'Other', value: 'OTHER' },
+  { label: 'Select Region', value: '', flag: '' },
+  
+  // Major English-speaking countries
+  { label: '🇺🇸 United States', value: 'US', flag: '🇺🇸' },
+  { label: '🇬🇧 United Kingdom', value: 'GB', flag: '🇬🇧' },
+  { label: '🇨🇦 Canada', value: 'CA', flag: '🇨🇦' },
+  { label: '🇦🇺 Australia', value: 'AU', flag: '🇦🇺' },
+  { label: '🇳🇿 New Zealand', value: 'NZ', flag: '🇳🇿' },
+  
+  // European Union Countries (Eurozone)
+  { label: '🇩🇪 Germany', value: 'DE', flag: '🇩🇪' },
+  { label: '🇫🇷 France', value: 'FR', flag: '🇫🇷' },
+  { label: '🇪🇸 Spain', value: 'ES', flag: '🇪🇸' },
+  { label: '🇮🇹 Italy', value: 'IT', flag: '🇮🇹' },
+  { label: '🇳🇱 Netherlands', value: 'NL', flag: '🇳🇱' },
+  { label: '🇧🇪 Belgium', value: 'BE', flag: '🇧🇪' },
+  { label: '🇦🇹 Austria', value: 'AT', flag: '🇦🇹' },
+  { label: '🇮🇪 Ireland', value: 'IE', flag: '🇮🇪' },
+  { label: '🇵🇹 Portugal', value: 'PT', flag: '🇵🇹' },
+  { label: '🇫🇮 Finland', value: 'FI', flag: '🇫🇮' },
+  { label: '🇬🇷 Greece', value: 'GR', flag: '🇬🇷' },
+  { label: '🇱🇺 Luxembourg', value: 'LU', flag: '🇱🇺' },
+  { label: '🇸🇮 Slovenia', value: 'SI', flag: '🇸🇮' },
+  { label: '🇸🇰 Slovakia', value: 'SK', flag: '🇸🇰' },
+  { label: '🇪🇪 Estonia', value: 'EE', flag: '🇪🇪' },
+  { label: '🇱🇻 Latvia', value: 'LV', flag: '🇱🇻' },
+  { label: '🇱🇹 Lithuania', value: 'LT', flag: '🇱🇹' },
+  { label: '🇲🇹 Malta', value: 'MT', flag: '🇲🇹' },
+  { label: '🇨🇾 Cyprus', value: 'CY', flag: '🇨🇾' },
+  { label: '🇭🇷 Croatia', value: 'HR', flag: '🇭🇷' },
+  
+  // European Union (Non-Eurozone)
+  { label: '🇧🇬 Bulgaria', value: 'BG', flag: '🇧🇬' },
+  { label: '🇨🇿 Czech Republic', value: 'CZ', flag: '🇨🇿' },
+  { label: '🇭🇺 Hungary', value: 'HU', flag: '🇭🇺' },
+  { label: '🇵🇱 Poland', value: 'PL', flag: '🇵🇱' },
+  { label: '🇷🇴 Romania', value: 'RO', flag: '🇷🇴' },
+  { label: '🇸🇪 Sweden', value: 'SE', flag: '🇸🇪' },
+  { label: '🇩🇰 Denmark', value: 'DK', flag: '🇩🇰' },
+  
+  // Other European Countries
+  { label: '🇨🇭 Switzerland', value: 'CH', flag: '🇨🇭' },
+  { label: '🇳🇴 Norway', value: 'NO', flag: '🇳🇴' },
+  
+  // Middle East
+  { label: '🇦🇪 United Arab Emirates', value: 'AE', flag: '🇦🇪' },
+  
+  { label: '🌍 Other', value: 'OTHER', flag: '🌍' },
 ];
 
 export default function OnboardingScreen3() {
@@ -58,6 +82,15 @@ export default function OnboardingScreen3() {
   const [businessName, setBusinessName] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('');
   const [showRegionPicker, setShowRegionPicker] = useState(false);
+  const [isNameInputFocused, setIsNameInputFocused] = useState(true);
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   // Auto-focus name input when screen loads
 	useEffect(() => {
@@ -85,13 +118,17 @@ export default function OnboardingScreen3() {
 
   const handleRegionPress = () => {
     Keyboard.dismiss(); // Hide the keyboard
+    if (nameInputRef.current) {
+      nameInputRef.current.blur(); // Programmatically blur the input
+    }
+    setIsNameInputFocused(false); // Remove focus from name input
     setShowRegionPicker(true);
   };
 
   const styles = getStyles(theme);
 
 	return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.backgroundContainer}>
         {/* Background - placeholder gradient, replace with actual image */}
         <LinearGradient
@@ -109,17 +146,27 @@ export default function OnboardingScreen3() {
                 {/* Header */}
                 <View style={styles.headerContent}>
                   <Text style={[styles.headline, { color: theme.foreground }]}>Business Info</Text>
+                  <Text style={[styles.subtitle, { color: theme.mutedForeground }]}>
+                    Help us tailor your invoices with your business name.
+                  </Text>
 				</View>
 
                 {/* Form */}
                 <View style={styles.formContainer}>
                   {/* Name Input */}
                   <View style={styles.inputContainer}>
-                    <View style={[styles.inputWrapper, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <View style={[
+                      styles.inputWrapper, 
+                      { 
+                        backgroundColor: theme.card, 
+                        borderColor: isNameInputFocused ? theme.primary : theme.border,
+                        borderWidth: isNameInputFocused ? 2 : 1
+                      }
+                    ]}>
                       <Ionicons 
                         name="business" 
                         size={20} 
-                        color={theme.mutedForeground} 
+                        color={isNameInputFocused ? theme.primary : theme.mutedForeground} 
                         style={styles.inputIcon}
                       />
                       <TextInput
@@ -132,6 +179,8 @@ export default function OnboardingScreen3() {
                         autoCapitalize="words"
                         returnKeyType="next"
                         onSubmitEditing={handleRegionPress}
+                        onFocus={() => setIsNameInputFocused(true)}
+                        onBlur={() => setIsNameInputFocused(false)}
                       />
                     </View>
                     <Text style={[styles.helperText, { color: theme.mutedForeground }]}>
@@ -238,40 +287,57 @@ export default function OnboardingScreen3() {
           </View>
         </View>
       )}
-		</SafeAreaView>
+		</View>
 	);
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
   },
   backgroundContainer: {
     flex: 1,
+    height: '100%',
+    width: '100%',
   },
   background: {
     flex: 1,
+    height: '100%',
   },
   overlay: {
     flex: 1,
+    height: '100%',
   },
   scrollContent: {
     flexGrow: 1,
+    minHeight: '100%',
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: 30,
   },
   headerContent: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
+    marginTop: 75,
+    marginBottom: 30,
   },
   headline: {
     fontSize: 32,
     fontWeight: 'bold',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 20,
   },
   formContainer: {
 		flex: 1,
@@ -325,7 +391,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     minHeight: 20,
   },
   buttonContainer: {
-    paddingBottom: 20,
+    paddingBottom: 30,
+    paddingTop: 10,
   },
   primaryButton: {
     paddingVertical: 16,

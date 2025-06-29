@@ -60,7 +60,7 @@ export default function CustomersScreen() {
 	const fetchClients = useCallback(async (isRefresh = false) => {
 		console.log("Fetching clients from Supabase...", isRefresh ? "(refresh)" : "(initial)");
 		if (!isRefresh) {
-			setLoading(true);
+		setLoading(true);
 		} else {
 			setRefreshing(true);
 		}
@@ -108,7 +108,7 @@ export default function CustomersScreen() {
 			setCustomers([]);
 		}
 		if (!isRefresh) {
-			setLoading(false);
+		setLoading(false);
 		} else {
 			setRefreshing(false);
 		}

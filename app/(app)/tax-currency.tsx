@@ -31,14 +31,21 @@ const REGIONS_DATA = [
 
 const CURRENCIES_DATA = [
   { id: 'usd', name: 'USD - United States Dollar', symbol: '$' },
-  { id: 'cad', name: 'CAD - Canadian Dollar', symbol: 'CA$' },
-  { id: 'gbp', name: 'GBP - British Pound', symbol: '£' },
-  { id: 'aud', name: 'AUD - Australian Dollar', symbol: 'A$' },
   { id: 'eur', name: 'EUR - Euro', symbol: '€' },
-  { id: 'jpy', name: 'JPY - Japanese Yen', symbol: '¥' },
-  { id: 'inr', name: 'INR - Indian Rupee', symbol: '₹' },
-  { id: 'brl', name: 'BRL - Brazilian Real', symbol: 'R$' },
-  { id: 'zar', name: 'ZAR - South African Rand', symbol: 'R' },
+  { id: 'gbp', name: 'GBP - British Pound', symbol: '£' },
+  { id: 'cad', name: 'CAD - Canadian Dollar', symbol: 'CA$' },
+  { id: 'aud', name: 'AUD - Australian Dollar', symbol: 'A$' },
+  { id: 'nzd', name: 'NZD - New Zealand Dollar', symbol: 'NZ$' },
+  { id: 'chf', name: 'CHF - Swiss Franc', symbol: 'CHF' },
+  { id: 'sek', name: 'SEK - Swedish Krona', symbol: 'kr' },
+  { id: 'dkk', name: 'DKK - Danish Krone', symbol: 'kr' },
+  { id: 'nok', name: 'NOK - Norwegian Krone', symbol: 'kr' },
+  { id: 'bgn', name: 'BGN - Bulgarian Lev', symbol: 'лв' },
+  { id: 'czk', name: 'CZK - Czech Koruna', symbol: 'Kč' },
+  { id: 'huf', name: 'HUF - Hungarian Forint', symbol: 'Ft' },
+  { id: 'pln', name: 'PLN - Polish Złoty', symbol: 'zł' },
+  { id: 'ron', name: 'RON - Romanian Leu', symbol: 'lei' },
+  { id: 'aed', name: 'AED - UAE Dirham', symbol: 'د.إ' },
 ];
 
 const TAX_NAMES_DATA = [
@@ -50,16 +57,50 @@ const TAX_NAMES_DATA = [
 ];
 
 const COUNTRY_AUTOFIL_SETTINGS: Record<string, { currencyCode: string; taxRate: string; taxName: string }> = {
-  'United Kingdom': { currencyCode: 'GBP', taxRate: '20%', taxName: 'VAT' },
+  // Major English-speaking countries
   'United States': { currencyCode: 'USD', taxRate: '0%', taxName: 'Sales Tax' },
-  'Germany': { currencyCode: 'EUR', taxRate: '19%', taxName: 'VAT' },
+  'United Kingdom': { currencyCode: 'GBP', taxRate: '20%', taxName: 'VAT' },
   'Canada': { currencyCode: 'CAD', taxRate: '5%', taxName: 'GST' },
   'Australia': { currencyCode: 'AUD', taxRate: '10%', taxName: 'GST' },
-  'France': { currencyCode: 'EUR', taxRate: '20%', taxName: 'VAT' },
-  'India': { currencyCode: 'INR', taxRate: '18%', taxName: 'GST' },
-  'Brazil': { currencyCode: 'BRL', taxRate: '17%', taxName: 'ICMS' },
-  'Japan': { currencyCode: 'JPY', taxRate: '10%', taxName: 'Consumption Tax' },
-  'South Africa': { currencyCode: 'ZAR', taxRate: '15%', taxName: 'VAT' },
+  'New Zealand': { currencyCode: 'NZD', taxRate: '15%', taxName: 'GST' },
+  
+  // European Union Countries (Eurozone) - Local VAT terms
+  'Germany': { currencyCode: 'EUR', taxRate: '19%', taxName: 'USt.' },
+  'France': { currencyCode: 'EUR', taxRate: '20%', taxName: 'TVA' },
+  'Spain': { currencyCode: 'EUR', taxRate: '21%', taxName: 'IVA' },
+  'Italy': { currencyCode: 'EUR', taxRate: '22%', taxName: 'IVA' },
+  'Netherlands': { currencyCode: 'EUR', taxRate: '21%', taxName: 'BTW' },
+  'Belgium': { currencyCode: 'EUR', taxRate: '21%', taxName: 'TVA/BTW' },
+  'Austria': { currencyCode: 'EUR', taxRate: '20%', taxName: 'USt.' },
+  'Ireland': { currencyCode: 'EUR', taxRate: '23%', taxName: 'VAT' },
+  'Portugal': { currencyCode: 'EUR', taxRate: '23%', taxName: 'IVA' },
+  'Finland': { currencyCode: 'EUR', taxRate: '24%', taxName: 'ALV' },
+  'Greece': { currencyCode: 'EUR', taxRate: '24%', taxName: 'ΦΠΑ' },
+  'Luxembourg': { currencyCode: 'EUR', taxRate: '16%', taxName: 'TVA' },
+  'Slovenia': { currencyCode: 'EUR', taxRate: '22%', taxName: 'DDV' },
+  'Slovakia': { currencyCode: 'EUR', taxRate: '20%', taxName: 'DPH' },
+  'Estonia': { currencyCode: 'EUR', taxRate: '20%', taxName: 'KM' },
+  'Latvia': { currencyCode: 'EUR', taxRate: '21%', taxName: 'PVN' },
+  'Lithuania': { currencyCode: 'EUR', taxRate: '21%', taxName: 'PVM' },
+  'Malta': { currencyCode: 'EUR', taxRate: '18%', taxName: 'VAT' },
+  'Cyprus': { currencyCode: 'EUR', taxRate: '19%', taxName: 'ΦΠΑ' },
+  'Croatia': { currencyCode: 'EUR', taxRate: '25%', taxName: 'PDV' },
+  
+  // European Union (Non-Eurozone) - Local currencies and VAT terms
+  'Bulgaria': { currencyCode: 'BGN', taxRate: '20%', taxName: 'ДДС' },
+  'Czech Republic': { currencyCode: 'CZK', taxRate: '21%', taxName: 'DPH' },
+  'Hungary': { currencyCode: 'HUF', taxRate: '27%', taxName: 'ÁFA' },
+  'Poland': { currencyCode: 'PLN', taxRate: '23%', taxName: 'VAT' },
+  'Romania': { currencyCode: 'RON', taxRate: '19%', taxName: 'TVA' },
+  'Sweden': { currencyCode: 'SEK', taxRate: '25%', taxName: 'MOMS' },
+  'Denmark': { currencyCode: 'DKK', taxRate: '25%', taxName: 'MOMS' },
+  
+  // Other European Countries
+  'Switzerland': { currencyCode: 'CHF', taxRate: '7.7%', taxName: 'VAT' },
+  'Norway': { currencyCode: 'NOK', taxRate: '25%', taxName: 'VAT' },
+  
+  // Middle East
+  'United Arab Emirates': { currencyCode: 'AED', taxRate: '5%', taxName: 'VAT' },
 };
 
 const getStyles = (theme: any) => StyleSheet.create({

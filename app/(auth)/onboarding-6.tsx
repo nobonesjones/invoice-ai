@@ -1,16 +1,19 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Platform,
   ScrollView,
+  StatusBar,
+  Dimensions,
+  Image,
 } from "react-native";
 import * as StoreReview from 'expo-store-review';
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -27,6 +30,15 @@ export default function OnboardingScreen6() {
   const router = useRouter();
   const { theme } = useTheme();
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0);
+  const videoRef = useRef<Video>(null);
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   React.useEffect(() => {
     // Cycle through testimonials
@@ -59,16 +71,31 @@ export default function OnboardingScreen6() {
   const styles = getStyles(theme);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.contentContainer}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
+      <View style={styles.backgroundContainer}>
+        {/* Video Background */}
+        <Video
+          ref={videoRef}
+          style={styles.background}
+          source={require('../../assets/videos/0629.mp4')}
+          useNativeControls={false}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          shouldPlay
+          isMuted
+        />
+        
+        {/* Content overlay */}
+        <View style={styles.overlay}>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.contentContainer}>
           {/* Header */}
           <View style={styles.headerContent}>
-            <Text style={[styles.headline, { color: theme.foreground }]}>Give us a rating</Text>
-            <Text style={[styles.subHeadline, { color: theme.mutedForeground }]}>
+            <Text style={[styles.headline, { color: '#FFFFFF' }]}>Give us a rating</Text>
+            <Text style={[styles.subHeadline, { color: '#FFFFFF' }]}>
               SupaInvoice was made for people like you.
             </Text>
           </View>
@@ -79,19 +106,34 @@ export default function OnboardingScreen6() {
               {/* Avatar Circles */}
               <View style={styles.avatarCluster}>
                 <View style={[styles.avatar, styles.avatar1]}>
-                  <Text style={styles.avatarText}>JD</Text>
+                  <Image 
+                    source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face&auto=format' }}
+                    style={styles.avatarImage}
+                  />
                 </View>
                 <View style={[styles.avatar, styles.avatar2]}>
-                  <Text style={styles.avatarText}>SM</Text>
+                  <Image 
+                    source={{ uri: 'https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150&h=150&fit=crop&crop=face&auto=format' }}
+                    style={styles.avatarImage}
+                  />
                 </View>
                 <View style={[styles.avatar, styles.avatar3]}>
-                  <Text style={styles.avatarText}>AL</Text>
+                  <Image 
+                    source={{ uri: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face&auto=format' }}
+                    style={styles.avatarImage}
+                  />
                 </View>
                 <View style={[styles.avatar, styles.avatar4]}>
-                  <Text style={styles.avatarText}>+1M</Text>
+                  <Image 
+                    source={{ uri: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face&auto=format' }}
+                    style={[styles.avatarImage, styles.avatar4Image]}
+                  />
+                  <View style={styles.overlayBadge}>
+                    <Text style={styles.badgeText}>14K+</Text>
+                  </View>
                 </View>
               </View>
-              <Text style={[styles.userCountText, { color: theme.mutedForeground }]}>+1M SupaInvoice people</Text>
+              <Text style={[styles.userCountText, { color: '#FFFFFF' }]}>Over 14,000 businesses trust SuperInvoice</Text>
             </View>
 
             {/* Star Rating */}
@@ -109,7 +151,7 @@ export default function OnboardingScreen6() {
 
             {/* Testimonials */}
             <View style={styles.testimonialContainer}>
-              <Text style={[styles.testimonialText, { color: theme.mutedForeground }]}>
+              <Text style={[styles.testimonialText, { color: '#FFFFFF' }]}>
                 {TESTIMONIALS[currentTestimonialIndex]}
               </Text>
             </View>
@@ -117,8 +159,8 @@ export default function OnboardingScreen6() {
 
           {/* Main Message */}
           <View style={styles.mainMessageSection}>
-            <Text style={[styles.mainMessage, { color: theme.foreground }]}>
-              Join Millions of Happy{'\n'}SupaInvoice users
+            <Text style={[styles.mainMessage, { color: '#FFFFFF' }]}>
+              Look professional{'\n'}keep customers happy.
             </Text>
           </View>
 
@@ -136,37 +178,70 @@ export default function OnboardingScreen6() {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+        </View>
+      </View>
+    </View>
   );
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
+  },
+  backgroundContainer: {
+    flex: 1,
+    height: '100%',
+    width: '100%',
+  },
+  background: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    height: '100%',
   },
   scrollContent: {
     flexGrow: 1,
+    minHeight: '100%',
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: 30,
   },
   headerContent: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
+    marginTop: 70,
+    marginBottom: 30,
   },
   headline: {
     fontSize: 32,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subHeadline: {
     fontSize: 18,
     textAlign: 'center',
     lineHeight: 26,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   socialProofSection: {
     alignItems: 'center',
@@ -217,6 +292,30 @@ const getStyles = (theme: any) => StyleSheet.create({
     height: 48,
     borderRadius: 24,
   },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+  },
+  avatar4Image: {
+    borderRadius: 24,
+  },
+  overlayBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#F59E0B',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   avatarText: {
     color: '#FFFFFF',
     fontSize: 12,
@@ -225,6 +324,9 @@ const getStyles = (theme: any) => StyleSheet.create({
   userCountText: {
     fontSize: 16,
     fontWeight: '500',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   starsContainer: {
     flexDirection: 'row',
@@ -243,6 +345,9 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     fontStyle: 'italic',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   mainMessageSection: {
     alignItems: 'center',
@@ -253,13 +358,17 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 36,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   spacer: {
     flex: 1,
     minHeight: 20,
   },
   buttonContainer: {
-    paddingBottom: 20,
+    paddingBottom: 30,
+    paddingTop: 10,
   },
   primaryButton: {
     paddingVertical: 16,

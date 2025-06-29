@@ -1282,21 +1282,22 @@ Would you like me to help you send this invoice or make any changes?`;
   // Currency symbol mapping function
   private static getCurrencySymbol(code: string): string {
     const mapping: Record<string, string> = {
-      GBP: '£',
       USD: '$',
       EUR: '€',
+      GBP: '£',
+      CAD: 'CA$',
       AUD: 'A$',
-      CAD: 'C$',
-      JPY: '¥',
-      INR: '₹',
-      CHF: 'Fr',
-      CNY: '¥',
       NZD: 'NZ$',
+      CHF: 'CHF',
       SEK: 'kr',
-      NOK: 'kr',
       DKK: 'kr',
-      SGD: 'S$',
-      HKD: 'HK$'
+      NOK: 'kr',
+      BGN: 'лв',
+      CZK: 'Kč',
+      HUF: 'Ft',
+      PLN: 'zł',
+      RON: 'lei',
+      AED: 'د.إ'
     };
     if (!code) return '$';
     const normalized = code.split(' ')[0]; // Handle "GBP - British Pound" format
@@ -1860,18 +1861,19 @@ This will help with tax and compliance suggestions for your invoices. Is there a
         { currency_code: 'USD', currency_name: 'US Dollar', symbol: '$' },
         { currency_code: 'EUR', currency_name: 'Euro', symbol: '€' },
         { currency_code: 'GBP', currency_name: 'British Pound', symbol: '£' },
-        { currency_code: 'CAD', currency_name: 'Canadian Dollar', symbol: 'C$' },
+        { currency_code: 'CAD', currency_name: 'Canadian Dollar', symbol: 'CA$' },
         { currency_code: 'AUD', currency_name: 'Australian Dollar', symbol: 'A$' },
-        { currency_code: 'JPY', currency_name: 'Japanese Yen', symbol: '¥' },
-        { currency_code: 'CHF', currency_name: 'Swiss Franc', symbol: 'Fr' },
-        { currency_code: 'CNY', currency_name: 'Chinese Yuan', symbol: '¥' },
-        { currency_code: 'INR', currency_name: 'Indian Rupee', symbol: '₹' },
         { currency_code: 'NZD', currency_name: 'New Zealand Dollar', symbol: 'NZ$' },
+        { currency_code: 'CHF', currency_name: 'Swiss Franc', symbol: 'CHF' },
         { currency_code: 'SEK', currency_name: 'Swedish Krona', symbol: 'kr' },
-        { currency_code: 'NOK', currency_name: 'Norwegian Krone', symbol: 'kr' },
         { currency_code: 'DKK', currency_name: 'Danish Krone', symbol: 'kr' },
-        { currency_code: 'SGD', currency_name: 'Singapore Dollar', symbol: 'S$' },
-        { currency_code: 'HKD', currency_name: 'Hong Kong Dollar', symbol: 'HK$' }
+        { currency_code: 'NOK', currency_name: 'Norwegian Krone', symbol: 'kr' },
+        { currency_code: 'BGN', currency_name: 'Bulgarian Lev', symbol: 'лв' },
+        { currency_code: 'CZK', currency_name: 'Czech Koruna', symbol: 'Kč' },
+        { currency_code: 'HUF', currency_name: 'Hungarian Forint', symbol: 'Ft' },
+        { currency_code: 'PLN', currency_name: 'Polish Złoty', symbol: 'zł' },
+        { currency_code: 'RON', currency_name: 'Romanian Leu', symbol: 'lei' },
+        { currency_code: 'AED', currency_name: 'UAE Dirham', symbol: 'د.إ' }
       ];
 
       const successMessage = `Here are some common currency options:

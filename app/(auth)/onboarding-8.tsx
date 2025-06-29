@@ -5,8 +5,9 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Platform,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,14 @@ import { useTheme } from "@/context/theme-provider";
 export default function OnboardingScreen8() {
   const router = useRouter();
   const { theme } = useTheme();
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   useEffect(() => {
     // Trigger success haptic feedback when screen loads
@@ -48,7 +57,7 @@ export default function OnboardingScreen8() {
   const styles = getStyles(theme);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.contentContainer}>
         {/* Success Visual */}
         <View style={styles.visualSection}>
@@ -88,27 +97,33 @@ export default function OnboardingScreen8() {
             onPress={handleStartTutorial}
             style={[styles.primaryButton, { backgroundColor: theme.primary }]}
           >
-            <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Start Invoice Tutorial</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Start Making Invoices</Text>
           </Button>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: 30,
     alignItems: 'center',
+    height: '100%',
   },
   visualSection: {
     alignItems: 'center',
-    marginTop: 60,
+    marginTop: 110,
     marginBottom: 40,
     position: 'relative',
   },
@@ -201,7 +216,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   buttonContainer: {
     width: '100%',
-    paddingBottom: 20,
+    paddingBottom: 30,
+    paddingTop: 10,
   },
   primaryButton: {
     paddingVertical: 16,

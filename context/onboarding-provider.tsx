@@ -25,30 +25,93 @@ const ONBOARDING_STORAGE_KEY = '@onboarding_data';
 
 // Region to currency and tax mapping
 const REGION_CURRENCY_TAX_MAP: Record<string, { currency: string; taxName: string; defaultTaxRate: number }> = {
-  'US': { currency: 'USD', taxName: 'Sales Tax', defaultTaxRate: 8.5 },
-  'CA': { currency: 'CAD', taxName: 'GST/HST', defaultTaxRate: 13.0 },
+  // Major English-speaking countries
+  'US': { currency: 'USD', taxName: 'Sales Tax', defaultTaxRate: 0.0 }, // Updated to 0% as default - varies by state
   'GB': { currency: 'GBP', taxName: 'VAT', defaultTaxRate: 20.0 },
-  'DE': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 19.0 },
-  'FR': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 20.0 },
+  'CA': { currency: 'CAD', taxName: 'GST', defaultTaxRate: 5.0 }, // Updated to federal GST rate
   'AU': { currency: 'AUD', taxName: 'GST', defaultTaxRate: 10.0 },
   'NZ': { currency: 'NZD', taxName: 'GST', defaultTaxRate: 15.0 },
-  'NL': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 21.0 },
-  'SE': { currency: 'SEK', taxName: 'VAT', defaultTaxRate: 25.0 },
-  'NO': { currency: 'NOK', taxName: 'VAT', defaultTaxRate: 25.0 },
-  'DK': { currency: 'DKK', taxName: 'VAT', defaultTaxRate: 25.0 },
-  'FI': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 24.0 },
-  'CH': { currency: 'CHF', taxName: 'VAT', defaultTaxRate: 7.7 },
-  'AT': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 20.0 },
-  'BE': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 21.0 },
+  
+  // European Union Countries (Eurozone) - All use EUR with local VAT terms
+  'DE': { currency: 'EUR', taxName: 'USt.', defaultTaxRate: 19.0 },
+  'FR': { currency: 'EUR', taxName: 'TVA', defaultTaxRate: 20.0 },
+  'ES': { currency: 'EUR', taxName: 'IVA', defaultTaxRate: 21.0 },
+  'IT': { currency: 'EUR', taxName: 'IVA', defaultTaxRate: 22.0 },
+  'NL': { currency: 'EUR', taxName: 'BTW', defaultTaxRate: 21.0 },
+  'BE': { currency: 'EUR', taxName: 'TVA/BTW', defaultTaxRate: 21.0 },
+  'AT': { currency: 'EUR', taxName: 'USt.', defaultTaxRate: 20.0 },
   'IE': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 23.0 },
-  'ES': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 21.0 },
-  'IT': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 22.0 },
-  'PT': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 23.0 },
-  'JP': { currency: 'JPY', taxName: 'Consumption Tax', defaultTaxRate: 10.0 },
-  'KR': { currency: 'KRW', taxName: 'VAT', defaultTaxRate: 10.0 },
-  'SG': { currency: 'SGD', taxName: 'GST', defaultTaxRate: 8.0 },
-  'HK': { currency: 'HKD', taxName: 'Tax', defaultTaxRate: 0.0 },
+  'PT': { currency: 'EUR', taxName: 'IVA', defaultTaxRate: 23.0 },
+  'FI': { currency: 'EUR', taxName: 'ALV', defaultTaxRate: 24.0 },
+  'GR': { currency: 'EUR', taxName: 'ΦΠΑ', defaultTaxRate: 24.0 },
+  'LU': { currency: 'EUR', taxName: 'TVA', defaultTaxRate: 16.0 },
+  'SI': { currency: 'EUR', taxName: 'DDV', defaultTaxRate: 22.0 },
+  'SK': { currency: 'EUR', taxName: 'DPH', defaultTaxRate: 20.0 },
+  'EE': { currency: 'EUR', taxName: 'KM', defaultTaxRate: 20.0 },
+  'LV': { currency: 'EUR', taxName: 'PVN', defaultTaxRate: 21.0 },
+  'LT': { currency: 'EUR', taxName: 'PVM', defaultTaxRate: 21.0 },
+  'MT': { currency: 'EUR', taxName: 'VAT', defaultTaxRate: 18.0 },
+  'CY': { currency: 'EUR', taxName: 'ΦΠΑ', defaultTaxRate: 19.0 },
+  'HR': { currency: 'EUR', taxName: 'PDV', defaultTaxRate: 25.0 },
+  
+  // European Union (Non-Eurozone) with local currencies and VAT terms
+  'BG': { currency: 'BGN', taxName: 'ДДС', defaultTaxRate: 20.0 },
+  'CZ': { currency: 'CZK', taxName: 'DPH', defaultTaxRate: 21.0 },
+  'HU': { currency: 'HUF', taxName: 'ÁFA', defaultTaxRate: 27.0 },
+  'PL': { currency: 'PLN', taxName: 'VAT', defaultTaxRate: 23.0 },
+  'RO': { currency: 'RON', taxName: 'TVA', defaultTaxRate: 19.0 },
+  'SE': { currency: 'SEK', taxName: 'MOMS', defaultTaxRate: 25.0 },
+  'DK': { currency: 'DKK', taxName: 'MOMS', defaultTaxRate: 25.0 },
+  
+  // Other European Countries
+  'CH': { currency: 'CHF', taxName: 'VAT', defaultTaxRate: 7.7 },
+  'NO': { currency: 'NOK', taxName: 'VAT', defaultTaxRate: 25.0 },
+  
+  // Middle East
+  'AE': { currency: 'AED', taxName: 'VAT', defaultTaxRate: 5.0 },
+  
+  // Default
   'OTHER': { currency: 'USD', taxName: 'Tax', defaultTaxRate: 0.0 },
+};
+
+// Comprehensive EU Localization Data for future UI features
+const EU_LOCALIZATION_DATA: Record<string, {
+  vatTerm: string;
+  vatRate: number;
+  invoiceTerm: string;
+  invoiceNumberFormat: string;
+  dateFormat: string;
+  currency: string;
+}> = {
+  'AT': { vatTerm: 'USt.', vatRate: 20, invoiceTerm: 'Rechnung', invoiceNumberFormat: 'Rechnung #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'BE': { vatTerm: 'TVA / BTW', vatRate: 21, invoiceTerm: 'Facture / Factuur', invoiceNumberFormat: 'Facture / Factuur #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'BG': { vatTerm: 'ДДС', vatRate: 20, invoiceTerm: 'Фактура', invoiceNumberFormat: 'Фактура #1001', dateFormat: 'DD.MM.YYYY', currency: 'BGN' },
+  'HR': { vatTerm: 'PDV', vatRate: 25, invoiceTerm: 'Račun', invoiceNumberFormat: 'Račun #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'CY': { vatTerm: 'ΦΠΑ', vatRate: 19, invoiceTerm: 'Τιμολόγιο', invoiceNumberFormat: 'Τιμολόγιο #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'CZ': { vatTerm: 'DPH', vatRate: 21, invoiceTerm: 'Faktura', invoiceNumberFormat: 'Faktura #1001', dateFormat: 'DD.MM.YYYY', currency: 'CZK' },
+  'DK': { vatTerm: 'MOMS', vatRate: 25, invoiceTerm: 'Faktura', invoiceNumberFormat: 'Faktura #1001', dateFormat: 'DD-MM-YYYY', currency: 'DKK' },
+  'EE': { vatTerm: 'Käibemaks', vatRate: 20, invoiceTerm: 'Arve', invoiceNumberFormat: 'Arve #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'FI': { vatTerm: 'ALV', vatRate: 24, invoiceTerm: 'Lasku', invoiceNumberFormat: 'Lasku #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'FR': { vatTerm: 'TVA', vatRate: 20, invoiceTerm: 'Facture', invoiceNumberFormat: 'Facture #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'DE': { vatTerm: 'USt. / MwSt.', vatRate: 19, invoiceTerm: 'Rechnung', invoiceNumberFormat: 'Rechnung #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'GR': { vatTerm: 'ΦΠΑ', vatRate: 24, invoiceTerm: 'Τιμολόγιο', invoiceNumberFormat: 'Τιμολόγιο #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'HU': { vatTerm: 'ÁFA', vatRate: 27, invoiceTerm: 'Számla', invoiceNumberFormat: 'Számla #1001', dateFormat: 'YYYY.MM.DD', currency: 'HUF' },
+  'IE': { vatTerm: 'VAT', vatRate: 23, invoiceTerm: 'Invoice', invoiceNumberFormat: 'Invoice #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'IT': { vatTerm: 'IVA', vatRate: 22, invoiceTerm: 'Fattura', invoiceNumberFormat: 'Fattura #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'LV': { vatTerm: 'PVN', vatRate: 21, invoiceTerm: 'Rēķins', invoiceNumberFormat: 'Rēķins #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'LT': { vatTerm: 'PVM', vatRate: 21, invoiceTerm: 'Sąskaita faktūra', invoiceNumberFormat: 'Sąskaita faktūra #1001', dateFormat: 'YYYY-MM-DD', currency: 'EUR' },
+  'LU': { vatTerm: 'TVA', vatRate: 16, invoiceTerm: 'Facture', invoiceNumberFormat: 'Facture #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'MT': { vatTerm: 'VAT', vatRate: 18, invoiceTerm: 'Fattura', invoiceNumberFormat: 'Fattura #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'NL': { vatTerm: 'BTW', vatRate: 21, invoiceTerm: 'Factuur', invoiceNumberFormat: 'Factuur #1001', dateFormat: 'DD-MM-YYYY', currency: 'EUR' },
+  'PL': { vatTerm: 'VAT', vatRate: 23, invoiceTerm: 'Faktura', invoiceNumberFormat: 'Faktura #1001', dateFormat: 'DD.MM.YYYY', currency: 'PLN' },
+  'PT': { vatTerm: 'IVA', vatRate: 23, invoiceTerm: 'Fatura', invoiceNumberFormat: 'Fatura #1001', dateFormat: 'DD-MM-YYYY', currency: 'EUR' },
+  'RO': { vatTerm: 'TVA', vatRate: 19, invoiceTerm: 'Factură', invoiceNumberFormat: 'Factură #1001', dateFormat: 'DD.MM.YYYY', currency: 'RON' },
+  'SK': { vatTerm: 'DPH', vatRate: 20, invoiceTerm: 'Faktúra', invoiceNumberFormat: 'Faktúra #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'SI': { vatTerm: 'DDV', vatRate: 22, invoiceTerm: 'Račun', invoiceNumberFormat: 'Račun #1001', dateFormat: 'DD.MM.YYYY', currency: 'EUR' },
+  'ES': { vatTerm: 'IVA', vatRate: 21, invoiceTerm: 'Factura', invoiceNumberFormat: 'Factura #1001', dateFormat: 'DD/MM/YYYY', currency: 'EUR' },
+  'SE': { vatTerm: 'MOMS', vatRate: 25, invoiceTerm: 'Faktura', invoiceNumberFormat: 'Faktura #1001', dateFormat: 'YYYY-MM-DD', currency: 'SEK' },
+  // Middle East
+  'AE': { vatTerm: 'VAT', vatRate: 5, invoiceTerm: 'Invoice', invoiceNumberFormat: 'Invoice #1001', dateFormat: 'DD/MM/YYYY', currency: 'AED' },
 };
 
 export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
@@ -259,4 +322,7 @@ export const useOnboarding = () => {
     throw new Error('useOnboarding must be used within an OnboardingProvider');
   }
   return context;
-}; 
+};
+
+// Export localization data for future use
+export { EU_LOCALIZATION_DATA }; 

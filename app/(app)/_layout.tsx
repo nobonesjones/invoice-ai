@@ -32,9 +32,9 @@ export default function AppLayout() {
 				/>
 				<Stack.Screen name="index" options={{ headerShown: false }} />
 				<Stack.Screen name="account-details" options={{ headerShown: false }} />
-				      <Stack.Screen name="business-information" options={{ headerShown: false }} />
+				<Stack.Screen name="business-information" options={{ headerShown: false }} />
       <Stack.Screen name="invoice-settings" options={{ headerShown: false }} />
-      <Stack.Screen name="tax-currency" options={{ headerShown: false }} />
+				<Stack.Screen name="tax-currency" options={{ headerShown: false }} />
 				<Stack.Screen name="app-language" options={{ headerShown: false }} />
 				<Stack.Screen name="customer-support" options={{ headerShown: false }} />
 				<Stack.Screen name="payment-options" options={{ headerShown: false }} />

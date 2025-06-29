@@ -1,17 +1,18 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Platform,
   Pressable,
   Alert,
   ActionSheetIOS,
   Image,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,14 @@ export default function OnboardingScreen5() {
   const { theme } = useTheme();
   const { updateLogo } = useOnboarding();
   const [logoUri, setLogoUri] = useState<string | null>(null);
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -140,7 +149,7 @@ export default function OnboardingScreen5() {
   const styles = getStyles(theme);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.backgroundContainer}>
         {/* Background - placeholder gradient, replace with actual image */}
         <LinearGradient
@@ -198,32 +207,41 @@ export default function OnboardingScreen5() {
           </View>
         </LinearGradient>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
   },
   backgroundContainer: {
     flex: 1,
+    height: '100%',
+    width: '100%',
   },
   background: {
     flex: 1,
+    height: '100%',
   },
   overlay: {
     flex: 1,
+    height: '100%',
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: 30,
   },
   headerContent: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
+    marginTop: 45,
+    marginBottom: 30,
   },
   headline: {
     fontSize: 32,
@@ -308,7 +326,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     flex: 0.5,
   },
   buttonContainer: {
-    paddingBottom: 20,
+    paddingBottom: 30,
+    paddingTop: 10,
   },
   primaryButton: {
     paddingVertical: 16,

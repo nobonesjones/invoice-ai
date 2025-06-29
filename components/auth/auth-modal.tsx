@@ -165,30 +165,40 @@ export function AuthModal({
         <View style={[styles.container, { backgroundColor: theme.background }]}>
           {/* Animation Section - Top 70% */}
           <View style={styles.animationSection}>
-            <LinearGradient
-              colors={['#4F46E5', '#7C3AED', '#2563EB']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.gradientBackground}
-            >
+            <View style={styles.gradientBackground}>
               <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#FFFFFF" />
+                <Ionicons name="close" size={24} color="#000000" />
               </TouchableOpacity>
               
               <View style={styles.animationContent}>
-                <View style={styles.logoContainer}>
-                  <View style={styles.logoCircle}>
-                    <Text style={styles.logoText}>SI</Text>
+                <View style={styles.upperContent}>
+                                  <View style={styles.logoContainer}>
+                    <Image 
+                      source={require('../../assets/superinvoiceicon.png')} 
+                      style={styles.logoImage}
+                    />
                   </View>
-                </View>
                 <Text style={styles.title}>Create Account</Text>
                 <Text style={styles.subtitle}>
                   {plan === 'paid' 
                     ? 'Start your Pro subscription' 
                     : 'Join thousands of business owners'}
                 </Text>
+                </View>
+                
+                <View style={styles.quoteSection}>
+                                  <View style={styles.quoteContainer}>
+                  <Image 
+                    source={require('../../assets/onboarding/happyuser.png')} 
+                    style={styles.profileImage}
+                  />
+                  <Text style={styles.quoteText}>
+                    "AI that actually works and saves me hours of paperwork."
+                  </Text>
+                </View>
+                </View>
               </View>
-            </LinearGradient>
+            </View>
           </View>
 
           {/* Choice Section - Bottom 30% */}
@@ -235,7 +245,7 @@ export function AuthModal({
                   backgroundColor: theme.primary 
                 }]}
               >
-                <Ionicons name="mail" size={20} color={theme.primaryForeground} />
+                <Ionicons name="mail" size={20} color={theme.primaryForeground} style={styles.emailIcon} />
                 <Text style={[styles.choiceButtonText, { color: theme.primaryForeground }]}>
                   Continue with Email
                 </Text>
@@ -295,6 +305,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   gradientBackground: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
     paddingTop: Platform.OS === 'ios' ? 50 : 30,
   },
   closeButton: {
@@ -304,9 +315,14 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   animationContent: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 40,
+  },
+  upperContent: {
+    alignItems: 'center',
+    marginTop: 30,
   },
   logoContainer: {
     marginBottom: 20,
@@ -315,35 +331,74 @@ const getStyles = (theme: any) => StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   logoText: {
     color: '#FFFFFF',
     fontSize: 28,
     fontWeight: 'bold',
   },
+  logoImage: {
+    width: 65,
+    height: 65,
+    borderRadius: 16,
+  },
   title: {
-    color: '#FFFFFF',
+    color: '#000000',
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(0, 0, 0, 0.7)',
     fontSize: 16,
     textAlign: 'center',
     paddingHorizontal: 20,
+  },
+  quoteSection: {
+    alignItems: 'center',
+    marginBottom: 50,
+  },
+  quoteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    maxWidth: '90%',
+  },
+  profileImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  quoteText: {
+    color: 'rgba(0, 0, 0, 0.7)',
+    fontSize: 16,
+    fontStyle: 'italic',
+    textAlign: 'left',
+    flex: 1,
   },
   choiceSection: {
     height: '30%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   choiceContent: {
     flex: 1,
@@ -393,6 +448,13 @@ const getStyles = (theme: any) => StyleSheet.create({
     width: 20,
     height: 20,
     marginRight: 12,
+    marginLeft: -2,
+    transform: [{ translateY: 3 }],
+  },
+  emailIcon: {
+    marginRight: 12,
+    marginLeft: -2,
+    transform: [{ translateY: 5 }],
   },
   choiceButtonText: {
     fontSize: 16,

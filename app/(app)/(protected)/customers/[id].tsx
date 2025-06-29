@@ -381,7 +381,7 @@ export default function ClientProfileScreen() {
 						} catch (error) {
 							console.error('Error deleting client:', error);
 							Alert.alert('Error', 'Failed to delete client. Please try again.');
-						}
+		}
 					},
 				},
 			]
@@ -702,10 +702,10 @@ export default function ClientProfileScreen() {
 	},
 		destructiveButtonText: {
 			color: 'white',
-			fontSize: 16,
+		fontSize: 16,
 			fontWeight: 'bold',
-			marginLeft: 8,
-		},
+		marginLeft: 8,
+	},
 
 		// Loading and error states
 		loadingText: {
@@ -878,10 +878,10 @@ export default function ClientProfileScreen() {
 					{/* Sticky Bottom Button */}
 					<View style={styles.stickyButtonContainer}>
 						<View style={styles.buttonRow}>
-							<TouchableOpacity style={styles.primaryButton} onPress={handleNewInvoice}>
-								<Plus size={20} color={theme.primaryForeground} />
-								<Text style={styles.primaryButtonText}>New Invoice</Text>
-							</TouchableOpacity>
+						<TouchableOpacity style={styles.primaryButton} onPress={handleNewInvoice}>
+							<Plus size={20} color={theme.primaryForeground} />
+							<Text style={styles.primaryButtonText}>New Invoice</Text>
+						</TouchableOpacity>
 							<TouchableOpacity style={styles.destructiveButton} onPress={handleDeleteClient}>
 								<Trash2 size={18} color="white" />
 								<Text style={styles.destructiveButtonText}>Delete</Text>

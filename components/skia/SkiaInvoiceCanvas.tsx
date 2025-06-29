@@ -1006,26 +1006,26 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
           {/* Left: Business Logo */}
           {displaySettings.show_business_logo && (
             logoImage && business?.business_logo_url ? (
-              <Image 
-                image={logoImage} 
-                x={OFFSET_X + 27} 
-                y={22} 
-                width={65} 
-                height={65} 
-                fit="contain"
+            <Image 
+              image={logoImage} 
+              x={OFFSET_X + 27} 
+              y={22} 
+              width={65} 
+              height={65} 
+              fit="contain"
+            />
+          ) : (
+            <>
+              {/* Fallback logo with dynamic business initials */}
+              <Circle cx={OFFSET_X + 59} cy={55} r={32} color={colors.orange} />
+              <Text 
+                x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
+                y={64} 
+                text={businessInitials} 
+                font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
+                color="white" 
               />
-            ) : (
-              <>
-                {/* Fallback logo with dynamic business initials */}
-                <Circle cx={OFFSET_X + 59} cy={55} r={32} color={colors.orange} />
-                <Text 
-                  x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
-                  y={64} 
-                  text={businessInitials} 
-                  font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
-                  color="white" 
-                />
-              </>
+            </>
             )
           )}
           

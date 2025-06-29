@@ -5,9 +5,10 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Animated,
   Easing,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 
 import { useTheme } from "@/context/theme-provider";
@@ -20,6 +21,14 @@ export default function OnboardingScreen7() {
   // Animation refs
   const spinAnimation = useRef(new Animated.Value(0)).current;
   const progressAnimation = useRef(new Animated.Value(0)).current;
+
+  // Hide status bar for immersive experience
+  useEffect(() => {
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, []);
 
   useEffect(() => {
     // Start spinner animation
@@ -85,7 +94,7 @@ export default function OnboardingScreen7() {
   const styles = getStyles(theme);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.contentContainer}>
         {/* Loading Spinner */}
         <View style={styles.loadingSection}>
@@ -126,20 +135,25 @@ export default function OnboardingScreen7() {
           </View>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
+
+const { height, width } = Dimensions.get('window');
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    height: height,
+    width: width,
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    height: '100%',
   },
   loadingSection: {
     alignItems: 'center',

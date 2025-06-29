@@ -264,20 +264,20 @@ export const ColorSelector: React.FC<ColorSelectorProps> = ({
                   />
                 </View>
               ) : (
-                <View
-                  style={[
-                    styles.colorSwatch,
-                    { backgroundColor: colorOption.color }
-                  ]}
-                >
-                  {isSelected && (
-                    <Check 
-                      size={20} 
-                      color="white" 
-                      strokeWidth={3}
-                    />
-                  )}
-                </View>
+              <View
+                style={[
+                  styles.colorSwatch,
+                  { backgroundColor: colorOption.color }
+                ]}
+              >
+                {isSelected && (
+                  <Check 
+                    size={20} 
+                    color="white" 
+                    strokeWidth={3}
+                  />
+                )}
+              </View>
               )}
               <Text style={[styles.colorName, { color: themeColors.foreground }]}>
                 {colorOption.name}
