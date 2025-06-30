@@ -1,14 +1,21 @@
 import React from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import { InvoiceStatus, getStatusConfig } from '@/constants/invoice-status';
+import { EstimateStatus, getEstimateStatusConfig } from '@/constants/estimate-status';
 
 interface StatusBadgeProps {
-  status: InvoiceStatus;
+  status: InvoiceStatus | EstimateStatus;
   size?: 'small' | 'medium' | 'large';
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'medium' }) => {
-  const config = getStatusConfig(status);
+  // Try to get config from invoice status first, then estimate status
+  let config;
+  try {
+    config = getStatusConfig(status as InvoiceStatus);
+  } catch {
+    config = getEstimateStatusConfig(status as EstimateStatus);
+  }
   
   const styles = StyleSheet.create({
     badge: {

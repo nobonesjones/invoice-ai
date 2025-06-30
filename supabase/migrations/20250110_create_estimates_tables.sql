@@ -1,7 +1,7 @@
 -- Create estimates table (mirrors invoices structure)
 CREATE TABLE public.estimates (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     client_id uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
     estimate_number text NOT NULL,
     estimate_date timestamp with time zone DEFAULT now(),
@@ -33,7 +33,7 @@ CREATE TABLE public.estimates (
 CREATE TABLE public.estimate_line_items (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     estimate_id uuid NOT NULL REFERENCES public.estimates(id) ON DELETE CASCADE,
-    user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     item_name text NOT NULL,
     item_description text NULL,
     quantity numeric(10,2) DEFAULT 1,
@@ -50,7 +50,7 @@ CREATE TABLE public.estimate_line_items (
 CREATE TABLE public.estimate_shares (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     estimate_id uuid NOT NULL REFERENCES public.estimates(id) ON DELETE CASCADE,
-    user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     share_token text UNIQUE NOT NULL,
     expires_at timestamp with time zone NULL,
     is_active boolean DEFAULT true,

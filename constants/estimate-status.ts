@@ -17,6 +17,22 @@ export interface EstimateStatusConfig {
   description: string;
 }
 
+// Function to get estimate status config
+export const getEstimateStatusConfig = (status: EstimateStatus): EstimateStatusConfig => {
+  return ESTIMATE_STATUS_CONFIG[status] || ESTIMATE_STATUS_CONFIG[ESTIMATE_STATUSES.DRAFT];
+};
+
+// Function to check if estimate should be automatically marked as expired
+export const shouldAutoMarkExpired = (currentStatus: EstimateStatus, validUntilDate: string | null): boolean => {
+  if (currentStatus !== ESTIMATE_STATUSES.SENT || !validUntilDate) {
+    return false;
+  }
+  
+  const now = new Date();
+  const validUntil = new Date(validUntilDate);
+  return now > validUntil;
+};
+
 export const ESTIMATE_STATUS_CONFIG: Record<EstimateStatus, EstimateStatusConfig> = {
   [ESTIMATE_STATUSES.DRAFT]: {
     label: 'Draft',
@@ -63,9 +79,6 @@ export const ESTIMATE_STATUS_CONFIG: Record<EstimateStatus, EstimateStatusConfig
 };
 
 // Helper functions
-export const getEstimateStatusConfig = (status: EstimateStatus): EstimateStatusConfig => {
-  return ESTIMATE_STATUS_CONFIG[status] || ESTIMATE_STATUS_CONFIG[ESTIMATE_STATUSES.DRAFT];
-};
 
 // Get all available statuses for selection
 export const getAllEstimateStatuses = (): EstimateStatus[] => {
@@ -129,10 +142,6 @@ export const canClientRespond = (status: EstimateStatus): boolean => {
 };
 
 // Auto-status helpers
-export const shouldAutoMarkExpired = (status: EstimateStatus, validUntilDate: string | null): boolean => {
-  if (!validUntilDate || status !== ESTIMATE_STATUSES.SENT) return false;
-  return new Date(validUntilDate) < new Date();
-};
 
 // Utility functions for estimate lifecycle
 export const getEstimateLifecycleStage = (status: EstimateStatus): 'creation' | 'pending' | 'responded' | 'final' => {
