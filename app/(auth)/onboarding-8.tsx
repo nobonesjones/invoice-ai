@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
+import { AuthModal } from "@/components/auth/auth-modal";
 
 export default function OnboardingScreen8() {
   const router = useRouter();
   const { theme } = useTheme();
+  const [authModalVisible, setAuthModalVisible] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -50,7 +52,13 @@ export default function OnboardingScreen8() {
       console.log('Error requesting notification permissions:', error);
     }
     
-    // Navigate directly to the main app - soft paywall will handle monetization naturally
+    // Show auth modal instead of navigating to soft paywall
+    setAuthModalVisible(true);
+  };
+
+  const handleAuthSuccess = () => {
+    setAuthModalVisible(false);
+    // Navigate to soft paywall after successful authentication
     router.replace("/(app)/soft-paywall");
   };
 
@@ -101,6 +109,14 @@ export default function OnboardingScreen8() {
           </Button>
         </View>
       </View>
+
+      {/* Auth Modal */}
+      <AuthModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        onSuccess={handleAuthSuccess}
+        plan="free"
+      />
     </View>
   );
 }

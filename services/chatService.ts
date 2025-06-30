@@ -32,7 +32,9 @@ export class ChatService {
   private static async shouldUseAssistants(userId: string): Promise<boolean> {
     // For now, enable for all users. Later you can add user-specific logic
     // or environment variables for gradual rollout
-    return true;
+    const shouldUse = true;
+    console.log('[ChatService] shouldUseAssistants result:', shouldUse);
+    return shouldUse;
     
     // Example for gradual rollout:
     // const userConfig = await this.getUserConfig(userId);
@@ -51,7 +53,13 @@ export class ChatService {
       
       if (useAssistants) {
         console.log('[ChatService] Using Assistants API');
-        return await this.processWithAssistants(userId, userMessage, currencyContext, statusCallback);
+        try {
+          return await this.processWithAssistants(userId, userMessage, currencyContext, statusCallback);
+        } catch (assistantError) {
+          console.error('[ChatService] Assistants API failed, falling back to Chat Completions:', assistantError);
+          // Fall back to Chat Completions if Assistants fails
+          return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
+        }
       } else {
         console.log('[ChatService] Using Chat Completions API');
         return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
@@ -70,16 +78,21 @@ export class ChatService {
     statusCallback?: (status: string) => void
   ): Promise<{ thread: any; messages: any[] }> {
     try {
+      console.log('[ChatService] Starting processWithAssistants...');
+      
       // Check if Assistants API is configured
       if (!AssistantService.isConfigured()) {
+        console.error('[ChatService] AssistantService.isConfigured() returned false');
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
+      console.log('[ChatService] AssistantService is configured, proceeding...');
       statusCallback?.('SuperAI is preparing...');
 
       // Send message via Assistants API with currency context and status updates
       const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext, statusCallback);
 
+      console.log('[ChatService] AssistantService.sendMessage completed successfully');
       statusCallback?.('SuperAI is finalizing response...');
 
       // Get updated messages for UI

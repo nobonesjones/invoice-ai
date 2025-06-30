@@ -57,9 +57,38 @@ export default function SoftPaywallScreen() {
     try {
       setIsProcessing(true);
       
-      // Set plan to paid and show auth modal
-      setSelectedPlan('paid');
-      setAuthModalVisible(true);
+      if (session) {
+        // User already authenticated - handle subscription directly
+        console.log('[Soft Paywall] User already authenticated, processing paid plan');
+        
+        // Save onboarding data if available
+        if (session.user?.id) {
+          try {
+            await saveOnboardingData(session.user.id);
+            console.log('[Soft Paywall] Onboarding data saved to authenticated user');
+          } catch (error) {
+            console.error('[Soft Paywall] Error saving onboarding data:', error);
+          }
+        }
+        
+        // For now, show coming soon alert and navigate to app
+        Alert.alert(
+          'Coming Soon!', 
+          'Payment integration will be added here. For now, you can access the app.',
+          [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                router.replace('/(app)/(protected)');
+              }
+            }
+          ]
+        );
+      } else {
+        // User not authenticated - show auth modal
+        setSelectedPlan('paid');
+        setAuthModalVisible(true);
+      }
       
     } catch (error: any) {
       console.error('[Soft Paywall] Error starting subscription:', error);
@@ -71,9 +100,27 @@ export default function SoftPaywallScreen() {
 
   const handleSkip = async () => {
     try {
-      // Set plan to free and show auth modal
-      setSelectedPlan('free');
-      setAuthModalVisible(true);
+      if (session) {
+        // User already authenticated - proceed with free plan
+        console.log('[Soft Paywall] User already authenticated, proceeding with free plan');
+        
+        // Save onboarding data if available
+        if (session.user?.id) {
+          try {
+            await saveOnboardingData(session.user.id);
+            console.log('[Soft Paywall] Onboarding data saved to authenticated user');
+          } catch (error) {
+            console.error('[Soft Paywall] Error saving onboarding data:', error);
+          }
+        }
+        
+        // Navigate to protected app
+        router.replace('/(app)/(protected)');
+      } else {
+        // User not authenticated - show auth modal
+        setSelectedPlan('free');
+        setAuthModalVisible(true);
+      }
       
     } catch (error: any) {
       console.error('[Soft Paywall] Error starting free trial:', error);

@@ -1096,7 +1096,13 @@ Use tools to take action. Reference previous conversation naturally.`;
 
   // Check if service is configured
   static isConfigured(): boolean {
-    return !!process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+    const hasApiKey = !!process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+    console.log('[AssistantService] Configuration check:', {
+      hasApiKey,
+      apiKeyLength: process.env.EXPO_PUBLIC_OPENAI_API_KEY?.length || 0,
+      apiKeyPrefix: process.env.EXPO_PUBLIC_OPENAI_API_KEY?.substring(0, 7) || 'undefined'
+    });
+    return hasApiKey;
   }
 
   // Create a new thread and deactivate old ones

@@ -1,6 +1,6 @@
 // OpenAI API Configuration
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const MODEL = 'gpt-4';
+const MODEL = 'gpt-4o-mini'; // Temporary downgrade to cheaper model due to quota
 
 export interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'function';

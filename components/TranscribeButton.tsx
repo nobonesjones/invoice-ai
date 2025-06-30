@@ -48,15 +48,27 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
 
     audioLevelInterval.current = setInterval(async () => {
       try {
+        // Check if recording is still valid
+        if (!recording) {
+          console.log('[TranscribeButton] Recording object lost during monitoring, stopping interval');
+          stopAudioLevelMonitoring();
+          return;
+        }
+
         const status = await recording.getStatusAsync();
         if (status.isRecording && status.metering !== undefined) {
           // Convert metering to a 0-1 range for waveform visualization
           // Expo's metering is typically between -160 and 0 dB
           const normalizedLevel = Math.max(0, Math.min(1, (status.metering + 160) / 160));
           onAudioLevel(normalizedLevel);
+        } else if (!status.isRecording) {
+          console.log('[TranscribeButton] Recording stopped during monitoring, cleaning up');
+          stopAudioLevelMonitoring();
         }
       } catch (error) {
         console.log('[TranscribeButton] Error getting audio level:', error);
+        // If we can't get status, assume recording is problematic
+        stopAudioLevelMonitoring();
       }
     }, 100); // Update every 100ms for smooth animation
   }, [recording, onAudioLevel]);
@@ -71,7 +83,7 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
   // Transcribe audio function (defined early for other functions)
   const transcribeAudio = async (audioUri: string) => {
     try {
-      console.log('[TranscribeButton] Transcribing audio...');
+      console.log('[TranscribeButton] Transcribing audio from URI:', audioUri);
       setIsProcessing(true);
       onProcessing?.(true);
       
@@ -90,17 +102,31 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
         throw new Error('OpenAI API key not configured');
       }
 
-      // Send to OpenAI Whisper API
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: formData,
+      console.log('[TranscribeButton] Sending transcription request to OpenAI...');
+
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Transcription timeout after 30 seconds')), 30000);
       });
 
+      // Send to OpenAI Whisper API with timeout
+      const response = await Promise.race([
+        fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: formData,
+        }),
+        timeoutPromise
+      ]);
+
+      console.log('[TranscribeButton] Received response from OpenAI, status:', response.status);
+
       if (!response.ok) {
-        throw new Error(`Transcription failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error('[TranscribeButton] OpenAI error response:', errorText);
+        throw new Error(`Transcription failed: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -108,15 +134,18 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
       
       console.log('[TranscribeButton] Transcription result:', transcript);
       
-      if (transcript && onTranscript) {
+      if (transcript && transcript.length > 0 && onTranscript) {
+        console.log('[TranscribeButton] Calling onTranscript with:', transcript);
         onTranscript(transcript);
       } else {
+        console.log('[TranscribeButton] No transcript or empty transcript received');
         Alert.alert('No Speech Detected', 'Please try speaking more clearly.');
       }
     } catch (error) {
       console.error('[TranscribeButton] Transcription failed:', error);
       Alert.alert('Transcription Error', 'Failed to transcribe audio. Please try again.');
     } finally {
+      console.log('[TranscribeButton] Transcription process completed');
       setIsProcessing(false);
       onProcessing?.(false);
     }
@@ -159,40 +188,80 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
       
       stopAudioLevelMonitoring();
       
-      // Check if we're actually in a recording state
-      if (!isRecording) {
-        console.log('[TranscribeButton] Not currently recording, ignoring stop request');
-        return;
-      }
-      
+      // Check if we have a recording object (more reliable than isRecording state)
       if (!recording) {
-        console.log('[TranscribeButton] No recording object but isRecording is true, resetting state');
-        setIsRecording(false);
-        onRecordingStateChange?.(false);
+        console.log('[TranscribeButton] No recording object available');
+        
+        // Reset states to be consistent
+        if (isRecording) {
+          console.log('[TranscribeButton] Resetting inconsistent isRecording state');
+          setIsRecording(false);
+          onRecordingStateChange?.(false);
+        }
         return;
       }
 
       console.log('[TranscribeButton] Proceeding to stop recording...');
       
-      // Get the URI before stopping
-      const uri = recording.getURI();
-      console.log('[TranscribeButton] Recording URI before stop:', uri);
+      // Check if recording is actually active
+      let recordingStatus;
+      let uri = null;
       
-      // Stop the recording
-      await recording.stopAndUnloadAsync();
-      console.log('[TranscribeButton] Recording stopped successfully');
+      try {
+        recordingStatus = await recording.getStatusAsync();
+        console.log('[TranscribeButton] Recording status:', recordingStatus.isRecording ? 'active' : 'inactive');
+        
+        // Get the URI before any stop operations
+        uri = recording.getURI();
+        console.log('[TranscribeButton] Recording URI:', uri);
+        
+        // Only try to stop if recording is still active
+        if (recordingStatus.isRecording) {
+          console.log('[TranscribeButton] Recording is active, stopping...');
+          await recording.stopAndUnloadAsync();
+          console.log('[TranscribeButton] Recording stopped successfully');
+        } else {
+          console.log('[TranscribeButton] Recording already stopped, just unloading...');
+          // Recording already stopped, but we still need to unload to clean up
+          try {
+            await recording.stopAndUnloadAsync();
+            console.log('[TranscribeButton] Recording unloaded successfully');
+          } catch (unloadError) {
+            console.log('[TranscribeButton] Recording already unloaded:', unloadError.message);
+            // This is fine, recording was already cleaned up
+          }
+        }
+      } catch (statusError) {
+        console.log('[TranscribeButton] Could not get recording status:', statusError);
+        // Try to get URI anyway
+        try {
+          uri = recording.getURI();
+          console.log('[TranscribeButton] Got URI despite status error:', uri);
+        } catch (uriError) {
+          console.log('[TranscribeButton] Could not get URI:', uriError);
+        }
+        
+        // Try to stop anyway, but catch any errors
+        try {
+          await recording.stopAndUnloadAsync();
+          console.log('[TranscribeButton] Recording stopped despite status error');
+        } catch (stopError) {
+          console.log('[TranscribeButton] Stop failed (expected if already stopped):', stopError.message);
+        }
+      }
       
       // Update states
       setIsRecording(false);
       onRecordingStateChange?.(false);
       setRecording(null);
       
+      // Proceed with transcription if we have a URI
       if (uri) {
         console.log('[TranscribeButton] Sending for transcription...');
-        // Send to transcription (processing state handled in transcribeAudio)
         await transcribeAudio(uri);
       } else {
         console.log('[TranscribeButton] No URI available for transcription');
+        Alert.alert('Recording Error', 'Could not access the recorded audio. Please try again.');
       }
       
       console.log('[TranscribeButton] stopRecording completed successfully');
@@ -277,6 +346,17 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
       console.log('[TranscribeButton] Current isRecording state:', isRecording);
       console.log('[TranscribeButton] Current recording object:', !!recording);
       
+      // Clean up any existing recording first
+      if (recording) {
+        console.log('[TranscribeButton] Cleaning up existing recording before starting new one');
+        try {
+          await recording.stopAndUnloadAsync();
+        } catch (cleanupError) {
+          console.log('[TranscribeButton] Error cleaning up existing recording:', cleanupError);
+        }
+        setRecording(null);
+      }
+      
       // Configure audio mode for recording with metering enabled
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -289,18 +369,31 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
         isMeteringEnabled: true, // Enable audio level monitoring
       });
       
+      console.log('[TranscribeButton] New recording object created:', !!newRecording);
+      
+      // Verify recording is actually started
+      const initialStatus = await newRecording.getStatusAsync();
+      console.log('[TranscribeButton] Initial recording status:', initialStatus.isRecording ? 'active' : 'inactive');
+      
       setRecording(newRecording);
       setIsRecording(true);
       onRecordingStateChange?.(true);
       
-      // Start monitoring audio levels
+      // Start monitoring audio levels with a delay to ensure recording is fully started
       setTimeout(() => {
-        startAudioLevelMonitoring();
-      }, 100); // Small delay to ensure recording is fully started
+        if (newRecording) {
+          console.log('[TranscribeButton] Starting audio level monitoring...');
+          startAudioLevelMonitoring();
+        }
+      }, 100);
       
       console.log('[TranscribeButton] Recording started successfully with metering enabled');
     } catch (error) {
       console.error('[TranscribeButton] Failed to start recording:', error);
+      // Clean up states on error
+      setRecording(null);
+      setIsRecording(false);
+      onRecordingStateChange?.(false);
       Alert.alert('Error', 'Failed to start recording. Please try again.');
     }
   };
