@@ -53,6 +53,9 @@ import { useSupabase } from '@/context/supabase-provider';
 import { SwipeListView } from 'react-native-swipe-list-view';
 import { ESTIMATE_STATUSES } from '@/constants/estimate-status';
 import { UsageService } from '@/services/usageService';
+import { usePaymentOptions } from '../invoices/usePaymentOptions';
+import { useEstimateActivityLogger } from './useEstimateActivityLogger';
+import { ReferenceNumberService } from '@/services/referenceNumberService';
 
 // Import estimate-specific components and modals
 import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
@@ -61,6 +64,7 @@ import { NewItemData } from './AddNewItemFormSheet';
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet';
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from './EditInvoiceTaxSheet';
 import EditEstimateDetailsSheet, { EditEstimateDetailsSheetRef, EstimateDetailsData } from './EditEstimateDetailsSheet';
+import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -89,7 +93,6 @@ interface EstimateFormData {
   po_number?: string;
   custom_headline?: string;
   taxPercentage?: number | null;
-  estimate_tax_label?: string | null;
   discountType?: 'percentage' | 'fixed' | null;
   discountValue?: number | null;
   subTotalAmount?: number;
@@ -285,6 +288,9 @@ export default function CreateEstimateScreen() {
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { supabase, user } = useSupabase();
   
+  // Add activity logger for estimate tracking
+  const { logEstimateCreated, logEstimateEdited } = useEstimateActivityLogger();
+  
   const params = useLocalSearchParams<{ 
     id?: string;
     selectedClientId?: string; 
@@ -297,6 +303,23 @@ export default function CreateEstimateScreen() {
   const [selectedClient, setSelectedClient] = useState<ClientType | null>(null);
   const [currencyCode, setCurrencyCode] = useState<string>('GBP');
   const [currentEstimateLineItems, setCurrentEstimateLineItems] = useState<EstimateLineItem[]>([]);
+  const [isSavingEstimate, setIsSavingEstimate] = useState(false);
+  const [currentEstimateId, setCurrentEstimateId] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [estimateTerminology, setEstimateTerminology] = useState<'estimate' | 'quote'>('estimate');
+  const [currentDesign, setCurrentDesign] = useState<string>('classic');
+  const [currentAccentColor, setCurrentAccentColor] = useState<string>('#14B8A6');
+  const [isLoadingEstimateNumber, setIsLoadingEstimateNumber] = useState(true);
+  
+  // Preview modal state
+  const [previewData, setPreviewData] = useState<{
+    estimateData: any;
+    businessSettings: any;
+    clientData: any;
+  } | null>(null);
+  
+  // Business settings cache for preview
+  const [businessSettingsCache, setBusinessSettingsCache] = useState<any>(null);
   
   // Sheet refs
   const newClientSheetRef = useRef<BottomSheetModal>(null);
@@ -304,34 +327,111 @@ export default function CreateEstimateScreen() {
   const discountSheetRef = useRef<SelectDiscountTypeSheetRef>(null);
   const taxSheetRef = useRef<EditInvoiceTaxSheetRef>(null);
   const editEstimateDetailsSheetRef = useRef<EditEstimateDetailsSheetRef>(null);
+  const estimatePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
   
+  const defaultValues = {
+    estimate_number: '', // Will be updated with proper unified number when component loads
+    client_id: '', 
+    estimate_date: new Date(),
+    valid_until_date: null,
+    valid_until_option: 'valid_for_30_days',
+    items: [],
+    taxPercentage: 20,
+    discountType: null,
+    discountValue: 0,
+    notes: '',
+    acceptance_terms: '',
+    paypal_active: false,
+    stripe_active: false,
+    bank_account_active: false,
+  };
+
   const {
     handleSubmit,
     setValue,
     watch,
-    getValues
+    getValues,
+    reset
   } = useForm<EstimateFormData>({
-    defaultValues: {
-      estimate_number: 'EST001',
-      client_id: '', 
-      estimate_date: new Date(),
-      valid_until_date: null,
-      valid_until_option: 'valid_for_30_days',
-      items: [],
-      taxPercentage: 20,
-      estimate_tax_label: 'VAT',
-      discountType: null,
-      discountValue: 0,
-      notes: '',
-      acceptance_terms: '',
-      paypal_active: false,
-      stripe_active: false,
-      bank_account_active: false,
-    }
+    defaultValues
   });
 
-  const screenBackgroundColor = isLightMode ? '#F0F2F5' : themeColors.background;
-  const styles = getStyles(themeColors, screenBackgroundColor);
+  // Safety check to prevent undefined themeColors during navigation
+  const safeThemeColors = themeColors || colors.light;
+  const screenBackgroundColor = isLightMode ? '#F0F2F5' : safeThemeColors.background;
+  const styles = getStyles(safeThemeColors, screenBackgroundColor);
+
+  // Generate unique estimate number
+  const generateEstimateNumber = async (): Promise<string> => {
+    if (!user || !supabase) {
+      return 'INV-001';
+    }
+
+    try {
+      // Use the new reference numbering service for unified numbering
+      return await ReferenceNumberService.generateNextReference(user.id, 'estimate');
+    } catch (error) {
+      console.error('Error generating estimate number:', error);
+      return `INV-${Date.now().toString().slice(-6)}`; // Fallback to timestamp-based
+    }
+  };
+
+  // Initialize estimate number on component load (for new estimates only)
+  useEffect(() => {
+    const initializeEstimateNumber = async () => {
+      if (!isEditMode && user && supabase) {
+        setIsLoadingEstimateNumber(true);
+        const newEstimateNumber = await generateEstimateNumber();
+        setValue('estimate_number', newEstimateNumber);
+        console.log('[initializeEstimateNumber] Set estimate number to:', newEstimateNumber);
+        setIsLoadingEstimateNumber(false);
+      } else {
+        // For edit mode, number is already loaded, no need to generate
+        setIsLoadingEstimateNumber(false);
+      }
+    };
+
+    initializeEstimateNumber();
+  }, [user, supabase, isEditMode, setValue]);
+
+  // Fetch business settings including estimate terminology
+  useEffect(() => {
+    const fetchBusinessSettings = async () => {
+      if (!user || !supabase) return;
+      
+      try {
+        // Fetch complete business settings for caching
+        const { data: businessSettingsData, error: businessError } = await supabase
+          .from('business_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (!businessError && businessSettingsData) {
+          // Cache for preview
+          setBusinessSettingsCache(businessSettingsData);
+          
+          // Set individual states
+          if (businessSettingsData.currency_code) {
+            setCurrencyCode(businessSettingsData.currency_code);
+          }
+          if (businessSettingsData.estimate_terminology) {
+            setEstimateTerminology(businessSettingsData.estimate_terminology);
+          }
+          if (businessSettingsData.default_invoice_design) {
+            setCurrentDesign(businessSettingsData.default_invoice_design);
+          }
+          if (businessSettingsData.default_accent_color) {
+            setCurrentAccentColor(businessSettingsData.default_accent_color);
+          }
+        }
+      } catch (error) {
+        console.log('[fetchBusinessSettings] Error fetching settings:', error);
+      }
+    };
+
+    fetchBusinessSettings();
+  }, [user, supabase]);
 
   // Watch form values
   const watchedEstimateNumber = watch('estimate_number');
@@ -339,6 +439,11 @@ export default function CreateEstimateScreen() {
   const watchedTaxPercentage = watch('taxPercentage');
   const watchedDiscountType = watch('discountType');
   const watchedDiscountValue = watch('discountValue');
+  
+  // Watch payment method values to prevent auto-toggle issues
+  const watchedStripeActive = watch('stripe_active');
+  const watchedPaypalActive = watch('paypal_active');
+  const watchedBankAccountActive = watch('bank_account_active');
 
   // Calculate totals
   const displaySubtotal = currentEstimateLineItems.reduce((sum, item) => sum + item.total_price, 0);
@@ -404,17 +509,362 @@ export default function CreateEstimateScreen() {
     }
   }, [params?.selectedClientId, params?.selectedClientName, user?.id]);
 
+  // Load existing estimate data when in edit mode
+  useEffect(() => {
+    const loadEstimateForEditing = async () => {
+      if (!isEditMode || !editEstimateId || !user || !supabase) {
+        return;
+      }
+
+      try {
+        console.log('[loadEstimateForEditing] Loading estimate:', editEstimateId);
+
+        // Fetch estimate with client and line items
+        const { data: estimateData, error: estimateError } = await supabase
+          .from('estimates')
+          .select(`
+            *,
+            clients (*),
+            estimate_line_items (*)
+          `)
+          .eq('id', editEstimateId)
+          .eq('user_id', user.id) // Security: ensure user owns this estimate
+          .single();
+
+        if (estimateError) {
+          console.error('[loadEstimateForEditing] Error loading estimate:', estimateError);
+          Alert.alert('Error', 'Failed to load estimate data for editing.');
+          router.back();
+          return;
+        }
+
+        if (!estimateData) {
+          Alert.alert('Error', 'Estimate not found.');
+          router.back();
+          return;
+        }
+
+        console.log('[loadEstimateForEditing] Estimate data loaded:', estimateData);
+
+        // Set the selected client
+        if (estimateData.clients) {
+          setSelectedClient(estimateData.clients as ClientType);
+        }
+
+        // Transform estimate line items to match form structure
+        const transformedLineItems: EstimateLineItem[] = (estimateData.estimate_line_items || []).map(item => ({
+          id: item.id || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          user_saved_item_id: item.user_saved_item_id,
+          item_name: item.item_name || '',
+          description: item.description,
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || 0,
+          total_price: item.total_price || 0,
+          line_item_discount_type: item.line_item_discount_type,
+          line_item_discount_value: item.line_item_discount_value,
+          item_image_url: item.item_image_url,
+        }));
+
+        // Set current estimate ID for updates
+        setCurrentEstimateId(editEstimateId);
+
+        // Populate form with estimate data
+        reset({
+          estimate_number: estimateData.estimate_number || '',
+          client_id: estimateData.client_id || '',
+          estimate_date: estimateData.estimate_date ? new Date(estimateData.estimate_date) : new Date(),
+          valid_until_date: estimateData.valid_until_date ? new Date(estimateData.valid_until_date) : null,
+          valid_until_option: null, // This will be calculated based on dates
+          items: transformedLineItems,
+          po_number: estimateData.po_number || '',
+          custom_headline: estimateData.custom_headline || '',
+          taxPercentage: estimateData.tax_percentage || 20,
+          discountType: estimateData.discount_type as 'percentage' | 'fixed' | null,
+          discountValue: estimateData.discount_value || 0,
+          notes: estimateData.notes || '',
+          acceptance_terms: estimateData.acceptance_terms || '',
+          paypal_active: estimateData.paypal_active || false,
+          stripe_active: estimateData.stripe_active || false,
+          bank_account_active: estimateData.bank_account_active || false,
+        });
+
+        // Set line items state for UI
+        setCurrentEstimateLineItems(transformedLineItems);
+
+        // Load design and color from estimate
+        if (estimateData.estimate_template) {
+          setCurrentDesign(estimateData.estimate_template);
+        }
+        if (estimateData.accent_color) {
+          setCurrentAccentColor(estimateData.accent_color);
+        }
+
+        console.log('[loadEstimateForEditing] Form populated with estimate data');
+
+      } catch (error) {
+        console.error('[loadEstimateForEditing] Unexpected error:', error);
+        Alert.alert('Error', 'An unexpected error occurred while loading the estimate.');
+        router.back();
+      }
+    };
+
+    loadEstimateForEditing();
+  }, [isEditMode, editEstimateId, user, supabase, reset, router]);
+
+  // Watch items from form
+  const watchedItems = watch('items');
+
   // Sync form items with currentEstimateLineItems for UI display
   useEffect(() => {
-    const watchedItems = watch('items');
     if (watchedItems) {
       console.log('[useEffect for items] watchedItems:', watchedItems);
       setCurrentEstimateLineItems(watchedItems as EstimateLineItem[]);
     }
-  }, [watch('items')]);
+  }, [watchedItems]);
 
   const handleSaveEstimate = async () => {
-    console.log('Save estimate functionality to be implemented...');
+    if (!user || !supabase) {
+      Alert.alert('Error', 'You must be logged in to save estimates.');
+      return;
+    }
+
+    console.log('[handleSaveEstimate] Starting save process...');
+    setIsSavingEstimate(true);
+
+    try {
+      // 1. Validate required fields
+      const formData = getValues();
+      
+      if (!formData.client_id) {
+        Alert.alert('Validation Error', 'Please select a client before saving.');
+        setIsSavingEstimate(false);
+        return;
+      }
+
+      if (!formData.estimate_number) {
+        Alert.alert('Validation Error', 'Estimate number is required.');
+        setIsSavingEstimate(false);
+        return;
+      }
+
+      console.log('[handleSaveEstimate] formData.valid_until_option:', formData.valid_until_option);
+
+      // Get default design and color from business settings for new estimates
+      let defaultDesign = 'classic';
+      let defaultAccentColor = '#14B8A6';
+      
+      if (!isEditMode) {
+        try {
+          const { data: businessSettings } = await supabase
+            .from('business_settings')
+            .select('default_invoice_design, default_accent_color')
+            .eq('user_id', user.id)
+            .single();
+          
+          if (businessSettings) {
+            defaultDesign = businessSettings.default_invoice_design || 'classic';
+            defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
+            console.log('[handleSaveEstimate] Using default design:', defaultDesign, 'color:', defaultAccentColor);
+          }
+        } catch (error) {
+          console.log('[handleSaveEstimate] Could not load business settings, using defaults');
+        }
+      }
+
+      // 2. Generate unique estimate number if needed
+      let estimateNumber = formData.estimate_number;
+      if (!estimateNumber || estimateNumber === 'EST-001') {
+        estimateNumber = await generateEstimateNumber();
+      }
+
+      // 3. Prepare main estimate data
+      const estimateData = {
+        user_id: user.id,
+        client_id: formData.client_id,
+        estimate_number: estimateNumber,
+        status: ESTIMATE_STATUSES.DRAFT, // Always save as draft from the form
+        estimate_date: formData.estimate_date instanceof Date ? formData.estimate_date.toISOString() : new Date(formData.estimate_date).toISOString(),
+        valid_until_date: formData.valid_until_date ? (formData.valid_until_date instanceof Date ? formData.valid_until_date.toISOString() : new Date(formData.valid_until_date).toISOString()) : null,
+        po_number: formData.po_number || null,
+        custom_headline: formData.custom_headline || null,
+        acceptance_terms: formData.acceptance_terms || null,
+        subtotal_amount: displaySubtotal,
+        discount_type: formData.discountType || null,
+        discount_value: formData.discountValue || 0,
+        tax_percentage: formData.taxPercentage || 0,
+        total_amount: displayEstimateTotal,
+        notes: formData.notes || null,
+        stripe_active: formData.stripe_active,
+        bank_account_active: formData.bank_account_active,
+        paypal_active: formData.paypal_active,
+        // Add template and color for estimates
+        estimate_template: isEditMode ? currentDesign : defaultDesign,
+        accent_color: isEditMode ? currentAccentColor : defaultAccentColor,
+      };
+
+      let savedEstimate;
+
+      if (isEditMode && editEstimateId) {
+        // UPDATE existing estimate
+        console.log('[handleSaveEstimate] Updating existing estimate:', editEstimateId);
+        const { data: updatedEstimate, error: estimateError } = await supabase
+          .from('estimates')
+          .update(estimateData)
+          .eq('id', editEstimateId)
+          .eq('user_id', user.id) // Security: ensure user owns this estimate
+          .select()
+          .single();
+
+        if (estimateError) {
+          console.error('Error updating estimate:', estimateError);
+          Alert.alert('Error', `Failed to update estimate: ${estimateError.message}`);
+          setIsSavingEstimate(false);
+          return;
+        }
+
+        savedEstimate = updatedEstimate;
+        console.log('[handleSaveEstimate] Estimate updated successfully');
+
+      } else {
+        // CREATE new estimate
+        console.log('[handleSaveEstimate] Creating new estimate');
+        const { data: newEstimate, error: estimateError } = await supabase
+          .from('estimates')
+          .insert(estimateData)
+          .select()
+          .single();
+
+        if (estimateError) {
+          console.error('Error creating estimate:', estimateError);
+          Alert.alert('Error', `Failed to create estimate: ${estimateError.message}`);
+          setIsSavingEstimate(false);
+          return;
+        }
+
+        savedEstimate = newEstimate;
+        console.log('[handleSaveEstimate] Estimate created successfully');
+
+        // Increment usage count for new estimates only
+        try {
+          await UsageService.incrementInvoiceCount(user.id);
+          console.log('[handleSaveEstimate] Usage count incremented');
+        } catch (usageError) {
+          console.error('Error incrementing usage count:', usageError);
+          // Don't fail the estimate creation for this, just log it
+        }
+      }
+
+      if (!savedEstimate) {
+        Alert.alert('Error', 'Failed to save estimate: No data returned.');
+        setIsSavingEstimate(false);
+        return;
+      }
+
+      // 4. Handle line items (create/update/delete)
+      await handleLineItemsUpdate(savedEstimate.id, formData.items);
+
+      // 5. Log estimate activity
+      try {
+        if (isEditMode) {
+          await logEstimateEdited(savedEstimate.id, savedEstimate.estimate_number);
+        } else {
+          await logEstimateCreated(savedEstimate.id, savedEstimate.estimate_number);
+        }
+      } catch (activityError) {
+        console.error('Error logging estimate activity:', activityError);
+        // Don't fail the estimate creation for this, just log it
+      }
+
+      // 6. Success - Navigate to viewer
+      const successMessage = isEditMode ? 'Estimate updated successfully!' : 'Estimate created successfully!';
+      console.log(`[handleSaveEstimate] ${successMessage} Navigating to viewer with ID:`, savedEstimate.id);
+      
+      // Update local state
+      setCurrentEstimateId(savedEstimate.id);
+      setHasUnsavedChanges(false);
+      
+      if (!isEditMode && !currentEstimateId) {
+        // Only reset form for completely new estimates, not edits or drafts
+        reset(defaultValues);
+        setSelectedClient(null);
+      }
+      
+      // Navigation logic: different behavior for edit vs create
+      if (isEditMode) {
+        // For edit mode: go back to the existing estimate viewer (don't create a new one)
+        console.log('[handleSaveEstimate] Edit mode: going back to existing estimate viewer');
+        router.back();
+      } else {
+        // For new estimate creation: navigate to new estimate viewer
+        console.log('[handleSaveEstimate] Create mode: navigating to new estimate viewer');
+        router.replace({
+          pathname: '/(app)/(protected)/estimates/estimate-viewer',
+          params: { id: savedEstimate.id, from: 'save' },
+        });
+      }
+
+      setTimeout(() => setIsSavingEstimate(false), 500);
+
+    } catch (error: any) {
+      console.error('Unexpected error saving estimate:', error);
+      Alert.alert('Error', `An unexpected error occurred: ${error.message}`);
+    } finally {
+      setIsSavingEstimate(false);
+    }
+  };
+
+  const handleLineItemsUpdate = async (estimateId: string, items: EstimateLineItem[] | undefined) => {
+    if (!user || !supabase) {
+      throw new Error('User authentication required');
+    }
+
+    console.log('[handleLineItemsUpdate] Starting line items update for estimate:', estimateId);
+
+    // 1. Delete existing line items (for both create and edit modes)
+    // This ensures clean state and simplifies the logic
+    const { error: deleteError } = await supabase
+      .from('estimate_line_items')
+      .delete()
+      .eq('estimate_id', estimateId)
+      .eq('user_id', user.id);
+
+    if (deleteError) {
+      console.error('Error deleting existing line items:', deleteError);
+      throw new Error(`Failed to delete existing line items: ${deleteError.message}`);
+    }
+
+    console.log('[handleLineItemsUpdate] Existing line items deleted');
+
+    // 2. Insert new/updated line items (for both create and edit modes)
+    if (items && items.length > 0) {
+      const lineItemsData = items.map(item => ({
+        estimate_id: estimateId,
+        user_id: user.id,
+        item_name: item.item_name,
+        item_description: item.description || null,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price,
+        line_item_discount_type: item.line_item_discount_type || null,
+        line_item_discount_value: item.line_item_discount_value || null,
+        item_image_url: item.item_image_url || null,
+      }));
+
+      console.log('[handleLineItemsUpdate] Inserting line items:', lineItemsData.length);
+
+      const { error: insertError } = await supabase
+        .from('estimate_line_items')
+        .insert(lineItemsData);
+
+      if (insertError) {
+        console.error('Error inserting line items:', insertError);
+        throw new Error(`Failed to save line items: ${insertError.message}`);
+      }
+
+      console.log('[handleLineItemsUpdate] Line items saved successfully');
+    } else {
+      console.log('[handleLineItemsUpdate] No line items to save');
+    }
   };
 
   const openNewClientSelectionSheet = () => {
@@ -427,8 +877,40 @@ export default function CreateEstimateScreen() {
     newClientSheetRef.current?.dismiss();
   };
 
+  // Payment options hook for validation
+  const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
+
   const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
-    setValue(`${methodKey}_active` as keyof EstimateFormData, newValue);
+    const currentPaymentSettings = paymentOptionsData;
+
+    if (newValue === true && currentPaymentSettings) { // Check only when toggling ON and paymentOptionsData are loaded
+      let isEnabledInSettings = false;
+      let settingName = '';
+
+      if (methodKey === 'stripe') {
+        isEnabledInSettings = currentPaymentSettings.stripe_enabled === true;
+        settingName = 'Pay With Card (Stripe)';
+      } else if (methodKey === 'paypal') {
+        isEnabledInSettings = currentPaymentSettings.paypal_enabled === true;
+        settingName = 'PayPal';
+      } else if (methodKey === 'bank_account') {
+        isEnabledInSettings = currentPaymentSettings.bank_transfer_enabled === true;
+        settingName = 'Bank Transfer';
+      }
+
+      if (!isEnabledInSettings) {
+        Alert.alert(
+          'Payment Method Disabled',
+          `${settingName} is not enabled in your Payment Options. Please update your settings to use this method.`,
+          [{ text: 'OK' }]
+        );
+        return; // Prevent toggling ON
+      }
+    }
+
+    // Update react-hook-form state directly
+    const formKey = `${methodKey}_active` as keyof EstimateFormData;
+    setValue(formKey, newValue, { shouldValidate: true, shouldDirty: true });
   };
 
   // Modal callback handlers
@@ -530,7 +1012,7 @@ export default function CreateEstimateScreen() {
 
   const handleTaxSave = (taxData: EstimateTaxData) => {
     setValue('taxPercentage', parseFloat(taxData.taxRate));
-    setValue('estimate_tax_label', taxData.taxName);
+    // Note: estimate_tax_label is not stored in database, only used for display
     taxSheetRef.current?.dismiss();
   };
 
@@ -539,17 +1021,121 @@ export default function CreateEstimateScreen() {
     setValue('estimate_date', detailsData.creationDate);
     setValue('valid_until_option', detailsData.validUntilType);
     setValue('valid_until_date', detailsData.customValidUntilDate || null);
-    setValue('acceptance_terms', detailsData.acceptanceTerms);
-    setValue('custom_headline', detailsData.customHeadline);
-    editEstimateDetailsSheetRef.current?.dismiss();
+    setValue('acceptance_terms', detailsData.acceptanceTerms || '');
+    setValue('custom_headline', detailsData.customHeadline || '');
+  };
+
+  const handleChangeDesign = () => {
+    console.log('[handleChangeDesign] Button pressed - testing functionality');
+    Alert.alert('Design Change', 'Change Design button is working! Modal integration will be added next.');
+  };
+
+  const handleDesignSaved = (designId: string, accentColor: string) => {
+    console.log('[handleDesignSaved] Design saved:', designId, 'Color:', accentColor);
+    setCurrentDesign(designId);
+    setCurrentAccentColor(accentColor);
+  };
+
+  const handlePreviewEstimate = async () => {
+    if (!selectedClient) {
+      Alert.alert('Preview Error', 'Please select a client before previewing the estimate.');
+      return;
+    }
+
+    try {
+      console.log('[handlePreviewEstimate] Creating preview data...');
+      
+      // Get current form data
+      const formData = getValues();
+      
+      // Load business settings for preview - use cached if available
+      let businessSettingsForPreview = null;
+      
+      if (businessSettingsCache) {
+        // Load payment options to combine with cached business settings
+        const { data: paymentOptionsData, error: paymentError } = await supabase
+          .from('payment_options')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        // Combine business settings with payment options
+        businessSettingsForPreview = {
+          ...businessSettingsCache,
+          ...paymentOptionsData,
+          currency_symbol: getCurrencySymbol(currencyCode),
+          estimate_terminology: estimateTerminology, // Ensure terminology is included
+        };
+      } else {
+        Alert.alert('Preview Error', 'Business settings not loaded yet. Please try again.');
+        return;
+      }
+
+      // Transform estimate form data to invoice-like structure for the modal
+      const enhancedFormData = {
+        ...formData,
+        // Transform estimate fields to invoice fields for modal compatibility
+        invoice_number: formData.estimate_number,
+        invoice_date: formData.estimate_date,
+        due_date: formData.valid_until_date,
+        invoice_line_items: formData.items || currentEstimateLineItems,
+        // Add client information
+        clients: selectedClient,
+        // Ensure all calculated values are present
+        subtotal_amount: displaySubtotal,
+        total_amount: displayEstimateTotal,
+        tax_percentage: formData.taxPercentage || 0,
+        discount_type: formData.discountType || null,
+        discount_value: formData.discountValue || 0,
+        // Set proper field names for invoice template compatibility
+        invoice_tax_label: 'VAT', // Use consistent tax label for estimates
+        currency_symbol: getCurrencySymbol(currencyCode),
+        currency: currencyCode,
+        // Map payment method fields
+        stripe_active: formData.stripe_active || false,
+        paypal_active: formData.paypal_active || false,
+        bank_account_active: formData.bank_account_active || false,
+        // Apply current design settings
+        invoice_design: currentDesign,
+        accent_color: currentAccentColor,
+        // Add estimate terminology for proper labeling
+        estimate_terminology: estimateTerminology,
+      };
+
+      console.log('[handlePreviewEstimate] Enhanced form data:', enhancedFormData);
+      console.log('[handlePreviewEstimate] Business settings:', businessSettingsForPreview);
+      console.log('[handlePreviewEstimate] Client data:', selectedClient);
+
+      // Set preview data and open modal
+      setPreviewData({
+        estimateData: enhancedFormData,
+        businessSettings: businessSettingsForPreview,
+        clientData: selectedClient,
+      });
+      
+      estimatePreviewModalRef.current?.present();
+
+    } catch (error: any) {
+      console.error('[handlePreviewEstimate] Error preparing preview:', error);
+      Alert.alert('Preview Error', 'Failed to load preview data. Please try again.');
+    }
   };
 
   // Function to handle removing items
   const handleRemoveItem = (itemId: string) => {
     console.log('[handleRemoveItem] Removing item:', itemId);
-    const updatedItems = currentEstimateLineItems.filter(item => item.id !== itemId);
-    setCurrentEstimateLineItems(updatedItems);
-    setValue('items', updatedItems, { shouldValidate: true, shouldDirty: true });
+    
+    // Get current items from form to ensure we have the latest state
+    const currentFormItems = getValues('items') || [];
+    const updatedItems = currentFormItems.filter(item => item.id !== itemId);
+    
+    console.log('[handleRemoveItem] Current items count:', currentFormItems.length);
+    console.log('[handleRemoveItem] Updated items count:', updatedItems.length);
+    
+    // Update form state first, then local state will be synced via useEffect
+    setValue('items', updatedItems, { shouldValidate: false, shouldDirty: false });
+    
+    // The useEffect watching 'items' will update currentEstimateLineItems automatically
   };
 
   // Render function for the visible part of the list item
@@ -560,15 +1146,15 @@ export default function CreateEstimateScreen() {
     return (
       <View style={[
         styles.estimateItemRow,
-        { backgroundColor: themeColors.card },
+        { backgroundColor: safeThemeColors.card },
         isFirstItem && { borderTopWidth: 0 },
         isLastItem && { borderBottomWidth: 0 }
       ]}>
         <Text style={styles.estimateItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
-          <Text style={[styles.estimateItemNameText, { color: themeColors.foreground }]}>{item.item_name} </Text>
-          <Text style={[styles.estimateItemQuantityText, { color: themeColors.mutedForeground }]}>(x{item.quantity})</Text>
+          <Text style={[styles.estimateItemNameText, { color: safeThemeColors.foreground }]}>{item.item_name} </Text>
+          <Text style={[styles.estimateItemQuantityText, { color: safeThemeColors.mutedForeground }]}>(x{item.quantity})</Text>
         </Text>
-        <Text style={[styles.estimateItemTotalText, { color: themeColors.foreground }]}>
+        <Text style={[styles.estimateItemTotalText, { color: safeThemeColors.foreground }]}>
           {getCurrencySymbol(currencyCode)}{Number(item.total_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
       </View>
@@ -581,7 +1167,7 @@ export default function CreateEstimateScreen() {
     return (
       <View style={styles.rowBack}>
         <TouchableOpacity
-          style={[styles.backRightBtn, styles.backRightBtnRight, { backgroundColor: themeColors.destructive }]}
+          style={[styles.backRightBtn, styles.backRightBtnRight, { backgroundColor: safeThemeColors.destructive }]}
           onPress={() => {
             console.log('[renderHiddenItem] Remove button pressed for item:', item.id);
             handleRemoveItem(item.id);
@@ -590,8 +1176,8 @@ export default function CreateEstimateScreen() {
             }
           }}
         >
-          <Trash2 size={22} color={themeColors.card} />
-          <Text style={{ color: themeColors.card, marginLeft: 8, fontSize: 15, fontWeight: '500' }}>Remove</Text>
+          <Trash2 size={22} color={safeThemeColors.card} />
+          <Text style={{ color: safeThemeColors.card, marginLeft: 8, fontSize: 15, fontWeight: '500' }}>Remove</Text>
         </TouchableOpacity>
       </View>
     );
@@ -617,11 +1203,11 @@ export default function CreateEstimateScreen() {
       {/* Status Bar with white background */}
       <StatusBar 
         barStyle="dark-content" 
-        backgroundColor={themeColors.card}
+        backgroundColor={safeThemeColors.card}
         translucent={false}
       />
       
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.card }]} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: safeThemeColors.card }]} edges={['top', 'left', 'right']}>
         <KeyboardAvoidingView 
           style={styles.keyboardAvoidingView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -641,10 +1227,10 @@ export default function CreateEstimateScreen() {
               {/* Header with Back and Preview buttons */}
               <View style={styles.headerButtonsRow}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                  <ChevronLeft size={24} color={themeColors.foreground} />
-                  <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
+                  <ChevronLeft size={24} color={safeThemeColors.foreground} />
+                  <Text style={[styles.backButtonText, { color: safeThemeColors.foreground }]}>Back</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.previewButton}>
+                <TouchableOpacity style={styles.previewButton} onPress={handlePreviewEstimate}>
                   <Text style={styles.previewButtonText}>Preview</Text>
                 </TouchableOpacity>
               </View>
@@ -652,24 +1238,24 @@ export default function CreateEstimateScreen() {
               {/* Estimate Details */}
               <View style={styles.detailsRow1}>
                 <View style={styles.estimateNumberEditContainer}>
-                  <Text style={[styles.estimateNumberDisplay, { color: themeColors.foreground }]}>
-                    {watchedEstimateNumber || 'EST001'}
+                  <Text style={[styles.estimateNumberDisplay, { color: safeThemeColors.foreground }]}>
+                    {watchedEstimateNumber || (isLoadingEstimateNumber ? 'Loading...' : 'INV-001')}
                   </Text>
                 </View>
-                <Text style={{ color: themeColors.foreground, fontWeight: 'bold' }}>
+                <Text style={{ color: safeThemeColors.foreground, fontWeight: 'bold' }}>
                   Valid for 30 days
                 </Text>
               </View>
               <View style={styles.detailsRow2}>
-                <Text style={[styles.subLabel, { color: themeColors.mutedForeground }]}>Creation Date</Text>
-                <Text style={[styles.dateDisplay, { color: themeColors.mutedForeground, fontWeight: 'normal' }]}>
+                <Text style={[styles.subLabel, { color: safeThemeColors.mutedForeground }]}>Creation Date</Text>
+                <Text style={[styles.dateDisplay, { color: safeThemeColors.mutedForeground, fontWeight: 'normal' }]}>
                   {formatFriendlyDate(watchedEstimateDate)}
                 </Text>
               </View>
             </TouchableOpacity>
 
             {/* Client Section */}
-            <FormSection title="CLIENT" themeColors={themeColors}>
+            <FormSection title="CLIENT" themeColors={safeThemeColors}>
               {selectedClient ? (
                 <View style={styles.selectedClientContainer}>
                   <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
@@ -679,22 +1265,22 @@ export default function CreateEstimateScreen() {
                 </View>
               ) : (
                 <TouchableOpacity onPress={openNewClientSelectionSheet} style={styles.clientSelector}>
-                  <PlusCircle size={22} color={themeColors.primary} />
+                  <PlusCircle size={22} color={safeThemeColors.primary} />
                   <Text style={styles.clientSelectorText}>Add Client</Text>
                 </TouchableOpacity>
               )}
             </FormSection>
 
             {/* Items Section */}
-            <FormSection title="ITEMS" themeColors={themeColors} noPadding={currentEstimateLineItems.length > 0}>
+            <FormSection title="ITEMS" themeColors={safeThemeColors} noPadding={currentEstimateLineItems.length > 0}>
               {currentEstimateLineItems.length === 0 ? (
                 <View style={{ alignItems: 'center', paddingVertical: 16 }}>
                   <TouchableOpacity 
                     style={styles.addItemButtonInline}
                     onPress={() => addItemSheetRef.current?.present()}
                   >
-                    <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
-                    <Text style={[styles.addItemButtonText, { color: themeColors.primary }]}>Add Item or Service</Text>
+                    <PlusCircle size={20} color={safeThemeColors.primary} style={styles.addItemButtonIcon} />
+                    <Text style={[styles.addItemButtonText, { color: safeThemeColors.primary }]}>Add Item or Service</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -710,7 +1296,7 @@ export default function CreateEstimateScreen() {
                       styles.swipeListStyle, 
                       currentEstimateLineItems.length > 0 && {
                         borderRadius: 10,
-                        backgroundColor: themeColors.card
+                        backgroundColor: safeThemeColors.card
                       }
                     ]}
                     contentContainerStyle={styles.swipeListContentContainer}
@@ -724,15 +1310,15 @@ export default function CreateEstimateScreen() {
                     style={styles.addItemButtonFullWidth}
                     onPress={() => addItemSheetRef.current?.present()}
                   >
-                    <PlusCircle size={20} color={themeColors.primary} style={styles.addItemButtonIcon} />
-                    <Text style={[styles.addItemButtonText, { color: themeColors.primary }]}>Add Another Item or Service</Text>
+                    <PlusCircle size={20} color={safeThemeColors.primary} style={styles.addItemButtonIcon} />
+                    <Text style={[styles.addItemButtonText, { color: safeThemeColors.primary }]}>Add Another Item or Service</Text>
                   </TouchableOpacity>
                 </>
               )}
             </FormSection>
 
             {/* Summary Section */}
-            <FormSection title="SUMMARY" themeColors={themeColors}>
+            <FormSection title="SUMMARY" themeColors={safeThemeColors}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal</Text>
                 <Text style={styles.summaryText}>
@@ -786,83 +1372,86 @@ export default function CreateEstimateScreen() {
                 value=""
                 onPress={() => editEstimateDetailsSheetRef.current?.present()}
                 icon={CreditCard}
-                themeColors={themeColors}
+                themeColors={safeThemeColors}
               />
               
               <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
-                <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17, color: themeColors.foreground }]}>
+                <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17, color: safeThemeColors.foreground }]}>
                   Total
                 </Text>
-                <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17, color: themeColors.foreground }]}>
+                <Text style={[styles.summaryText, { fontWeight: 'bold', fontSize: 17, color: safeThemeColors.foreground }]}>
                   {getCurrencySymbol(currencyCode)}{displayEstimateTotal.toFixed(2)}
                 </Text>
               </View>
             </FormSection>
 
             {/* Payment Methods Section */}
-            <FormSection title="PAYMENT METHODS" themeColors={themeColors}>
+            <FormSection title="PAYMENT METHODS" themeColors={safeThemeColors}>
               <ActionRow
                 label={
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: themeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
+                    <Text style={{ color: safeThemeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
                     <Image source={require('../../../../assets/visaicon.png')} style={iconStyle} />
                     <Image source={require('../../../../assets/mastercardicon.png')} style={mastercardSpecificStyle} />
                   </View>
                 }
                 icon={CreditCard}
-                themeColors={themeColors}
+                themeColors={safeThemeColors}
                 showSwitch={true}
-                switchValue={getValues('stripe_active')}
+                switchValue={watchedStripeActive}
                 onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
               />
               
               <ActionRow
                 label={
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: themeColors.foreground, fontSize: 16 }}>PayPal</Text>
+                    <Text style={{ color: safeThemeColors.foreground, fontSize: 16 }}>PayPal</Text>
                     <Image source={require('../../../../assets/paypalicon.png')} style={iconStyle} />
                   </View>
                 }
                 icon={Banknote}
-                themeColors={themeColors}
+                themeColors={safeThemeColors}
                 showSwitch={true}
-                switchValue={getValues('paypal_active')}
+                switchValue={watchedPaypalActive}
                 onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
               />
               
               <ActionRow
                 label="Bank Transfer"
                 icon={Landmark}
-                themeColors={themeColors}
+                themeColors={safeThemeColors}
                 showSwitch={true}
-                switchValue={getValues('bank_account_active')}
+                switchValue={watchedBankAccountActive}
                 onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
               />
             </FormSection>
 
             {/* Change Design Section */}
-            <FormSection title="" themeColors={themeColors}>
-              <TouchableOpacity style={styles.changeDesignSelector}>
-                <Text style={[styles.changeDesignText, { color: themeColors.primary }]}>Change Estimate Design</Text>
+            <FormSection title="" themeColors={safeThemeColors}>
+              <TouchableOpacity 
+                style={styles.changeDesignSelector} 
+                onPress={handleChangeDesign}
+              >
+                <Text style={[styles.changeDesignText, { color: safeThemeColors.primary }]}>Change {estimateTerminology === 'quote' ? 'Quote' : 'Estimate'} Design</Text>
               </TouchableOpacity>
             </FormSection>
 
             {/* Other Settings Section */}
-            <FormSection title="OTHER SETTINGS" themeColors={themeColors}>
+            <FormSection title="OTHER SETTINGS" themeColors={safeThemeColors}>
               <ActionRow
                 label="Add images & PDFs (0)"
                 onPress={() => console.log('Add Attachments pressed - Coming soon!')}
                 icon={Paperclip}
-                themeColors={themeColors}
+                themeColors={safeThemeColors}
                 showChevron={false}
               />
               <TextInput
                 style={[styles.notesInput, { 
-                  color: themeColors.foreground,
-                  borderColor: themeColors.border 
+                  color: safeThemeColors.foreground,
+                  borderColor: safeThemeColors.border 
                 }]}
                 placeholder="Payment is due within 30 days of estimate date. Late payments may incur additional fees."
-                placeholderTextColor={themeColors.mutedForeground}
+                placeholderTextColor={safeThemeColors.mutedForeground}
                 multiline
                 value={watch('notes') || ''}
                 onChangeText={(text) => setValue('notes', text)}
@@ -873,10 +1462,15 @@ export default function CreateEstimateScreen() {
           {/* Save Button */}
           <TouchableOpacity 
             onPress={handleSaveEstimate} 
-            style={[styles.bottomSaveButton, { backgroundColor: themeColors.primary }]}
+            style={[styles.bottomSaveButton, { backgroundColor: safeThemeColors.primary, opacity: isSavingEstimate ? 0.7 : 1 }]}
+            disabled={isSavingEstimate}
           >
             <Text style={styles.bottomSaveButtonText}>
-              {isEditMode ? 'Save' : 'Save Estimate'}
+              {isSavingEstimate 
+                ? (isEditMode ? 'Updating...' : 'Saving...') 
+                : (isEditMode 
+                  ? `Update ${estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}` 
+                  : `Save ${estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}`)}
             </Text>
           </TouchableOpacity>
 
@@ -905,13 +1499,15 @@ export default function CreateEstimateScreen() {
           <EditInvoiceTaxSheet
             ref={taxSheetRef}
             currentTaxPercentage={watchedTaxPercentage}
-            currentTaxLabel={watch('estimate_tax_label')}
-            onSaveTax={handleTaxSave}
+            currentTaxLabel={'Tax'}
+            onSave={handleTaxSave}
+            onClose={() => taxSheetRef.current?.dismiss()}
           />
 
           {/* Edit Estimate Details Sheet */}
           <EditEstimateDetailsSheet
             ref={editEstimateDetailsSheetRef}
+            terminology={estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}
             initialDetails={{
               estimateNumber: watchedEstimateNumber,
               creationDate: watchedEstimateDate,
@@ -923,14 +1519,46 @@ export default function CreateEstimateScreen() {
             onSave={handleEstimateDetailsSave}
           />
 
+          {/* Estimate Design Preview Modal */}
+          <InvoicePreviewModal
+            ref={estimatePreviewModalRef}
+            mode={previewData ? "preview" : "settings"}
+            invoiceData={previewData?.estimateData}
+            businessSettings={previewData?.businessSettings}
+            clientData={previewData?.clientData}
+            initialDesign={currentDesign}
+            initialAccentColor={currentAccentColor}
+            onDesignSaved={handleDesignSaved}
+            documentType="estimate"
+            onClose={() => {
+              console.log('[EstimateDesign] Modal closed');
+              setPreviewData(null); // Clear preview data when modal closes
+            }}
+          />
+
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Estimate Design Preview Modal - Temporarily Disconnected */}
+      {/* <InvoicePreviewModal
+        ref={estimatePreviewModalRef}
+        mode="settings"
+        initialDesign={currentDesign}
+        initialAccentColor={currentAccentColor}
+        onDesignSaved={handleDesignSaved}
+        onClose={() => console.log('[EstimateDesign] Modal closed')}
+      /> */}
+
     </SafeAreaView>
     </>
   );
 }
 
-const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string) => StyleSheet.create({
+const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string) => {
+  // Safety check to prevent theme colors being undefined during navigation
+  const safeThemeColors = themeColors || colors.light;
+  
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: screenBackgroundColor,
@@ -969,7 +1597,7 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     paddingHorizontal: 16,
     paddingTop: 1,
     paddingBottom: 8,
-    backgroundColor: themeColors.card,
+    backgroundColor: safeThemeColors.card,
     borderRadius: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1023,11 +1651,11 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
   selectedClientName: {
     fontSize: 17,
     fontWeight: '600',
-    color: themeColors.foreground,
+    color: safeThemeColors.foreground,
   },
   changeClientText: {
     fontSize: 16,
-    color: themeColors.primary,
+    color: safeThemeColors.primary,
     fontWeight: '500',
   },
   clientSelector: {
@@ -1040,7 +1668,7 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     marginLeft: 10,
     fontSize: 17,
     fontWeight: '500',
-    color: themeColors.primary,
+    color: safeThemeColors.primary,
   },
   addItemButtonInline: {
     flexDirection: 'row',
@@ -1053,7 +1681,7 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderTopColor: themeColors.border,
+    borderTopColor: safeThemeColors.border,
   },
   addItemButtonIcon: {
     marginRight: 8,
@@ -1068,20 +1696,20 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
+    borderBottomColor: safeThemeColors.border,
   },
   summaryLabel: {
     fontSize: 16,
-    color: themeColors.foreground,
+    color: safeThemeColors.foreground,
   },
   summaryText: {
     fontSize: 16,
-    color: themeColors.foreground,
+    color: safeThemeColors.foreground,
     textAlign: 'right',
   },
   taxPercentageStyle: {
     fontSize: 16,
-    color: themeColors.mutedForeground,
+    color: safeThemeColors.mutedForeground,
     fontWeight: 'normal',
     marginLeft: 2,
   },
@@ -1121,7 +1749,7 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
   },
   notesInput: {
     borderTopWidth: 1,
-    borderTopColor: themeColors.border,
+    borderTopColor: safeThemeColors.border,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 14,
@@ -1154,29 +1782,29 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: themeColors.border,
+    borderBottomColor: safeThemeColors.border,
   },
   estimateItemCombinedInfo: {
     flex: 1,
     marginRight: 12,
     fontSize: 16,
-    color: themeColors.foreground,
+    color: safeThemeColors.foreground,
   },
   estimateItemNameText: {
     fontWeight: '500',
   },
   estimateItemQuantityText: {
     fontWeight: 'normal',
-    color: themeColors.mutedForeground,
+    color: safeThemeColors.mutedForeground,
   },
   estimateItemTotalText: {
     fontSize: 16,
     fontWeight: '600',
-    color: themeColors.foreground,
+    color: safeThemeColors.foreground,
   },
   rowBack: {
     alignItems: 'center',
-    backgroundColor: themeColors.destructive,
+    backgroundColor: safeThemeColors.destructive,
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -1191,12 +1819,13 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     flexDirection: 'row',
   },
   backRightBtnRight: {
-    backgroundColor: themeColors.destructive,
+    backgroundColor: safeThemeColors.destructive,
     right: 0,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: themeColors.border,
+    backgroundColor: safeThemeColors.border,
     marginLeft: 16, // Assuming ActionRow content (like icon) starts after 16px padding
   },
 }); 
+};

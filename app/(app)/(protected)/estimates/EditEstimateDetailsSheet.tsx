@@ -6,7 +6,7 @@ import {
 	BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { format, parseISO, isValid, addDays } from "date-fns";
-import { X, CalendarDays } from "lucide-react-native"; // Added CalendarDays
+import { CalendarDays } from "lucide-react-native"; // Added CalendarDays
 import React, {
 	useMemo,
 	useCallback,
@@ -51,6 +51,7 @@ interface EditEstimateDetailsSheetProps {
 	initialDetails?: EstimateDetailsData;
 	onSave: (updatedDetails: EstimateDetailsData) => void;
 	onClose?: () => void;
+	terminology?: 'estimate' | 'quote';
 }
 
 // Define and export the Ref type
@@ -62,7 +63,7 @@ export interface EditEstimateDetailsSheetRef {
 const EditEstimateDetailsSheet = forwardRef<
 	EditEstimateDetailsSheetRef,
 	EditEstimateDetailsSheetProps
->(({ initialDetails, onSave, onClose }, ref) => {
+>(({ initialDetails, onSave, onClose, terminology }, ref) => {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 
@@ -160,13 +161,6 @@ const EditEstimateDetailsSheet = forwardRef<
 		// bottomSheetModalRef.current?.dismiss(); // Consider if auto-dismiss is desired after save
 	};
 
-	const internalClose = () => {
-		bottomSheetModalRef.current?.dismiss();
-		if (onClose) {
-			onClose();
-		}
-	};
-
 	// Date picker handlers (existing logic retained)
 	const handleValidUntilSelect = (
 		type: string,
@@ -203,37 +197,11 @@ const EditEstimateDetailsSheet = forwardRef<
 		hideCreationDatePicker();
 	};
 
-	// Helper to format creation date for display
-	const formattedCreationDate = useMemo(() => {
-		return isValid(creationDateObject)
-			? format(creationDateObject, "MMM d, yyyy")
-			: "Select Date";
-	}, [creationDateObject]);
+	const formattedCreationDate = format(creationDateObject, "MMM d, yyyy");
 
-	// Styles (merged and adapted from AddNewItemFormSheet)
 	const styles = StyleSheet.create({
 		modalBackground: { backgroundColor: themeColors.background },
 		handleIndicator: { backgroundColor: themeColors.mutedForeground },
-		headerContainer: {
-			flexDirection: "row",
-			justifyContent: "center", // Center title
-			alignItems: "center",
-			paddingVertical: Platform.OS === "ios" ? 12 : 15, // Adjusted padding
-			paddingHorizontal: 15, // Horizontal padding for header content
-			borderBottomWidth: StyleSheet.hairlineWidth,
-			borderBottomColor: themeColors.border,
-		},
-		title: {
-			fontSize: 20, // Matched AddNewItem title size slightly better
-			fontWeight: "600", // Matched AddNewItem title weight
-			color: themeColors.foreground,
-		},
-		closeButton: {
-			position: "absolute",
-			top: Platform.OS === "ios" ? 10 : 12, // Adjusted for new header padding
-			right: 15,
-			padding: 6,
-		},
 		contentScrollView: {
 			flex: 1,
 		},
@@ -345,13 +313,6 @@ const EditEstimateDetailsSheet = forwardRef<
 			keyboardBlurBehavior="restore"
 			onDismiss={onClose} // Call onClose when sheet is dismissed by pan down etc.
 		>
-			<View style={styles.headerContainer}>
-				<Text style={styles.title}>Edit Estimate Details</Text>
-				<TouchableOpacity onPress={internalClose} style={styles.closeButton}>
-					<X size={24} color={themeColors.mutedForeground} />
-				</TouchableOpacity>
-			</View>
-
 			<BottomSheetScrollView
 				style={styles.contentScrollView}
 				contentContainerStyle={styles.contentContainerStyle}

@@ -61,6 +61,7 @@ import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
 import { InvoiceShareService } from '../../../../services/invoiceShareService';
+import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 
 // NEW SKIA IMPORTS
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
@@ -169,6 +170,9 @@ function InvoiceViewerScreen() {
 
   // Add ref for MakePaymentSheet
   const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null);
+
+  // Add ref for InvoicePreviewModal
+  const previewModalRef = useRef<InvoicePreviewModalRef>(null);
 
   // Snap points for the Send Invoice Modal
   const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []); // Adjust as needed
@@ -1407,25 +1411,65 @@ function InvoiceViewerScreen() {
 
   const handleViewClientProfile = () => {
     moreOptionsSheetRef.current?.dismiss();
-    console.log('View client profile pressed');
-    // TODO: Implement view client profile functionality
-    Alert.alert('Coming Soon', 'View client profile functionality will be implemented soon.');
+    
+    if (!invoice?.client_id) {
+      Alert.alert('Error', 'No client associated with this invoice.');
+      return;
+    }
+    
+    console.log('Navigating to client profile:', invoice.client_id);
+    // Navigate to the client profile page
+    router.push(`/customers/${invoice.client_id}`);
   };
 
-  const handleVoidInvoice = () => {
+  const handleVoidInvoice = async () => {
     moreOptionsSheetRef.current?.dismiss();
+    
+    if (!invoice || !supabase || !user) {
+      Alert.alert('Error', 'Unable to void invoice at this time.');
+      return;
+    }
+
     Alert.alert(
       'Void Invoice',
-      'Are you sure you want to void this invoice? This will mark it as cancelled.',
+      'Are you sure you want to void this invoice? This action cannot be undone and will mark the invoice as cancelled.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Void',
+          text: 'Void Invoice',
           style: 'destructive',
-          onPress: () => {
-            console.log('Void invoice pressed');
-            // TODO: Implement void functionality
-            Alert.alert('Coming Soon', 'Void functionality will be implemented soon.');
+          onPress: async () => {
+            try {
+              console.log('Voiding invoice:', invoice.id);
+              
+              // Update invoice status to cancelled
+              const { error } = await supabase
+                .from('invoices')
+                .update({ 
+                  status: 'cancelled',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', invoice.id)
+                .eq('user_id', user.id); // Security: ensure user owns the invoice
+
+              if (error) {
+                console.error('Error voiding invoice:', error);
+                Alert.alert('Error', 'Failed to void invoice. Please try again.');
+                return;
+              }
+
+              // Log the activity
+              await logStatusChanged(invoice.id, 'cancelled', invoice.status || 'draft');
+
+              // Update local state
+              setInvoice(prev => prev ? { ...prev, status: 'cancelled' } : null);
+
+              Alert.alert('Success', 'Invoice has been voided successfully.');
+
+            } catch (error) {
+              console.error('Unexpected error voiding invoice:', error);
+              Alert.alert('Error', 'An unexpected error occurred while voiding the invoice.');
+            }
           }
         }
       ]
@@ -1439,11 +1483,128 @@ function InvoiceViewerScreen() {
     Alert.alert('Coming Soon', 'Payment link functionality will be implemented soon.');
   };
 
-  const handleRefundCreditNote = () => {
+  const handleRefundCreditNote = async () => {
     moreOptionsSheetRef.current?.dismiss();
-    console.log('Refund/Credit note pressed');
-    // TODO: Implement refund/credit note functionality
-    Alert.alert('Coming Soon', 'Refund/Credit note functionality will be implemented soon.');
+    
+    if (!invoice || !supabase || !user) {
+      Alert.alert('Error', 'Unable to create credit note at this time.');
+      return;
+    }
+
+    Alert.alert(
+      'Create Credit Note',
+      `This will create a credit note for the full amount of ${getCurrencySymbol(invoice.currency || 'USD')}${invoice.total_amount?.toFixed(2) || '0.00'}. This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create Credit Note',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('Creating credit note for invoice:', invoice.id);
+              
+              // Generate credit note number (similar to invoice number but with CN prefix)
+              const timestamp = Date.now().toString().slice(-6);
+              const creditNoteNumber = `CN-${timestamp}`;
+
+              // Create a new credit note based on the invoice
+              const creditNoteData = {
+                user_id: user.id,
+                client_id: invoice.client_id,
+                invoice_number: creditNoteNumber,
+                status: 'draft',
+                invoice_date: new Date().toISOString(),
+                due_date: new Date().toISOString(), // Credit notes are typically immediate
+                total_amount: -(invoice.total_amount || 0), // Negative amount for credit
+                currency: invoice.currency,
+                tax_percentage: invoice.tax_percentage,
+                discount_type: invoice.discount_type,
+                discount_value: invoice.discount_value,
+                notes: `Credit note for invoice ${invoice.invoice_number}`,
+                custom_headline: `Credit Note - ${invoice.invoice_number}`,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+
+              const { data: creditNote, error: creditNoteError } = await supabase
+                .from('invoices')
+                .insert([creditNoteData])
+                .select()
+                .single();
+
+              if (creditNoteError) {
+                console.error('Error creating credit note:', creditNoteError);
+                Alert.alert('Error', 'Failed to create credit note. Please try again.');
+                return;
+              }
+
+              // Copy line items to the credit note
+              if (invoice.line_items && invoice.line_items.length > 0) {
+                const creditNoteLineItems = invoice.line_items.map((item: any) => ({
+                  invoice_id: creditNote.id,
+                  user_saved_item_id: item.user_saved_item_id,
+                  item_name: item.item_name,
+                  description: item.description,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  total_price: item.total_price,
+                  line_item_discount_type: item.line_item_discount_type,
+                  line_item_discount_value: item.line_item_discount_value,
+                  item_image_url: item.item_image_url,
+                  created_at: new Date().toISOString(),
+                }));
+
+                const { error: lineItemsError } = await supabase
+                  .from('invoice_line_items')
+                  .insert(creditNoteLineItems);
+
+                if (lineItemsError) {
+                  console.error('Error creating credit note line items:', lineItemsError);
+                  // Continue anyway, the credit note was created
+                }
+              }
+
+              // Update the original invoice status to show it has been credited
+              const { error: updateError } = await supabase
+                .from('invoices')
+                .update({ 
+                  status: 'credited',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', invoice.id)
+                .eq('user_id', user.id);
+
+              if (updateError) {
+                console.error('Error updating original invoice status:', updateError);
+                // Continue anyway, the credit note was created
+              }
+
+              // Log the activity
+              await logStatusChanged(invoice.id, 'credited', invoice.status || 'draft');
+
+              // Update local state
+              setInvoice(prev => prev ? { ...prev, status: 'credited' } : null);
+
+              Alert.alert(
+                'Credit Note Created',
+                `Credit note ${creditNoteNumber} has been created successfully. You can find it in your invoices list.`,
+                [
+                  { text: 'OK', style: 'default' },
+                  { 
+                    text: 'View Credit Note', 
+                    onPress: () => router.push(`/invoices/invoice-viewer?id=${creditNote.id}`)
+                  }
+                ]
+              );
+
+            } catch (error) {
+              console.error('Unexpected error creating credit note:', error);
+              Alert.alert('Error', 'An unexpected error occurred while creating the credit note.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleAutoReminders = () => {
@@ -1544,6 +1705,34 @@ ${analytics.countries.length > 0 ?
       Alert.alert('Error', 'Failed to load analytics. Please try again.');
     }
   };
+
+  const handleChangeDesign = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    console.log('Change design pressed');
+    // Open the invoice preview modal for design selection
+    if (invoice && businessSettings && client) {
+      previewModalRef.current?.present();
+    } else {
+      Alert.alert('Error', 'Please wait for invoice data to load before changing design.');
+    }
+  };
+
+  const handleDesignModalClose = useCallback(async () => {
+    console.log('Invoice Preview Modal Dismissed');
+    // Refresh the invoice data to reflect any design changes
+    if (invoiceId && supabase) {
+      try {
+        console.log('[handleDesignModalClose] Refreshing invoice data after design change');
+        const fetchedInvoice = await fetchInvoiceData(invoiceId);
+        if (fetchedInvoice && fetchedInvoice.user_id) {
+          const targetUserId = fetchedInvoice.user_id;
+          if (targetUserId) await fetchBusinessSettings(targetUserId);
+        }
+      } catch (error) {
+        console.error('[handleDesignModalClose] Error refreshing data:', error);
+      }
+    }
+  }, [invoiceId, supabase]);
 
   // More options action item component
   const MoreOptionItem = ({ 
@@ -1966,6 +2155,7 @@ ${analytics.countries.length > 0 ?
                 business={businessSettings}
                 currencySymbol={currencySymbol}
                 accentColor={getAccentColor()}
+                documentType="invoice"
                 renderSinglePage={0}
                 displaySettings={{
                   show_business_logo: businessSettings?.show_business_logo ?? true,
@@ -2125,7 +2315,7 @@ ${analytics.countries.length > 0 ?
       {/* More Options Bottom Sheet */}
       <BottomSheetModal
         ref={moreOptionsSheetRef}
-        snapPoints={['60%']}
+        snapPoints={['80%']}
         enablePanDownToClose={true}
         backdropComponent={(props) => (
           <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
@@ -2161,6 +2351,14 @@ ${analytics.countries.length > 0 ?
               icon={BarChart3}
               title="View Share Analytics"
               onPress={handleViewAnalytics}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={Settings}
+              title="Change Design"
+              onPress={handleChangeDesign}
             />
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
@@ -2237,6 +2435,16 @@ ${analytics.countries.length > 0 ?
         onClose={() => console.log('Make Payment Sheet Dismissed')}
         invoiceTotal={invoice?.total_amount || 0}
         previouslyPaidAmount={invoice?.paid_amount || 0}
+      />
+
+      {/* Invoice Preview Modal */}
+      <InvoicePreviewModal
+        ref={previewModalRef}
+        invoiceData={invoice}
+        businessSettings={businessSettings}
+        clientData={client}
+        invoiceId={invoiceId}
+        onClose={handleDesignModalClose}
       />
     </SafeAreaView>
   );

@@ -131,10 +131,24 @@ export class UsageService {
       }
 
       // Original authenticated user logic
+      // First get current count
+      const { data: profile, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('invoice_count')
+        .eq('id', userId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching current invoice count:', fetchError);
+        throw fetchError;
+      }
+
+      // Then increment it
+      const newCount = (profile?.invoice_count || 0) + 1;
       const { error } = await supabase
         .from('user_profiles')
         .update({ 
-          invoice_count: supabase.raw('invoice_count + 1'),
+          invoice_count: newCount,
           updated_at: new Date().toISOString()
         })
         .eq('id', userId);
@@ -167,10 +181,24 @@ export class UsageService {
       }
 
       // Authenticated user logic
+      // First get current count
+      const { data: profile, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('sent_invoice_count')
+        .eq('id', userId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching current sent invoice count:', fetchError);
+        throw fetchError;
+      }
+
+      // Then increment it
+      const newCount = (profile?.sent_invoice_count || 0) + 1;
       const { error } = await supabase
         .from('user_profiles')
         .update({ 
-          sent_invoice_count: supabase.raw('sent_invoice_count + 1'),
+          sent_invoice_count: newCount,
           updated_at: new Date().toISOString()
         })
         .eq('id', userId);

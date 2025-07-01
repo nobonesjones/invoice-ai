@@ -1,98 +1,132 @@
-/**
- * EstimateViewerScreen - View Estimate Details
- * 
- * This screen displays estimate information including:
- * - Estimate details (number, dates, client)
- * - Line items with quantities and pricing
- * - Status and total amounts
- * - Action buttons for editing and sharing
- */
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
   Platform,
-  Alert
+  Switch,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import {
+  ChevronLeft,
+  Edit3,
+  MoreHorizontal,
+  History,
+  Send,
+  Share2,
+  Trash2,
+  X as XIcon,
+  Mail,
+  Link2,
+} from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
-import { colors } from '@/constants/colors';
-import { ArrowLeft, Edit3, Share, Calendar, User, Hash, DollarSign } from 'lucide-react-native';
-import { useSupabase } from '@/context/supabase-provider';
+import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useSupabase } from '@/context/supabase-provider'; 
+import type { Tables } from '../../../../types/database.types'; 
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { StatusBadge } from '@/components/StatusBadge';
-import { ESTIMATE_STATUSES } from '@/constants/estimate-status';
+import { EstimateStatus, getEstimateStatusConfig, isEstimateEditable } from '@/constants/estimate-status';
+import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
+import { useEstimateActivityLogger } from './useEstimateActivityLogger';
+import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistorySheet';
+import { EstimateConversionService } from '@/services/estimateConversionService';
+import { EstimateSenderService } from '@/services/estimateSenderService';
 
-// Define types
-type ThemeColorPalette = typeof colors.light;
+// SKIA IMPORTS for estimate rendering
+import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
+import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
+import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
+import { useCanvasRef } from '@shopify/react-native-skia';
 
-interface EstimateData {
+interface EstimateForTemplate {
   id: string;
-  estimate_number: string;
+  estimate_number: string | null;
   estimate_date: string;
   valid_until_date: string | null;
-  status: string;
-  subtotal_amount: number;
-  tax_amount: number;
-  discount_amount: number;
-  total_amount: number;
+  status: string | null;
+  subtotal_amount: number | null;
+  tax_amount: number | null;
+  discount_amount: number | null;
+  total_amount: number | null;
   notes: string | null;
   acceptance_terms: string | null;
-  client: {
-    id: string;
-    name: string;
-    email: string | null;
-  };
-  estimate_line_items: Array<{
-    id: string;
-    item_name: string;
-    description: string | null;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>;
+  clients: Tables<'clients'> | null;
+  estimate_line_items: Tables<'estimate_line_items'>[];
+  currency: string;
+  currency_symbol: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  invoice_design?: string | null;
+  accent_color?: string | null;
+  estimate_tax_label?: string;
 }
 
-export default function EstimateViewerScreen() {
+interface BusinessSettingsRow {
+  id?: string;
+  user_id: string;
+  business_name?: string | null;
+  business_address?: string | null;
+  business_phone?: string | null;
+  business_email?: string | null;
+  business_website?: string | null;
+  business_tax_number?: string | null;
+  business_logo_url?: string | null;
+  currency_code?: string | null;
+  show_business_logo?: boolean | null;
+  show_business_name?: boolean | null;
+  show_business_address?: boolean | null;
+  show_business_tax_number?: boolean | null;
+  show_notes_section?: boolean | null;
+  payment_instructions?: string | null;
+  stripe_enabled?: boolean | null;
+  paypal_enabled?: boolean | null;
+  bank_account_enabled?: boolean | null;
+  estimate_terminology?: 'estimate' | 'quote' | null;
+}
+
+function EstimateViewerScreen() {
   const { isLightMode } = useTheme();
-  const themeColors = isLightMode ? colors.light : colors.dark;
+  const themeColors = isLightMode ? globalColors.light : globalColors.dark;
   const router = useRouter();
+  const { id: estimateId } = useLocalSearchParams<{ id: string }>();
+  const { supabase, user } = useSupabase();
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { supabase, user } = useSupabase();
-  
-  const params = useLocalSearchParams<{ id?: string }>();
-  const estimateId = params?.id;
-  
-  const [estimate, setEstimate] = useState<EstimateData | null>(null);
+  const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted } = useEstimateActivityLogger();
+
+  const [estimate, setEstimate] = useState<EstimateForTemplate | null>(null);
+  const [client, setClient] = useState<Tables<'clients'> | null>(null);
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettingsRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEstimateReady, setIsEstimateReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
 
-  const styles = getStyles(themeColors);
+  // Modal refs
+  const sendEstimateModalRef = useRef<BottomSheetModal>(null);
+  const moreOptionsSheetRef = useRef<BottomSheetModal>(null);
+  const historyModalRef = useRef<EstimateHistorySheetRef>(null);
 
-  // Custom header setup
+  // Skia canvas ref for PDF export
+  const skiaEstimateRef = useCanvasRef();
+
+  // Disable default header to prevent flash (we use custom header in render)
   useEffect(() => {
     navigation.setOptions({
-      header: () => (
-        <View style={[styles.headerContainer, { backgroundColor: themeColors.card, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: themeColors.border}]}>
-          <TouchableOpacity onPress={() => router.back()} style={{ padding: 6 }}>
-            <ArrowLeft size={26} color={themeColors.foreground} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, {color: themeColors.foreground}]}>
-            Estimate Details
-          </Text>
-        </View>
-      ),
-      headerShown: true, 
+      headerShown: false,
     });
-  }, [navigation, router, themeColors, styles]);
+  }, [navigation]);
 
-  // Tab bar visibility management
+  // Tab bar visibility management (following pagetransitions.md Approach 2)
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
       console.log('[EstimateViewerScreen] Focus event: Hiding tab bar');
@@ -118,82 +152,611 @@ export default function EstimateViewerScreen() {
     };
   }, [navigation, setIsTabBarVisible]);
 
-  // Load estimate data
-  useEffect(() => {
-    if (estimateId) {
-      loadEstimate(estimateId);
-    } else {
-      setError('No estimate ID provided');
-      setIsLoading(false);
-    }
-  }, [estimateId]);
+  const fetchBusinessSettings = async (userId: string) => {
+    if (!userId) return;
 
-  const loadEstimate = async (id: string) => {
-    if (!supabase || !user) {
-      setError('Database connection not available');
-      setIsLoading(false);
+    try {
+      const { data, error: settingsError } = await supabase
+        .from('business_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single(); 
+
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        console.error('[fetchBusinessSettings] Error:', settingsError);
+        setBusinessSettings(null); 
+      } else {
+        if (data) {
+          const { data: paymentOpts, error: paymentOptsError } = await supabase
+            .from('payment_options') 
+            .select('*')
+            .eq('user_id', userId) 
+            .single();
+
+          if (paymentOptsError && paymentOptsError.code !== 'PGRST116') {
+            console.error('[fetchBusinessSettings] Payment options error:', paymentOptsError);
+          }
+
+          const combinedSettings = { ...data, ...(paymentOpts || {}) };
+          setBusinessSettings(combinedSettings as BusinessSettingsRow); 
+        } else {
+          setBusinessSettings(null);
+        }
+      }
+    } catch (e: any) {
+      console.error('[fetchBusinessSettings] Exception:', e.message);
+      setBusinessSettings(null);
+    }
+  };
+
+  const fetchEstimateData = async (estimateId: string) => {
+    try {
+      const { data: estimateData, error: estimateError } = await supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients (*),
+          estimate_line_items (*)
+        `)
+        .eq('id', estimateId)
+        .single();
+
+      if (estimateError) {
+        console.error('[fetchEstimateData] Error:', estimateError);
+        setError('Failed to load estimate data.');
+        return null;
+      }
+
+      if (!estimateData) {
+        setError('Estimate not found.');
+        return null;
+      }
+      
+      const { data: businessDataForCurrency, error: businessError } = await supabase
+        .from('business_settings')
+        .select('currency_code')
+        .eq('user_id', estimateData.user_id)
+        .single();
+
+      if (businessError && businessError.code !== 'PGRST116') {
+        console.error('[fetchEstimateData] Currency error:', businessError);
+      }
+
+      const fetchedEstimate: EstimateForTemplate = {
+        ...estimateData,
+        estimate_number: estimateData.estimate_number ?? '', 
+        clients: estimateData.clients as Tables<'clients'> | null,
+        estimate_line_items: estimateData.estimate_line_items as Tables<'estimate_line_items'>[],
+        currency: businessDataForCurrency?.currency_code || 'USD', 
+        currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_code || 'USD'),
+        valid_until_date: estimateData.valid_until_date ?? null,
+        estimate_tax_label: estimateData.estimate_tax_label || 'Tax',
+      };
+      
+      setEstimate(fetchedEstimate);
+      if (estimateData.clients) {
+        setClient(estimateData.clients as Tables<'clients'>);
+      }
+      setError(null);
+      return fetchedEstimate;
+    } catch (e: any) {
+      console.error('[fetchEstimateData] Exception:', e.message);
+      setError('An unexpected error occurred.');
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const processData = async () => {
+      if (estimateId) {
+        setIsLoading(true);
+        try {
+          const startTime = Date.now();
+          const minLoadingTime = 800;
+          
+          const fetchedEstimate = await fetchEstimateData(estimateId);
+          if (fetchedEstimate && fetchedEstimate.user_id) {
+            await fetchBusinessSettings(fetchedEstimate.user_id);
+          }
+          
+          const elapsedTime = Date.now() - startTime;
+          if (elapsedTime < minLoadingTime) {
+            await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+          }
+          
+        } catch (error) {
+          console.error('[processData] Error:', error);
+          setError('Failed to load estimate data.');
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setError('No estimate specified.');
+        setIsLoading(false);
+      }
+    };
+
+    processData();
+  }, [estimateId, supabase]);
+
+  // Track when estimate is ready to render
+  useEffect(() => {
+    if (estimate && businessSettings && !isLoading) {
+      const timer = setTimeout(() => {
+        setIsEstimateReady(true);
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setIsEstimateReady(false);
+    }
+  }, [estimate, businessSettings, isLoading]);
+
+  const getCurrencySymbol = (currencyCode: string): string => {
+    // Handles both codes and full names from the DB, e.g. 'GBP - British Pound'
+    if (!currencyCode) return '$';
+    const mapping: Record<string, string> = {
+      'USD': '$',
+      'USD - United States Dollar': '$',
+      'GBP': '£',
+      'GBP - British Pound': '£',
+      'EUR': '€',
+      'EUR - Euro': '€',
+      // Add more as needed
+    };
+    // Try direct match
+    if (mapping[currencyCode]) return mapping[currencyCode];
+    // Try extracting code from start of string
+    const code = currencyCode.split(' ')[0];
+    if (mapping[code]) return mapping[code];
+    return '$'; // Default fallback
+  };
+
+  // Calculate currency symbol for Skia canvas
+  const currencySymbol = estimate?.currency ? getCurrencySymbol(estimate.currency) : '$';
+
+  const getEstimateDesignComponent = () => {
+    const designType = estimate?.invoice_design || 'classic';
+    
+    switch (designType.toLowerCase()) {
+      case 'modern':
+        return SkiaInvoiceCanvasModern;
+      case 'simple':
+        return SkiaInvoiceCanvasSimple;
+      case 'classic':
+      default:
+        return SkiaInvoiceCanvas;
+    }
+  };
+
+  const EstimateDesignComponent = getEstimateDesignComponent();
+
+  const getAccentColor = () => {
+    return estimate?.accent_color || '#14B8A6';
+  };
+
+  const handleEdit = () => {
+    if (!estimate) return;
+    
+    const currentStatus = (estimate.status || 'draft') as EstimateStatus;
+    
+    if (!isEstimateEditable(currentStatus)) {
+      const config = getEstimateStatusConfig(currentStatus);
+      Alert.alert(
+        'Edit Estimate', 
+        `This estimate is currently marked as ${config.label}. Editing it may affect its status. Do you want to continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Edit Anyway', 
+            onPress: () => {
+              setIsTabBarVisible(false);
+              router.push(`/estimates/create?id=${estimate.id}` as any);
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    if (estimate.id) {
+      setIsTabBarVisible(false);
+      router.push(`/estimates/create?id=${estimate.id}` as any);
+    }
+  };
+
+  const handleMoreOptions = () => {
+    moreOptionsSheetRef.current?.present();
+  };
+
+  const handleViewHistory = () => {
+    if (!estimate) return;
+    console.log('[handleViewHistory] Opening history for estimate:', estimate.id);
+    historyModalRef.current?.present(estimate.id, estimate.estimate_number || undefined);
+  };
+
+  const handleSend = () => {
+    sendEstimateModalRef.current?.present();
+  };
+
+  const handleSendPDF = async () => {
+    if (!estimate || !businessSettings) {
+      Alert.alert('Error', 'Cannot export PDF - estimate data not loaded');
       return;
     }
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('estimates')
-        .select(`
-          *,
-          clients(*),
-          estimate_line_items(*)
-        `)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single();
+      const image = skiaEstimateRef.current?.makeImageSnapshot();
+      
+      if (!image) {
+        throw new Error('Failed to create image snapshot');
+      }
+      
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            @page { margin: 0; size: ${image.width()}px ${image.height()}px; }
+            body { margin: 0; padding: 0; width: ${image.width()}px; height: ${image.height()}px; overflow: hidden; }
+            .estimate-image { width: ${image.width()}px; height: ${image.height()}px; display: block; object-fit: none; }
+          </style>
+        </head>
+        <body>
+          <img src="data:image/png;base64,${image.encodeToBase64()}" class="estimate-image" alt="Estimate ${estimate.estimate_number}" />
+        </body>
+        </html>
+      `;
+      
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false,
+      });
 
-      if (fetchError) {
-        console.error('Error fetching estimate:', fetchError);
-        setError('Failed to load estimate');
-        return;
+      // Update estimate status and log activity
+      if (user && estimate.status !== 'sent') {
+        const sendResult = await EstimateSenderService.sendEstimateByPDF(
+          estimate.id,
+          user.id,
+          estimate.estimate_number || 'Unknown',
+          supabase
+        );
+
+        if (sendResult.success) {
+          // Update local state
+          setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
+        } else {
+          console.warn('[handleSendPDF] Failed to update status:', sendResult.error);
+        }
       }
 
-      if (!data) {
-        setError('Estimate not found');
-        return;
-      }
+      await Sharing.shareAsync(uri, { 
+        mimeType: 'application/pdf', 
+        dialogTitle: 'Share Estimate PDF' 
+      });
 
-      setEstimate(data as EstimateData);
-    } catch (err: any) {
-      console.error('Unexpected error loading estimate:', err);
-      setError('An unexpected error occurred');
-    } finally {
-      setIsLoading(false);
+      sendEstimateModalRef.current?.dismiss();
+      
+    } catch (error: any) {
+      console.error('[handleSendPDF] Error:', error);
+      Alert.alert('PDF Export Error', `Failed to export PDF: ${error.message}`);
     }
   };
 
-  const handleEditEstimate = () => {
-    if (estimate) {
-      router.push(`/estimates/create?id=${estimate.id}`);
+  const handleSendByEmail = async () => {
+    if (!estimate || !businessSettings || !user) {
+      Alert.alert('Error', 'Cannot send estimate - data not available');
+      return;
+    }
+
+    try {
+      // Update estimate status and log activity
+      const sendResult = await EstimateSenderService.sendEstimateByEmail(
+        estimate.id,
+        user.id,
+        estimate.estimate_number || 'Unknown',
+        supabase
+      );
+
+      if (sendResult.success) {
+        // Update local state
+        setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
+        Alert.alert('Success', sendResult.message || 'Estimate sent successfully');
+      } else {
+        Alert.alert('Error', sendResult.error || 'Failed to send estimate');
+      }
+
+      sendEstimateModalRef.current?.dismiss();
+      
+    } catch (error: any) {
+      console.error('[handleSendByEmail] Error:', error);
+      Alert.alert('Error', `Failed to send estimate: ${error.message}`);
     }
   };
 
-  const handleShareEstimate = () => {
-    // TODO: Implement share functionality
-    Alert.alert('Share Estimate', 'Share functionality coming soon...');
+  const handleSendByLink = async () => {
+    if (!estimate || !user) {
+      Alert.alert('Error', 'Cannot send estimate - data not available');
+      return;
+    }
+
+    try {
+      // Update estimate status and log activity
+      const sendResult = await EstimateSenderService.sendEstimateByLink(
+        estimate.id,
+        user.id,
+        estimate.estimate_number || 'Unknown',
+        supabase
+      );
+
+      if (sendResult.success) {
+        // Update local state
+        setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
+        Alert.alert('Success', sendResult.message || 'Estimate link shared successfully');
+      } else {
+        Alert.alert('Error', sendResult.error || 'Failed to share estimate link');
+      }
+
+      sendEstimateModalRef.current?.dismiss();
+      
+    } catch (error: any) {
+      console.error('[handleSendByLink] Error:', error);
+    }
   };
 
-  const formatCurrency = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
+  const handleDeleteEstimate = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    Alert.alert(
+      'Delete Estimate',
+      'Are you sure you want to delete this estimate? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!estimate || !supabase) return;
+
+            try {
+              const { error: lineItemsError } = await supabase
+                .from('estimate_line_items')
+                .delete()
+                .eq('estimate_id', estimate.id);
+
+              if (lineItemsError) {
+                Alert.alert('Error', 'Failed to delete estimate line items.');
+                return;
+              }
+
+              const { error: estimateError } = await supabase
+                .from('estimates')
+                .delete()
+                .eq('id', estimate.id);
+
+              if (estimateError) {
+                Alert.alert('Error', `Failed to delete estimate: ${estimateError.message}`);
+                return;
+              }
+
+              Alert.alert('Estimate Deleted', 'The estimate has been permanently deleted.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    setIsTabBarVisible(true);
+                    router.back();
+                  }
+                }
+              ]);
+
+            } catch (error: any) {
+              Alert.alert('Error', 'An unexpected error occurred while deleting the estimate.');
+            }
+          }
+        }
+      ]
+    );
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Not set';
-    return new Date(dateString).toLocaleDateString();
+  const handleConvertToInvoice = async () => {
+    if (!estimate || !user) {
+      Alert.alert('Error', 'Cannot convert estimate at this time.');
+      return;
+    }
+
+    // First, mark estimate as accepted if it's not already
+    if (estimate.status !== 'accepted' && estimate.status !== 'converted') {
+      try {
+        const { error: statusError } = await supabase
+          .from('estimates')
+          .update({ 
+            status: 'accepted',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', estimate.id)
+          .eq('user_id', user.id);
+
+        if (statusError) {
+          console.error('Error updating estimate status to accepted:', statusError);
+          Alert.alert('Error', 'Failed to update estimate status');
+          return;
+        }
+
+        // Update local state
+        setEstimate(prev => prev ? { ...prev, status: 'accepted' } : null);
+      } catch (error) {
+        console.error('Error accepting estimate:', error);
+        Alert.alert('Error', 'Failed to accept estimate');
+        return;
+      }
+    }
+
+    // Show confirmation dialog for conversion
+    Alert.alert(
+      'Convert to Invoice',
+      `Are you sure you want to convert this estimate to an invoice?\n\nThis will:\n• Create a new invoice with the same details\n• Mark this estimate as "converted"\n• Take you to the new invoice`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Convert', 
+          style: 'default',
+          onPress: async () => {
+            setIsConverting(true);
+            
+            try {
+              const result = await EstimateConversionService.convertEstimateToInvoice(
+                estimate.id,
+                user.id
+              );
+
+              if (result.success && result.invoiceId) {
+                // Log the conversion activity
+                await logEstimateConverted(
+                  estimate.id, 
+                  estimate.estimate_number || undefined,
+                  result.invoiceId,
+                  result.invoiceNumber
+                );
+
+                // Update local state to show converted status
+                setEstimate(prev => prev ? { ...prev, status: 'converted', converted_to_invoice_id: result.invoiceId } : null);
+
+                // Show success message
+                Alert.alert(
+                  'Conversion Successful',
+                  result.message || 'Estimate has been converted to an invoice.',
+                  [
+                    {
+                      text: 'View Invoice',
+                      onPress: () => {
+                        // Navigate to the invoice viewer and then to invoices dashboard
+                        router.push({
+                          pathname: '/(app)/(protected)/invoices/invoice-viewer',
+                          params: { id: result.invoiceId }
+                        });
+                      }
+                    }
+                  ]
+                );
+              } else {
+                Alert.alert('Conversion Failed', result.message || 'Failed to convert estimate to invoice.');
+              }
+            } catch (error) {
+              console.error('Error converting estimate:', error);
+              Alert.alert('Error', 'An unexpected error occurred while converting the estimate.');
+            } finally {
+              setIsConverting(false);
+            }
+          }
+        },
+      ]
+    );
   };
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5}
+      />
+    ),
+    []
+  );
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-        <View style={styles.centerContainer}>
-          <Text style={[styles.loadingText, { color: themeColors.foreground }]}>
-            Loading estimate...
-          </Text>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+          <View style={styles.topRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+              <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
+              <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
+            </TouchableOpacity>
+          </View>
+                  {/* Loading skeleton for action buttons */}
+        <View style={styles.actionButtonsRow}>
+          <View style={[styles.actionButton, { backgroundColor: themeColors.muted, borderColor: themeColors.border }]}>
+            <View style={{ width: 20, height: 20, backgroundColor: themeColors.border, borderRadius: 4 }} />
+            <View style={{ width: 30, height: 12, backgroundColor: themeColors.border, borderRadius: 2, marginLeft: 8 }} />
+          </View>
+          <View style={[styles.actionButton, { backgroundColor: themeColors.muted, borderColor: themeColors.border }]}>
+            <View style={{ width: 20, height: 20, backgroundColor: themeColors.border, borderRadius: 4 }} />
+            <View style={{ width: 40, height: 12, backgroundColor: themeColors.border, borderRadius: 2, marginLeft: 8 }} />
+          </View>
+          <View style={[styles.actionButton, { backgroundColor: themeColors.muted, borderColor: themeColors.border }]}>
+            <View style={{ width: 20, height: 20, backgroundColor: themeColors.border, borderRadius: 4 }} />
+            <View style={{ width: 30, height: 12, backgroundColor: themeColors.border, borderRadius: 2, marginLeft: 8 }} />
+          </View>
+        </View>
+        </View>
+        
+        {/* Skeleton in ScrollView area - same as loaded state */}
+        <ScrollView 
+          style={styles.scrollView} 
+          contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border }]} 
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ alignItems: 'center', paddingTop: -10 }}> 
+            <InvoiceSkeletonLoader />
+          </View>
+        </ScrollView>
+
+        {/* Footer section - always rendered like invoice viewer */}
+        <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>
+          <View style={styles.estimateDetailsBottomContainer}>
+            <View style={styles.estimateNumberAndTotalRow}>
+              <Text style={[styles.estimateNumberDisplay, { color: themeColors.foreground }]}>
+                {estimate?.estimate_number}
+              </Text>
+              <Text style={[styles.estimateTotalDisplay, { color: themeColors.foreground }]}>
+                {`${estimate?.currency_symbol || '$'}${(estimate?.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </Text>
+            </View>
+            <View style={styles.clientAndStatusRow}>
+              <Text style={[styles.clientNameDisplay, { color: themeColors.mutedForeground }]}>
+                {client?.name}
+              </Text>
+              <View style={styles.statusToggleContainer}>
+                <Switch
+                  trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
+                  thumbColor={estimate?.status === 'accepted' ? themeColors.primary : themeColors.card}
+                  ios_backgroundColor={themeColors.muted}
+                  onValueChange={(isAccepted) => {
+                    if (isAccepted && estimate?.status !== 'accepted') {
+                      // Handle convert to invoice
+                      handleConvertToInvoice();
+                    }
+                  }}
+                  value={estimate?.status === 'accepted'}
+                  style={styles.statusSwitch}
+                  disabled={isConverting || estimate?.status === 'converted'}
+                />
+                <Text style={[styles.statusToggleValue, { color: estimate?.status === 'accepted' || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
+                  {estimate?.status === 'converted' ? 'Converted' : estimate?.status === 'accepted' ? 'Accepted' : 'Convert\nto invoice'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={[
+              styles.primaryButton,
+              {
+                backgroundColor: themeColors.primary,
+              },
+            ]}
+            onPress={handleSend}
+          >
+            <Send size={20} color={themeColors.primaryForeground} style={{ marginRight: 8 }}/>
+            <Text style={[styles.primaryButtonText, { color: themeColors.primaryForeground }]}>
+              {estimate?.status === 'draft' 
+                ? `Send ${businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'}` 
+                : `Resend ${businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'}`}
+            </Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -201,393 +764,478 @@ export default function EstimateViewerScreen() {
 
   if (error || !estimate) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-        <View style={styles.centerContainer}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+          <View style={styles.topRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+              <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
+              <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.centeredMessageContainer}>
           <Text style={[styles.errorText, { color: themeColors.destructive }]}>
             {error || 'Estimate not found'}
           </Text>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.buttonText}>Go Back</Text>
-          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+    <BottomSheetModalProvider>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.card }]}>
+        <Stack.Screen options={{ headerShown: false }} />
         
-        {/* Estimate Header */}
-        <View style={[styles.section, { backgroundColor: themeColors.card }]}>
-          <View style={styles.estimateHeader}>
-            <View style={styles.estimateHeaderLeft}>
-              <Text style={[styles.estimateNumber, { color: themeColors.foreground }]}>
-                {estimate.estimate_number}
-              </Text>
+        {/* Header Section */}
+        <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+          <View style={styles.topRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+              <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
+              <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.statusIndicatorContainer}>
               <StatusBadge 
-                status={estimate.status} 
-                statusConfig={ESTIMATE_STATUSES} 
+                status={(estimate?.status || 'draft') as EstimateStatus} 
+                size="medium" 
               />
             </View>
-            <Text style={[styles.totalAmount, { color: themeColors.foreground }]}>
-              {formatCurrency(estimate.total_amount)}
-            </Text>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
+              onPress={handleEdit} 
+            >
+              <Edit3 size={20} color={themeColors.primary} />
+              <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
+              onPress={handleViewHistory}
+            >
+              <History size={20} color={themeColors.primary} />
+              <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>History</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
+              onPress={handleMoreOptions} 
+            >
+              <MoreHorizontal size={20} color={themeColors.primary} />
+              <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>More</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Client Information */}
-        <View style={[styles.section, { backgroundColor: themeColors.card }]}>
-          <View style={styles.sectionHeader}>
-            <User size={20} color={themeColors.primary} />
-            <Text style={[styles.sectionTitle, { color: themeColors.foreground }]}>
-              Client
-            </Text>
-          </View>
-          <Text style={[styles.clientName, { color: themeColors.foreground }]}>
-            {estimate.client.name}
-          </Text>
-          {estimate.client.email && (
-            <Text style={[styles.clientEmail, { color: themeColors.mutedForeground }]}>
-              {estimate.client.email}
-            </Text>
+        {/* Estimate Canvas */}
+        <ScrollView 
+          style={styles.scrollView} 
+          contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border }]} 
+          showsVerticalScrollIndicator={false}
+        >
+          {isEstimateReady ? (
+            <View style={{ alignItems: 'center', marginTop: -30 }}>
+              <View style={{
+                transform: [{ scale: 0.882 }],
+                marginLeft: -175,
+              }}>
+                <EstimateDesignComponent
+                  ref={skiaEstimateRef}
+                  invoice={{
+                    ...estimate,
+                    // Transform estimate fields to invoice fields for Skia canvas compatibility
+                    invoice_number: estimate?.estimate_number,
+                    invoice_date: estimate?.estimate_date,
+                    due_date: estimate?.valid_until_date,
+                    invoice_line_items: estimate?.estimate_line_items, // Key transformation
+                  }}
+                  client={client}
+                  business={businessSettings}
+                  currencySymbol={currencySymbol}
+                  accentColor={getAccentColor()}
+                  documentType="estimate"
+                  estimateTerminology={businessSettings?.estimate_terminology || 'estimate'}
+                  renderSinglePage={0}
+                  displaySettings={{
+                    show_business_logo: businessSettings?.show_business_logo ?? true,
+                    show_business_name: businessSettings?.show_business_name ?? true,
+                    show_business_address: businessSettings?.show_business_address ?? true,
+                    show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
+                    show_notes_section: businessSettings?.show_notes_section ?? true,
+                  }}
+                  style={{ 
+                    width: 200, 
+                    height: 295,
+                    backgroundColor: 'white',
+                    borderRadius: 8,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }}
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={{ alignItems: 'center', paddingTop: -10 }}> 
+              <InvoiceSkeletonLoader />
+            </View>
           )}
-        </View>
+        </ScrollView>
 
-        {/* Estimate Details */}
-        <View style={[styles.section, { backgroundColor: themeColors.card }]}>
-          <View style={styles.sectionHeader}>
-            <Calendar size={20} color={themeColors.primary} />
-            <Text style={[styles.sectionTitle, { color: themeColors.foreground }]}>
-              Details
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: themeColors.mutedForeground }]}>
-              Estimate Date:
-            </Text>
-            <Text style={[styles.detailValue, { color: themeColors.foreground }]}>
-              {formatDate(estimate.estimate_date)}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: themeColors.mutedForeground }]}>
-              Valid Until:
-            </Text>
-            <Text style={[styles.detailValue, { color: themeColors.foreground }]}>
-              {formatDate(estimate.valid_until_date)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Line Items */}
-        <View style={[styles.section, { backgroundColor: themeColors.card }]}>
-          <View style={styles.sectionHeader}>
-            <Hash size={20} color={themeColors.primary} />
-            <Text style={[styles.sectionTitle, { color: themeColors.foreground }]}>
-              Items
-            </Text>
-          </View>
-          
-          {estimate.estimate_line_items.map((item, index) => (
-            <View key={item.id} style={styles.lineItem}>
-              <View style={styles.lineItemMain}>
-                <Text style={[styles.lineItemName, { color: themeColors.foreground }]}>
-                  {item.item_name}
-                </Text>
-                <Text style={[styles.lineItemTotal, { color: themeColors.foreground }]}>
-                  {formatCurrency(item.total_price)}
+        {/* Bottom Action Section */}
+        <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>
+          <View style={styles.estimateDetailsBottomContainer}>
+            <View style={styles.estimateNumberAndTotalRow}>
+              <Text style={[styles.estimateNumberDisplay, { color: themeColors.foreground }]}>
+                {estimate?.estimate_number}
+              </Text>
+              <Text style={[styles.estimateTotalDisplay, { color: themeColors.foreground }]}>
+                {`${estimate?.currency_symbol}${(estimate?.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </Text>
+            </View>
+            <View style={styles.clientAndStatusRow}>
+              <Text style={[styles.clientNameDisplay, { color: themeColors.mutedForeground }]}>
+                {client?.name}
+              </Text>
+              <View style={styles.statusToggleContainer}>
+                <Switch
+                  trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
+                  thumbColor={estimate?.status === 'accepted' ? themeColors.primary : themeColors.card}
+                  ios_backgroundColor={themeColors.muted}
+                  onValueChange={(isAccepted) => {
+                    if (isAccepted && estimate?.status !== 'accepted') {
+                      // Handle convert to invoice
+                      handleConvertToInvoice();
+                    }
+                  }}
+                  value={estimate?.status === 'accepted'}
+                  style={styles.statusSwitch}
+                  disabled={isConverting || estimate?.status === 'converted'}
+                />
+                <Text style={[styles.statusToggleValue, { color: estimate?.status === 'accepted' || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
+                  {estimate?.status === 'converted' ? 'Converted' : estimate?.status === 'accepted' ? 'Accepted' : 'Convert\nto invoice'}
                 </Text>
               </View>
-              
-              {item.description && (
-                <Text style={[styles.lineItemDescription, { color: themeColors.mutedForeground }]}>
-                  {item.description}
-                </Text>
-              )}
-              
-              <Text style={[styles.lineItemDetails, { color: themeColors.mutedForeground }]}>
-                {item.quantity} × {formatCurrency(item.unit_price)}
-              </Text>
             </View>
-          ))}
-        </View>
+          </View>
 
-        {/* Total Summary */}
-        <View style={[styles.section, { backgroundColor: themeColors.card }]}>
-          <View style={styles.sectionHeader}>
-            <DollarSign size={20} color={themeColors.primary} />
-            <Text style={[styles.sectionTitle, { color: themeColors.foreground }]}>
-              Summary
-            </Text>
-          </View>
-          
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: themeColors.mutedForeground }]}>
-              Subtotal:
-            </Text>
-            <Text style={[styles.summaryValue, { color: themeColors.foreground }]}>
-              {formatCurrency(estimate.subtotal_amount)}
-            </Text>
-          </View>
-          
-          {estimate.discount_amount > 0 && (
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: themeColors.mutedForeground }]}>
-                Discount:
-              </Text>
-              <Text style={[styles.summaryValue, { color: themeColors.destructive }]}>
-                -{formatCurrency(estimate.discount_amount)}
-              </Text>
-            </View>
-          )}
-          
-          {estimate.tax_amount > 0 && (
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: themeColors.mutedForeground }]}>
-                Tax:
-              </Text>
-              <Text style={[styles.summaryValue, { color: themeColors.foreground }]}>
-                {formatCurrency(estimate.tax_amount)}
-              </Text>
-            </View>
-          )}
-          
-          <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={[styles.totalLabel, { color: themeColors.foreground }]}>
-              Total:
-            </Text>
-            <Text style={[styles.totalValue, { color: themeColors.foreground }]}>
-              {formatCurrency(estimate.total_amount)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Notes */}
-        {estimate.notes && (
-          <View style={[styles.section, { backgroundColor: themeColors.card }]}>
-            <Text style={[styles.sectionTitle, { color: themeColors.foreground }]}>
-              Notes
-            </Text>
-            <Text style={[styles.notesText, { color: themeColors.foreground }]}>
-              {estimate.notes}
-            </Text>
-          </View>
-        )}
-
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.editButton, { backgroundColor: themeColors.primary }]}
-            onPress={handleEditEstimate}
+          <TouchableOpacity 
+            style={[styles.primaryButton, { backgroundColor: themeColors.primary }]}
+            onPress={handleSend}
           >
-            <Edit3 size={20} color="white" />
-            <Text style={styles.actionButtonText}>Edit</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.shareButton, { borderColor: themeColors.border }]}
-            onPress={handleShareEstimate}
-          >
-            <Share size={20} color={themeColors.primary} />
-            <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Share</Text>
+            <Send size={20} color={themeColors.primaryForeground} style={{ marginRight: 8 }}/>
+            <Text style={[styles.primaryButtonText, { color: themeColors.primaryForeground }]}>
+              {estimate?.status === 'draft' 
+                ? `Send ${businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'}` 
+                : `Resend ${businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'}`}
+            </Text>
           </TouchableOpacity>
         </View>
 
-      </ScrollView>
-    </SafeAreaView>
+        {/* Send Estimate Modal */}
+        <BottomSheetModal
+          ref={sendEstimateModalRef}
+          index={0}
+          snapPoints={['35%']}
+          backdropComponent={renderBackdrop}
+          handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
+          backgroundStyle={{ backgroundColor: themeColors.card }}
+        >
+          <BottomSheetView style={styles.modalContentContainer}> 
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
+              <Text style={[styles.modalTitle, { flex: 1, textAlign: 'center', color: themeColors.foreground }]}>
+                Send {businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'}
+              </Text>
+              <TouchableOpacity onPress={() => sendEstimateModalRef.current?.dismiss()} style={{ padding: 4 }}>
+                <XIcon size={24} color={themeColors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendByEmail}>
+              <Mail size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+              <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Send by Email</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: themeColors.border, marginLeft: 16 }} />
+
+            <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendByLink}>
+              <Link2 size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+              <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Send Link</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: themeColors.border, marginLeft: 16 }} />
+
+            <TouchableOpacity style={styles.modalOptionRow} onPress={handleSendPDF}>
+              <Share2 size={22} color={themeColors.foreground} style={styles.modalOptionIcon} />
+              <Text style={[styles.modalOptionText, { color: themeColors.foreground }]}>Export & Share PDF</Text>
+            </TouchableOpacity>
+          </BottomSheetView>
+        </BottomSheetModal>
+
+        {/* More Options Modal */}
+        <BottomSheetModal
+          ref={moreOptionsSheetRef}
+          snapPoints={['40%']}
+          backdropComponent={renderBackdrop}
+          handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
+          backgroundStyle={{ backgroundColor: themeColors.card }}
+        >
+          <BottomSheetView style={[styles.moreOptionsContainer, { backgroundColor: themeColors.card }]}>
+            <View style={[styles.moreOptionsHeader, { borderBottomColor: themeColors.border }]}>
+              <Text style={[styles.moreOptionsTitle, { color: themeColors.foreground }]}>
+                More Options
+              </Text>
+              <TouchableOpacity 
+                onPress={() => moreOptionsSheetRef.current?.dismiss()}
+                style={styles.closeButton}
+              >
+                <MoreHorizontal size={24} color={themeColors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.moreOptionsContent} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={styles.moreOptionItem} onPress={handleDeleteEstimate}>
+                <View style={styles.moreOptionLeft}>
+                  <Trash2 size={20} color="#DC2626" style={styles.moreOptionIcon} />
+                  <Text style={[styles.moreOptionTitle, { color: "#DC2626" }]}>
+                    Delete Estimate
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </ScrollView>
+          </BottomSheetView>
+        </BottomSheetModal>
+
+        {/* Estimate History Modal */}
+        <EstimateHistorySheet
+          ref={historyModalRef}
+          onClose={() => console.log('Estimate History Modal Dismissed')}
+        />
+      </SafeAreaView>
+    </BottomSheetModalProvider>
   );
 }
 
-const getStyles = (themeColors: ThemeColorPalette) => StyleSheet.create({
-  container: {
+const styles = StyleSheet.create({
+  safeArea: {
     flex: 1,
-    backgroundColor: themeColors.background,
+  },
+
+  newTopSectionContainer: { 
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 0 : 0, 
+    paddingBottom: 12, 
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.5,
+    elevation: 3,           
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', 
+    width: '100%',
+  },
+  headerLeftContainer: {
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingVertical: 8, 
+  },
+  backButtonText: { 
+    fontSize: 17,
+    marginLeft: 6,
+  },
+  statusIndicatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto', 
+  },
+  actionButtonsRow: { 
+    flexDirection: 'row',
+    justifyContent: 'center', 
+    marginTop: 10, 
+    marginBottom: 10, 
+  },
+  actionButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    width: 120, 
+    marginHorizontal: 5, 
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.30, 
+    shadowRadius: 4.65, 
+    elevation: 8, 
+  },
+  actionButtonText: {
+    marginLeft: 8,
+    fontSize: 14, 
+    fontWeight: 'bold', 
   },
   scrollView: {
     flex: 1,
   },
-  headerContainer: {
-    flexDirection: 'row',
+  scrollViewContent: { 
+    flexGrow: 1,
+    paddingTop: 10,
+    paddingBottom: 200,
+    paddingHorizontal: 10,
+  },
+  centered: { 
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10, 
-    paddingTop: Platform.OS === 'ios' ? 50 : 40, 
-    paddingBottom: 10, 
   },
-  headerTitle: {
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    marginLeft: 10,
-  },
-  centerContainer: {
+  centeredMessageContainer: { 
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  loadingText: {
-    fontSize: 16,
-  },
-  errorText: {
+  errorText: { 
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
-  button: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  section: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
+  actionBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 16, 
+    borderTopWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 16,
   },
-  estimateHeader: {
+  estimateDetailsBottomContainer: { 
+    marginBottom: 16, 
+  },
+  estimateNumberAndTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'flex-start', 
+    marginBottom: 0, 
   },
-  estimateHeaderLeft: {
-    flex: 1,
-  },
-  estimateNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  totalAmount: {
-    fontSize: 24,
+  estimateNumberDisplay: {
+    fontSize: 22, 
     fontWeight: 'bold',
   },
-  sectionHeader: {
+  estimateTotalDisplay: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+  },
+  clientAndStatusRow: { 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8, 
+  },
+  clientNameDisplay: { 
+    fontSize: 14, 
+  },
+  statusToggleContainer: { 
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
+  statusSwitch: { 
+    transform: Platform.OS === 'ios' ? [{ scaleX: 0.8 }, { scaleY: 0.8 }] : [], 
+    marginRight: 8,
   },
-  clientName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  clientEmail: {
-    fontSize: 14,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-  },
-  detailValue: {
+  statusToggleValue: { 
     fontSize: 14,
     fontWeight: '500',
   },
-  lineItem: {
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: themeColors.border,
-  },
-  lineItemMain: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  lineItemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    flex: 1,
-    marginRight: 12,
-  },
-  lineItemTotal: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  lineItemDescription: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  lineItemDetails: {
-    fontSize: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  totalRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: themeColors.border,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  notesText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 24,
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
+  primaryButton: {
+    paddingVertical: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
+    flexDirection: 'row', 
   },
-  editButton: {
-    // backgroundColor set via style prop
-  },
-  shareButton: {
-    borderWidth: 1,
-  },
-  actionButtonText: {
+  primaryButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+  },
+  modalContentContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12, 
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  modalOptionIcon: {
+    marginRight: 16,
+  },
+  modalOptionText: {
+    fontSize: 16,
+  },
+  moreOptionsContainer: {
+    flex: 1,
+  },
+  moreOptionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  moreOptionsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    padding: 6,
+  },
+  moreOptionsContent: {
+    flex: 1,
+    paddingTop: 8,
+  },
+  moreOptionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  moreOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  moreOptionIcon: {
+    marginRight: 12,
+  },
+  moreOptionTitle: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
+
+export default EstimateViewerScreen; 

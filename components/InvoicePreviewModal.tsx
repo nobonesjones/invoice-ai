@@ -39,10 +39,12 @@ interface InvoicePreviewModalProps {
   onDesignSaved?: (designId: string, accentColor: string) => void;
   initialDesign?: string;
   initialAccentColor?: string;
+  // Document type for proper labeling
+  documentType?: 'invoice' | 'estimate';
 }
 
 export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePreviewModalProps>(
-  ({ invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor }, ref) => {
+  ({ invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice' }, ref) => {
     const colorScheme = useColorScheme();
     const isLightMode = colorScheme === 'light';
     const themeColors = colors[colorScheme || 'light'];
@@ -475,7 +477,12 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                 />
               </TouchableOpacity>
               <Text style={[styles.headerTitle, { color: themeColors.foreground }]}>
-                {mode === 'settings' ? 'Default Design Settings' : 'Invoice Preview'}
+                {mode === 'settings' 
+                  ? 'Default Design Settings' 
+                  : documentType === 'estimate' 
+                    ? 'Preview' 
+                    : 'Invoice Preview'
+                }
               </Text>
               <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
                 <Text style={[styles.saveButtonText, { color: '#22c55e' }]}>Save</Text>
@@ -513,6 +520,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                     client: clientData,
                     currencySymbol: businessSettings?.currency_symbol || '$',
                     accentColor: currentAccentColor,
+                    documentType: documentType,
+                    estimateTerminology: businessSettings?.estimate_terminology || 'estimate',
                     displaySettings: {
                       show_business_logo: businessSettings?.show_business_logo ?? true,
                       show_business_name: businessSettings?.show_business_name ?? true,
@@ -615,7 +624,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                 flex: 1,
                 textAlign: 'center'
               }}>
-                Send Invoice
+                Send {documentType === 'estimate' ? 'Estimate' : 'Invoice'}
               </Text>
               <TouchableOpacity onPress={handleCloseSendModal} style={{ padding: 4 }}>
                 <XIcon size={24} color={themeColors.foreground + '80'} />

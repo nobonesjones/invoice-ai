@@ -11,6 +11,8 @@ interface SkiaInvoiceCanvasProps {
   renderSinglePage?: number; // NEW: If provided, only render this specific page (0-indexed)
   exportPageNumber?: number; // NEW: For export - render only this page (1-indexed) at standard size
   accentColor?: string; // NEW: Dynamic accent color for customization
+  documentType?: 'invoice' | 'estimate'; // NEW: Document type for dynamic titles
+  estimateTerminology?: 'estimate' | 'quote'; // NEW: User's preferred estimate terminology
   displaySettings?: {
     show_business_logo?: boolean;
     show_business_name?: boolean;
@@ -30,6 +32,8 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     renderSinglePage,
     exportPageNumber,
     accentColor = '#14B8A6', // Default turquoise
+    documentType = 'invoice', // Default to invoice for backward compatibility
+    estimateTerminology = 'estimate', // Default to estimate
     displaySettings = {
       show_business_logo: true,
       show_business_name: true,
@@ -38,6 +42,17 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
       show_notes_section: true,
     }
   } = props;
+  
+  // Get the correct document title based on type and user preference
+  const getDocumentTitle = () => {
+    if (documentType === 'invoice') {
+      return 'INVOICE';
+    } else {
+      return estimateTerminology === 'quote' ? 'QUOTE' : 'ESTIMATE';
+    }
+  };
+  
+  const documentTitle = getDocumentTitle();
   console.log('[SkiaInvoiceCanvasModern] Rendering Modern Design');
 
   // DEBUG: Add payment status logging
@@ -446,7 +461,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 32, // Made even bigger for maximum impact
         fontStyle: { weight: 700 }
       })
-      .addText(`INVOICE`)
+      .addText(`${documentTitle}`)
       .build();
 
       const refParagraph = Skia.ParagraphBuilder.Make({

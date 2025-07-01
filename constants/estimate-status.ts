@@ -34,7 +34,7 @@ export const shouldAutoMarkExpired = (currentStatus: EstimateStatus, validUntilD
 };
 
 export const ESTIMATE_STATUS_CONFIG: Record<EstimateStatus, EstimateStatusConfig> = {
-  [ESTIMATE_STATUSES.DRAFT]: {
+    [ESTIMATE_STATUSES.DRAFT]: {
     label: 'Draft',
     color: '#6B7280', // Gray
     backgroundColor: '#F3F4F6',
@@ -42,8 +42,8 @@ export const ESTIMATE_STATUS_CONFIG: Record<EstimateStatus, EstimateStatusConfig
   },
   [ESTIMATE_STATUSES.SENT]: {
     label: 'Sent',
-    color: '#2563EB', // Blue
-    backgroundColor: '#DBEAFE', 
+    color: '#059669', // Green 
+    backgroundColor: '#D1FAE5',
     description: 'Estimate has been sent to client',
   },
   [ESTIMATE_STATUSES.ACCEPTED]: {
@@ -60,14 +60,14 @@ export const ESTIMATE_STATUS_CONFIG: Record<EstimateStatus, EstimateStatusConfig
   },
   [ESTIMATE_STATUSES.EXPIRED]: {
     label: 'Expired',
-    color: '#D97706', // Orange
-    backgroundColor: '#FED7AA',
+    color: '#DC2626', // Red
+    backgroundColor: '#FEE2E2',
     description: 'Estimate has passed its valid until date',
   },
   [ESTIMATE_STATUSES.CONVERTED]: {
-    label: 'Converted',
-    color: '#7C3AED', // Purple
-    backgroundColor: '#EDE9FE',
+    label: 'Accepted',
+    color: '#059669', // Green
+    backgroundColor: '#D1FAE5',
     description: 'Estimate has been converted to an invoice',
   },
   [ESTIMATE_STATUSES.CANCELLED]: {

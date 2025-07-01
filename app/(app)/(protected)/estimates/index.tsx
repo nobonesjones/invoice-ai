@@ -161,17 +161,15 @@ const getStatusColor = (
 	themeColors: typeof colors.light,
 ) => {
 	switch (status?.toLowerCase()) {
+		case "draft":
+			return themeColors.statusDraft; // Gray for draft
+		case "sent":
 		case "accepted":
-			return themeColors.statusPaid; // Green for accepted
+		case "converted":
+			return themeColors.statusPaid; // Green for sent, accepted, converted
 		case "declined":
     case "expired":
 			return themeColors.statusDue; // Red for declined/expired
-		case "draft":
-			return themeColors.statusDraft; // Gray for draft
-    case "sent":
-      return themeColors.primary; // Blue for sent
-    case "converted":
-      return '#7C3AED'; // Purple for converted
     case "cancelled":
       return themeColors.mutedForeground; // Gray for cancelled
 		default:
@@ -230,6 +228,7 @@ export default function EstimateDashboardScreen() {
   const [totalAccepted, setTotalAccepted] = useState<number>(0); 
   const [totalExpired, setTotalExpired] = useState<number>(0); 
   const [currencyCode, setCurrencyCode] = useState<string>('USD'); // Default to USD
+  const [estimateTerminology, setEstimateTerminology] = useState<'estimate' | 'quote'>('estimate'); // Default to estimate
 
   // Filter estimates based on search term
   const filteredEstimates = estimates.filter((estimate) => {
@@ -274,14 +273,19 @@ export default function EstimateDashboardScreen() {
     try {
       const { data, error } = await supabase
         .from('business_settings')
-        .select('currency_code')
+        .select('currency_code, estimate_terminology')
         .eq('user_id', user.id)
         .single();
-      if (!error && data && data.currency_code) {
-        setCurrencyCode(data.currency_code);
+      if (!error && data) {
+        if (data.currency_code) {
+          setCurrencyCode(data.currency_code);
+        }
+        if (data.estimate_terminology) {
+          setEstimateTerminology(data.estimate_terminology);
+        }
       }
     } catch (e) {
-      // fallback to USD
+      // fallback to defaults
     }
   }, [user?.id, supabase]);
 
@@ -495,7 +499,7 @@ export default function EstimateDashboardScreen() {
         <View style={[styles.container, { backgroundColor: themeColors.background }]}>
           <View style={styles.headerRow}>
             <Text style={[styles.title, { color: themeColors.foreground }]}>
-              Estimates
+              {estimateTerminology === 'quote' ? 'Quotes' : 'Estimates'}
             </Text>
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
@@ -520,7 +524,7 @@ export default function EstimateDashboardScreen() {
                     { color: themeColors.primaryForeground },
                   ]}
                 >
-                  Create Estimate
+                  Create {estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}
                 </Text>
               </TouchableOpacity>
           </View>
@@ -537,7 +541,7 @@ export default function EstimateDashboardScreen() {
               style={styles.searchIcon}
             />
             <TextInput
-              placeholder="Search by client, estimate #, or status"
+              placeholder={`Search by client, ${estimateTerminology === 'quote' ? 'quote' : 'estimate'} #, or status`}
               placeholderTextColor={themeColors.mutedForeground}
               style={[styles.searchInput, { color: themeColors.foreground }]}
               value={searchTerm}
@@ -553,7 +557,7 @@ export default function EstimateDashboardScreen() {
           {filteredEstimates.length > 0 && !loading && (
             <View style={styles.currentFilterDisplayContainer}>
               <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
-                {searchTerm.trim() ? `${filteredEstimates.length} of ${estimates.length} estimates` : currentFilterLabel}
+                {searchTerm.trim() ? `${filteredEstimates.length} of ${estimates.length} ${estimateTerminology === 'quote' ? 'quotes' : 'estimates'}` : currentFilterLabel}
               </Text>
             </View>
           )}
@@ -584,7 +588,7 @@ export default function EstimateDashboardScreen() {
                 return (
                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
                     <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
-                      No estimates found matching "{searchTerm}". Try a different search term.
+                      No {estimateTerminology === 'quote' ? 'quotes' : 'estimates'} found matching "{searchTerm}". Try a different search term.
                     </Text>
                   </View>
                 );
@@ -593,7 +597,7 @@ export default function EstimateDashboardScreen() {
                 return (
                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
                     <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
-                      No estimates found.
+                      No {estimateTerminology === 'quote' ? 'quotes' : 'estimates'} found.
                     </Text>
                   </View>
                 );

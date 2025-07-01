@@ -5,6 +5,7 @@ export const INVOICE_STATUSES = {
   OVERDUE: 'overdue',
   PARTIAL: 'partial',
   CANCELLED: 'cancelled',
+  CREDITED: 'credited',
 } as const;
 
 export type InvoiceStatus = typeof INVOICE_STATUSES[keyof typeof INVOICE_STATUSES];
@@ -52,6 +53,12 @@ export const STATUS_CONFIG: Record<InvoiceStatus, StatusConfig> = {
     color: '#6B7280', // Gray
     backgroundColor: '#F3F4F6',
     description: 'Invoice has been cancelled',
+  },
+  [INVOICE_STATUSES.CREDITED]: {
+    label: 'Credited',
+    color: '#7C3AED', // Purple
+    backgroundColor: '#EDE9FE',
+    description: 'Invoice has been credited',
   },
 };
 

@@ -1,4 +1,5 @@
 import { supabase } from '@/config/supabase';
+import { ReferenceNumberService } from './referenceNumberService';
 import { OpenAIFunction } from '@/services/openaiService';
 import { UsageService } from '@/services/usageService';
 
@@ -1116,7 +1117,7 @@ export class InvoiceFunctionService {
       }
 
       // Step 2: Generate unique invoice number
-      const invoiceNumber = await this.generateInvoiceNumber(userId);
+      const invoiceNumber = await ReferenceNumberService.generateNextReference(userId, 'invoice');
 
       // Step 3: Calculate dates
       const invoiceDate = params.invoice_date || new Date().toISOString().split('T')[0];
@@ -3365,7 +3366,7 @@ Deleted:
       }
 
       // Generate new invoice number
-      const newInvoiceNumber = await this.generateInvoiceNumber(userId);
+      const newInvoiceNumber = await ReferenceNumberService.generateNextReference(userId, 'invoice');
 
       // Set dates
       const invoiceDate = new_invoice_date || new Date().toISOString().split('T')[0];

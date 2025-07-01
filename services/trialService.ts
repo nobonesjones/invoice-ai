@@ -29,7 +29,7 @@ export class TrialService {
         console.log('[TrialService] Signup in progress flag cleared');
       }
     } catch (error) {
-      console.error('[TrialService] Error managing signup flag:', error);
+      console.error('[TrialService] Error managing signup flag:', error?.message || error);
     }
   }
 
@@ -41,7 +41,7 @@ export class TrialService {
       const flag = await AsyncStorage.getItem(this.SIGNUP_IN_PROGRESS_KEY);
       return flag === 'true';
     } catch (error) {
-      console.error('[TrialService] Error checking signup flag:', error);
+      console.error('[TrialService] Error checking signup flag:', error?.message || error);
       return false;
     }
   }
@@ -121,7 +121,7 @@ export class TrialService {
       return trialSession;
 
     } catch (error: any) {
-      console.error('[TrialService] Error creating trial session:', error);
+      console.error('[TrialService] Error creating trial session:', error?.message || error);
       return null;
     }
   }
@@ -139,7 +139,7 @@ export class TrialService {
       const session: TrialSession = JSON.parse(sessionData);
       return session;
     } catch (error: any) {
-      console.error('[TrialService] Error getting trial session:', error);
+      console.error('[TrialService] Error getting trial session:', error?.message || error);
       return null;
     }
   }
@@ -307,7 +307,7 @@ export class TrialService {
       await AsyncStorage.removeItem(this.TRIAL_KEY);
       console.log('[TrialService] Trial session cleared');
     } catch (error: any) {
-      console.error('[TrialService] Error clearing trial session:', error);
+      console.error('[TrialService] Error clearing trial session:', error?.message || error);
     }
   }
 
@@ -351,7 +351,7 @@ export class TrialService {
         canSendInvoice: !isExpired,
       };
     } catch (error: any) {
-      console.error('[TrialService] Error getting trial status:', error);
+      console.error('[TrialService] Error getting trial status:', error?.message || error);
       return {
         isTrial: false,
         invoiceCount: 0,
@@ -389,7 +389,7 @@ export class TrialService {
       return true;
 
     } catch (error: any) {
-      console.error('[TrialService] Error deleting trial account:', error);
+      console.error('[TrialService] Error deleting trial account:', error?.message || error);
       return false;
     }
   }

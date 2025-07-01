@@ -9,6 +9,8 @@ interface SkiaInvoiceCanvasSimpleProps {
   currencySymbol?: string;
   style?: any;
   accentColor?: string; // NEW: Dynamic accent color for customization
+  documentType?: 'invoice' | 'estimate'; // NEW: Document type for dynamic titles
+  estimateTerminology?: 'estimate' | 'quote'; // NEW: User's preferred estimate terminology
   displaySettings?: {
     show_business_logo?: boolean;
     show_business_name?: boolean;
@@ -26,6 +28,8 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps,
     currencySymbol = '£',
     style,
     accentColor = '#14B8A6', // Default turquoise
+    documentType = 'invoice', // Default to invoice for backward compatibility
+    estimateTerminology = 'estimate', // Default to estimate
     displaySettings = {
       show_business_logo: true,
       show_business_name: true,
@@ -34,6 +38,17 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps,
       show_notes_section: true,
     }
   } = props;
+  
+  // Get the correct document title based on type and user preference
+  const getDocumentTitle = () => {
+    if (documentType === 'invoice') {
+      return 'INVOICE';
+    } else {
+      return estimateTerminology === 'quote' ? 'QUOTE' : 'ESTIMATE';
+    }
+  };
+  
+  const documentTitle = getDocumentTitle();
 
   console.log('[SkiaInvoiceCanvasSimple] Starting FULL INVOICE render test...');
 
@@ -163,7 +178,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasSimpleProps,
         fontSize: 10,
         fontStyle: { weight: 700 }
       })
-      .addText(`INVOICE`)
+      .addText(`${documentTitle}`)
       .build();
 
       const refParagraph = Skia.ParagraphBuilder.Make({

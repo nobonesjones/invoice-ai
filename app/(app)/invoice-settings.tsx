@@ -127,6 +127,17 @@ const getStyles = (theme: any) => StyleSheet.create({
     color: theme.mutedForeground,
     fontStyle: 'italic',
   },
+  terminologyButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  terminologyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   stickyButtonContainer: {
     position: 'absolute',
     bottom: 0,
@@ -519,6 +530,7 @@ interface InvoiceSettings {
   show_notes_section: boolean;
   auto_update_default_design: boolean;
   invoice_reference_format: string;
+  estimate_terminology: 'estimate' | 'quote';
 }
 
 // Helper function to generate dummy invoice data for preview
@@ -653,6 +665,7 @@ export default function InvoiceSettingsScreen() {
     show_notes_section: true,
     auto_update_default_design: true,
     invoice_reference_format: 'INV-001',
+    estimate_terminology: 'estimate',
   });
 
   const fetchInvoiceSettings = useCallback(async (): Promise<void> => {
@@ -683,6 +696,7 @@ export default function InvoiceSettingsScreen() {
           show_notes_section: data.show_notes_section ?? true,
           auto_update_default_design: data.auto_update_default_design ?? true,
           invoice_reference_format: data.invoice_reference_format || 'INV-001',
+          estimate_terminology: (data.estimate_terminology as 'estimate' | 'quote') || 'estimate',
         });
       }
     } catch (error) {
@@ -765,6 +779,7 @@ export default function InvoiceSettingsScreen() {
         show_notes_section: settings.show_notes_section,
         auto_update_default_design: settings.auto_update_default_design,
         invoice_reference_format: settings.invoice_reference_format,
+        estimate_terminology: settings.estimate_terminology,
         updated_at: new Date().toISOString(),
       };
 
@@ -984,15 +999,51 @@ export default function InvoiceSettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Estimates Section - Coming Soon */}
+        {/* Estimates Section */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Estimates</Text>
             <Text style={styles.sectionSubtitle}>Configure estimate templates and defaults</Text>
           </View>
           
-          <View style={styles.comingSoonContainer}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
+          <View style={[styles.settingRow, styles.lastSettingRow, { paddingVertical: 18 }]}>
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingLabel}>Document Terminology</Text>
+              <Text style={styles.settingDescription}>Choose how you want to label your estimate documents</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={[
+                  styles.terminologyButton,
+                  { backgroundColor: settings.estimate_terminology === 'estimate' ? theme.primary : theme.muted }
+                ]}
+                onPress={() => updateSetting('estimate_terminology', 'estimate')}
+              >
+                <Text style={[
+                  styles.terminologyButtonText,
+                  { color: settings.estimate_terminology === 'estimate' ? theme.primaryForeground : theme.mutedForeground }
+                ]}>
+                  Estimate
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.terminologyButton,
+                  { 
+                    backgroundColor: settings.estimate_terminology === 'quote' ? theme.primary : theme.muted, 
+                    marginLeft: 8 
+                  }
+                ]}
+                onPress={() => updateSetting('estimate_terminology', 'quote')}
+              >
+                <Text style={[
+                  styles.terminologyButtonText,
+                  { color: settings.estimate_terminology === 'quote' ? theme.primaryForeground : theme.mutedForeground }
+                ]}>
+                  Quote
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 

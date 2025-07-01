@@ -490,6 +490,12 @@ export default function InvoiceDashboardScreen() {
         />
         <View style={[styles.container, { backgroundColor: themeColors.background }]}>
           <View style={styles.headerRow}>
+            {/* 
+              IMPORTANT: Keep this title as "Invoices" ONLY!
+              DO NOT change to "Invoices & Estimates" or anything including estimates.
+              Estimates have their own separate dashboard with dynamic terminology.
+              The invoices dashboard should NEVER change regardless of estimate terminology settings.
+            */}
             <Text style={[styles.title, { color: themeColors.foreground }]}>
               Invoices
             </Text>
