@@ -146,7 +146,8 @@ export class EstimateConversionService {
       const { error: estimateUpdateError } = await supabase
         .from('estimates')
         .update({
-          status: 'converted',
+          status: 'accepted', // First mark as accepted, then converted in next step
+          is_accepted: true, // Set the boolean toggle field
           converted_to_invoice_id: invoice.id,
           updated_at: new Date().toISOString()
         })
@@ -157,6 +158,21 @@ export class EstimateConversionService {
         console.error('Error updating estimate status:', estimateUpdateError);
         // Note: We don't rollback the invoice creation here as it's still valid
         // The estimate just won't show as converted, but the invoice exists
+      }
+
+      // Step 9: Update estimate to converted status after successful linking
+      const { error: convertedUpdateError } = await supabase
+        .from('estimates')
+        .update({
+          status: 'converted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', estimateId)
+        .eq('user_id', userId);
+
+      if (convertedUpdateError) {
+        console.error('Error updating estimate to converted status:', convertedUpdateError);
+        // The estimate will show as accepted but linked to invoice
       }
 
       return {

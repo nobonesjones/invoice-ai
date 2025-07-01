@@ -68,6 +68,7 @@ interface EstimateForTemplate {
   invoice_design?: string | null;
   accent_color?: string | null;
   estimate_tax_label?: string;
+  is_accepted?: boolean | null;
 }
 
 interface BusinessSettingsRow {
@@ -231,6 +232,7 @@ function EstimateViewerScreen() {
         currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_code || 'USD'),
         valid_until_date: estimateData.valid_until_date ?? null,
         estimate_tax_label: estimateData.estimate_tax_label || 'Tax',
+        is_accepted: estimateData.status === 'accepted',
       };
       
       setEstimate(fetchedEstimate);
@@ -722,20 +724,20 @@ function EstimateViewerScreen() {
               <View style={styles.statusToggleContainer}>
                 <Switch
                   trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
-                  thumbColor={estimate?.status === 'accepted' ? themeColors.primary : themeColors.card}
+                  thumbColor={(estimate?.is_accepted || estimate?.status === 'converted') ? themeColors.primary : themeColors.card}
                   ios_backgroundColor={themeColors.muted}
                   onValueChange={(isAccepted) => {
-                    if (isAccepted && estimate?.status !== 'accepted') {
+                    if (isAccepted && !estimate?.is_accepted && estimate?.status !== 'converted') {
                       // Handle convert to invoice
                       handleConvertToInvoice();
                     }
                   }}
-                  value={estimate?.status === 'accepted'}
+                  value={estimate?.is_accepted || estimate?.status === 'converted'}
                   style={styles.statusSwitch}
                   disabled={isConverting || estimate?.status === 'converted'}
                 />
-                <Text style={[styles.statusToggleValue, { color: estimate?.status === 'accepted' || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
-                  {estimate?.status === 'converted' ? 'Converted' : estimate?.status === 'accepted' ? 'Accepted' : 'Convert\nto invoice'}
+                <Text style={[styles.statusToggleValue, { color: estimate?.is_accepted || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
+                  {estimate?.status === 'converted' ? 'Converted' : estimate?.is_accepted ? 'Accepted' : 'Convert\nto invoice'}
                 </Text>
               </View>
             </View>
@@ -905,20 +907,20 @@ function EstimateViewerScreen() {
               <View style={styles.statusToggleContainer}>
                 <Switch
                   trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
-                  thumbColor={estimate?.status === 'accepted' ? themeColors.primary : themeColors.card}
+                  thumbColor={(estimate?.is_accepted || estimate?.status === 'converted') ? themeColors.primary : themeColors.card}
                   ios_backgroundColor={themeColors.muted}
                   onValueChange={(isAccepted) => {
-                    if (isAccepted && estimate?.status !== 'accepted') {
+                    if (isAccepted && !estimate?.is_accepted && estimate?.status !== 'converted') {
                       // Handle convert to invoice
                       handleConvertToInvoice();
                     }
                   }}
-                  value={estimate?.status === 'accepted'}
+                  value={estimate?.is_accepted || estimate?.status === 'converted'}
                   style={styles.statusSwitch}
                   disabled={isConverting || estimate?.status === 'converted'}
                 />
-                <Text style={[styles.statusToggleValue, { color: estimate?.status === 'accepted' || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
-                  {estimate?.status === 'converted' ? 'Converted' : estimate?.status === 'accepted' ? 'Accepted' : 'Convert\nto invoice'}
+                <Text style={[styles.statusToggleValue, { color: estimate?.is_accepted || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
+                  {estimate?.status === 'converted' ? 'Converted' : estimate?.is_accepted ? 'Accepted' : 'Convert\nto invoice'}
                 </Text>
               </View>
             </View>
