@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "supastarter",
+    "name": "SuperInvoice",
     "slug": "meetings",
     "scheme": "expo-supabase-starter",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/rocketicon.png",
+    "icon": "./assets/superinvoiceicon.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
@@ -29,7 +29,7 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone for voice chat with AI assistant and recording meetings",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
         "UIBackgroundModes": [
           "audio"
         ],
@@ -43,9 +43,11 @@
         ]
       },
       "splash": {
+        "image": "./assets/superinvoiceicon.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
+          "image": "./assets/superinvoiceicon.png",
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
@@ -64,9 +66,11 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "splash": {
+        "image": "./assets/superinvoiceicon.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
+          "image": "./assets/superinvoiceicon.png",
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }

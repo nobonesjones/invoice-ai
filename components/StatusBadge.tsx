@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import { InvoiceStatus, getStatusConfig } from '@/constants/invoice-status';
+import { InvoiceStatus, getStatusConfig, INVOICE_STATUSES } from '@/constants/invoice-status';
 import { EstimateStatus, getEstimateStatusConfig } from '@/constants/estimate-status';
 
 interface StatusBadgeProps {
@@ -9,11 +9,15 @@ interface StatusBadgeProps {
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'medium' }) => {
-  // Try to get config from invoice status first, then estimate status
+  // Check if it's a valid invoice status first, otherwise use estimate status
   let config;
-  try {
+  
+  // Use the actual invoice status constants
+  const validInvoiceStatuses = Object.values(INVOICE_STATUSES);
+  
+  if (validInvoiceStatuses.includes(status as InvoiceStatus)) {
     config = getStatusConfig(status as InvoiceStatus);
-  } catch {
+  } else {
     config = getEstimateStatusConfig(status as EstimateStatus);
   }
   

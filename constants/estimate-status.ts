@@ -181,4 +181,22 @@ export const getNextSuggestedAction = (status: EstimateStatus): string => {
     default:
       return 'Manage estimate';
   }
+};
+
+// Helper function to determine the best previous status when reverting
+export const getPreviousStatus = (currentStatus: EstimateStatus): EstimateStatus => {
+  switch (currentStatus) {
+    case ESTIMATE_STATUSES.ACCEPTED:
+      return ESTIMATE_STATUSES.SENT; // Most logical previous step
+    case ESTIMATE_STATUSES.CONVERTED:
+      return ESTIMATE_STATUSES.ACCEPTED; // Was accepted before conversion
+    case ESTIMATE_STATUSES.DECLINED:
+      return ESTIMATE_STATUSES.SENT; // Was sent before decline
+    case ESTIMATE_STATUSES.EXPIRED:
+      return ESTIMATE_STATUSES.SENT; // Was sent before expiry
+    case ESTIMATE_STATUSES.SENT:
+      return ESTIMATE_STATUSES.DRAFT; // Was draft before sending
+    default:
+      return ESTIMATE_STATUSES.DRAFT; // Safe fallback
+  }
 }; 

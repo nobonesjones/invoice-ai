@@ -33,7 +33,7 @@ import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomShee
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { StatusBadge } from '@/components/StatusBadge';
-import { EstimateStatus, getEstimateStatusConfig, isEstimateEditable } from '@/constants/estimate-status';
+import { EstimateStatus, getEstimateStatusConfig, isEstimateEditable, getPreviousStatus } from '@/constants/estimate-status';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { useEstimateActivityLogger } from './useEstimateActivityLogger';
 import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistorySheet';
@@ -102,7 +102,7 @@ function EstimateViewerScreen() {
   const { supabase, user } = useSupabase();
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted } = useEstimateActivityLogger();
+  const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted, logStatusChanged } = useEstimateActivityLogger();
 
   const [estimate, setEstimate] = useState<EstimateForTemplate | null>(null);
   const [client, setClient] = useState<Tables<'clients'> | null>(null);
@@ -152,6 +152,8 @@ function EstimateViewerScreen() {
       setIsTabBarVisible(true);
     };
   }, [navigation, setIsTabBarVisible]);
+
+
 
   const fetchBusinessSettings = async (userId: string) => {
     if (!userId) return;
@@ -232,7 +234,7 @@ function EstimateViewerScreen() {
         currency_symbol: getCurrencySymbol(businessDataForCurrency?.currency_code || 'USD'),
         valid_until_date: estimateData.valid_until_date ?? null,
         estimate_tax_label: estimateData.estimate_tax_label || 'Tax',
-        is_accepted: estimateData.status === 'accepted',
+        is_accepted: estimateData.is_accepted || estimateData.status === 'accepted' || estimateData.converted_to_invoice_id,
       };
       
       setEstimate(fetchedEstimate);
@@ -620,8 +622,18 @@ function EstimateViewerScreen() {
                   result.invoiceNumber
                 );
 
-                // Update local state to show converted status
-                setEstimate(prev => prev ? { ...prev, status: 'converted', converted_to_invoice_id: result.invoiceId } : null);
+                // Update local state to show accepted status
+                setEstimate(prev => prev ? { 
+                  ...prev, 
+                  status: 'accepted', 
+                  is_accepted: true,
+                  converted_to_invoice_id: result.invoiceId 
+                } : null);
+
+                // Force refresh the estimate data from database to ensure status is updated
+                if (estimateId && user?.id) {
+                  await fetchEstimateData(estimateId);
+                }
 
                 // Show success message
                 Alert.alert(
@@ -726,15 +738,55 @@ function EstimateViewerScreen() {
                   trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
                   thumbColor={(estimate?.is_accepted || estimate?.status === 'converted') ? themeColors.primary : themeColors.card}
                   ios_backgroundColor={themeColors.muted}
-                  onValueChange={(isAccepted) => {
+                  onValueChange={async (isAccepted) => {
                     if (isAccepted && !estimate?.is_accepted && estimate?.status !== 'converted') {
                       // Handle convert to invoice
                       handleConvertToInvoice();
+                    } else if (!isAccepted && estimate?.status === 'converted') {
+                      // Handle unconvert (toggle back from converted to accepted)
+                      Alert.alert(
+                        'Unconvert Estimate',
+                        'Are you sure you want to revert this estimate back to accepted status? This will not affect the invoice that was already created.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Revert', 
+                            style: 'default',
+                            onPress: async () => {
+                              try {
+                                const { error } = await supabase
+                                  .from('estimates')
+                                  .update({
+                                    status: 'accepted',
+                                    updated_at: new Date().toISOString()
+                                  })
+                                  .eq('id', estimate.id)
+                                  .eq('user_id', user?.id);
+
+                                if (error) {
+                                  console.error('Error reverting estimate status:', error);
+                                  Alert.alert('Error', 'Failed to revert estimate status');
+                                  return;
+                                }
+
+                                // Update local state
+                                setEstimate(prev => prev ? { 
+                                  ...prev, 
+                                  status: 'accepted'
+                                } : null);
+                              } catch (error) {
+                                console.error('Error reverting estimate:', error);
+                                Alert.alert('Error', 'An unexpected error occurred');
+                              }
+                            }
+                          }
+                        ]
+                      );
                     }
                   }}
                   value={estimate?.is_accepted || estimate?.status === 'converted'}
                   style={styles.statusSwitch}
-                  disabled={isConverting || estimate?.status === 'converted'}
+                  disabled={isConverting}
                 />
                 <Text style={[styles.statusToggleValue, { color: estimate?.is_accepted || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
                   {estimate?.status === 'converted' ? 'Converted' : estimate?.is_accepted ? 'Accepted' : 'Convert\nto invoice'}
@@ -909,18 +961,108 @@ function EstimateViewerScreen() {
                   trackColor={{ false: themeColors.muted, true: themeColors.primaryTransparent }}
                   thumbColor={(estimate?.is_accepted || estimate?.status === 'converted') ? themeColors.primary : themeColors.card}
                   ios_backgroundColor={themeColors.muted}
-                  onValueChange={(isAccepted) => {
+                  onValueChange={async (isAccepted) => {
                     if (isAccepted && !estimate?.is_accepted && estimate?.status !== 'converted') {
                       // Handle convert to invoice
                       handleConvertToInvoice();
+                    } else if (!isAccepted && estimate?.status === 'converted') {
+                      // Handle unconvert (toggle back from converted to accepted)
+                      Alert.alert(
+                        'Unconvert Estimate',
+                        'Are you sure you want to revert this estimate back to accepted status? This will not affect the invoice that was already created.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Revert', 
+                            style: 'default',
+                            onPress: async () => {
+                              try {
+                                const { error } = await supabase
+                                  .from('estimates')
+                                  .update({
+                                    status: 'accepted',
+                                    is_accepted: true,
+                                    updated_at: new Date().toISOString()
+                                  })
+                                  .eq('id', estimate.id)
+                                  .eq('user_id', user?.id);
+
+                                if (error) {
+                                  console.error('Error reverting estimate status:', error);
+                                  Alert.alert('Error', 'Failed to revert estimate status');
+                                  return;
+                                }
+
+                                // Update local state
+                                setEstimate(prev => prev ? { 
+                                  ...prev, 
+                                  status: 'accepted',
+                                  is_accepted: true
+                                } : null);
+                              } catch (error) {
+                                console.error('Error reverting estimate:', error);
+                                Alert.alert('Error', 'An unexpected error occurred');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    } else if (!isAccepted && estimate?.status === 'accepted') {
+                      // Handle toggle back from accepted to previous status
+                      const previousStatus = getPreviousStatus('accepted');
+                      const statusLabel = previousStatus.charAt(0).toUpperCase() + previousStatus.slice(1);
+                      
+                      Alert.alert(
+                        'Revert Estimate',
+                        'Are you sure you want to revert this estimate back to "Sent" status?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Revert to Sent', 
+                            style: 'default',
+                            onPress: async () => {
+                              try {
+                                const { error } = await supabase
+                                  .from('estimates')
+                                  .update({
+                                    status: 'sent',
+                                    is_accepted: false,
+                                    updated_at: new Date().toISOString()
+                                  })
+                                  .eq('id', estimate.id)
+                                  .eq('user_id', user?.id);
+
+                                if (error) {
+                                  console.error('Error reverting estimate status:', error);
+                                  Alert.alert('Error', 'Failed to revert estimate status');
+                                  return;
+                                }
+
+                                // Log the status change activity
+                                logStatusChanged(estimate.id, estimate.estimate_number || undefined, 'accepted', 'sent');
+
+                                // Update local state
+                                setEstimate(prev => prev ? { 
+                                  ...prev, 
+                                  status: 'sent',
+                                  is_accepted: false
+                                } : null);
+                              } catch (error) {
+                                console.error('Error reverting estimate:', error);
+                                Alert.alert('Error', 'An unexpected error occurred');
+                              }
+                            }
+                          }
+                        ]
+                      );
                     }
                   }}
                   value={estimate?.is_accepted || estimate?.status === 'converted'}
                   style={styles.statusSwitch}
-                  disabled={isConverting || estimate?.status === 'converted'}
+                  disabled={isConverting}
                 />
                 <Text style={[styles.statusToggleValue, { color: estimate?.is_accepted || estimate?.status === 'converted' ? themeColors.primary : themeColors.foreground }]}>
-                  {estimate?.status === 'converted' ? 'Converted' : estimate?.is_accepted ? 'Accepted' : 'Convert\nto invoice'}
+                  {estimate?.status === 'converted' ? 'Converted' : estimate?.is_accepted ? 'Accepted' : 'Convert\nto Invoice'}
                 </Text>
               </View>
             </View>
