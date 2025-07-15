@@ -17,7 +17,7 @@ jobs:
   submit:
     name: Submit to App Store Connect
     type: submit
-    needs: build
+    needs: [build]
     params:
       platform: ios
       profile: production
