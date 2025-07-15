@@ -50,6 +50,7 @@ import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './I
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
+import { Share } from 'react-native';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml';
@@ -60,7 +61,7 @@ import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } fr
 import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
-import { InvoiceShareService } from '../../../../services/invoiceShareService';
+import { InvoiceShareService } from '@/services/invoiceShareService';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 
 // NEW SKIA IMPORTS
@@ -347,12 +348,29 @@ function InvoiceViewerScreen() {
   };
 
   const handleSendLink = async () => {
-    if (!invoice || !supabase) {
+    if (!invoice || !supabase || !user) {
       Alert.alert('Error', 'Unable to send invoice at this time.');
       return;
     }
 
     try {
+      console.log('[handleSendLink] Generating shareable PDF link for invoice:', invoice.id);
+      
+      // Generate shareable PDF link using the Skia canvas
+      const result = await InvoiceShareService.generateShareLinkFromCanvas(
+        invoice.id, 
+        user.id,
+        skiaInvoiceRef,
+        30 // Expires in 30 days
+      );
+
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to generate share link');
+        return;
+      }
+
+      console.log('[handleSendLink] Share link generated:', result.shareUrl);
+
       // Update invoice status to sent
       const { error: updateError } = await supabase
         .from('invoices')
@@ -365,13 +383,41 @@ function InvoiceViewerScreen() {
         return;
       }
 
-      // Log the send activity
+      // Log the send activity with the share URL
       await logInvoiceSent(invoice.id, invoice.invoice_number, 'link');
+
+      // Also log that a shareable link was created
+      await supabase
+        .from('invoice_activities')
+        .insert({
+          invoice_id: invoice.id,
+          user_id: user.id,
+          activity_type: 'link_generated',
+          description: `Shareable link created for invoice ${invoice.invoice_number}`,
+          activity_data: {
+            share_url: result.shareUrl,
+            expires_at: result.expiresAt,
+            share_token: result.shareToken
+          }
+        });
 
       // Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
-      Alert.alert('Link Shared', 'Invoice link has been shared.');
+      // Use React Native's Share API for better text sharing compatibility
+      await Share.share({
+        message: `View Invoice ${invoice.invoice_number}: ${result.shareUrl}`,
+        url: result.shareUrl,
+        title: `Invoice ${invoice.invoice_number}`,
+      }, {
+        dialogTitle: `Share Invoice ${invoice.invoice_number}`,
+      });
+
+      Alert.alert(
+        'Invoice Link Shared', 
+        `A trackable link has been created for invoice ${invoice.invoice_number}. The link will expire in 30 days and you can view analytics in the invoice history.`
+      );
+      
       handleCloseSendModal(); // Close the send modal
       
       // Refresh invoice data to reflect status change
@@ -383,7 +429,7 @@ function InvoiceViewerScreen() {
       }
     } catch (error: any) {
       console.error('[handleSendLink] Unexpected error:', error);
-      Alert.alert('Error', 'An unexpected error occurred while sharing the invoice link.');
+      Alert.alert('Error', 'An unexpected error occurred while creating the shareable link.');
     }
   };
 
@@ -1623,10 +1669,11 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      // Generate shareable link
-      const result = await InvoiceShareService.generateShareLink(
+      // Generate shareable PDF link from Skia canvas
+      const result = await InvoiceShareService.generateShareLinkFromCanvas(
         invoice.id, 
         user.id,
+        skiaInvoiceRef,
         30 // Expires in 30 days
       );
 
@@ -1655,8 +1702,19 @@ function InvoiceViewerScreen() {
 
   const shareInvoiceLink = async (shareUrl: string) => {
     try {
-      await Sharing.shareAsync(shareUrl, {
+      const shareMessage = `View Invoice ${invoice?.invoice_number}: ${shareUrl}`;
+      
+      // Create a temporary text file for sharing
+      const fileName = `invoice-${invoice?.invoice_number}-link.txt`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      
+      await FileSystem.writeAsStringAsync(fileUri, shareMessage, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      
+      await Sharing.shareAsync(fileUri, {
         dialogTitle: `Share Invoice ${invoice?.invoice_number}`,
+        mimeType: 'text/plain',
       });
     } catch (error) {
       console.error('Error sharing link:', error);

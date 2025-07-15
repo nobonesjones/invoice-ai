@@ -9,9 +9,12 @@ export type InvoiceActivityType =
   | 'payment_removed'
   | 'status_changed'
   | 'note_added'
-  | 'downloaded'
+  | 'downloaded'   // When invoice PDF is downloaded via shared link
   | 'email_sent'
-  | 'link_shared';
+  | 'link_shared'
+  | 'opened'       // When invoice is opened/viewed via shared link
+  | 'printed'      // When invoice is printed via shared link
+  | 'link_generated'; // When a shareable link is created
 
 interface LogActivityParams {
   invoiceId: string;

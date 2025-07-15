@@ -1,0 +1,31 @@
+{
+  "buildCommand": "npx expo export -p web",
+  "outputDirectory": "dist",
+  "framework": null,
+
+  "rewrites": [
+    {
+      "source": "/((?!_expo|.*\\.).*)",
+      "destination": "/"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/shared/invoice/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        }
+      ]
+    }
+  ]
+} 

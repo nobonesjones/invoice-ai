@@ -1,0 +1,24 @@
+name: Build and Submit iOS App to App Store
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build iOS App
+    type: build
+    params:
+      platform: ios
+      profile: production
+      autoIncrement: true
+
+  submit:
+    name: Submit to App Store Connect
+    type: submit
+    needs: build
+    params:
+      platform: ios
+      profile: production
+      # This will automatically use the build artifact from the 'build' job 

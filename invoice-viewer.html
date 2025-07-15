@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.4;
+            color: #1f2937;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .viewer-header {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .viewer-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .viewer-actions {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .viewer-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .viewer-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px 30px;
+            color: #6b7280;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            text-align: center;
+            padding: 60px 30px;
+            color: #dc2626;
+        }
+        
+        /* Invoice Canvas - Exact match to Skia design */
+        .invoice-canvas {
+            background: white;
+            margin: 0;
+            position: relative;
+            min-height: 842px; /* A4 aspect ratio */
+        }
+        
+        .invoice-page {
+            width: 100%;
+            padding: 40px;
+            background: white;
+            position: relative;
+            min-height: 800px;
+        }
+        
+        /* Header Section - matching Skia layout exactly */
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+        }
+        
+        .business-section {
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        .business-logo {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .business-logo-placeholder {
+            width: 80px;
+            height: 80px;
+            background: #f9fafb;
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: #6b7280;
+            text-align: center;
+            line-height: 1.2;
+            margin-bottom: 12px;
+        }
+        
+        .business-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+        
+        .business-address {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+        
+        .invoice-title-section {
+            text-align: right;
+            flex: 1;
+            max-width: 250px;
+        }
+        
+        .invoice-title {
+            font-size: 36px;
+            font-weight: 800;
+            color: var(--accent-color, #14B8A6);
+            margin-bottom: 12px;
+            letter-spacing: 2px;
+        }
+        
+        .invoice-meta {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.5;
+        }
+        
+        .invoice-meta-line {
+            margin-bottom: 4px;
+        }
+        
+        /* Business and Client Info Section */
+        .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            gap: 40px;
+        }
+        
+        .business-info, .client-info {
+            flex: 1;
+        }
+        
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        
+        .info-content {
+            font-size: 14px;
+            color: #1f2937;
+            line-height: 1.5;
+        }
+        
+        .info-line {
+            margin-bottom: 4px;
+        }
+        
+        .client-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+        
+        /* Table Section - matching Skia table exactly */
+        .table-section {
+            margin-bottom: 40px;
+        }
+        
+        .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table-header {
+            background: #f9fafb;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .table-header th {
+            padding: 12px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .qty-col { width: 8%; text-align: center; }
+        .desc-col { width: 52%; text-align: left; }
+        .price-col { width: 20%; text-align: right; }
+        .total-col { width: 20%; text-align: right; }
+        
+        .table-row td {
+            padding: 12px 8px;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: top;
+            font-size: 14px;
+        }
+        
+        .qty-cell { 
+            text-align: center; 
+            color: #374151; 
+        }
+        
+        .desc-cell { 
+            color: #1f2937; 
+        }
+        
+        .item-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        
+        .item-description {
+            font-size: 12px;
+            color: #6b7280;
+            line-height: 1.3;
+        }
+        
+        .price-cell { 
+            text-align: right; 
+            color: #374151; 
+        }
+        
+        .total-cell { 
+            text-align: right; 
+            color: #1f2937; 
+            font-weight: 500; 
+        }
+        
+        /* Footer Section - matching Skia layout */
+        .footer-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            gap: 40px;
+        }
+        
+        .footer-left {
+            flex: 1;
+        }
+        
+        .footer-right {
+            flex: 0 0 300px;
+        }
+        
+        .footer-block {
+            margin-bottom: 24px;
+        }
+        
+        .footer-block-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .footer-block-content {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.5;
+            white-space: pre-line;
+        }
+        
+        /* Payment Methods */
+        .payment-method-item {
+            margin-bottom: 16px;
+        }
+        
+        .payment-method-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        
+        .payment-method-name {
+            font-weight: 500;
+            color: #1f2937;
+        }
+        
+        .payment-icons {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .payment-icon {
+            width: 24px;
+            height: 16px;
+            object-fit: contain;
+        }
+        
+        .payment-method-details {
+            font-size: 13px;
+            color: #6b7280;
+        }
+        
+        /* Totals Section - matching Skia styling */
+        .totals-block {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #f3f4f6;
+        }
+        
+        .total-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .total-label {
+            color: #6b7280;
+        }
+        
+        .total-value {
+            color: #1f2937;
+            font-weight: 500;
+        }
+        
+        .discount-line .total-value {
+            color: #dc2626;
+        }
+        
+        .paid-line .total-value {
+            color: #10b981;
+        }
+        
+        .grand-total {
+            border-top: 2px solid #e5e7eb;
+            padding-top: 12px;
+            margin-top: 12px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .grand-total .total-value {
+            color: var(--accent-color, #14B8A6);
+            font-size: 20px;
+        }
+        
+        /* Status badge */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-paid { background: #dcfce7; color: #166534; }
+        .status-sent { background: #dbeafe; color: #1e40af; }
+        .status-draft { background: #f3f4f6; color: #374151; }
+        .status-overdue { background: #fee2e2; color: #dc2626; }
+        
+        /* Responsive Design */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none;
+                border-radius: 0;
+                max-width: none;
+            }
+            
+            .viewer-header {
+                display: none;
+            }
+            
+            .invoice-page {
+                padding: 20px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .invoice-page {
+                padding: 20px;
+            }
+            
+            .invoice-header,
+            .info-section,
+            .footer-section {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .invoice-title-section {
+                text-align: left;
+                max-width: none;
+            }
+            
+            .footer-right {
+                flex: 1;
+            }
+            
+            .invoice-title {
+                font-size: 28px;
+            }
+            
+            .table-header th,
+            .table-row td {
+                padding: 8px 4px;
+                font-size: 12px;
+            }
+            
+            .viewer-header {
+                flex-direction: column;
+                gap: 12px;
+                text-align: center;
+            }
+            
+            .viewer-actions {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="viewer-header">
+            <h1>Invoice Viewer</h1>
+            <div class="viewer-actions">
+                <button onclick="window.print()" class="viewer-btn">🖨️ Print</button>
+                <button onclick="copyLink()" class="viewer-btn">🔗 Copy Link</button>
+            </div>
+        </div>
+        
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading invoice details...</p>
+        </div>
+        
+        <div id="error" class="error" style="display: none;">
+            <h2>Unable to Load Invoice</h2>
+            <p>The invoice could not be found or has expired.</p>
+        </div>
+        
+        <div id="invoice-content" style="display: none;">
+            <!-- Invoice canvas will be rendered here -->
+        </div>
+    </div>
+    
+    <script>
+        // Get share token from URL hash
+        function getShareToken() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#/')) {
+                return hash.substring(2);
+            }
+            return null;
+        }
+        
+        // Load invoice data
+        async function loadInvoice() {
+            try {
+                const token = getShareToken();
+                if (!token) {
+                    throw new Error('No share token found in URL');
+                }
+                
+                const apiUrl = `https://wzpuzqzsjdizmpiobsuo.supabase.co/functions/v1/shared-invoice/${token}`;
+                
+                const response = await fetch(apiUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error('Failed to load invoice data');
+                }
+                
+                renderInvoice(result.data);
+                
+            } catch (error) {
+                console.error('Error loading invoice:', error);
+                showError();
+            }
+        }
+        
+        // Render invoice with exact Skia canvas styling
+        function renderInvoice(data) {
+            const { invoice, businessSettings, paymentOptions } = data;
+            const lineItems = invoice.invoice_line_items || [];
+            const client = invoice.clients;
+            const currency = businessSettings?.currency_code || 'USD';
+            const accentColor = invoice.accent_color || '#14B8A6';
+            
+            // Set CSS custom property for accent color
+            document.documentElement.style.setProperty('--accent-color', accentColor);
+            
+            // Update page title
+            document.title = `Invoice ${invoice.invoice_number} - ${businessSettings?.business_name || 'SuperInvoice'}`;
+            
+            // Format dates
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-GB', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                });
+            };
+            
+            const formatDueDate = (option, dateString) => {
+                const options = {
+                    'on_receipt': 'On receipt',
+                    'net_7': 'In 7 days',
+                    'net_14': 'In 14 days',
+                    'net_30': 'In 30 days'
+                };
+                return options[option] || formatDate(dateString) || 'N/A';
+            };
+            
+            // Build invoice HTML
+            const invoiceHTML = `
+                <div class="invoice-canvas">
+                    <div class="invoice-page">
+                        <!-- Header Section -->
+                        <div class="invoice-header">
+                            <div class="business-section">
+                                ${businessSettings?.business_logo_url 
+                                    ? `<img src="${businessSettings.business_logo_url}" alt="Logo" class="business-logo" />`
+                                    : `<div class="business-logo-placeholder">${businessSettings?.business_name || 'Your Logo'}</div>`
+                                }
+                                ${businessSettings?.show_business_name !== false ? `<div class="business-name">${businessSettings?.business_name || ''}</div>` : ''}
+                                ${businessSettings?.show_business_address !== false && businessSettings?.business_address ? `<div class="business-address">${businessSettings.business_address.replace(/\n/g, '<br>')}</div>` : ''}
+                            </div>
+                            
+                            <div class="invoice-title-section">
+                                <div class="invoice-title">INVOICE</div>
+                                <div class="invoice-meta">
+                                    <div class="invoice-meta-line"><strong>Ref:</strong> ${invoice.invoice_number || 'N/A'}</div>
+                                    <div class="invoice-meta-line"><strong>Date:</strong> ${formatDate(invoice.invoice_date)}</div>
+                                    <div class="invoice-meta-line"><strong>Due:</strong> ${formatDueDate(invoice.due_date_option, invoice.due_date)}</div>
+                                    ${invoice.po_number ? `<div class="invoice-meta-line"><strong>PO:</strong> ${invoice.po_number}</div>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Business and Client Info -->
+                        <div class="info-section">
+                            <div class="business-info">
+                                <div class="section-label">From</div>
+                                <div class="info-content">
+                                    <div class="info-line"><strong>${businessSettings?.business_name || 'Business Name'}</strong></div>
+                                    ${businessSettings?.business_address ? businessSettings.business_address.split('\n').map(line => `<div class="info-line">${line}</div>`).join('') : ''}
+                                    ${businessSettings?.business_email ? `<div class="info-line">${businessSettings.business_email}</div>` : ''}
+                                    ${businessSettings?.business_phone ? `<div class="info-line">${businessSettings.business_phone}</div>` : ''}
+                                    ${businessSettings?.show_business_tax_number !== false && businessSettings?.business_tax_number ? `<div class="info-line">Tax ID: ${businessSettings.business_tax_number}</div>` : ''}
+                                </div>
+                            </div>
+                            
+                            <div class="client-info">
+                                <div class="section-label">Bill To</div>
+                                <div class="info-content">
+                                    <div class="client-name">${client?.name || 'Client Name'}</div>
+                                    ${client?.email ? `<div class="info-line">${client.email}</div>` : ''}
+                                    ${client?.phone ? `<div class="info-line">${client.phone}</div>` : ''}
+                                    ${client?.address_client ? client.address_client.split('\n').map(line => `<div class="info-line">${line}</div>`).join('') : ''}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Table Section -->
+                        <div class="table-section">
+                            <table class="invoice-table">
+                                <thead class="table-header">
+                                    <tr>
+                                        <th class="qty-col">QTY</th>
+                                        <th class="desc-col">DESCRIPTION</th>
+                                        <th class="price-col">PRICE</th>
+                                        <th class="total-col">TOTAL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${lineItems.map(item => `
+                                        <tr class="table-row">
+                                            <td class="qty-cell">${item.quantity || 1}</td>
+                                            <td class="desc-cell">
+                                                <div class="item-name">${item.item_name || 'Item'}</div>
+                                                ${item.item_description ? `<div class="item-description">${item.item_description}</div>` : ''}
+                                            </td>
+                                            <td class="price-cell">${currency} ${(item.unit_price || 0).toFixed(2)}</td>
+                                            <td class="total-cell">${currency} ${(item.total_price || 0).toFixed(2)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Footer Section -->
+                        <div class="footer-section">
+                            <div class="footer-left">
+                                ${businessSettings?.show_notes_section !== false && invoice.notes ? `
+                                    <div class="footer-block">
+                                        <div class="footer-block-title">Terms, Instructions & Notes</div>
+                                        <div class="footer-block-content">${invoice.notes}</div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${invoice.payment_terms ? `
+                                    <div class="footer-block">
+                                        <div class="footer-block-title">Payment Terms</div>
+                                        <div class="footer-block-content">${invoice.payment_terms}</div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${(invoice.stripe_active || invoice.paypal_active || invoice.bank_account_active) ? `
+                                    <div class="footer-block">
+                                        <div class="footer-block-title">Payment Methods</div>
+                                        
+                                        ${invoice.stripe_active ? `
+                                            <div class="payment-method-item">
+                                                <div class="payment-method-header">
+                                                    <span class="payment-method-name">Pay Online</span>
+                                                    <div class="payment-icons">
+                                                        <img src="https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/visaicon.png" alt="Visa" class="payment-icon" />
+                                                        <img src="https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/mastercardicon.png" alt="Mastercard" class="payment-icon" />
+                                                    </div>
+                                                </div>
+                                                <div class="payment-method-details">www.stripelink.com</div>
+                                            </div>
+                                        ` : ''}
+                                        
+                                        ${invoice.paypal_active ? `
+                                            <div class="payment-method-item">
+                                                <div class="payment-method-header">
+                                                    <span class="payment-method-name">Pay with PayPal</span>
+                                                    <div class="payment-icons">
+                                                        <img src="https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/paypalicon.png" alt="PayPal" class="payment-icon" />
+                                                    </div>
+                                                </div>
+                                                <div class="payment-method-details">${paymentOptions?.paypal_email || 'paypal@company.com'}</div>
+                                            </div>
+                                        ` : ''}
+                                        
+                                        ${invoice.bank_account_active ? `
+                                            <div class="payment-method-item">
+                                                <div class="payment-method-name">Bank Transfer</div>
+                                                <div class="payment-method-details">${(paymentOptions?.bank_details || 'Bank details not available').replace(/\n/g, '<br>')}</div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="footer-right">
+                                <div class="totals-block">
+                                    ${generateTotalsHTML(invoice, currency)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Insert invoice HTML
+            document.getElementById('invoice-content').innerHTML = invoiceHTML;
+            
+            // Show content, hide loading
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('invoice-content').style.display = 'block';
+        }
+        
+        // Generate totals HTML matching Skia styling
+        function generateTotalsHTML(invoice, currency) {
+            const subtotal = invoice.subtotal_amount || 0;
+            const discountValue = invoice.discount_value || 0;
+            const discountType = invoice.discount_type || '';
+            const taxPercentage = invoice.tax_percentage || 0;
+            const paidAmount = invoice.paid_amount || 0;
+            const total = invoice.total_amount || subtotal;
+            
+            // Calculate amounts
+            const discountAmount = discountType === 'percentage' 
+                ? (subtotal * discountValue / 100) 
+                : discountValue;
+            const afterDiscount = subtotal - discountAmount;
+            const taxAmount = afterDiscount * taxPercentage / 100;
+            
+            let html = `
+                <div class="total-line">
+                    <span class="total-label">Subtotal:</span>
+                    <span class="total-value">${currency} ${subtotal.toFixed(2)}</span>
+                </div>
+            `;
+            
+            if (discountValue > 0) {
+                html += `
+                    <div class="total-line discount-line">
+                        <span class="total-label">Discount ${discountType === 'percentage' ? `(${discountValue}%)` : ''}:</span>
+                        <span class="total-value">-${currency} ${discountAmount.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+            
+            if (taxPercentage > 0) {
+                html += `
+                    <div class="total-line">
+                        <span class="total-label">${invoice.invoice_tax_label || 'Tax'} (${taxPercentage}%):</span>
+                        <span class="total-value">${currency} ${taxAmount.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+            
+            if (paidAmount > 0) {
+                html += `
+                    <div class="total-line paid-line">
+                        <span class="total-label">Paid:</span>
+                        <span class="total-value">-${currency} ${paidAmount.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="total-line grand-total">
+                    <span class="total-label">Total:</span>
+                    <span class="total-value">${currency} ${total.toFixed(2)}</span>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        // Show error state
+        function showError() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+        }
+        
+        // Utility functions
+        function copyLink() {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                alert('✅ Link copied to clipboard!');
+            }).catch(() => {
+                alert('❌ Failed to copy link');
+            });
+        }
+        
+        // Load invoice when page loads
+        window.addEventListener('load', loadInvoice);
+    </script>
+</body>
+</html> 

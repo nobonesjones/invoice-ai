@@ -47,6 +47,7 @@ import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft } from 'lucide-react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { addDays } from 'date-fns';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { Controller, useForm } from 'react-hook-form';
 import { useSupabase } from '@/context/supabase-provider';
@@ -255,6 +256,30 @@ const formatFriendlyDate = (date: Date | null | undefined): string => {
   return date.toLocaleDateString();
 };
 
+const formatValidUntilDisplay = (validUntilDate: Date | null, validUntilOption: string | null): string => {
+  if (validUntilDate) {
+    return `Valid until ${formatFriendlyDate(validUntilDate)}`;
+  }
+  
+  // Default display based on option
+  switch (validUntilOption) {
+    case 'on_receipt':
+      return 'Valid on receipt';
+    case 'net_7':
+      return 'Valid for 7 days';
+    case 'net_14':
+      return 'Valid for 14 days';
+    case 'net_30':
+      return 'Valid for 30 days';
+    case 'net_60':
+      return 'Valid for 60 days';
+    case 'net_90':
+      return 'Valid for 90 days';
+    default:
+      return 'Valid for 30 days';
+  }
+};
+
 const calculateGrandTotal = (
   subtotal: number,
   discountType: 'percentage' | 'fixed' | null | undefined,
@@ -334,7 +359,7 @@ export default function CreateEstimateScreen() {
     client_id: '', 
     estimate_date: new Date(),
     valid_until_date: null,
-    valid_until_option: 'valid_for_30_days',
+    valid_until_option: 'net_30',
     items: [],
     taxPercentage: 20,
     discountType: null,
@@ -355,6 +380,16 @@ export default function CreateEstimateScreen() {
   } = useForm<EstimateFormData>({
     defaultValues
   });
+
+  // State for modal visibility
+  const [isEstimateDetailsSheetOpen, setIsEstimateDetailsSheetOpen] = useState(false);
+  const [isValidUntilDateSheetOpen, setIsValidUntilDateSheetOpen] = useState(false);
+  const [isAddItemSheetOpen, setIsAddItemSheetOpen] = useState(false);
+  const [isNewClientSelectionSheetOpen, setIsNewClientSelectionSheetOpen] = useState(false);
+  const [isSelectDiscountTypeSheetOpen, setIsSelectDiscountTypeSheetOpen] = useState(false);
+  const [isEditInvoiceTaxSheetOpen, setIsEditInvoiceTaxSheetOpen] = useState(false);
+  const [isAddNewItemFormSheetOpen, setIsAddNewItemFormSheetOpen] = useState(false);
+  const [formUpdateKey, setFormUpdateKey] = useState(0); // Force re-render key
 
   // Safety check to prevent undefined themeColors during navigation
   const safeThemeColors = themeColors || colors.light;
@@ -436,6 +471,8 @@ export default function CreateEstimateScreen() {
   // Watch form values
   const watchedEstimateNumber = watch('estimate_number');
   const watchedEstimateDate = watch('estimate_date');
+  const watchedValidUntilDate = watch('valid_until_date');
+  const watchedValidUntilOption = watch('valid_until_option');
   const watchedTaxPercentage = watch('taxPercentage');
   const watchedDiscountType = watch('discountType');
   const watchedDiscountValue = watch('discountValue');
@@ -641,12 +678,16 @@ export default function CreateEstimateScreen() {
         return;
       }
 
-      if (!formData.estimate_number) {
-        Alert.alert('Validation Error', 'Estimate number is required.');
-        setIsSavingEstimate(false);
-        return;
+      // Check and generate estimate number if missing
+      let estimateNumber = formData.estimate_number?.trim();
+      if (!estimateNumber) {
+        console.log('[handleSaveEstimate] Estimate number is missing, generating new one...');
+        estimateNumber = await generateEstimateNumber();
+        setValue('estimate_number', estimateNumber, { shouldValidate: true, shouldDirty: true });
+        console.log('[handleSaveEstimate] Generated new estimate number:', estimateNumber);
       }
 
+      console.log('[handleSaveEstimate] Using estimate number:', estimateNumber);
       console.log('[handleSaveEstimate] formData.valid_until_option:', formData.valid_until_option);
 
       // Get default design and color from business settings for new estimates
@@ -672,10 +713,85 @@ export default function CreateEstimateScreen() {
       }
 
       // 2. Generate unique estimate number if needed
-      let estimateNumber = formData.estimate_number;
-      if (!estimateNumber || estimateNumber === 'EST-001') {
-        estimateNumber = await generateEstimateNumber();
+      // let estimateNumber = formData.estimate_number; // This line is now handled above
+
+      // Calculate valid_until_date based on option if not explicitly set
+      let calculatedValidUntilDate = formData.valid_until_date;
+      if (!calculatedValidUntilDate && formData.valid_until_option) {
+        const estimateDate = formData.estimate_date instanceof Date ? formData.estimate_date : new Date(formData.estimate_date);
+        
+        switch (formData.valid_until_option) {
+          case 'net_7':
+            calculatedValidUntilDate = addDays(estimateDate, 7);
+            break;
+          case 'net_14':
+            calculatedValidUntilDate = addDays(estimateDate, 14);
+            break;
+          case 'net_30':
+            calculatedValidUntilDate = addDays(estimateDate, 30);
+            break;
+          case 'net_60':
+            calculatedValidUntilDate = addDays(estimateDate, 60);
+            break;
+          case 'net_90':
+            calculatedValidUntilDate = addDays(estimateDate, 90);
+            break;
+          case 'on_receipt':
+          default:
+            calculatedValidUntilDate = null;
+            break;
+        }
       }
+
+      // Check if this is an update to an existing estimate
+      const existingEstimateId = editEstimateId;
+      
+      if (existingEstimateId) {
+        // This is an update to an existing estimate
+        console.log('[handleSaveEstimate] Updating existing estimate:', existingEstimateId);
+        
+        const updateData = {
+          client_id: formData.client_id,
+          estimate_date: formData.estimate_date,
+          valid_until_date: calculatedValidUntilDate,
+          tax_percentage: formData.taxPercentage,
+          discount_type: formData.discountType,
+          discount_value: formData.discountValue,
+          notes: formData.notes,
+          acceptance_terms: formData.acceptance_terms || '',
+          custom_headline: formData.custom_headline || '',
+          paypal_active: formData.paypal_active,
+          stripe_active: formData.stripe_active,
+          bank_account_active: formData.bank_account_active,
+          subtotal_amount: displaySubtotal,
+          total_amount: displayEstimateTotal,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: updateError } = await supabase
+          .from('estimates')
+          .update(updateData)
+          .eq('id', existingEstimateId);
+
+        if (updateError) {
+          console.error('[handleSaveEstimate] Error updating estimate:', updateError);
+          Alert.alert('Error', 'Failed to update estimate. Please try again.');
+          setIsSavingEstimate(false);
+          return;
+        }
+
+        // Update line items separately
+        await handleLineItemsUpdate(existingEstimateId, currentEstimateLineItems);
+
+        console.log('[handleSaveEstimate] Successfully updated estimate');
+        Alert.alert('Success', 'Estimate updated successfully!');
+        setIsSavingEstimate(false);
+        router.back();
+        return;
+      }
+
+      // This is a new estimate - proceed with creation logic
+      console.log('[handleSaveEstimate] Creating new estimate');
 
       // 3. Prepare main estimate data
       const estimateData = {
@@ -684,7 +800,7 @@ export default function CreateEstimateScreen() {
         estimate_number: estimateNumber,
         status: ESTIMATE_STATUSES.DRAFT, // Always save as draft from the form
         estimate_date: formData.estimate_date instanceof Date ? formData.estimate_date.toISOString() : new Date(formData.estimate_date).toISOString(),
-        valid_until_date: formData.valid_until_date ? (formData.valid_until_date instanceof Date ? formData.valid_until_date.toISOString() : new Date(formData.valid_until_date).toISOString()) : null,
+        valid_until_date: calculatedValidUntilDate ? calculatedValidUntilDate.toISOString() : null,
         po_number: formData.po_number || null,
         custom_headline: formData.custom_headline || null,
         acceptance_terms: formData.acceptance_terms || null,
@@ -1017,12 +1133,31 @@ export default function CreateEstimateScreen() {
   };
 
   const handleEstimateDetailsSave = (detailsData: EstimateDetailsData) => {
-    setValue('estimate_number', detailsData.estimateNumber);
-    setValue('estimate_date', detailsData.creationDate);
-    setValue('valid_until_option', detailsData.validUntilType);
-    setValue('valid_until_date', detailsData.customValidUntilDate || null);
-    setValue('acceptance_terms', detailsData.acceptanceTerms || '');
-    setValue('custom_headline', detailsData.customHeadline || '');
+    console.log('[handleEstimateDetailsSave] Received data:', detailsData);
+    
+    // Validate that we have a valid estimate number
+    if (!detailsData.estimateNumber || !detailsData.estimateNumber.trim()) {
+      console.error('[handleEstimateDetailsSave] Invalid estimate number received:', detailsData.estimateNumber);
+      Alert.alert('Error', 'Invalid estimate number. Please try again.');
+      return;
+    }
+    
+    // Update form values with shouldValidate and shouldDirty flags to trigger re-render
+    setValue('estimate_number', detailsData.estimateNumber.trim(), { shouldValidate: true, shouldDirty: true });
+    setValue('estimate_date', detailsData.creationDate, { shouldValidate: true, shouldDirty: true });
+    setValue('valid_until_option', detailsData.validUntilType, { shouldValidate: true, shouldDirty: true });
+    setValue('valid_until_date', detailsData.customValidUntilDate || null, { shouldValidate: true, shouldDirty: true });
+    setValue('acceptance_terms', detailsData.acceptanceTerms || '', { shouldValidate: true, shouldDirty: true });
+    setValue('custom_headline', detailsData.customHeadline || '', { shouldValidate: true, shouldDirty: true });
+    
+    // Force a re-render by updating a state variable
+    setIsEstimateDetailsSheetOpen(false);
+    setFormUpdateKey(prev => prev + 1); // Force re-render
+    
+    // Add a small delay to ensure the form processes the changes
+    setTimeout(() => {
+      console.log('[handleEstimateDetailsSave] Form values updated successfully');
+    }, 100);
   };
 
   const handleChangeDesign = () => {
@@ -1214,6 +1349,7 @@ export default function CreateEstimateScreen() {
           keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
         >
           <ScrollView 
+            key={formUpdateKey}
             style={{ flex: 1, backgroundColor: screenBackgroundColor }}
             contentContainerStyle={{ paddingBottom: 20 }}
             keyboardShouldPersistTaps="handled"
@@ -1242,9 +1378,9 @@ export default function CreateEstimateScreen() {
                     {watchedEstimateNumber || (isLoadingEstimateNumber ? 'Loading...' : 'INV-001')}
                   </Text>
                 </View>
-                <Text style={{ color: safeThemeColors.foreground, fontWeight: 'bold' }}>
-                  Valid for 30 days
-                </Text>
+                                  <Text style={{ color: safeThemeColors.foreground, fontWeight: 'bold' }}>
+                    {formatValidUntilDisplay(watchedValidUntilDate, watchedValidUntilOption)}
+                  </Text>
               </View>
               <View style={styles.detailsRow2}>
                 <Text style={[styles.subLabel, { color: safeThemeColors.mutedForeground }]}>Creation Date</Text>
@@ -1507,14 +1643,14 @@ export default function CreateEstimateScreen() {
           {/* Edit Estimate Details Sheet */}
           <EditEstimateDetailsSheet
             ref={editEstimateDetailsSheetRef}
-            terminology={estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}
+            terminology={estimateTerminology === 'quote' ? 'quote' : 'estimate'}
             initialDetails={{
-              estimateNumber: watchedEstimateNumber,
-              creationDate: watchedEstimateDate,
+              estimateNumber: watchedEstimateNumber || 'EST-001',
+              creationDate: watchedEstimateDate || new Date(),
               validUntilType: watch('valid_until_option') || 'net_30',
               customValidUntilDate: watch('valid_until_date'),
-              acceptanceTerms: watch('acceptance_terms'),
-              customHeadline: watch('custom_headline'),
+              acceptanceTerms: watch('acceptance_terms') || '',
+              customHeadline: watch('custom_headline') || '',
             }}
             onSave={handleEstimateDetailsSave}
           />

@@ -3,6 +3,7 @@ import { SplashScreen } from "expo-router";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import { supabase } from "@/config/supabase";
+import CustomSplashScreen from "@/components/CustomSplashScreen";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -36,6 +37,8 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	const [user, setUser] = useState<User | null>(null);
 	const [session, setSession] = useState<Session | null>(null);
 	const [initialized, setInitialized] = useState<boolean>(false);
+	const [loadingProgress, setLoadingProgress] = useState<number>(0);
+	const [showCustomSplash, setShowCustomSplash] = useState<boolean>(true);
 
 	const signUp = async (email: string, password: string) => {
 		// Sign up the user
@@ -75,11 +78,25 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	};
 
 	useEffect(() => {
-		supabase.auth.getSession().then(({ data: { session } }) => {
+		const initializeApp = async () => {
+			// Simulate loading progress
+			setLoadingProgress(20);
+			
+			const { data: { session } } = await supabase.auth.getSession();
+			setLoadingProgress(60);
+			
 			setSession(session);
 			setUser(session ? session.user : null);
-			setInitialized(true);
-		});
+			setLoadingProgress(90);
+			
+			// Small delay to show 100% completion
+			setTimeout(() => {
+				setLoadingProgress(100);
+				setInitialized(true);
+			}, 200);
+		};
+
+		initializeApp();
 
 		supabase.auth.onAuthStateChange((_event, session) => {
 			setSession(session);
@@ -89,9 +106,12 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
 	useEffect(() => {
 		if (!initialized) return;
+		
+		// Hide custom splash screen after a brief delay
 		setTimeout(() => {
+			setShowCustomSplash(false);
 			SplashScreen.hideAsync();
-		}, 500);
+		}, 800);
 	}, [initialized]);
 
 	return (
@@ -106,6 +126,12 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 				signOut,
 			}}
 		>
+			{showCustomSplash && (
+				<CustomSplashScreen 
+					loadingProgress={loadingProgress}
+					onLoadingComplete={() => setShowCustomSplash(false)}
+				/>
+			)}
 			{children}
 		</SupabaseContext.Provider>
 	);

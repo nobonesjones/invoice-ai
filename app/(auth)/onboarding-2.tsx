@@ -58,7 +58,7 @@ export default function OnboardingScreen2() {
             
             {/* Header content - positioned just above button */}
             <View style={styles.headerContent}>
-              <Text style={styles.headline}>SuperAI handles all of your paperwork - fast and easy</Text>
+              <Text style={styles.headline}>Make professional invoices in seconds from anywhere</Text>
             </View>
 
             {/* Bottom button */}
@@ -119,7 +119,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingBottom: 20,
   },
   headline: {
-    fontSize: 25,
+    fontSize: 30,
     fontWeight: 'bold',
     color: '#FFFFFF',
     textAlign: 'center',

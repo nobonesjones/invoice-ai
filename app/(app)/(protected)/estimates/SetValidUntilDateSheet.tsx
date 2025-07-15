@@ -69,13 +69,10 @@ const SetValidUntilDateSheet = forwardRef<BottomSheetModal, SetValidUntilDateShe
 
 		const handleSelectOption = (option: ValidUntilDateOption) => {
 			if (option.type === "custom") {
-				console.log(
-					"Custom date selection to be implemented here - will open date picker",
-				);
-				// For now, don't close or call onSelectValidUntil until date picker is implemented
-				// onSelectValidUntil(option.type, null, option.label);
-				// (ref as React.RefObject<BottomSheetModal>)?.current?.dismiss();
-				alert("Custom date picker coming soon!");
+				console.log("Custom date selection - calling parent to handle date picker");
+				// Call parent with custom type, it will handle opening the date picker
+				onSelectValidUntil(option.type, null, option.label);
+				(ref as React.RefObject<BottomSheetModal>)?.current?.dismiss();
 				return;
 			}
 			onSelectValidUntil(option.type, null, option.label);

@@ -161,7 +161,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
 
   appName: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center',

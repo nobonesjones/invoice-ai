@@ -2,7 +2,7 @@
   "expo": {
     "name": "SuperInvoice",
     "slug": "meetings",
-    "scheme": "expo-supabase-starter",
+    "scheme": "superinvoice",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/superinvoiceicon.png",
@@ -37,7 +37,7 @@
           {
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.631922182428-43a9083jf657d88sftj917vi3e6mj6ig",
-              "expo-supabase-starter"
+              "superinvoice"
             ]
           }
         ]

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from '
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { X as XIcon, Clock, CreditCard, Edit, Send, Eye, FileText } from 'lucide-react-native'; 
+import { X as XIcon, Clock, CreditCard, Edit, Send, Eye, FileText, Printer, Link, Globe, Download } from 'lucide-react-native'; 
 import { useInvoiceActivityLogger, InvoiceActivityType } from './useInvoiceActivityLogger';
 
 export interface InvoiceHistorySheetProps {
@@ -95,6 +95,15 @@ const InvoiceHistorySheet = forwardRef<InvoiceHistorySheetRef, InvoiceHistoryShe
         return <Send {...iconProps} />;
       case 'viewed':
         return <Eye {...iconProps} />;
+      case 'opened':
+        return <Globe {...iconProps} />;
+      case 'downloaded':
+        return <Download {...iconProps} />;
+      case 'printed':
+        return <Printer {...iconProps} />;
+      case 'link_generated':
+      case 'link_shared':
+        return <Link {...iconProps} />;
       case 'payment_added':
         return <CreditCard {...iconProps} />;
       default:
@@ -115,6 +124,15 @@ const InvoiceHistorySheet = forwardRef<InvoiceHistorySheetRef, InvoiceHistoryShe
         return '#F59E0B'; // Amber
       case 'viewed':
         return '#8B5CF6'; // Purple
+      case 'opened':
+        return '#06B6D4'; // Cyan - for shared link opens
+      case 'downloaded':
+        return '#059669'; // Emerald - for downloads
+      case 'printed':
+        return '#7C3AED'; // Violet - for prints
+      case 'link_generated':
+      case 'link_shared':
+        return '#EC4899'; // Pink - for link sharing
       default:
         return themeColors.mutedForeground;
     }

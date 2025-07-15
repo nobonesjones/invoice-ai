@@ -13,6 +13,7 @@ import { H1 } from '@/components/ui/typography';
 import { useTheme } from '@/context/theme-provider';
 import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from '../../../(app)/(protected)/invoices/InvoiceTemplateOne';
 import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml';
+import { InvoiceShareService } from '../../../../services/invoiceShareService';
 
 interface SharedInvoiceData {
   share: {
@@ -44,24 +45,36 @@ export default function SharedInvoiceView() {
       setLoading(true);
       setError(null);
 
-      // Get invoice data from our edge function
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/shared-invoice/${token}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      if (!token) {
+        throw new Error('Invalid share token');
+      }
 
-      const result = await response.json();
+      // Get invoice data using the share service
+      const result = await InvoiceShareService.getInvoiceByShareToken(token);
 
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         throw new Error(result.error || 'Failed to load invoice');
       }
 
-      setInvoiceData(result.data);
+      // Transform the data to match expected format
+      const invoiceData: SharedInvoiceData = {
+        share: {
+          id: result.data!.share.id,
+          expires_at: result.data!.share.expires_at
+        },
+        invoice: result.data!.invoice,
+        businessSettings: result.data!.businessSettings,
+        paymentOptions: result.data!.paymentOptions
+      };
+
+      setInvoiceData(invoiceData);
+
+      // Track the view event
+      await InvoiceShareService.trackShareEvent(token, 'view', {
+        userAgent: navigator?.userAgent,
+        referrer: document?.referrer,
+      });
+
     } catch (err) {
       console.error('Error loading shared invoice:', err);
       setError(err instanceof Error ? err.message : 'Failed to load invoice');
@@ -72,20 +85,12 @@ export default function SharedInvoiceView() {
 
   const trackEvent = async (eventType: 'download' | 'print' | 'copy_link') => {
     try {
-      await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/shared-invoice/${token}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            eventType,
-            userAgent: navigator?.userAgent,
-            referrer: document?.referrer,
-          }),
-        }
-      );
+      if (!token) return;
+      
+      await InvoiceShareService.trackShareEvent(token, eventType, {
+        userAgent: navigator?.userAgent,
+        referrer: document?.referrer,
+      });
     } catch (err) {
       console.warn('Failed to track event:', err);
     }

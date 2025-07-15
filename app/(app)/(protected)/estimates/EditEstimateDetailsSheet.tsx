@@ -73,6 +73,14 @@ const EditEstimateDetailsSheet = forwardRef<
 	const [estimateNumber, setEstimateNumber] = useState(
 		initialDetails?.estimateNumber || "",
 	);
+	
+	// Debug log for initial values
+	React.useEffect(() => {
+		console.log('[EditEstimateDetailsSheet] Initial details:', initialDetails);
+		console.log('[EditEstimateDetailsSheet] Initial estimate number:', initialDetails?.estimateNumber);
+		console.log('[EditEstimateDetailsSheet] State estimate number:', estimateNumber);
+	}, [initialDetails, estimateNumber]);
+
 	const initialCreationDate = initialDetails?.creationDate
 		? typeof initialDetails.creationDate === "string"
 			? parseISO(initialDetails.creationDate)
@@ -146,9 +154,16 @@ const EditEstimateDetailsSheet = forwardRef<
 	);
 
 	const handleInternalSave = () => {
+		// Validate required fields
+		const trimmedEstimateNumber = estimateNumber.trim();
+		if (!trimmedEstimateNumber) {
+			Alert.alert('Validation Error', `${terminology || 'Estimate'} number is required.`);
+			return;
+		}
+		
 		setIsLoading(true);
 		const updatedDetails: EstimateDetailsData = {
-			estimateNumber: estimateNumber.trim(),
+			estimateNumber: trimmedEstimateNumber,
 			creationDate: creationDateObject,
 			validUntilType: selectedValidUntilType,
 			customValidUntilDate: selectedCustomValidUntilDate,
@@ -156,9 +171,13 @@ const EditEstimateDetailsSheet = forwardRef<
 			customHeadline: customHeadline.trim(),
 			validUntilDisplayLabel: validUntilDisplay,
 		};
+		
+		console.log('[EditEstimateDetailsSheet] Saving details:', updatedDetails);
 		onSave(updatedDetails);
 		setIsLoading(false);
-		// bottomSheetModalRef.current?.dismiss(); // Consider if auto-dismiss is desired after save
+		
+		// Dismiss the modal after saving
+		bottomSheetModalRef.current?.dismiss();
 	};
 
 	// Date picker handlers (existing logic retained)
@@ -167,19 +186,30 @@ const EditEstimateDetailsSheet = forwardRef<
 		customDate?: Date | null,
 		displayLabel?: string,
 	) => {
+		console.log('[handleValidUntilSelect] Selected type:', type, 'customDate:', customDate, 'displayLabel:', displayLabel);
+		
 		setSelectedValidUntilType(type);
+		
 		if (type === "custom" && customDate) {
 			setSelectedCustomValidUntilDate(customDate);
 			setValidUntilDisplay(displayLabel || format(customDate, "MMM d, yyyy"));
 		} else if (type === "custom" && !customDate) {
 			showCustomDatePicker(); // Prompt for date if 'custom' is selected but no date given
-			// Keep current custom date for now, or clear it: setSelectedCustomValidUntilDate(null);
 		} else {
-			setSelectedCustomValidUntilDate(null); // Clear custom date if a non-custom type is chosen
+			// For net_X options, calculate the actual date
 			const option = VALID_UNTIL_DATE_OPTIONS.find((opt) => opt.type === type);
+			
+			if (option && option.days) {
+				// Calculate the actual date based on the creation date + days
+				const calculatedDate = addDays(creationDateObject, option.days);
+				setSelectedCustomValidUntilDate(calculatedDate);
+				console.log('[handleValidUntilSelect] Calculated date for', type, ':', calculatedDate);
+			} else {
+				// For options like "on_receipt", clear the custom date
+				setSelectedCustomValidUntilDate(null);
+			}
+			
 			setValidUntilDisplay(option ? option.label : "Select Valid Until Date");
-			// Calculate actual due date if needed for 'updatedDetails.due_date'
-			// For example, if type is 'net_30', actualDueDate = addDays(creationDateObject, 30);
 		}
 	};
 	const showCustomDatePicker = () => setCustomDatePickerVisibility(true);
@@ -319,7 +349,7 @@ const EditEstimateDetailsSheet = forwardRef<
 			>
 				<View style={styles.inputGroupContainer}>
 					<View style={styles.inputRow}>
-						<Text style={styles.inputLabelText}>Estimate #</Text>
+						<Text style={styles.inputLabelText}>{terminology || 'Estimate'} #</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
 								style={styles.textInputStyled}

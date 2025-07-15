@@ -11,7 +11,6 @@ import {
   Dimensions,
   Image,
 } from "react-native";
-import * as StoreReview from 'expo-store-review';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 
@@ -53,18 +52,6 @@ export default function OnboardingScreen6() {
 
   const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    try {
-      // Try to show the rating prompt
-      const isAvailable = await StoreReview.isAvailableAsync();
-      if (isAvailable) {
-        await StoreReview.requestReview();
-      }
-    } catch (error) {
-      console.log('Store review not available or error:', error);
-    }
-    
-    // Continue to next screen regardless of rating prompt
     router.push("/onboarding-7");
   };
 
@@ -94,7 +81,7 @@ export default function OnboardingScreen6() {
             <View style={styles.contentContainer}>
           {/* Header */}
           <View style={styles.headerContent}>
-            <Text style={[styles.headline, { color: '#FFFFFF' }]}>Give us a rating</Text>
+            <Text style={[styles.headline, { color: '#FFFFFF' }]}>Try For Free</Text>
             <Text style={[styles.subHeadline, { color: '#FFFFFF' }]}>
               SupaInvoice was made for people like you.
             </Text>
