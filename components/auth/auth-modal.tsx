@@ -9,7 +9,9 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
@@ -157,107 +159,77 @@ export function AuthModal({
   return (
     <>
       <Modal
-        visible={visible}
         animationType="slide"
-        presentationStyle="pageSheet"
+        transparent={true}
+        visible={visible}
         onRequestClose={handleClose}
       >
-        <View style={[styles.container, { backgroundColor: theme.background }]}>
-          {/* Animation Section - Top 70% */}
-          <View style={styles.animationSection}>
-            <View style={styles.gradientBackground}>
-              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#000000" />
-              </TouchableOpacity>
+        <View style={styles.container}>
+          {/* Video Header Section */}
+          <View style={styles.videoHeaderSection}>
+            <Video
+              style={styles.backgroundVideo}
+              source={require('../../assets/videos/0629.mp4')}
+              useNativeControls={false}
+              resizeMode={ResizeMode.COVER}
+              isLooping
+              shouldPlay
+              isMuted
+            />
+            <View style={styles.overlay}>
               
-              <View style={styles.animationContent}>
-                <View style={styles.upperContent}>
-                                  <View style={styles.logoContainer}>
-                    <Image 
-                      source={require('../../assets/superinvoiceicon.png')} 
-                      style={styles.logoImage}
-                    />
-                  </View>
+              <View style={styles.headerContent}>
                 <Text style={styles.title}>Create Account</Text>
                 <Text style={styles.subtitle}>
-                  {plan === 'paid' 
-                    ? 'Start your Pro subscription' 
-                    : 'Join thousands of business owners'}
+                  Join thousands of business owners who trust SupaInvoice.
                 </Text>
-                </View>
-                
-                <View style={styles.quoteSection}>
-                                  <View style={styles.quoteContainer}>
-                  <Image 
-                    source={require('../../assets/onboarding/happyuser.png')} 
-                    style={styles.profileImage}
-                  />
-                  <Text style={styles.quoteText}>
-                    "AI that actually works and saves me hours of paperwork."
-                  </Text>
-                </View>
-                </View>
               </View>
             </View>
           </View>
 
-          {/* Choice Section - Bottom 30% */}
+          {/* Choice Section */}
           <View style={[styles.choiceSection, { backgroundColor: theme.card }]}>
             <View style={styles.choiceContent}>
-              {/* Plan indicator */}
-              {plan === 'paid' && (
-                <View style={[styles.planBadge, { backgroundColor: theme.primary }]}>
-                  <Ionicons name="crown" size={16} color={theme.primaryForeground} />
-                  <Text style={[styles.planBadgeText, { color: theme.primaryForeground }]}>
-                    Pro Plan
-                  </Text>
-                </View>
-              )}
-
-              {/* Google Button */}
-              <Button
-                onPress={handleGoogleAuth}
-                disabled={isGoogleLoading}
-                style={[styles.choiceButton, { 
-                  backgroundColor: theme.card, 
-                  borderColor: theme.border 
-                }]}
-              >
-                {isGoogleLoading ? (
-                  <ActivityIndicator size="small" color={theme.foreground} />
-                ) : (
-                  <>
-                    <Image
-                      source={require("@/assets/google.png")}
-                      style={styles.googleIcon}
-                    />
-                    <Text style={[styles.choiceButtonText, { color: theme.foreground }]}>
-                      Continue with Google
-                    </Text>
-                  </>
+              <View>
+                {plan === 'paid' && (
+                  <View style={[styles.planBadge, { backgroundColor: theme.primaryTransparent }]}>
+                    <Ionicons name="star" size={16} color={theme.primary} />
+                    <Text style={[styles.planBadgeText, { color: theme.primary }]}>PRO PLAN</Text>
+                  </View>
                 )}
-              </Button>
-
-              {/* Email Button */}
-              <Button
-                onPress={handleContinueWithEmail}
-                style={[styles.choiceButton, styles.emailButton, { 
-                  backgroundColor: theme.primary 
-                }]}
-              >
-                <Ionicons name="mail" size={20} color={theme.primaryForeground} style={styles.emailIcon} />
-                <Text style={[styles.choiceButtonText, { color: theme.primaryForeground }]}>
-                  Continue with Email
-                </Text>
-              </Button>
-
-              {/* Sign In Link */}
+                <Button
+                  onPress={handleGoogleAuth}
+                  style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                  disabled={isGoogleLoading}
+                >
+                  {isGoogleLoading ? (
+                    <ActivityIndicator color={theme.foreground} />
+                  ) : (
+                    <>
+                      <Image 
+                        source={require('@/assets/google.png')} 
+                        style={styles.googleIcon} 
+                      />
+                      <Text style={[styles.choiceButtonText, { color: theme.foreground }]}>
+                        Sign Up With Google
+                      </Text>
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onPress={handleContinueWithEmail}
+                  style={[styles.choiceButton, styles.emailButton, { backgroundColor: theme.primary }]}                  
+                >
+                  <Ionicons name="mail" size={20} color={theme.primaryForeground} style={styles.emailIcon} />
+                  <Text style={[styles.choiceButtonText, { color: theme.primaryForeground }]}>
+                    Sign Up With Email
+                  </Text>
+                </Button>
+              </View>
               <TouchableOpacity onPress={handleSignInPress} style={styles.signInLink}>
                 <Text style={[styles.signInText, { color: theme.mutedForeground }]}>
-                  Already have an account?{' '}
-                  <Text style={[styles.signInHighlight, { color: theme.primary }]}>
-                    Sign In
-                  </Text>
+                  Already have an account?{" "}
+                  <Text style={[styles.signInHighlight, { color: theme.primary }]}>Sign In</Text>
                 </Text>
               </TouchableOpacity>
             </View>
@@ -268,9 +240,7 @@ export function AuthModal({
       {/* Email Sign Up Modal */}
       <SignUpModal
         visible={showSignUp}
-        onClose={() => {
-          setShowSignUp(false);
-        }}
+        onClose={() => setShowSignUp(false)}
         onSwitchToSignIn={() => {
           setShowSignUp(false);
           setShowSignIn(true);
@@ -282,9 +252,7 @@ export function AuthModal({
       {/* Sign In Modal */}
       <SignInModal
         visible={showSignIn}
-        onClose={() => {
-          setShowSignIn(false);
-        }}
+        onClose={() => setShowSignIn(false)}
         onSwitchToSignUp={() => {
           setShowSignIn(false);
           setShowSignUp(true);
@@ -299,95 +267,62 @@ export function AuthModal({
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  animationSection: {
+  // New Video Header Styles
+  videoHeaderSection: {
     height: '70%',
+    backgroundColor: '#000',
   },
-  gradientBackground: {
+  backgroundVideo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
+  },
+  overlay: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-  },
-  closeButton: {
-    alignSelf: 'flex-end',
-    padding: 8,
-    marginHorizontal: 16,
-  },
-  animationContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-  },
-  upperContent: {
-    alignItems: 'center',
-    marginTop: 30,
-  },
-  logoContainer: {
-    marginBottom: 20,
-  },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
+    paddingHorizontal: 24,
   },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: 'bold',
+  closeButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    right: 16,
+    zIndex: 1,
   },
-  logoImage: {
-    width: 65,
-    height: 65,
-    borderRadius: 16,
+  headerContent: {
+    alignItems: 'center',
   },
   title: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 8,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    marginBottom: 8,
   },
   subtitle: {
-    color: 'rgba(0, 0, 0, 0.7)',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 16,
     textAlign: 'center',
     paddingHorizontal: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  quoteSection: {
-    alignItems: 'center',
-    marginBottom: 50,
-  },
-  quoteContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    maxWidth: '90%',
-  },
-  profileImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  quoteText: {
-    color: 'rgba(0, 0, 0, 0.7)',
-    fontSize: 16,
-    fontStyle: 'italic',
-    textAlign: 'left',
-    flex: 1,
-  },
+
+  // Auth Choices Section
   choiceSection: {
     height: '30%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: -20,
+    marginTop: -20, // Creates the overlap effect
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -404,7 +339,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    paddingBottom: 16,
     justifyContent: 'space-between',
   },
   planBadge: {
@@ -448,17 +383,14 @@ const getStyles = (theme: any) => StyleSheet.create({
     width: 20,
     height: 20,
     marginRight: 12,
-    marginLeft: -2,
-    transform: [{ translateY: 3 }],
   },
   emailIcon: {
     marginRight: 12,
-    marginLeft: -2,
-    transform: [{ translateY: 5 }],
   },
   choiceButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    transform: [{ translateY: -2 }],
   },
   signInLink: {
     alignItems: 'center',
