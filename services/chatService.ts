@@ -357,14 +357,24 @@ export class ChatService {
     // Simple title generation based on first message
     const message = firstMessage.toLowerCase();
     
-    if (message.includes('invoice') && message.includes('create')) {
+    if (message.includes('estimate') && message.includes('create')) {
+      return 'Create Estimate';
+    } else if (message.includes('invoice') && message.includes('create')) {
       return 'Create Invoice';
+    } else if (message.includes('estimate') && (message.includes('search') || message.includes('find'))) {
+      return 'Search Estimates';
     } else if (message.includes('search') || message.includes('find')) {
       return 'Search Invoices';
+    } else if (message.includes('estimate') && (message.includes('summary') || message.includes('report'))) {
+      return 'Estimate Summary';
     } else if (message.includes('summary') || message.includes('report')) {
       return 'Invoice Summary';
+    } else if (message.includes('estimate') && message.includes('recent')) {
+      return 'Recent Estimates';
     } else if (message.includes('recent')) {
       return 'Recent Invoices';
+    } else if (message.includes('estimate')) {
+      return 'Estimate Chat';
     } else {
       // Truncate to first few words
       const words = firstMessage.split(' ').slice(0, 4).join(' ');

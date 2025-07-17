@@ -25,6 +25,377 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 // Simple Invoice Modal using our new InvoicePreviewModal component
 
+// Estimate Preview Component for Chat
+const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: any }) => {
+	const { estimate, line_items, client_id } = estimateData;
+	const [businessSettings, setBusinessSettings] = useState<(BusinessSettingsRow & {
+		currency: string;
+		currency_symbol: string;
+		show_business_logo?: boolean;
+		show_business_name?: boolean;
+		show_business_address?: boolean;
+		show_business_tax_number?: boolean;
+		show_notes_section?: boolean;
+	}) | null>(null);
+	const [fullClientData, setFullClientData] = useState<any>(null);
+	const estimatePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
+
+	// Get the correct invoice design component based on estimate design type
+	const getEstimateDesignComponent = () => {
+		const designType = estimate?.estimate_template || 'classic';
+		console.log('[AI EstimatePreview] Selected design type for estimate:', designType);
+		
+		switch (designType.toLowerCase()) {
+			case 'modern':
+				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasModern');
+				return SkiaInvoiceCanvasModern;
+			case 'simple':
+				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasSimple');
+				return SkiaInvoiceCanvasSimple;
+			case 'classic':
+			default:
+				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvas (classic)');
+				return SkiaInvoiceCanvas;
+		}
+	};
+	
+	const { supabase } = useSupabase();
+	
+	// Load business settings and client data on mount and when client_id or estimate changes
+	useEffect(() => {
+		loadBusinessSettings();
+		loadFullClientData();
+	}, [client_id, estimate.id]); // Re-run when client_id or estimate.id changes
+
+	const loadFullClientData = async () => {
+		if (!client_id) {
+			console.log('[AI Estimate Preview] No client_id provided, clearing client data');
+			setFullClientData(null);
+			return;
+		}
+		
+		try {
+			console.log('[AI Estimate Preview] Loading full client data for client_id:', client_id);
+			console.log('[AI Estimate Preview] Estimate client_name for comparison:', estimate.client_name);
+			
+			const { data: clientData, error } = await supabase
+				.from('clients')
+				.select('*')
+				.eq('id', client_id)
+				.single();
+
+			if (error) {
+				console.error('Error loading client data:', error);
+				setFullClientData(null);
+			} else {
+				console.log('[AI Estimate Preview] Loaded full client data:', clientData);
+				setFullClientData(clientData);
+			}
+		} catch (error) {
+			console.error('[AI Estimate Preview] Error loading client data:', error);
+			setFullClientData(null);
+		}
+	};
+
+	const loadBusinessSettings = async () => {
+		try {
+			console.log('[AI Estimate Preview] Loading business settings for user:', estimate.user_id);
+			
+			// Fetch actual business settings from the database
+			const { data: businessSettings, error } = await supabase
+				.from('business_settings')
+				.select('*')
+				.eq('user_id', estimate.user_id)
+				.single();
+
+			if (error) {
+				console.error('Error loading business settings:', error);
+				// Fall back to default settings
+				const defaultSettings: BusinessSettingsRow & {
+					currency: string;
+					currency_symbol: string;
+					show_business_logo?: boolean;
+					show_business_name?: boolean;
+					show_business_address?: boolean;
+					show_business_tax_number?: boolean;
+					show_notes_section?: boolean;
+				} = {
+					id: 'default',
+					user_id: estimate.user_id,
+					business_name: 'Your Business',
+					business_address: 'Your Address',
+					business_logo_url: null,
+					business_email: null,
+					business_phone: null,
+					business_website: null,
+					currency_code: 'USD',
+					tax_number: '',
+					tax_name: '',
+					default_tax_rate: null,
+					auto_apply_tax: false,
+					region: null,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					currency: 'USD',
+					currency_symbol: '$',
+					show_business_logo: true,
+					show_business_name: true,
+					show_business_address: true,
+					show_business_tax_number: true,
+					show_notes_section: true,
+				};
+				setBusinessSettings(defaultSettings);
+			} else {
+				console.log('[AI Estimate Preview] Loaded business settings:', businessSettings);
+				
+				// Map currency_code to currency_symbol
+				const currencySymbol = getCurrencySymbol(businessSettings.currency_code || 'USD');
+				
+				const enhancedSettings: BusinessSettingsRow & {
+					currency: string;
+					currency_symbol: string;
+					show_business_logo?: boolean;
+					show_business_name?: boolean;
+					show_business_address?: boolean;
+					show_business_tax_number?: boolean;
+					show_notes_section?: boolean;
+				} = {
+					...businessSettings,
+					currency: businessSettings.currency_code || 'USD',
+					currency_symbol: currencySymbol,
+					show_business_logo: businessSettings.show_business_logo ?? true,
+					show_business_name: businessSettings.show_business_name ?? true,
+					show_business_address: businessSettings.show_business_address ?? true,
+					show_business_tax_number: businessSettings.show_business_tax_number ?? true,
+					show_notes_section: businessSettings.show_notes_section ?? true,
+				};
+				
+				setBusinessSettings(enhancedSettings);
+			}
+		} catch (error) {
+			console.error('Error loading business settings:', error);
+			const defaultSettings: BusinessSettingsRow & {
+				currency: string;
+				currency_symbol: string;
+				show_business_logo?: boolean;
+				show_business_name?: boolean;
+				show_business_address?: boolean;
+				show_business_tax_number?: boolean;
+				show_notes_section?: boolean;
+			} = {
+				id: 'default',
+				user_id: estimate.user_id,
+				business_name: 'Your Business',
+				business_address: 'Your Address',
+				business_logo_url: null,
+				business_email: null,
+				business_phone: null,
+				business_website: null,
+				currency_code: 'USD',
+				tax_number: '',
+				tax_name: '',
+				default_tax_rate: null,
+				auto_apply_tax: false,
+				region: null,
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+				currency: 'USD',
+				currency_symbol: '$',
+				show_business_logo: true,
+				show_business_name: true,
+				show_business_address: true,
+				show_business_tax_number: true,
+				show_notes_section: true,
+			};
+			setBusinessSettings(defaultSettings);
+		}
+	};
+
+	// Currency symbol mapping function
+	const getCurrencySymbol = (code: string) => {
+		const mapping: Record<string, string> = {
+			GBP: '£',
+			USD: '$',
+			EUR: '€',
+			AUD: 'A$',
+			CAD: 'C$',
+			JPY: '¥',
+			INR: '₹',
+			CHF: 'Fr',
+			CNY: '¥',
+			NZD: 'NZ$',
+			SEK: 'kr',
+			NOK: 'kr',
+			DKK: 'kr',
+			SGD: 'S$',
+			HKD: 'HK$'
+		};
+		if (!code) return '$';
+		const normalized = code.split(' ')[0];
+		return mapping[normalized] || '$';
+	};
+
+	// Transform estimate data to work with invoice canvas components
+	const transformedEstimate = {
+		...estimate,
+		// Transform estimate fields to invoice fields for canvas compatibility
+		invoice_number: estimate?.estimate_number,
+		invoice_date: estimate?.estimate_date,
+		due_date: estimate?.valid_until_date,
+		invoice_line_items: line_items || [],
+	};
+
+	// Get the dynamic estimate component
+	const EstimateDesignComponent = getEstimateDesignComponent();
+
+	// Use the full client data from database but prefer current estimate client name if different
+	let transformedClient = null;
+	if (fullClientData) {
+		transformedClient = {
+			...fullClientData,
+			name: estimate.client_name || fullClientData.name,
+			email: estimate.client_email || fullClientData.email,
+		};
+	} else if (estimate.client_name) {
+		transformedClient = {
+			id: client_id,
+			user_id: estimate.user_id,
+			name: estimate.client_name,
+			email: estimate.client_email,
+			phone: estimate.client_phone || null,
+			address_client: estimate.client_address || null,
+			tax_number: estimate.client_tax_number || null,
+			notes: null,
+			avatar_url: null,
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		};
+	}
+
+	const handleTapToView = () => {
+		estimatePreviewModalRef.current?.present();
+	};
+
+	if (!businessSettings) {
+		return (
+			<View 
+				style={{
+					backgroundColor: theme.background,
+					borderWidth: 1,
+					borderColor: theme.border,
+					borderRadius: 12,
+					padding: 16,
+					marginTop: 8,
+					height: 200,
+					justifyContent: 'center',
+					alignItems: 'center',
+				}}
+			>
+				<Text style={{ color: theme.mutedForeground }}>Loading estimate preview...</Text>
+			</View>
+		);
+	}
+
+	return (
+		<>
+			<TouchableOpacity onPress={handleTapToView} activeOpacity={0.8}>
+				<View 
+					style={{
+						backgroundColor: theme.background,
+						borderWidth: 1,
+						borderColor: theme.border,
+						borderRadius: 12,
+						padding: 4,
+						marginTop: 8,
+						overflow: 'hidden',
+					}}
+				>
+					{/* Tap to view hint in top right */}
+					<View style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+						<Text style={{ color: theme.mutedForeground, fontSize: 12, backgroundColor: theme.background + 'E6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+							Tap to view
+						</Text>
+					</View>
+
+					{/* Scaled down estimate preview */}
+					<View 
+						style={{
+							height: 200,
+							width: '100%',
+							alignItems: 'center',
+							justifyContent: 'center',
+							overflow: 'hidden',
+							marginTop: 10,
+							marginBottom: 10,
+						}}
+					>
+						{businessSettings && transformedEstimate ? (
+							<View style={{
+								transform: [{ scale: 0.6 }],
+								marginLeft: -120,
+							}}>
+								<EstimateDesignComponent
+									renderSinglePage={0}
+									style={{
+										width: 200,
+										height: 280,
+										backgroundColor: 'white',
+										borderRadius: 8,
+										shadowColor: '#000',
+										shadowOffset: { width: 0, height: 4 },
+										shadowOpacity: 0.15,
+										shadowRadius: 8,
+										elevation: 5,
+									}}
+									invoice={transformedEstimate}
+									business={businessSettings}
+									client={transformedClient}
+									currencySymbol={businessSettings?.currency_symbol || '$'}
+									accentColor={estimate?.accent_color || '#14B8A6'}
+									documentType="estimate"
+									estimateTerminology={businessSettings?.estimate_terminology || 'estimate'}
+									displaySettings={{
+										show_business_logo: businessSettings?.show_business_logo ?? true,
+										show_business_name: businessSettings?.show_business_name ?? true,
+										show_business_address: businessSettings?.show_business_address ?? true,
+										show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
+										show_notes_section: businessSettings?.show_notes_section ?? true,
+									}}
+								/>
+							</View>
+						) : (
+							<View style={{
+								width: 120,
+								height: 168,
+								backgroundColor: 'white',
+								borderRadius: 8,
+								justifyContent: 'center',
+								alignItems: 'center',
+								shadowColor: '#000',
+								shadowOffset: { width: 0, height: 4 },
+								shadowOpacity: 0.15,
+								shadowRadius: 8,
+								elevation: 5,
+							}}>
+								<Text style={{ color: '#666', fontSize: 12 }}>Loading...</Text>
+							</View>
+						)}
+					</View>
+				</View>
+			</TouchableOpacity>
+
+			{/* Estimate Preview Modal */}
+			<InvoicePreviewModal
+				ref={estimatePreviewModalRef}
+				invoiceData={transformedEstimate}
+				businessSettings={businessSettings}
+				clientData={transformedClient}
+				documentType="estimate"
+			/>
+		</>
+	);
+};
+
 // Invoice Preview Component for Chat
 const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }) => {
 	const { invoice, line_items, client_id } = invoiceData;
@@ -733,7 +1104,7 @@ export default function AiScreen() {
 			id: 'welcome',
 			conversation_id: '',
 			role: 'assistant' as const,
-			content: `${greeting}, I'm SuperAI your invoice assistant. I can help create, manage, update or chase unpaid invoices (and much more). You can type or send a voice note and I will understand. What can I help with?`,
+			content: `${greeting}, I'm SuperAI your invoice and estimate assistant. I can help create, manage, update or chase unpaid invoices and estimates (and much more). You can type or send a voice note and I will understand. What can I help with?`,
 			message_type: 'text' as const,
 			created_at: new Date().toISOString()
 		};
@@ -873,6 +1244,8 @@ export default function AiScreen() {
 			return `👤 ${statusMessage}`;
 		} else if (message.includes('invoice')) {
 			return `📄 ${statusMessage}`;
+		} else if (message.includes('estimate')) {
+			return `📋 ${statusMessage}`;
 		} else {
 			// Default emoji for any other status
 			return `🔄 ${statusMessage}`;
@@ -1051,7 +1424,7 @@ export default function AiScreen() {
 									message.role === 'user' ? '#FFFFFF' : theme.foreground
 								)}
 
-									{/* Show invoice and client previews if this message has attachment data */}
+									{/* Show invoice, estimate, and client previews if this message has attachment data */}
 									{message.role === 'assistant' && (message as any).attachments && (message as any).attachments.length > 0 && (
 										(message as any).attachments.map((attachment: any, index: number) => {
 										// Check if attachment has invoice data
@@ -1060,6 +1433,17 @@ export default function AiScreen() {
 												<InvoicePreview 
 														key={`invoice-${index}`}
 													invoiceData={attachment} 
+													theme={theme} 
+												/>
+											);
+										}
+										
+										// Check if attachment has estimate data
+										if (attachment && attachment.estimate && attachment.line_items) {
+											return (
+												<EstimatePreview 
+													key={`estimate-${index}`}
+													estimateData={attachment} 
 													theme={theme} 
 												/>
 											);

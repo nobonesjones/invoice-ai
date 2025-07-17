@@ -665,6 +665,210 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       },
       required: ["client_name", "new_client_name"]
     }
+  },
+  {
+    name: "create_estimate",
+    description: "Create a new estimate/quote with client details and line items. If client doesn't exist, they will be created automatically.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "Name of the client for this estimate"
+        },
+        client_email: {
+          type: "string",
+          description: "Email address of the client (optional)"
+        },
+        client_phone: {
+          type: "string",
+          description: "Phone number of the client (optional)"
+        },
+        client_address: {
+          type: "string",
+          description: "Address of the client (optional)"
+        },
+        estimate_date: {
+          type: "string",
+          format: "date",
+          description: "Estimate date (YYYY-MM-DD). If not provided, uses today's date"
+        },
+        valid_until_date: {
+          type: "string",
+          format: "date",
+          description: "Date until when the estimate is valid (YYYY-MM-DD). If not provided, calculates based on validity period"
+        },
+        validity_days: {
+          type: "number",
+          default: 30,
+          description: "Number of days from estimate date until estimate expires (used if valid_until_date not provided)"
+        },
+        line_items: {
+          type: "array",
+          description: "Array of items/services being estimated",
+          items: {
+            type: "object",
+            properties: {
+              item_name: {
+                type: "string",
+                description: "Name of the item/service"
+              },
+              item_description: {
+                type: "string",
+                description: "Description of the item/service (optional)"
+              },
+              quantity: {
+                type: "number",
+                default: 1,
+                description: "Quantity of the item"
+              },
+              unit_price: {
+                type: "number",
+                description: "Price per unit"
+              }
+            },
+            required: ["item_name", "unit_price"]
+          },
+          minItems: 1
+        },
+        tax_percentage: {
+          type: "number",
+          default: 0,
+          description: "Tax percentage to apply (e.g., 8.5 for 8.5%)"
+        },
+        discount_type: {
+          type: "string",
+          enum: ["percentage", "fixed"],
+          description: "Type of discount to apply"
+        },
+        discount_value: {
+          type: "number",
+          default: 0,
+          description: "Discount value (percentage or fixed amount)"
+        },
+        notes: {
+          type: "string",
+          description: "Additional notes for the estimate (optional)"
+        },
+        custom_headline: {
+          type: "string",
+          description: "Custom headline/title for the estimate (optional)"
+        },
+        acceptance_terms: {
+          type: "string",
+          description: "Terms and conditions for estimate acceptance (optional)"
+        }
+      },
+      required: ["client_name", "line_items"]
+    }
+  },
+  {
+    name: "search_estimates",
+    description: "Search for estimates by various criteria like client name, status, date range, or amount",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "Search by client name (partial match)"
+        },
+        status: {
+          type: "string",
+          enum: ["draft", "sent", "accepted", "declined", "expired", "converted", "cancelled"],
+          description: "Filter by estimate status"
+        },
+        date_from: {
+          type: "string",
+          format: "date",
+          description: "Start date for date range filter (YYYY-MM-DD)"
+        },
+        date_to: {
+          type: "string",
+          format: "date",
+          description: "End date for date range filter (YYYY-MM-DD)"
+        },
+        min_amount: {
+          type: "number",
+          description: "Minimum estimate amount"
+        },
+        max_amount: {
+          type: "number",
+          description: "Maximum estimate amount"
+        },
+        limit: {
+          type: "number",
+          default: 10,
+          description: "Maximum number of results to return"
+        }
+      }
+    }
+  },
+  {
+    name: "get_estimate_by_number",
+    description: "Get a specific estimate by its estimate number",
+    parameters: {
+      type: "object",
+      properties: {
+        estimate_number: {
+          type: "string",
+          description: "The estimate number to search for"
+        }
+      },
+      required: ["estimate_number"]
+    }
+  },
+  {
+    name: "get_recent_estimates",
+    description: "Get the most recent estimates for the user",
+    parameters: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "number",
+          default: 5,
+          description: "Number of recent estimates to return"
+        },
+        status_filter: {
+          type: "string",
+          enum: ["all", "pending", "accepted", "declined", "expired"],
+          default: "all",
+          description: "Filter by status"
+        }
+      }
+    }
+  },
+  {
+    name: "convert_estimate_to_invoice",
+    description: "Convert an existing estimate to an invoice",
+    parameters: {
+      type: "object",
+      properties: {
+        estimate_number: {
+          type: "string",
+          description: "The estimate number to convert"
+        },
+        estimate_id: {
+          type: "string",
+          description: "The estimate ID to convert (alternative to estimate_number)"
+        },
+        invoice_date: {
+          type: "string",
+          format: "date",
+          description: "Invoice date (YYYY-MM-DD). If not provided, uses today's date"
+        },
+        due_date: {
+          type: "string",
+          format: "date",
+          description: "Due date for payment (YYYY-MM-DD). If not provided, calculates based on payment terms"
+        },
+        payment_terms_days: {
+          type: "number",
+          default: 30,
+          description: "Number of days from invoice date until payment is due"
+        }
+      },
+      required: ["estimate_number"]
+    }
   }
 ];
 
@@ -745,6 +949,16 @@ export class InvoiceFunctionService {
           return await this.duplicateInvoice(parameters, userId);
         case 'duplicate_client':
           return await this.duplicateClient(parameters, userId);
+        case 'create_estimate':
+          return await this.createEstimate(parameters, userId);
+        case 'search_estimates':
+          return await this.searchEstimates(parameters, userId);
+        case 'get_estimate_by_number':
+          return await this.getEstimateByNumber(parameters, userId);
+        case 'get_recent_estimates':
+          return await this.getRecentEstimates(parameters, userId);
+        case 'convert_estimate_to_invoice':
+          return await this.convertEstimateToInvoice(parameters, userId);
         default:
           return {
             success: false,
@@ -3570,5 +3784,570 @@ The new client is ready to use for invoices!`
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  // Estimate-specific methods
+  private static async createEstimate(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log('[AI Estimate Create] Creating estimate');
+      
+      // Get user's business settings for defaults
+      let defaultTaxRate = 0;
+      let businessCurrency = 'USD';
+      let businessCurrencySymbol = '$';
+      let defaultDesign = 'classic';
+      let defaultAccentColor = '#14B8A6';
+      
+      try {
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('default_tax_rate, auto_apply_tax, currency_code, default_invoice_design, default_accent_color')
+          .eq('user_id', userId)
+          .single();
+          
+        if (businessSettings) {
+          if (businessSettings.auto_apply_tax && businessSettings.default_tax_rate) {
+            defaultTaxRate = businessSettings.default_tax_rate;
+          }
+          if (businessSettings.currency_code) {
+            businessCurrency = businessSettings.currency_code;
+            businessCurrencySymbol = this.getCurrencySymbol(businessSettings.currency_code);
+          }
+          if (businessSettings.default_invoice_design) {
+            defaultDesign = businessSettings.default_invoice_design;
+          }
+          if (businessSettings.default_accent_color) {
+            defaultAccentColor = businessSettings.default_accent_color;
+          }
+        }
+      } catch (settingsError) {
+        console.log('[AI Estimate Create] Using default settings');
+      }
+
+      // Generate estimate number
+      const estimateNumber = await this.generateNextEstimateNumber(userId);
+      
+      // Process line items
+      const processedLineItems = [];
+      let subtotal = 0;
+
+      for (const item of params.line_items || []) {
+        const quantity = parseFloat(item.quantity) || 1;
+        const unitPrice = parseFloat(item.unit_price) || 0;
+        const total = quantity * unitPrice;
+        
+        processedLineItems.push({
+          description: item.description || 'Item',
+          quantity: quantity,
+          unit_price: unitPrice,
+          total: total
+        });
+        
+        subtotal += total;
+      }
+
+      // Calculate tax and total
+      const taxPercentage = params.tax_percentage !== undefined ? params.tax_percentage : defaultTaxRate;
+      const discountValue = params.discount_value || 0;
+      const discountType = params.discount_type || 'percentage';
+      
+      let discountAmount = 0;
+      if (discountType === 'percentage') {
+        discountAmount = (subtotal * discountValue) / 100;
+      } else {
+        discountAmount = discountValue;
+      }
+      
+      const discountedSubtotal = subtotal - discountAmount;
+      const taxAmount = (discountedSubtotal * taxPercentage) / 100;
+      const total = discountedSubtotal + taxAmount;
+
+      // Handle dates
+      const estimateDate = params.estimate_date ? new Date(params.estimate_date) : new Date();
+      let validUntilDate;
+      if (params.valid_until_date) {
+        validUntilDate = new Date(params.valid_until_date);
+      } else {
+        const validityDays = params.validity_days || 30;
+        validUntilDate = new Date(estimateDate);
+        validUntilDate.setDate(validUntilDate.getDate() + validityDays);
+      }
+
+      // Create or find client
+      let clientId = params.client_id;
+      if (!clientId && (params.client_name || params.client_email)) {
+        const clientResult = await this.findOrCreateClient({
+          name: params.client_name,
+          email: params.client_email,
+          phone: params.client_phone,
+          address: params.client_address
+        }, userId);
+        
+        if (clientResult.success) {
+          clientId = clientResult.data.id;
+        }
+      }
+
+      // Create estimate record
+      const estimateData = {
+        user_id: userId,
+        client_id: clientId,
+        estimate_number: estimateNumber,
+        estimate_date: estimateDate.toISOString().split('T')[0],
+        valid_until_date: validUntilDate.toISOString().split('T')[0],
+        subtotal: subtotal,
+        tax_percentage: taxPercentage,
+        tax_amount: taxAmount,
+        discount_type: discountType,
+        discount_value: discountValue,
+        discount_amount: discountAmount,
+        total: total,
+        currency: businessCurrency,
+        status: 'pending',
+        notes: params.notes || '',
+        acceptance_terms: params.acceptance_terms || '',
+        design_template: defaultDesign,
+        accent_color: defaultAccentColor
+      };
+
+      const { data: estimate, error: estimateError } = await supabase
+        .from('estimates')
+        .insert(estimateData)
+        .select()
+        .single();
+
+      if (estimateError) {
+        throw new Error(`Failed to create estimate: ${estimateError.message}`);
+      }
+
+      // Create line items
+      const lineItemsData = processedLineItems.map(item => ({
+        estimate_id: estimate.id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total: item.total
+      }));
+
+      const { error: lineItemsError } = await supabase
+        .from('estimate_line_items')
+        .insert(lineItemsData);
+
+      if (lineItemsError) {
+        throw new Error(`Failed to create estimate line items: ${lineItemsError.message}`);
+      }
+
+      const message = `✅ **Estimate ${estimateNumber} created successfully!**\n\n` +
+        `📋 **Estimate Details:**\n` +
+        `• Number: ${estimateNumber}\n` +
+        `• Date: ${estimateDate.toLocaleDateString()}\n` +
+        `• Valid until: ${validUntilDate.toLocaleDateString()}\n` +
+        `• Subtotal: ${businessCurrencySymbol}${subtotal.toFixed(2)}\n` +
+        (discountAmount > 0 ? `• Discount: -${businessCurrencySymbol}${discountAmount.toFixed(2)}\n` : '') +
+        (taxAmount > 0 ? `• Tax (${taxPercentage}%): ${businessCurrencySymbol}${taxAmount.toFixed(2)}\n` : '') +
+        `• **Total: ${businessCurrencySymbol}${total.toFixed(2)}**\n\n` +
+        `🎯 The estimate has been created and is ready for review.`;
+
+      return {
+        success: true,
+        data: estimate,
+        message: message,
+        attachments: [{
+          type: 'estimate',
+          estimate_id: estimate.id,
+          estimate_number: estimateNumber
+        }]
+      };
+
+    } catch (error) {
+      console.error('Error creating estimate:', error);
+      return {
+        success: false,
+        message: 'Failed to create estimate. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async searchEstimates(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      let query = supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients(id, name, email, phone)
+        `)
+        .eq('user_id', userId);
+
+      if (params.client_name) {
+        query = query.ilike('clients.name', `%${params.client_name}%`);
+      }
+
+      if (params.status) {
+        query = query.eq('status', params.status);
+      }
+
+      if (params.date_from) {
+        query = query.gte('estimate_date', params.date_from);
+      }
+
+      if (params.date_to) {
+        query = query.lte('estimate_date', params.date_to);
+      }
+
+      if (params.min_amount) {
+        query = query.gte('total', params.min_amount);
+      }
+
+      if (params.max_amount) {
+        query = query.lte('total', params.max_amount);
+      }
+
+      const limit = Math.min(params.limit || 10, 50);
+      query = query.order('estimate_date', { ascending: false }).limit(limit);
+
+      const { data: estimates, error } = await query;
+
+      if (error) {
+        throw new Error(`Search failed: ${error.message}`);
+      }
+
+      if (!estimates || estimates.length === 0) {
+        return {
+          success: true,
+          data: [],
+          message: 'No estimates found matching your criteria.'
+        };
+      }
+
+      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+
+      let message = `🔍 **Found ${estimates.length} estimate(s):**\n\n`;
+      
+      estimates.forEach(estimate => {
+        const clientName = estimate.clients?.name || 'No client';
+        const statusEmoji = estimate.status === 'accepted' ? '✅' : 
+                           estimate.status === 'declined' ? '❌' : 
+                           estimate.status === 'expired' ? '⏰' : '📋';
+        
+        message += `${statusEmoji} **${estimate.estimate_number}** - ${clientName}\n`;
+        message += `   💰 ${businessCurrencySymbol}${estimate.total.toFixed(2)} | `;
+        message += `📅 ${new Date(estimate.estimate_date).toLocaleDateString()}\n`;
+      });
+
+      return {
+        success: true,
+        data: estimates,
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error searching estimates:', error);
+      return {
+        success: false,
+        message: 'Failed to search estimates. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getEstimateByNumber(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { estimate_number } = params;
+
+      if (!estimate_number) {
+        return {
+          success: false,
+          message: 'Estimate number is required.',
+          error: 'Missing required parameter: estimate_number'
+        };
+      }
+
+      const { data: estimate, error } = await supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients(id, name, email, phone, address),
+          estimate_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('estimate_number', estimate_number)
+        .single();
+
+      if (error || !estimate) {
+        return {
+          success: false,
+          message: `Estimate ${estimate_number} not found.`,
+          error: 'Estimate not found'
+        };
+      }
+
+      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+      const clientName = estimate.clients?.name || 'No client assigned';
+      const statusEmoji = estimate.status === 'accepted' ? '✅' : 
+                         estimate.status === 'declined' ? '❌' : 
+                         estimate.status === 'expired' ? '⏰' : '📋';
+
+      let message = `${statusEmoji} **Estimate ${estimate.estimate_number}**\n\n`;
+      message += `👤 **Client:** ${clientName}\n`;
+      message += `📅 **Date:** ${new Date(estimate.estimate_date).toLocaleDateString()}\n`;
+      message += `⏰ **Valid until:** ${new Date(estimate.valid_until_date).toLocaleDateString()}\n`;
+      message += `📊 **Status:** ${estimate.status.charAt(0).toUpperCase() + estimate.status.slice(1)}\n`;
+      message += `💰 **Total:** ${businessCurrencySymbol}${estimate.total.toFixed(2)}\n\n`;
+
+      if (estimate.estimate_line_items && estimate.estimate_line_items.length > 0) {
+        message += `📋 **Line Items:**\n`;
+        estimate.estimate_line_items.forEach((item: any) => {
+          message += `• ${item.description} - Qty: ${item.quantity} × ${businessCurrencySymbol}${item.unit_price.toFixed(2)} = ${businessCurrencySymbol}${item.total.toFixed(2)}\n`;
+        });
+      }
+
+      return {
+        success: true,
+        data: estimate,
+        message: message,
+        attachments: [{
+          type: 'estimate',
+          estimate_id: estimate.id,
+          estimate_number: estimate.estimate_number
+        }]
+      };
+
+    } catch (error) {
+      console.error('Error getting estimate:', error);
+      return {
+        success: false,
+        message: 'Failed to get estimate details. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getRecentEstimates(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const limit = Math.min(params.limit || 5, 20);
+      const statusFilter = params.status_filter || 'all';
+
+      let query = supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients(id, name, email)
+        `)
+        .eq('user_id', userId);
+
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+
+      query = query.order('estimate_date', { ascending: false }).limit(limit);
+
+      const { data: estimates, error } = await query;
+
+      if (error) {
+        throw new Error(`Failed to fetch recent estimates: ${error.message}`);
+      }
+
+      if (!estimates || estimates.length === 0) {
+        const filterText = statusFilter === 'all' ? '' : ` with status "${statusFilter}"`;
+        return {
+          success: true,
+          data: [],
+          message: `No recent estimates found${filterText}.`
+        };
+      }
+
+      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+
+      let message = `📋 **Recent Estimates${statusFilter !== 'all' ? ` (${statusFilter})` : ''}:**\n\n`;
+      
+      estimates.forEach(estimate => {
+        const clientName = estimate.clients?.name || 'No client';
+        const statusEmoji = estimate.status === 'accepted' ? '✅' : 
+                           estimate.status === 'declined' ? '❌' : 
+                           estimate.status === 'expired' ? '⏰' : '📋';
+        
+        message += `${statusEmoji} **${estimate.estimate_number}** - ${clientName}\n`;
+        message += `   💰 ${businessCurrencySymbol}${estimate.total.toFixed(2)} | `;
+        message += `📅 ${new Date(estimate.estimate_date).toLocaleDateString()}\n\n`;
+      });
+
+      return {
+        success: true,
+        data: estimates,
+        message: message
+      };
+
+    } catch (error) {
+      console.error('Error getting recent estimates:', error);
+      return {
+        success: false,
+        message: 'Failed to get recent estimates. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async convertEstimateToInvoice(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { estimate_number, payment_terms_days } = params;
+
+      if (!estimate_number) {
+        return {
+          success: false,
+          message: 'Estimate number is required.',
+          error: 'Missing required parameter: estimate_number'
+        };
+      }
+
+      // Get the estimate with line items
+      const { data: estimate, error: estimateError } = await supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients(id, name, email, phone, address),
+          estimate_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('estimate_number', estimate_number)
+        .single();
+
+      if (estimateError || !estimate) {
+        return {
+          success: false,
+          message: `Estimate ${estimate_number} not found.`,
+          error: 'Estimate not found'
+        };
+      }
+
+      if (estimate.status === 'declined') {
+        return {
+          success: false,
+          message: 'Cannot convert a declined estimate to an invoice.',
+          error: 'Estimate declined'
+        };
+      }
+
+      // Generate invoice number
+      const invoiceNumber = await this.generateNextInvoiceNumber(userId);
+      
+      // Calculate due date
+      const invoiceDate = new Date();
+      const dueDate = new Date(invoiceDate);
+      dueDate.setDate(dueDate.getDate() + (payment_terms_days || 30));
+
+      // Create invoice record
+      const invoiceData = {
+        user_id: userId,
+        client_id: estimate.client_id,
+        invoice_number: invoiceNumber,
+        invoice_date: invoiceDate.toISOString().split('T')[0],
+        due_date: dueDate.toISOString().split('T')[0],
+        subtotal: estimate.subtotal,
+        tax_percentage: estimate.tax_percentage,
+        tax_amount: estimate.tax_amount,
+        discount_type: estimate.discount_type,
+        discount_value: estimate.discount_value,
+        discount_amount: estimate.discount_amount,
+        total: estimate.total,
+        currency: estimate.currency,
+        status: 'unpaid',
+        notes: estimate.notes,
+        design_template: estimate.design_template,
+        accent_color: estimate.accent_color,
+        converted_from_estimate: estimate.id
+      };
+
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert(invoiceData)
+        .select()
+        .single();
+
+      if (invoiceError) {
+        throw new Error(`Failed to create invoice: ${invoiceError.message}`);
+      }
+
+      // Create invoice line items from estimate line items
+      const invoiceLineItems = estimate.estimate_line_items.map((item: any) => ({
+        invoice_id: invoice.id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total: item.total
+      }));
+
+      const { error: lineItemsError } = await supabase
+        .from('invoice_line_items')
+        .insert(invoiceLineItems);
+
+      if (lineItemsError) {
+        throw new Error(`Failed to create invoice line items: ${lineItemsError.message}`);
+      }
+
+      // Update estimate status to accepted
+      const { error: updateError } = await supabase
+        .from('estimates')
+        .update({ 
+          status: 'accepted',
+          converted_to_invoice: invoice.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', estimate.id);
+
+      if (updateError) {
+        console.error('Warning: Failed to update estimate status:', updateError);
+      }
+
+      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+      const clientName = estimate.clients?.name || 'No client';
+
+      const message = `✅ **Estimate converted to Invoice successfully!**\n\n` +
+        `📋 **Estimate ${estimate_number}** → 🧾 **Invoice ${invoiceNumber}**\n\n` +
+        `👤 **Client:** ${clientName}\n` +
+        `📅 **Invoice Date:** ${invoiceDate.toLocaleDateString()}\n` +
+        `⏰ **Due Date:** ${dueDate.toLocaleDateString()}\n` +
+        `💰 **Amount:** ${businessCurrencySymbol}${invoice.total.toFixed(2)}\n\n` +
+        `🎯 The invoice is now ready to be sent to your client.`;
+
+      return {
+        success: true,
+        data: invoice,
+        message: message,
+        attachments: [{
+          type: 'invoice',
+          invoice_id: invoice.id,
+          invoice_number: invoiceNumber
+        }]
+      };
+
+    } catch (error) {
+      console.error('Error converting estimate to invoice:', error);
+      return {
+        success: false,
+        message: 'Failed to convert estimate to invoice. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async generateNextEstimateNumber(userId: string): Promise<string> {
+    const { data: latestEstimate } = await supabase
+      .from('estimates')
+      .select('estimate_number')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latestEstimate?.estimate_number) {
+      const match = latestEstimate.estimate_number.match(/EST-(\d+)/);
+      if (match) {
+        const nextNumber = parseInt(match[1]) + 1;
+        return `EST-${nextNumber.toString().padStart(4, '0')}`;
+      }
+    }
+
+    return 'EST-0001';
   }
 } 
