@@ -139,6 +139,14 @@ CAPABILITIES:
 • Mark invoices paid, send invoices
 • Business insights and analytics
 
+EDITING RECENTLY CREATED DOCUMENTS - CRITICAL:
+When a user asks to modify/edit/change/update a document you just created:
+• For INVOICES: ALWAYS use edit_recent_invoice function
+• For ESTIMATES: ALWAYS use edit_recent_estimate function
+• Common editing requests: "add an item", "remove something", "change the price", "update the date"
+• NEVER create a new document when the user wants to modify an existing one
+• These functions will automatically find the most recent document to edit
+
 DATABASE STRUCTURE - CRITICAL UNDERSTANDING:
 There are TWO SEPARATE data sources for different settings:
 
@@ -892,7 +900,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         console.log('🔧 TOOL CALL DEBUG:', {
           toolName: functionName,
           isEstimateFunction: functionName.includes('estimate'),
-          availableFunctions: ['create_estimate', 'search_estimates', 'get_estimate_by_number', 'get_recent_estimates', 'convert_estimate_to_invoice']
+          availableFunctions: ['create_estimate', 'search_estimates', 'get_estimate_by_number', 'get_recent_estimates', 'convert_estimate_to_invoice', 'edit_recent_estimate', 'edit_recent_invoice']
         });
         const toolStartTime = Date.now();
 

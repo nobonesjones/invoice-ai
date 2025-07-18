@@ -1,0 +1,128 @@
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useSupabase } from '@/context/supabase-provider';
+import PaywallService, { PaywallConfig } from '@/services/paywallService';
+
+interface PaywallContextType {
+  isInitialized: boolean;
+  isLoading: boolean;
+  isSubscribed: boolean;
+  presentPaywall: (config: PaywallConfig) => Promise<void>;
+  restorePurchases: () => Promise<void>;
+  checkSubscriptionStatus: () => Promise<boolean>;
+}
+
+const PaywallContext = createContext<PaywallContextType | undefined>(undefined);
+
+interface PaywallProviderProps {
+  children: ReactNode;
+}
+
+export function PaywallProvider({ children }: PaywallProviderProps) {
+  const { user } = useSupabase();
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  const initializePaywall = async () => {
+    try {
+      setIsLoading(true);
+      await PaywallService.initialize(user?.id);
+      setIsInitialized(true);
+      
+      // Check initial subscription status
+      const subscriptionStatus = await PaywallService.isUserSubscribed();
+      setIsSubscribed(subscriptionStatus);
+      
+      console.log('[PaywallProvider] Paywall services initialized successfully');
+    } catch (error) {
+      console.error('[PaywallProvider] Failed to initialize paywall services:', error);
+      // Don't block the app if paywall initialization fails
+      setIsInitialized(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const presentPaywall = async (config: PaywallConfig): Promise<void> => {
+    if (!isInitialized) {
+      throw new Error('Paywall services not initialized');
+    }
+    
+    try {
+      await PaywallService.presentPaywall(config);
+      
+      // Check subscription status after paywall interaction
+      const subscriptionStatus = await PaywallService.isUserSubscribed();
+      setIsSubscribed(subscriptionStatus);
+    } catch (error) {
+      console.error('[PaywallProvider] Failed to present paywall:', error);
+      throw error;
+    }
+  };
+
+  const restorePurchases = async (): Promise<void> => {
+    if (!isInitialized) {
+      throw new Error('Paywall services not initialized');
+    }
+    
+    try {
+      await PaywallService.restorePurchases();
+      
+      // Check subscription status after restore
+      const subscriptionStatus = await PaywallService.isUserSubscribed();
+      setIsSubscribed(subscriptionStatus);
+    } catch (error) {
+      console.error('[PaywallProvider] Failed to restore purchases:', error);
+      throw error;
+    }
+  };
+
+  const checkSubscriptionStatus = async (): Promise<boolean> => {
+    if (!isInitialized) {
+      return false;
+    }
+    
+    try {
+      const subscriptionStatus = await PaywallService.isUserSubscribed();
+      setIsSubscribed(subscriptionStatus);
+      return subscriptionStatus;
+    } catch (error) {
+      console.error('[PaywallProvider] Failed to check subscription status:', error);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      initializePaywall();
+    } else {
+      // Reset state when user logs out
+      setIsInitialized(false);
+      setIsSubscribed(false);
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  const value: PaywallContextType = {
+    isInitialized,
+    isLoading,
+    isSubscribed,
+    presentPaywall,
+    restorePurchases,
+    checkSubscriptionStatus
+  };
+
+  return (
+    <PaywallContext.Provider value={value}>
+      {children}
+    </PaywallContext.Provider>
+  );
+}
+
+export function usePaywall() {
+  const context = useContext(PaywallContext);
+  if (context === undefined) {
+    throw new Error('usePaywall must be used within a PaywallProvider');
+  }
+  return context;
+}

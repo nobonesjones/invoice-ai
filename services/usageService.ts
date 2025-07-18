@@ -1,16 +1,14 @@
 import { supabase } from '@/config/supabase';
-import { TrialService } from '@/services/trialService';
 
 export interface UsageStats {
   invoiceCount: number;
   sentInvoiceCount: number;
   freeLimit: number;
-  subscriptionTier: 'free' | 'premium' | 'trial' | 'grandfathered';
+  subscriptionTier: 'free' | 'premium' | 'grandfathered';
   canCreateInvoice: boolean;
   canSendInvoice: boolean;
   remainingInvoices: number;
   subscriptionExpiresAt?: Date;
-  isTrial?: boolean;
 }
 
 export interface UserProfile {
@@ -30,35 +28,18 @@ export interface UserProfile {
 export class UsageService {
   /**
    * Check if user can create a new invoice based on their current usage and subscription
-   * Now supports both authenticated users and trial sessions, with unlimited creation
+   * Users can create unlimited invoices but can only send 3 free invoices
    */
   static async checkInvoiceLimit(userId: string): Promise<{
     canCreate: boolean; // Always true for freemium flow
-    canSend: boolean; // New: check send permissions
+    canSend: boolean; // Check send permissions based on sent count
     remaining: number; // Remaining sends
     total: number;
     subscriptionTier: string;
     requiresUpgrade: boolean;
   }> {
     try {
-      // First check if this is a trial session
-      const isTrialSession = await TrialService.isTrialSession();
-      
-      if (isTrialSession) {
-        console.log('[UsageService] Checking trial session limits');
-        const trialCreateCheck = await TrialService.canCreateInvoice();
-        const trialSendCheck = await TrialService.canSendInvoice();
-        return {
-          canCreate: true, // Always allow creation
-          canSend: trialSendCheck.canSend,
-          remaining: trialSendCheck.remaining,
-          total: trialSendCheck.total,
-          subscriptionTier: 'trial',
-          requiresUpgrade: !trialSendCheck.canSend
-        };
-      }
-
-      // Original authenticated user logic
+      // Get user profile from database
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -117,18 +98,9 @@ export class UsageService {
 
   /**
    * Increment the user's invoice count after successful invoice creation
-   * Now supports both authenticated users and trial sessions
    */
   static async incrementInvoiceCount(userId: string): Promise<void> {
     try {
-      // Check if this is a trial session
-      const isTrialSession = await TrialService.isTrialSession();
-      
-      if (isTrialSession) {
-        console.log('[UsageService] Incrementing trial session invoice count');
-        await TrialService.incrementTrialInvoiceCount();
-        return;
-      }
 
       // Original authenticated user logic
       // First get current count
@@ -171,14 +143,6 @@ export class UsageService {
    */
   static async incrementSentInvoiceCount(userId: string): Promise<void> {
     try {
-      // Check if this is a trial session
-      const isTrialSession = await TrialService.isTrialSession();
-      
-      if (isTrialSession) {
-        console.log('[UsageService] Incrementing trial session sent count');
-        await TrialService.incrementTrialSentCount();
-        return;
-      }
 
       // Authenticated user logic
       // First get current count
@@ -217,29 +181,10 @@ export class UsageService {
 
   /**
    * Get comprehensive usage statistics for a user
-   * Now supports both authenticated users and trial sessions
    */
   static async getUsageStats(userId: string): Promise<UsageStats> {
     try {
-      // Check if this is a trial session
-      const isTrialSession = await TrialService.isTrialSession();
-      
-      if (isTrialSession) {
-        console.log('[UsageService] Getting trial session usage stats');
-        const trialStatus = await TrialService.getTrialStatus();
-        return {
-          invoiceCount: trialStatus.invoiceCount,
-          sentInvoiceCount: trialStatus.sentInvoiceCount,
-          freeLimit: trialStatus.maxInvoices,
-          subscriptionTier: 'trial',
-          canCreateInvoice: !trialStatus.isExpired,
-          canSendInvoice: trialStatus.canSendInvoice,
-          remainingInvoices: trialStatus.remaining,
-          isTrial: true
-        };
-      }
-
-      // Original authenticated user logic
+      // Get user profile from database
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')

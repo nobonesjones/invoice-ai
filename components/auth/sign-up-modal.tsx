@@ -22,7 +22,6 @@ import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
-import { TrialService } from "@/services/trialService";
 
 const signUpSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -108,9 +107,6 @@ export function SignUpModal({
     setGeneralError("");
     if (!validateForm()) return;
 
-    // Set signup flag to prevent trial creation
-    await TrialService.setSignupInProgress(true);
-
     try {
       setIsLoading(true);
       await signUp(email, password);
@@ -127,7 +123,6 @@ export function SignUpModal({
         }
       }
       
-      await TrialService.setSignupInProgress(false); // Clear flag on success
       onSuccess?.();
     } catch (error: any) {
       console.error("Error signing up:", error);
@@ -136,7 +131,6 @@ export function SignUpModal({
       } else {
         setGeneralError(error.message || "An error occurred during sign up");
       }
-      await TrialService.setSignupInProgress(false); // Clear flag on error
     } finally {
       setIsLoading(false);
     }

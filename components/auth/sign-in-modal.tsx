@@ -24,7 +24,6 @@ import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
-import { TrialService } from "@/services/trialService";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -105,9 +104,6 @@ export function SignInModal({
     setGeneralError("");
     if (!validateForm()) return;
 
-    // Set signup flag to prevent trial creation
-    await TrialService.setSignupInProgress(true);
-
     try {
       setIsLoading(true);
       await signInWithPassword(email, password);
@@ -124,7 +120,6 @@ export function SignInModal({
         }
       }
       
-      await TrialService.setSignupInProgress(false); // Clear flag on success
       onSuccess?.();
     } catch (error: any) {
       console.error("Error signing in:", error);
@@ -133,7 +128,6 @@ export function SignInModal({
       } else {
         setGeneralError(error.message || "An error occurred during sign in");
       }
-      await TrialService.setSignupInProgress(false); // Clear flag on error
     } finally {
       setIsLoading(false);
     }
@@ -141,9 +135,6 @@ export function SignInModal({
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
-    
-    // Set signup flag to prevent trial creation
-    await TrialService.setSignupInProgress(true);
     
     try {
       const explicitRedirectTo = "expo-supabase-starter://oauth/callback";
@@ -160,7 +151,6 @@ export function SignInModal({
           "Sign In Error",
           error.message || "An unexpected error occurred.",
         );
-        await TrialService.setSignupInProgress(false); // Clear flag on error
         setIsGoogleLoading(false);
         return;
       }
@@ -182,7 +172,6 @@ export function SignInModal({
             if (setError) {
               console.error("Error setting session manually:", setError);
               Alert.alert("Session Error", "Could not set user session.");
-              await TrialService.setSignupInProgress(false); // Clear flag on error
             } else {
               // Get the user ID from the session and save onboarding data
               const { data: sessionData } = await supabase.auth.getSession();
@@ -195,7 +184,6 @@ export function SignInModal({
                   // Don't block the flow if onboarding data save fails
                 }
               }
-              await TrialService.setSignupInProgress(false); // Clear flag on success
               onSuccess?.();
             }
           } else {
@@ -203,14 +191,10 @@ export function SignInModal({
               "Sign In Error",
               "Could not process authentication response.",
             );
-            await TrialService.setSignupInProgress(false); // Clear flag on error
           }
-        } else {
-          await TrialService.setSignupInProgress(false); // Clear flag if cancelled
         }
       } else {
         Alert.alert("Sign In Error", "Could not get authentication URL.");
-        await TrialService.setSignupInProgress(false); // Clear flag on error
       }
     } catch (catchError: any) {
       console.error(
@@ -221,7 +205,6 @@ export function SignInModal({
         "Sign In Error",
         catchError.message || "An unexpected error occurred.",
       );
-      await TrialService.setSignupInProgress(false); // Clear flag on error
     } finally {
       setIsGoogleLoading(false);
     }

@@ -15,12 +15,15 @@ import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useSupabase } from '@/context/supabase-provider';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation'; // Import the hook
+import { usePaywall } from '@/context/paywall-provider';
+import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 export default function NewSettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  const { presentPaywall, isSubscribed, isLoading: paywallLoading } = usePaywall();
   const [searchTerm, setSearchTerm] = useState('');
 
   // Use the custom hook for shine animation
@@ -38,7 +41,20 @@ export default function NewSettingsScreen() {
     }, [setIsTabBarVisible])
   );
 
-  const handleUpgradePress = () => console.log('Upgrade pressed');
+  const handleUpgradePress = async () => {
+    try {
+      await presentPaywall({
+        event: PaywallServiceClass.EVENTS.SETTINGS_UPGRADE,
+        params: {
+          source: 'settings_screen',
+          userId: user?.id
+        }
+      });
+    } catch (error) {
+      console.error('Failed to present paywall:', error);
+      Alert.alert('Error', 'Unable to show upgrade options. Please try again.');
+    }
+  };
   const handleEditAccountPress = () => {
     setIsTabBarVisible(false);
     router.push('/account-details'); 
@@ -227,24 +243,42 @@ export default function NewSettingsScreen() {
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.foreground }]}>Settings</Text>
             <TouchableOpacity 
-              style={[styles.upgradeButton, { backgroundColor: theme.gold }]} 
+              style={[
+                styles.upgradeButton, 
+                { 
+                  backgroundColor: isSubscribed ? theme.primary : theme.gold,
+                  opacity: paywallLoading ? 0.7 : 1
+                }
+              ]} 
               onPress={handleUpgradePress}
+              disabled={paywallLoading}
             >
-              <Animated.View 
-                style={[
-                  styles.shineOverlay,
-                  { transform: [{ translateX: shineTranslateX }] }
-                ]}
-              >
-                <LinearGradient
-                  colors={['transparent', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.15)', 'transparent']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.shineGradient}
-                />
-              </Animated.View>
-              <Crown size={16} color={theme.goldContrastText} style={{ marginRight: 6 }} /> 
-              <Text style={[styles.upgradeButtonText, { color: theme.goldContrastText }]}>Upgrade</Text> 
+              {!isSubscribed && (
+                <Animated.View 
+                  style={[
+                    styles.shineOverlay,
+                    { transform: [{ translateX: shineTranslateX }] }
+                  ]}
+                >
+                  <LinearGradient
+                    colors={['transparent', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.15)', 'transparent']}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.shineGradient}
+                  />
+                </Animated.View>
+              )}
+              {paywallLoading ? (
+                <ActivityIndicator size="small" color={theme.goldContrastText} style={{ marginRight: 6 }} />
+              ) : (
+                <Crown size={16} color={isSubscribed ? theme.primaryForeground : theme.goldContrastText} style={{ marginRight: 6 }} />
+              )}
+              <Text style={[
+                styles.upgradeButtonText, 
+                { color: isSubscribed ? theme.primaryForeground : theme.goldContrastText }
+              ]}>
+                {isSubscribed ? 'Pro' : 'Upgrade'}
+              </Text> 
             </TouchableOpacity>
           </View>
 

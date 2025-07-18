@@ -75,8 +75,9 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	useEffect(() => {
 		const handleAppStateChange = (nextAppState: string) => {
 			if (nextAppState === 'active') {
-				console.log('[AI Estimate Preview] App became active - refreshing data');
+				console.log('[AI Estimate Preview] App became active - refreshing data and client info');
 				loadFreshEstimateData();
+				loadFullClientData(); // Also refresh client data
 			}
 		};
 
@@ -89,10 +90,21 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	// Refresh when screen comes into focus (user navigates back to AI chat)
 	useFocusEffect(
 		React.useCallback(() => {
-			console.log('[AI Estimate Preview] Screen focused - refreshing data');
+			console.log('[AI Estimate Preview] Screen focused - refreshing data and client info');
 			loadFreshEstimateData();
+			loadFullClientData(); // Also refresh client data
 		}, [initialEstimate.id])
 	);
+
+	// Periodic refresh for client data changes (useful when AI updates client info)
+	useEffect(() => {
+		const interval = setInterval(() => {
+			console.log('[AI Estimate Preview] Periodic client data refresh');
+			loadFullClientData();
+		}, 10000); // Refresh client data every 10 seconds
+
+		return () => clearInterval(interval);
+	}, [client_id]);
 
 	const loadFreshEstimateData = async () => {
 		try {
@@ -458,8 +470,9 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 				documentType="estimate"
 				invoiceId={estimate?.id}
 				onSaveComplete={() => {
-					console.log('[AI Estimate Preview] Save completed - refreshing preview');
+					console.log('[AI Estimate Preview] Save completed - refreshing preview and client data');
 					loadFreshEstimateData();
+					loadFullClientData();
 				}}
 			/>
 		</>
@@ -515,8 +528,9 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	useEffect(() => {
 		const handleAppStateChange = (nextAppState: string) => {
 			if (nextAppState === 'active') {
-				console.log('[AI Invoice Preview] App became active - refreshing data');
+				console.log('[AI Invoice Preview] App became active - refreshing data and client info');
 				loadFreshInvoiceData();
+				loadFullClientData(); // Also refresh client data
 			}
 		};
 
@@ -529,10 +543,21 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Refresh when screen comes into focus (user navigates back to AI chat)
 	useFocusEffect(
 		React.useCallback(() => {
-			console.log('[AI Invoice Preview] Screen focused - refreshing data');
+			console.log('[AI Invoice Preview] Screen focused - refreshing data and client info');
 			loadFreshInvoiceData();
+			loadFullClientData(); // Also refresh client data
 		}, [initialInvoice.id])
 	);
+
+	// Periodic refresh for client data changes (useful when AI updates client info)
+	useEffect(() => {
+		const interval = setInterval(() => {
+			console.log('[AI Invoice Preview] Periodic client data refresh');
+			loadFullClientData();
+		}, 10000); // Refresh client data every 10 seconds
+
+		return () => clearInterval(interval);
+	}, [client_id]);
 
 	const loadFreshInvoiceData = async () => {
 		try {
@@ -917,8 +942,9 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				clientData={transformedClient}
 				invoiceId={invoice?.id}
 				onSaveComplete={() => {
-					console.log('[AI Invoice Preview] Save completed - refreshing preview');
+					console.log('[AI Invoice Preview] Save completed - refreshing preview and client data');
 					loadFreshInvoiceData();
+					loadFullClientData();
 				}}
 			/>
 		</>

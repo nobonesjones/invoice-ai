@@ -13,6 +13,7 @@ import { SupabaseProvider, useSupabase } from "@/context/supabase-provider";
 import { ThemeProvider, useTheme } from "@/context/theme-provider";
 import { UsageProvider } from "@/context/usage-provider";
 import { OnboardingProvider } from "@/context/onboarding-provider";
+import { PaywallProvider } from "@/context/paywall-provider";
 
 // Inner component to access theme and supabase context
 function RootLayoutNav() {
@@ -120,15 +121,17 @@ export default function AppLayout() {
 				<Host>
 					<SupabaseProvider>
 						<ThemeProvider>
-							<UsageProvider>
-								<OnboardingProvider>
-							<BottomSheetModalProvider>
-								<TabBarVisibilityProvider>
-									<RootLayoutNav />
-								</TabBarVisibilityProvider>
-							</BottomSheetModalProvider>
-								</OnboardingProvider>
-							</UsageProvider>
+							<PaywallProvider>
+								<UsageProvider>
+									<OnboardingProvider>
+								<BottomSheetModalProvider>
+									<TabBarVisibilityProvider>
+										<RootLayoutNav />
+									</TabBarVisibilityProvider>
+								</BottomSheetModalProvider>
+									</OnboardingProvider>
+								</UsageProvider>
+							</PaywallProvider>
 						</ThemeProvider>
 					</SupabaseProvider>
 				</Host>

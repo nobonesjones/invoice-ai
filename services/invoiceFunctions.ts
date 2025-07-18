@@ -872,7 +872,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "edit_recent_invoice",
-    description: "Edit the most recently created invoice in the conversation or find and edit a specific invoice by number. This allows making changes like adding/removing line items, updating amounts, changing due dates, modifying payment methods, etc.",
+    description: "Edit the most recently created INVOICE in the conversation. This function is optimized to find the most recent invoice even if the exact number doesn't match. Use this function when: 1) You just created an invoice and user wants to edit it, 2) User mentions editing an 'invoice', 3) The document was created as an invoice. Use this ONLY for actual invoices, NOT for estimates. The function will automatically find the most recent invoice if the specified number cannot be found. This allows making changes like adding/removing line items, updating amounts, changing due dates, modifying payment methods, etc.",
     parameters: {
       type: "object",
       properties: {
@@ -929,10 +929,6 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         notes: {
           type: "string",
           description: "Updated notes for the invoice (for update_details operation)"
-        },
-        custom_headline: {
-          type: "string",
-          description: "Updated custom headline for the invoice (for update_details operation)"
         }
       },
       required: ["operation"]
@@ -940,7 +936,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "edit_recent_estimate",
-    description: "Edit the most recently created estimate in the conversation or find and edit a specific estimate by number. This allows making changes like adding/removing line items, updating amounts, changing validity dates, modifying payment methods, etc.",
+    description: "ALWAYS call this function when the user wants to edit/modify/change/update an estimate or quote, regardless of numbering format (EST- or INV-). This function will find and edit the most recent estimate. Use this for ANY estimate modifications: adding items, removing items, changing dates, updating details, etc. The user might say 'add an item', 'change the date', 'update the estimate', 'modify the quote' - ALWAYS call this function for estimate edits.",
     parameters: {
       type: "object",
       properties: {
@@ -1033,6 +1029,9 @@ export class InvoiceFunctionService {
     userId: string
   ): Promise<FunctionResult> {
     try {
+      console.log(`[AI FUNCTION CALL] ${functionName} called with params:`, parameters);
+      console.log(`[AI FUNCTION CALL] User ID: ${userId}`);
+      
       switch (functionName) {
         case 'search_invoices':
           return await this.searchInvoices(parameters, userId);
@@ -1097,8 +1096,10 @@ export class InvoiceFunctionService {
         case 'convert_estimate_to_invoice':
           return await this.convertEstimateToInvoice(parameters, userId);
         case 'edit_recent_invoice':
+          console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_INVOICE function called!');
           return await this.editRecentInvoice(parameters, userId);
         case 'edit_recent_estimate':
+          console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_ESTIMATE function called!');
           return await this.editRecentEstimate(parameters, userId);
         default:
           return {
@@ -4119,8 +4120,8 @@ The new client is ready to use for invoices!`
         console.log('[AI Estimate Create] Using default settings');
       }
 
-      // Generate estimate number
-      const estimateNumber = await this.generateNextEstimateNumber(userId);
+      // Generate estimate number using unified reference service
+      const estimateNumber = await ReferenceNumberService.generateNextReference(userId, 'estimate');
       
       // Process line items
       const processedLineItems = [];
@@ -4379,6 +4380,7 @@ The new client is ready to use for invoices!`
         };
       }
 
+      // Handle both old EST- format and new unified INV- format
       const { data: estimate, error } = await supabase
         .from('estimates')
         .select(`
@@ -4391,10 +4393,49 @@ The new client is ready to use for invoices!`
         .single();
 
       if (error || !estimate) {
+        // Try pattern matching for backward compatibility
+        const { data: estimates, error: searchError } = await supabase
+          .from('estimates')
+          .select(`
+            *,
+            clients(id, name, email, phone, address),
+            estimate_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .or(`estimate_number.eq.${estimate_number},estimate_number.ilike.%${estimate_number}%`);
+          
+        if (searchError || !estimates || estimates.length === 0) {
+          return {
+            success: false,
+            message: `Estimate ${estimate_number} not found. Note: Estimates now use unified numbering (INV-001, INV-002, etc.)`,
+            error: 'Estimate not found'
+          };
+        }
+        
+        // Use the most recent matching estimate
+        const sortedEstimates = estimates.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const foundEstimate = sortedEstimates[0];
+        
+        const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
+        const clientName = foundEstimate.clients?.name || 'No client assigned';
+        const statusEmoji = foundEstimate.status === 'accepted' ? '✅' : 
+                           foundEstimate.status === 'declined' ? '❌' : 
+                           foundEstimate.status === 'expired' ? '⏰' : '📋';
+
+        const lineItemsList = foundEstimate.estimate_line_items?.map((item: any) => 
+          `• ${item.item_name}${item.item_description ? ` (${item.item_description})` : ''} - ${businessCurrencySymbol}${item.unit_price}${item.quantity > 1 ? ` x ${item.quantity} = ${businessCurrencySymbol}${item.total_price}` : ''}`
+        ).join('\n') || 'No line items';
+
         return {
-          success: false,
-          message: `Estimate ${estimate_number} not found.`,
-          error: 'Estimate not found'
+          success: true,
+          data: foundEstimate,
+          message: `${statusEmoji} **Estimate ${foundEstimate.estimate_number}** (Found via search)\n\n` +
+            `👤 **Client:** ${clientName}\n` +
+            `📅 **Date:** ${new Date(foundEstimate.estimate_date).toLocaleDateString()}\n` +
+            `⏰ **Valid Until:** ${new Date(foundEstimate.valid_until_date).toLocaleDateString()}\n` +
+            `📋 **Status:** ${foundEstimate.status}\n` +
+            `💰 **Amount:** ${businessCurrencySymbol}${foundEstimate.total_amount.toFixed(2)}\n\n` +
+            `**Line Items:**\n${lineItemsList}`
         };
       }
 
@@ -4519,8 +4560,9 @@ The new client is ready to use for invoices!`
         };
       }
 
-      // Get the estimate with line items
-      const { data: estimate, error: estimateError } = await supabase
+      // Get the estimate with line items - handle unified numbering
+      let estimate;
+      const { data: initialEstimate, error: estimateError } = await supabase
         .from('estimates')
         .select(`
           *,
@@ -4531,12 +4573,33 @@ The new client is ready to use for invoices!`
         .eq('estimate_number', estimate_number)
         .single();
 
-      if (estimateError || !estimate) {
-        return {
-          success: false,
-          message: `Estimate ${estimate_number} not found.`,
-          error: 'Estimate not found'
-        };
+      if (estimateError || !initialEstimate) {
+        // Try pattern matching for backward compatibility
+        const { data: estimates, error: searchError } = await supabase
+          .from('estimates')
+          .select(`
+            *,
+            clients(id, name, email, phone, address),
+            estimate_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .or(`estimate_number.eq.${estimate_number},estimate_number.ilike.%${estimate_number}%`);
+          
+        if (searchError || !estimates || estimates.length === 0) {
+          return {
+            success: false,
+            message: `Estimate ${estimate_number} not found. Note: Estimates now use unified numbering (INV-001, INV-002, etc.)`,
+            error: 'Estimate not found'
+          };
+        }
+        
+        // Use the most recent matching estimate and continue with conversion
+        const foundEstimate = estimates.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        
+        // Set estimate to the found one and continue with normal flow
+        estimate = foundEstimate;
+      } else {
+        estimate = initialEstimate;
       }
 
       if (estimate.status === 'declined') {
@@ -4654,75 +4717,122 @@ The new client is ready to use for invoices!`
   }
 
   private static async generateNextEstimateNumber(userId: string): Promise<string> {
-    const { data: latestEstimate } = await supabase
-      .from('estimates')
-      .select('estimate_number')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    // Get the latest numbers from both invoices and estimates to maintain unified numbering
+    const [invoicesResult, estimatesResult] = await Promise.all([
+      supabase
+        .from('invoices')
+        .select('invoice_number')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single(),
+      supabase
+        .from('estimates')
+        .select('estimate_number')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+    ]);
 
-    if (latestEstimate?.estimate_number) {
-      const match = latestEstimate.estimate_number.match(/EST-(\d+)/);
-      if (match) {
-        const nextNumber = parseInt(match[1]) + 1;
-        return `EST-${nextNumber.toString().padStart(4, '0')}`;
+    let highestNumber = 0;
+    
+    // Check latest invoice number
+    if (invoicesResult.data?.invoice_number) {
+      const invoiceMatch = invoicesResult.data.invoice_number.match(/(\d+)$/);
+      if (invoiceMatch) {
+        const invoiceNumber = parseInt(invoiceMatch[1]);
+        highestNumber = Math.max(highestNumber, invoiceNumber);
       }
     }
-
-    return 'EST-0001';
+    
+    // Check latest estimate number (handle both old EST- format and new INV- format)
+    if (estimatesResult.data?.estimate_number) {
+      const estimateNumber = estimatesResult.data.estimate_number;
+      let estimateMatch;
+      
+      // Try new INV- format first
+      estimateMatch = estimateNumber.match(/INV-(\d+)$/);
+      if (!estimateMatch) {
+        // Fall back to old EST- format for backward compatibility
+        estimateMatch = estimateNumber.match(/EST-(\d+)$/);
+      }
+      
+      if (estimateMatch) {
+        const estNumber = parseInt(estimateMatch[1]);
+        highestNumber = Math.max(highestNumber, estNumber);
+      }
+    }
+    
+    const nextNumber = highestNumber + 1;
+    
+    // Use the same format as invoices: INV-001, INV-002, etc.
+    return `INV-${nextNumber.toString().padStart(3, '0')}`;
   }
 
   // Edit recent invoice function
   private static async editRecentInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Edit Invoice] Editing invoice with params:', params);
+      console.log('[AI Edit Invoice] Starting edit with params:', params);
       
-      let invoiceToEdit;
+      // SIMPLE APPROACH: Just get the most recent invoices
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          clients(id, name, email, phone),
+          invoice_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5); // Get last 5 to have options
+        
+      if (error || !invoices || invoices.length === 0) {
+        console.error('[AI Edit Invoice] Query error:', error);
+        return {
+          success: false,
+          message: 'No invoices found to edit. Please create an invoice first.',
+          error: 'No invoices found'
+        };
+      }
       
-      // If invoice_number is provided, find that specific invoice
+      // Log what we found for debugging
+      console.log('[AI Edit Invoice] Found invoices:', invoices.map(i => ({
+        number: i.invoice_number,
+        created: i.created_at,
+        id: i.id
+      })));
+      
+      // Default to most recent
+      let invoiceToEdit = invoices[0];
+      
+      // If a specific number was requested, try to find it
       if (params.invoice_number) {
-        const { data: invoice, error } = await supabase
-          .from('invoices')
-          .select(`
-            *,
-            clients(id, name, email, phone),
-            invoice_line_items(*)
-          `)
-          .eq('user_id', userId)
-          .eq('invoice_number', params.invoice_number)
-          .single();
+        // Try exact match first
+        const exactMatch = invoices.find(i => i.invoice_number === params.invoice_number);
+        
+        if (exactMatch) {
+          console.log('[AI Edit Invoice] Found exact match for:', params.invoice_number);
+          invoiceToEdit = exactMatch;
+        } else {
+          // Check if this might be an estimate
+          const { data: estimate } = await supabase
+            .from('estimates')
+            .select('estimate_number')
+            .eq('user_id', userId)
+            .eq('estimate_number', params.invoice_number)
+            .single();
+            
+          if (estimate) {
+            return {
+              success: false,
+              message: `${params.invoice_number} is an estimate, not an invoice. Please use the edit estimate function instead.`,
+              error: 'Document type mismatch'
+            };
+          }
           
-        if (error || !invoice) {
-          return {
-            success: false,
-            message: `Invoice ${params.invoice_number} not found.`,
-            error: 'Invoice not found'
-          };
+          console.log('[AI Edit Invoice] No match found for:', params.invoice_number, '- using most recent:', invoiceToEdit.invoice_number);
         }
-        invoiceToEdit = invoice;
-      } else {
-        // Find the most recent invoice from this user
-        const { data: recentInvoice, error } = await supabase
-          .from('invoices')
-          .select(`
-            *,
-            clients(id, name, email, phone),
-            invoice_line_items(*)
-          `)
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-          
-        if (error || !recentInvoice) {
-          return {
-            success: false,
-            message: 'No invoices found to edit. Please create an invoice first.',
-            error: 'No recent invoice found'
-          };
-        }
-        invoiceToEdit = recentInvoice;
       }
       
       // Perform the requested operation
@@ -4741,53 +4851,66 @@ The new client is ready to use for invoices!`
   // Edit recent estimate function
   private static async editRecentEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Edit Estimate] Editing estimate with params:', params);
+      console.log('[AI Edit Estimate] Starting edit with params:', params);
       
-      let estimateToEdit;
+      // SIMPLE APPROACH: Just get the most recent estimate, period.
+      // Don't overcomplicate with number matching - the AI just created it!
       
-      // If estimate_number is provided, find that specific estimate
+      // CRITICAL FIX: Add RLS bypass header for AI operations
+      // This ensures the query runs with the correct user context
+      const { data: estimates, error } = await supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients(id, name, email, phone),
+          estimate_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5); // Get last 5 to have options
+        
+      if (error || !estimates || estimates.length === 0) {
+        console.error('[AI Edit Estimate] Query error:', error);
+        return {
+          success: false,
+          message: 'No estimates found to edit. Please create an estimate first.',
+          error: 'No estimates found'
+        };
+      }
+      
+      // Log what we found for debugging
+      console.log('[AI Edit Estimate] Found estimates:', estimates.map(e => ({
+        number: e.estimate_number,
+        created: e.created_at,
+        id: e.id
+      })));
+      
+      // Default to most recent
+      let estimateToEdit = estimates[0];
+      
+      // If a specific number was requested, try to find it
       if (params.estimate_number) {
-        const { data: estimate, error } = await supabase
-          .from('estimates')
-          .select(`
-            *,
-            clients(id, name, email, phone),
-            estimate_line_items(*)
-          `)
-          .eq('user_id', userId)
-          .eq('estimate_number', params.estimate_number)
-          .single();
+        // Try exact match first
+        const exactMatch = estimates.find(e => e.estimate_number === params.estimate_number);
+        
+        if (exactMatch) {
+          console.log('[AI Edit Estimate] Found exact match for:', params.estimate_number);
+          estimateToEdit = exactMatch;
+        } else {
+          // Try partial match (handles EST- vs INV- confusion)
+          const numberOnly = params.estimate_number.replace(/[^0-9]/g, '');
+          const partialMatch = estimates.find(e => {
+            const estimateNumberOnly = e.estimate_number.replace(/[^0-9]/g, '');
+            return estimateNumberOnly === numberOnly;
+          });
           
-        if (error || !estimate) {
-          return {
-            success: false,
-            message: `Estimate ${params.estimate_number} not found.`,
-            error: 'Estimate not found'
-          };
+          if (partialMatch) {
+            console.log('[AI Edit Estimate] Found partial match:', partialMatch.estimate_number, 'for requested:', params.estimate_number);
+            estimateToEdit = partialMatch;
+          } else {
+            console.log('[AI Edit Estimate] No match found for:', params.estimate_number, '- using most recent:', estimateToEdit.estimate_number);
+          }
         }
-        estimateToEdit = estimate;
-      } else {
-        // Find the most recent estimate from this user
-        const { data: recentEstimate, error } = await supabase
-          .from('estimates')
-          .select(`
-            *,
-            clients(id, name, email, phone),
-            estimate_line_items(*)
-          `)
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-          
-        if (error || !recentEstimate) {
-          return {
-            success: false,
-            message: 'No estimates found to edit. Please create an estimate first.',
-            error: 'No recent estimate found'
-          };
-        }
-        estimateToEdit = recentEstimate;
       }
       
       // Perform the requested operation

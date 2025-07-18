@@ -23,32 +23,6 @@ export function UsageProvider({ children }: UsageProviderProps) {
 
   const refreshUsage = async () => {
     if (!user) {
-      // Check if we're in a trial session even without a user
-      try {
-        const { TrialService } = await import('@/services/trialService');
-        const isTrialSession = await TrialService.isTrialSession();
-        
-        if (isTrialSession) {
-          console.log('[UsageProvider] Refreshing trial session usage');
-          const trialStatus = await TrialService.getTrialStatus();
-          setUsageStats({
-            invoiceCount: trialStatus.invoiceCount,
-            sentInvoiceCount: trialStatus.sentInvoiceCount,
-            freeLimit: trialStatus.maxInvoices,
-            subscriptionTier: 'trial',
-            canCreateInvoice: true, // Always true in freemium
-            canSendInvoice: trialStatus.canSendInvoice,
-            remainingInvoices: trialStatus.remaining,
-            isTrial: true
-          });
-          setIsLoading(false);
-          return;
-        }
-      } catch (trialError) {
-        console.error('Error checking trial session:', trialError);
-      }
-      
-      // No user and no trial session
       setUsageStats(null);
       setIsLoading(false);
       return;
