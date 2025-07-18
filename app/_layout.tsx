@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme } from "@/context/theme-provider";
 import { UsageProvider } from "@/context/usage-provider";
 import { OnboardingProvider } from "@/context/onboarding-provider";
 import { PaywallProvider } from "@/context/paywall-provider";
+// import { SuperwallProvider } from "expo-superwall";
 
 // Inner component to access theme and supabase context
 function RootLayoutNav() {

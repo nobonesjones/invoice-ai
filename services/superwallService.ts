@@ -1,4 +1,4 @@
-// import Superwall from '@superwall/react-native-superwall';
+import * as Superwall from 'expo-superwall';
 import { Platform } from 'react-native';
 
 class SuperwallService {
@@ -19,10 +19,9 @@ class SuperwallService {
     }
 
     try {
-      // Temporarily disabled for testing
-      console.log('[Superwall] Temporarily disabled - using mock implementation');
+      // With expo-superwall, initialization is handled by SuperwallProvider
       this.isInitialized = true;
-      console.log('[Superwall] Successfully initialized (mock)');
+      console.log('[Superwall] Successfully initialized');
     } catch (error) {
       console.error('[Superwall] Failed to initialize:', error);
       throw error;
@@ -31,10 +30,12 @@ class SuperwallService {
 
   async presentPaywall(event: string, params?: Record<string, any>): Promise<void> {
     try {
-      // Mock implementation for testing
-      console.log('[Superwall] Mock paywall presented for event:', event, 'with params:', params);
-      // You can add an alert here to simulate the paywall
-      console.log('[Superwall] This would show a paywall in production');
+      console.log('[Superwall] Presenting paywall for event:', event, 'with params:', params);
+      // Use the correct expo-superwall API
+      await Superwall.register({
+        placement: event,
+        ...params
+      });
     } catch (error) {
       console.error('[Superwall] Failed to present paywall:', error);
       throw error;
@@ -43,7 +44,8 @@ class SuperwallService {
 
   async setUserId(userId: string): Promise<void> {
     try {
-      console.log('[Superwall] Mock user identified:', userId);
+      await Superwall.identify({ userId });
+      console.log('[Superwall] User identified:', userId);
     } catch (error) {
       console.error('[Superwall] Failed to identify user:', error);
       throw error;
@@ -52,7 +54,8 @@ class SuperwallService {
 
   async setUserAttributes(attributes: Record<string, any>): Promise<void> {
     try {
-      console.log('[Superwall] Mock user attributes set:', attributes);
+      await Superwall.setUserAttributes(attributes);
+      console.log('[Superwall] User attributes set:', attributes);
     } catch (error) {
       console.error('[Superwall] Failed to set user attributes:', error);
       throw error;
@@ -61,7 +64,8 @@ class SuperwallService {
 
   async reset(): Promise<void> {
     try {
-      console.log('[Superwall] Mock reset successful');
+      await Superwall.reset();
+      console.log('[Superwall] Reset successful');
     } catch (error) {
       console.error('[Superwall] Failed to reset:', error);
       throw error;

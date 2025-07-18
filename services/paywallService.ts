@@ -102,7 +102,7 @@ class PaywallService {
 
   // Predefined paywall events
   static readonly EVENTS = {
-    SETTINGS_UPGRADE: 'settings_upgrade',
+    SETTINGS_UPGRADE: 'app_launch', // Using your configured trigger
     ONBOARDING_COMPLETE: 'onboarding_complete',
     INVOICE_LIMIT_REACHED: 'invoice_limit_reached',
     PREMIUM_FEATURE_ACCESSED: 'premium_feature_accessed'

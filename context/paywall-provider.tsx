@@ -26,14 +26,12 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
   const initializePaywall = async () => {
     try {
       setIsLoading(true);
-      await PaywallService.initialize(user?.id);
+      // Temporarily disable Superwall initialization to avoid native module errors
+      console.log('[PaywallProvider] Temporarily using mock paywall services');
       setIsInitialized(true);
+      setIsSubscribed(false); // Default to not subscribed
       
-      // Check initial subscription status
-      const subscriptionStatus = await PaywallService.isUserSubscribed();
-      setIsSubscribed(subscriptionStatus);
-      
-      console.log('[PaywallProvider] Paywall services initialized successfully');
+      console.log('[PaywallProvider] Mock paywall services initialized successfully');
     } catch (error) {
       console.error('[PaywallProvider] Failed to initialize paywall services:', error);
       // Don't block the app if paywall initialization fails
@@ -49,11 +47,10 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
     }
     
     try {
-      await PaywallService.presentPaywall(config);
-      
-      // Check subscription status after paywall interaction
-      const subscriptionStatus = await PaywallService.isUserSubscribed();
-      setIsSubscribed(subscriptionStatus);
+      console.log('[PaywallProvider] Mock paywall presented for:', config.event);
+      console.log('[PaywallProvider] This would show your Superwall paywall in production');
+      // Don't actually call the service to avoid native module errors
+      // await PaywallService.presentPaywall(config);
     } catch (error) {
       console.error('[PaywallProvider] Failed to present paywall:', error);
       throw error;
@@ -66,11 +63,9 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
     }
     
     try {
-      await PaywallService.restorePurchases();
-      
-      // Check subscription status after restore
-      const subscriptionStatus = await PaywallService.isUserSubscribed();
-      setIsSubscribed(subscriptionStatus);
+      console.log('[PaywallProvider] Mock restore purchases');
+      // Don't actually call the service to avoid native module errors
+      // await PaywallService.restorePurchases();
     } catch (error) {
       console.error('[PaywallProvider] Failed to restore purchases:', error);
       throw error;
@@ -83,9 +78,11 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
     }
     
     try {
-      const subscriptionStatus = await PaywallService.isUserSubscribed();
-      setIsSubscribed(subscriptionStatus);
-      return subscriptionStatus;
+      console.log('[PaywallProvider] Mock subscription check - returning false');
+      // Don't actually call the service to avoid native module errors
+      // const subscriptionStatus = await PaywallService.isUserSubscribed();
+      // setIsSubscribed(subscriptionStatus);
+      return false;
     } catch (error) {
       console.error('[PaywallProvider] Failed to check subscription status:', error);
       return false;
