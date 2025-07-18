@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Animated } from "react-native";
+import * as Clipboard from 'expo-clipboard';
 import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin, Activity, X, Check } from "lucide-react-native";
 import TranscribeButton, { TranscribeButtonRef } from "@/components/TranscribeButton";
 import VoiceChatButton from "@/components/VoiceChatButton";
@@ -1334,6 +1335,18 @@ export default function AiScreen() {
 		}
 	};
 
+	const handleLongPressMessage = async (messageContent: string) => {
+		try {
+			// Remove markdown formatting for cleaner copy
+			const cleanContent = messageContent.replace(/\*\*(.*?)\*\*/g, '$1');
+			await Clipboard.setStringAsync(cleanContent);
+			Alert.alert('Copied!', 'Message copied to clipboard');
+		} catch (error) {
+			console.error('Failed to copy message:', error);
+			Alert.alert('Error', 'Failed to copy message');
+		}
+	};
+
 	return (
 		<BottomSheetModalProvider>
 		<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
@@ -1408,7 +1421,9 @@ export default function AiScreen() {
 							key={message.id}
 							className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
 						>
-							<View
+							<TouchableOpacity
+								onLongPress={() => handleLongPressMessage(message.content)}
+								activeOpacity={0.8}
 								style={{
 									backgroundColor: message.role === 'user' ? theme.primary : theme.card,
 									maxWidth: '90%',
@@ -1479,7 +1494,7 @@ export default function AiScreen() {
 										})}
 									</Text>
 								)}
-							</View>
+							</TouchableOpacity>
 						</View>
 					))}
 

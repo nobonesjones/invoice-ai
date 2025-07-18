@@ -887,6 +887,7 @@ export interface FunctionResult {
   data?: any;
   message: string;
   error?: string;
+  attachments?: any[];
 }
 
 export class InvoiceFunctionService {
@@ -1492,6 +1493,100 @@ Would you like me to help you send this invoice or make any changes?`;
       .replace(/\s+(corp|corporation|inc|incorporated|llc|ltd|limited|co|company|sales|group|enterprises|solutions|services|consulting)\.?$/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  private static async findOrCreateClient(params: {
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  }, userId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      let existingClient = null;
+
+      // First, try to find by email if provided
+      if (params.email) {
+        const { data: emailClient } = await supabase
+          .from('clients')
+          .select('id, name, email')
+          .eq('user_id', userId)
+          .eq('email', params.email)
+          .single();
+        existingClient = emailClient;
+      }
+      
+      // If not found by email, try multiple name matching strategies
+      if (!existingClient) {
+        const clientName = params.name.toLowerCase().trim();
+        
+        // Strategy 1: Exact match (case insensitive)
+        const { data: exactMatch } = await supabase
+          .from('clients')
+          .select('id, name, email')
+          .eq('user_id', userId)
+          .ilike('name', clientName)
+          .single();
+        
+        if (exactMatch) {
+          existingClient = exactMatch;
+        } else {
+          // Strategy 2: Partial match - check if client name contains the search term or vice versa
+          const { data: partialMatches } = await supabase
+            .from('clients')
+            .select('id, name, email')
+            .eq('user_id', userId);
+          
+          if (partialMatches) {
+            // Find the best match
+            const bestMatch = partialMatches.find(client => {
+              const dbName = client.name.toLowerCase();
+              const searchName = clientName;
+              
+              // Check if either name contains the other (ignoring common suffixes/prefixes)
+              return dbName.includes(searchName) || 
+                     searchName.includes(dbName) ||
+                     this.normalizeClientName(dbName) === this.normalizeClientName(searchName);
+            });
+            
+            if (bestMatch) {
+              existingClient = bestMatch;
+              console.log(`[Find/Create Client] Found partial match: "${params.name}" matched with "${bestMatch.name}"`);
+            }
+          }
+        }
+      }
+
+      if (existingClient) {
+        console.log(`[Find/Create Client] Using existing client: ${existingClient.name} (${existingClient.email})`);
+        return { success: true, data: existingClient };
+      } else {
+        // Create new client
+        const { data: newClient, error: clientError } = await supabase
+          .from('clients')
+          .insert({
+            user_id: userId,
+            name: params.name,
+            email: params.email || null,
+            phone: params.phone || null,
+            address_client: params.address || null
+          })
+          .select('id, name, email')
+          .single();
+
+        if (clientError) {
+          throw new Error(`Failed to create client: ${clientError.message}`);
+        }
+
+        console.log(`[Find/Create Client] Created new client: ${newClient.name} (${newClient.email})`);
+        return { success: true, data: newClient };
+      }
+    } catch (error) {
+      console.error('[Find/Create Client] Error:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
   }
 
   // Currency symbol mapping function
@@ -3837,10 +3932,11 @@ The new client is ready to use for invoices!`
         const total = quantity * unitPrice;
         
         processedLineItems.push({
-          description: item.description || 'Item',
+          item_name: item.item_name || item.name || 'Item',
+          item_description: item.item_description || item.description || null,
           quantity: quantity,
           unit_price: unitPrice,
-          total: total
+          total_price: total
         });
         
         subtotal += total;
@@ -3895,19 +3991,15 @@ The new client is ready to use for invoices!`
         estimate_number: estimateNumber,
         estimate_date: estimateDate.toISOString().split('T')[0],
         valid_until_date: validUntilDate.toISOString().split('T')[0],
-        subtotal: subtotal,
+        subtotal_amount: subtotal,
         tax_percentage: taxPercentage,
-        tax_amount: taxAmount,
+        total_amount: total,
         discount_type: discountType,
         discount_value: discountValue,
-        discount_amount: discountAmount,
-        total: total,
-        currency: businessCurrency,
-        status: 'pending',
+        status: 'draft',
         notes: params.notes || '',
         acceptance_terms: params.acceptance_terms || '',
-        design_template: defaultDesign,
-        accent_color: defaultAccentColor
+        estimate_template: defaultDesign
       };
 
       const { data: estimate, error: estimateError } = await supabase
@@ -3923,10 +4015,12 @@ The new client is ready to use for invoices!`
       // Create line items
       const lineItemsData = processedLineItems.map(item => ({
         estimate_id: estimate.id,
-        description: item.description,
+        user_id: userId,
+        item_name: item.item_name,
+        item_description: item.item_description || null,
         quantity: item.quantity,
         unit_price: item.unit_price,
-        total: item.total
+        total_price: item.total_price
       }));
 
       const { error: lineItemsError } = await supabase
@@ -3953,6 +4047,9 @@ The new client is ready to use for invoices!`
         data: estimate,
         message: message,
         attachments: [{
+          estimate: estimate,
+          line_items: lineItemsData,
+          client_id: clientId,
           type: 'estimate',
           estimate_id: estimate.id,
           estimate_number: estimateNumber
@@ -4020,7 +4117,7 @@ The new client is ready to use for invoices!`
         };
       }
 
-      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
 
       let message = `🔍 **Found ${estimates.length} estimate(s):**\n\n`;
       
@@ -4031,7 +4128,7 @@ The new client is ready to use for invoices!`
                            estimate.status === 'expired' ? '⏰' : '📋';
         
         message += `${statusEmoji} **${estimate.estimate_number}** - ${clientName}\n`;
-        message += `   💰 ${businessCurrencySymbol}${estimate.total.toFixed(2)} | `;
+        message += `   💰 ${businessCurrencySymbol}${estimate.total_amount.toFixed(2)} | `;
         message += `📅 ${new Date(estimate.estimate_date).toLocaleDateString()}\n`;
       });
 
@@ -4082,7 +4179,7 @@ The new client is ready to use for invoices!`
         };
       }
 
-      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
       const clientName = estimate.clients?.name || 'No client assigned';
       const statusEmoji = estimate.status === 'accepted' ? '✅' : 
                          estimate.status === 'declined' ? '❌' : 
@@ -4093,7 +4190,7 @@ The new client is ready to use for invoices!`
       message += `📅 **Date:** ${new Date(estimate.estimate_date).toLocaleDateString()}\n`;
       message += `⏰ **Valid until:** ${new Date(estimate.valid_until_date).toLocaleDateString()}\n`;
       message += `📊 **Status:** ${estimate.status.charAt(0).toUpperCase() + estimate.status.slice(1)}\n`;
-      message += `💰 **Total:** ${businessCurrencySymbol}${estimate.total.toFixed(2)}\n\n`;
+      message += `💰 **Total:** ${businessCurrencySymbol}${estimate.total_amount.toFixed(2)}\n\n`;
 
       if (estimate.estimate_line_items && estimate.estimate_line_items.length > 0) {
         message += `📋 **Line Items:**\n`;
@@ -4109,7 +4206,10 @@ The new client is ready to use for invoices!`
         attachments: [{
           type: 'estimate',
           estimate_id: estimate.id,
-          estimate_number: estimate.estimate_number
+          estimate_number: estimate.estimate_number,
+          estimate: estimate,
+          line_items: estimate.estimate_line_items || [],
+          client_id: estimate.client_id
         }]
       };
 
@@ -4157,7 +4257,7 @@ The new client is ready to use for invoices!`
         };
       }
 
-      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
 
       let message = `📋 **Recent Estimates${statusFilter !== 'all' ? ` (${statusFilter})` : ''}:**\n\n`;
       
@@ -4168,7 +4268,7 @@ The new client is ready to use for invoices!`
                            estimate.status === 'expired' ? '⏰' : '📋';
         
         message += `${statusEmoji} **${estimate.estimate_number}** - ${clientName}\n`;
-        message += `   💰 ${businessCurrencySymbol}${estimate.total.toFixed(2)} | `;
+        message += `   💰 ${businessCurrencySymbol}${estimate.total_amount.toFixed(2)} | `;
         message += `📅 ${new Date(estimate.estimate_date).toLocaleDateString()}\n\n`;
       });
 
@@ -4229,7 +4329,7 @@ The new client is ready to use for invoices!`
       }
 
       // Generate invoice number
-      const invoiceNumber = await this.generateNextInvoiceNumber(userId);
+      const invoiceNumber = await this.generateInvoiceNumber(userId);
       
       // Calculate due date
       const invoiceDate = new Date();
@@ -4243,18 +4343,18 @@ The new client is ready to use for invoices!`
         invoice_number: invoiceNumber,
         invoice_date: invoiceDate.toISOString().split('T')[0],
         due_date: dueDate.toISOString().split('T')[0],
-        subtotal: estimate.subtotal,
+        subtotal: estimate.subtotal_amount,
         tax_percentage: estimate.tax_percentage,
-        tax_amount: estimate.tax_amount,
+        tax_amount: estimate.total_amount - estimate.subtotal_amount,
         discount_type: estimate.discount_type,
         discount_value: estimate.discount_value,
-        discount_amount: estimate.discount_amount,
-        total: estimate.total,
-        currency: estimate.currency,
+        discount_amount: 0,
+        total: estimate.total_amount,
+        currency: businessSettings?.currency_code || 'USD',
         status: 'unpaid',
         notes: estimate.notes,
-        design_template: estimate.design_template,
-        accent_color: estimate.accent_color,
+        design_template: estimate.estimate_template || 'classic',
+        accent_color: '#14B8A6',
         converted_from_estimate: estimate.id
       };
 
@@ -4290,7 +4390,7 @@ The new client is ready to use for invoices!`
         .from('estimates')
         .update({ 
           status: 'accepted',
-          converted_to_invoice: invoice.id,
+          converted_to_invoice_id: invoice.id,
           updated_at: new Date().toISOString()
         })
         .eq('id', estimate.id);
@@ -4299,7 +4399,7 @@ The new client is ready to use for invoices!`
         console.error('Warning: Failed to update estimate status:', updateError);
       }
 
-      const businessCurrencySymbol = await this.getUserCurrencySymbol(userId);
+      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
       const clientName = estimate.clients?.name || 'No client';
 
       const message = `✅ **Estimate converted to Invoice successfully!**\n\n` +
