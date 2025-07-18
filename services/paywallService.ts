@@ -26,19 +26,24 @@ class PaywallService {
     try {
       console.log('[PaywallService] Initializing RevenueCat and Superwall...');
       
-      // Initialize RevenueCat
-      await RevenueCatService.initialize(userId);
+      // Temporarily disable RevenueCat until we get the public key
+      // await RevenueCatService.initialize(userId);
+      console.log('[PaywallService] RevenueCat temporarily disabled - need public key');
       
       // Initialize Superwall
       await SuperwallService.initialize();
       
-      // If user is provided, set it for both services
+      // If user is provided, set it for Superwall only (but don't fail if it doesn't work)
       if (userId) {
-        await this.setUserId(userId);
+        try {
+          await SuperwallService.setUserId(userId);
+        } catch (error) {
+          console.error('[PaywallService] Failed to set user ID, continuing anyway:', error);
+        }
       }
 
       this.isInitialized = true;
-      console.log('[PaywallService] Successfully initialized both services');
+      console.log('[PaywallService] Successfully initialized Superwall');
     } catch (error) {
       console.error('[PaywallService] Failed to initialize:', error);
       throw error;
@@ -47,11 +52,9 @@ class PaywallService {
 
   async setUserId(userId: string): Promise<void> {
     try {
-      await Promise.all([
-        RevenueCatService.setUserId(userId),
-        SuperwallService.setUserId(userId)
-      ]);
-      console.log('[PaywallService] User ID set for both services:', userId);
+      // Only set for Superwall until RevenueCat is fixed
+      await SuperwallService.setUserId(userId);
+      console.log('[PaywallService] User ID set for Superwall:', userId);
     } catch (error) {
       console.error('[PaywallService] Failed to set user ID:', error);
       throw error;
@@ -70,7 +73,9 @@ class PaywallService {
 
   async isUserSubscribed(): Promise<boolean> {
     try {
-      return await RevenueCatService.isUserSubscribed();
+      // Return false until RevenueCat is properly configured
+      console.log('[PaywallService] Subscription check disabled - RevenueCat needs public key');
+      return false;
     } catch (error) {
       console.error('[PaywallService] Failed to check subscription status:', error);
       return false;
@@ -79,8 +84,8 @@ class PaywallService {
 
   async restorePurchases(): Promise<void> {
     try {
-      await RevenueCatService.restorePurchases();
-      console.log('[PaywallService] Purchases restored');
+      console.log('[PaywallService] Restore purchases disabled - RevenueCat needs public key');
+      // await RevenueCatService.restorePurchases();
     } catch (error) {
       console.error('[PaywallService] Failed to restore purchases:', error);
       throw error;
@@ -89,10 +94,8 @@ class PaywallService {
 
   async reset(): Promise<void> {
     try {
-      await Promise.all([
-        RevenueCatService.logOut(),
-        SuperwallService.reset()
-      ]);
+      // Only reset Superwall until RevenueCat is fixed
+      await SuperwallService.reset();
       console.log('[PaywallService] Reset successful');
     } catch (error) {
       console.error('[PaywallService] Failed to reset:', error);
@@ -102,7 +105,7 @@ class PaywallService {
 
   // Predefined paywall events
   static readonly EVENTS = {
-    SETTINGS_UPGRADE: 'app_launch', // Using your configured trigger
+    SETTINGS_UPGRADE: 'campaign_trigger', // Use the placement that works
     ONBOARDING_COMPLETE: 'onboarding_complete',
     INVOICE_LIMIT_REACHED: 'invoice_limit_reached',
     PREMIUM_FEATURE_ACCESSED: 'premium_feature_accessed'

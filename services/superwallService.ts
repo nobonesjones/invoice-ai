@@ -31,11 +31,24 @@ class SuperwallService {
   async presentPaywall(event: string, params?: Record<string, any>): Promise<void> {
     try {
       console.log('[Superwall] Presenting paywall for event:', event, 'with params:', params);
-      // Use the correct expo-superwall API
-      await Superwall.register({
-        placement: event,
-        ...params
-      });
+      
+      // Check what methods are available on the Superwall object
+      console.log('[Superwall] Available methods:', Object.keys(Superwall));
+      
+      // Try different possible method names
+      if (typeof Superwall.register === 'function') {
+        await Superwall.register({
+          placement: event,
+          ...params
+        });
+      } else if (typeof Superwall.present === 'function') {
+        await Superwall.present(event, params);
+      } else if (typeof Superwall.presentPaywall === 'function') {
+        await Superwall.presentPaywall(event, params);
+      } else {
+        console.log('[Superwall] No suitable method found, paywall methods available:', Object.keys(Superwall));
+        throw new Error('No suitable paywall presentation method found');
+      }
     } catch (error) {
       console.error('[Superwall] Failed to present paywall:', error);
       throw error;
@@ -44,11 +57,20 @@ class SuperwallService {
 
   async setUserId(userId: string): Promise<void> {
     try {
-      await Superwall.identify({ userId });
-      console.log('[Superwall] User identified:', userId);
+      // Check if the method exists before calling it
+      if (typeof Superwall.setUserId === 'function') {
+        await Superwall.setUserId(userId);
+        console.log('[Superwall] User identified:', userId);
+      } else if (typeof Superwall.identify === 'function') {
+        await Superwall.identify(userId);
+        console.log('[Superwall] User identified via identify:', userId);
+      } else {
+        console.log('[Superwall] User identification method not available, skipping');
+      }
     } catch (error) {
       console.error('[Superwall] Failed to identify user:', error);
-      throw error;
+      // Don't throw - let initialization continue
+      console.log('[Superwall] Continuing without user identification');
     }
   }
 
