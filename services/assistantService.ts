@@ -86,7 +86,10 @@ export class AssistantService {
       instructions: await this.getSystemInstructions(), // Use base instructions for assistant creation
       model: "gpt-4o-mini", // Keep original model for Assistants API
       tools: this.convertFunctionsToTools()
+      // Note: We explicitly only provide our custom tools - no code_interpreter or file_search
     });
+    
+    console.log('🔧 ASSISTANT TOOLS DEBUG:', assistant.tools?.map(t => ({ type: t.type, name: t.function?.name })));
 
     console.log('[AssistantService] Assistant created successfully');
     return assistant.id;
@@ -886,6 +889,11 @@ Use tools to take action. Reference previous conversation naturally.`;
         }
 
         console.log(`[AssistantService] Executing tool: ${functionName} with args:`, functionArgs);
+        console.log('🔧 TOOL CALL DEBUG:', {
+          toolName: functionName,
+          isEstimateFunction: functionName.includes('estimate'),
+          availableFunctions: ['create_estimate', 'search_estimates', 'get_estimate_by_number', 'get_recent_estimates', 'convert_estimate_to_invoice']
+        });
         const toolStartTime = Date.now();
 
         // Execute the function
@@ -898,7 +906,18 @@ Use tools to take action. Reference previous conversation naturally.`;
         console.log(`[AssistantService] Tool ${functionName} completed in ${Date.now() - toolStartTime}ms`);
 
         // Extract attachments from successful function results
-        if (result.success && result.data) {
+        console.log('=== ASSISTANT SERVICE ATTACHMENT DEBUG ===');
+        console.log('Function name:', functionName);
+        console.log('Result success:', result.success);
+        console.log('Result data:', result.data);
+        console.log('Result attachments:', result.attachments);
+        console.log('Result keys:', Object.keys(result));
+        
+        if (result.success && result.attachments && result.attachments.length > 0) {
+          console.log('✅ Adding attachments from result.attachments');
+          attachments.push(...result.attachments);
+        } else if (result.success && result.data) {
+          console.log('⚠️ Falling back to result.data');
           attachments.push(result.data);
         }
 

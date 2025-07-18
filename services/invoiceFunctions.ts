@@ -3884,7 +3884,8 @@ The new client is ready to use for invoices!`
   // Estimate-specific methods
   private static async createEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Estimate Create] Creating estimate');
+      console.log('🚨 CREATE ESTIMATE FUNCTION CALLED!!! 🚨');
+      console.log('[AI Estimate Create] Creating estimate with params:', params);
       
       // Get user's business settings for defaults
       let defaultTaxRate = 0;
@@ -4042,18 +4043,33 @@ The new client is ready to use for invoices!`
         `• **Total: ${businessCurrencySymbol}${total.toFixed(2)}**\n\n` +
         `🎯 The estimate has been created and is ready for review.`;
 
+      // Calculate totals for consistency with invoice structure
+      const calculations = {
+        subtotal: subtotal,
+        discount: discountAmount,
+        tax: taxAmount,
+        total: total
+      };
+
+      // DEBUG LOGGING
+      console.log('=== CREATE ESTIMATE RETURN DEBUG ===');
+      console.log('Estimate data:', estimate);
+      console.log('Line items data:', lineItemsData);
+
+      // Return the same structure as createInvoice for consistency
       return {
         success: true,
-        data: estimate,
-        message: message,
-        attachments: [{
-          estimate: estimate,
-          line_items: lineItemsData,
+        data: {
+          estimate: {
+            ...estimate,
+            client_name: params.client_name,
+            client_email: params.client_email
+          },
           client_id: clientId,
-          type: 'estimate',
-          estimate_id: estimate.id,
-          estimate_number: estimateNumber
-        }]
+          line_items: lineItemsData,
+          calculations: calculations
+        },
+        message: message
       };
 
     } catch (error) {

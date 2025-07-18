@@ -1442,8 +1442,20 @@ export default function AiScreen() {
 									{/* Show invoice, estimate, and client previews if this message has attachment data */}
 									{message.role === 'assistant' && (message as any).attachments && (message as any).attachments.length > 0 && (
 										(message as any).attachments.map((attachment: any, index: number) => {
+										// DEBUG LOGGING
+										console.log('=== ATTACHMENT DEBUG ===');
+										console.log('Message ID:', message.id);
+										console.log('Attachment index:', index);
+										console.log('Attachment keys:', Object.keys(attachment || {}));
+										console.log('Has attachment.invoice:', !!attachment?.invoice);
+										console.log('Has attachment.line_items:', !!attachment?.line_items);
+										console.log('Has attachment.estimate:', !!attachment?.estimate);
+										console.log('Attachment type:', attachment?.type);
+										console.log('Full attachment:', JSON.stringify(attachment, null, 2));
+										
 										// Check if attachment has invoice data
 										if (attachment && attachment.invoice && attachment.line_items) {
+											console.log('✅ Rendering InvoicePreview');
 											return (
 												<InvoicePreview 
 														key={`invoice-${index}`}
@@ -1455,6 +1467,7 @@ export default function AiScreen() {
 										
 										// Check if attachment has estimate data
 										if (attachment && attachment.estimate && attachment.line_items) {
+											console.log('✅ Rendering EstimatePreview');
 											return (
 												<EstimatePreview 
 													key={`estimate-${index}`}

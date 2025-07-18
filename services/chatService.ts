@@ -107,15 +107,28 @@ export class ChatService {
 
       return {
         thread,
-        messages: messages.map(msg => ({
-          id: msg.id,
-          conversation_id: msg.thread_id, // Map for UI compatibility
-          role: msg.role,
-          content: msg.content,
-          message_type: 'text',
-          attachments: msg.attachments,
-          created_at: msg.created_at
-        }))
+        messages: messages.map(msg => {
+          const mappedMessage = {
+            id: msg.id,
+            conversation_id: msg.thread_id, // Map for UI compatibility
+            role: msg.role,
+            content: msg.content,
+            message_type: 'text',
+            attachments: msg.attachments,
+            created_at: msg.created_at
+          };
+          
+          // DEBUG LOGGING for attachments
+          if (msg.attachments && msg.attachments.length > 0) {
+            console.log('=== CHATSERVICE MESSAGE MAPPING DEBUG ===');
+            console.log('Message ID:', msg.id);
+            console.log('Role:', msg.role);
+            console.log('Original attachments:', JSON.stringify(msg.attachments, null, 2));
+            console.log('Mapped attachments:', JSON.stringify(mappedMessage.attachments, null, 2));
+          }
+          
+          return mappedMessage;
+        })
       };
     } catch (error) {
       console.error('[ChatService] Assistants API error:', error);
