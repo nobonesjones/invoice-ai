@@ -869,6 +869,142 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       },
       required: ["estimate_number"]
     }
+  },
+  {
+    name: "edit_recent_invoice",
+    description: "Edit the most recently created invoice in the conversation or find and edit a specific invoice by number. This allows making changes like adding/removing line items, updating amounts, changing due dates, modifying payment methods, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "Optional: Specific invoice number to edit. If not provided, will edit the most recent invoice from this conversation."
+        },
+        operation: {
+          type: "string",
+          enum: ["add_item", "remove_item", "update_item", "update_details", "update_payment_methods", "update_due_date"],
+          description: "Type of edit to perform on the invoice"
+        },
+        line_items_to_add: {
+          type: "array",
+          description: "New line items to add to the invoice (for add_item operation)",
+          items: {
+            type: "object",
+            properties: {
+              item_name: { type: "string" },
+              item_description: { type: "string" },
+              quantity: { type: "number" },
+              unit_price: { type: "number" }
+            },
+            required: ["item_name", "quantity", "unit_price"]
+          }
+        },
+        item_name_to_remove: {
+          type: "string",
+          description: "Name of the item to remove (for remove_item operation)"
+        },
+        item_updates: {
+          type: "object",
+          description: "Updates to apply to a specific item (for update_item operation)",
+          properties: {
+            item_name: { type: "string", description: "Name of item to update" },
+            new_quantity: { type: "number" },
+            new_unit_price: { type: "number" },
+            new_description: { type: "string" }
+          }
+        },
+        due_date: {
+          type: "string",
+          description: "New due date in YYYY-MM-DD format or relative like '30 days' (for update_due_date operation)"
+        },
+        payment_methods: {
+          type: "object",
+          description: "Payment method settings to update (for update_payment_methods operation)",
+          properties: {
+            paypal_active: { type: "boolean" },
+            stripe_active: { type: "boolean" },
+            bank_account_active: { type: "boolean" }
+          }
+        },
+        notes: {
+          type: "string",
+          description: "Updated notes for the invoice (for update_details operation)"
+        },
+        custom_headline: {
+          type: "string",
+          description: "Updated custom headline for the invoice (for update_details operation)"
+        }
+      },
+      required: ["operation"]
+    }
+  },
+  {
+    name: "edit_recent_estimate",
+    description: "Edit the most recently created estimate in the conversation or find and edit a specific estimate by number. This allows making changes like adding/removing line items, updating amounts, changing validity dates, modifying payment methods, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        estimate_number: {
+          type: "string",
+          description: "Optional: Specific estimate number to edit. If not provided, will edit the most recent estimate from this conversation."
+        },
+        operation: {
+          type: "string",
+          enum: ["add_item", "remove_item", "update_item", "update_details", "update_payment_methods", "update_validity"],
+          description: "Type of edit to perform on the estimate"
+        },
+        line_items_to_add: {
+          type: "array",
+          description: "New line items to add to the estimate (for add_item operation)",
+          items: {
+            type: "object",
+            properties: {
+              item_name: { type: "string" },
+              item_description: { type: "string" },
+              quantity: { type: "number" },
+              unit_price: { type: "number" }
+            },
+            required: ["item_name", "quantity", "unit_price"]
+          }
+        },
+        item_name_to_remove: {
+          type: "string",
+          description: "Name of the item to remove (for remove_item operation)"
+        },
+        item_updates: {
+          type: "object",
+          description: "Updates to apply to a specific item (for update_item operation)",
+          properties: {
+            item_name: { type: "string", description: "Name of item to update" },
+            new_quantity: { type: "number" },
+            new_unit_price: { type: "number" },
+            new_description: { type: "string" }
+          }
+        },
+        valid_until_date: {
+          type: "string",
+          description: "New validity date in YYYY-MM-DD format or relative like '30 days' (for update_validity operation)"
+        },
+        payment_methods: {
+          type: "object",
+          description: "Payment method settings to update (for update_payment_methods operation)",
+          properties: {
+            paypal_active: { type: "boolean" },
+            stripe_active: { type: "boolean" },
+            bank_account_active: { type: "boolean" }
+          }
+        },
+        notes: {
+          type: "string",
+          description: "Updated notes for the estimate (for update_details operation)"
+        },
+        acceptance_terms: {
+          type: "string",
+          description: "Updated acceptance terms for the estimate (for update_details operation)"
+        }
+      },
+      required: ["operation"]
+    }
   }
 ];
 
@@ -960,6 +1096,10 @@ export class InvoiceFunctionService {
           return await this.getRecentEstimates(parameters, userId);
         case 'convert_estimate_to_invoice':
           return await this.convertEstimateToInvoice(parameters, userId);
+        case 'edit_recent_invoice':
+          return await this.editRecentInvoice(parameters, userId);
+        case 'edit_recent_estimate':
+          return await this.editRecentEstimate(parameters, userId);
         default:
           return {
             success: false,
@@ -1207,6 +1347,34 @@ export class InvoiceFunctionService {
       let defaultDesign = 'classic';
       let defaultAccentColor = '#14B8A6';
       
+      // Step 0.1: Get user's payment settings to determine which payment methods should be enabled
+      let paypalEnabled = false;
+      let stripeEnabled = false;
+      let bankTransferEnabled = false;
+      
+      try {
+        const { data: paymentOptions } = await supabase
+          .from('payment_options')
+          .select('paypal_enabled, stripe_enabled, bank_transfer_enabled')
+          .eq('user_id', userId)
+          .single();
+          
+        if (paymentOptions) {
+          paypalEnabled = paymentOptions.paypal_enabled || false;
+          stripeEnabled = paymentOptions.stripe_enabled || false;
+          bankTransferEnabled = paymentOptions.bank_transfer_enabled || false;
+          console.log('[AI Invoice Create] Payment settings:', {
+            paypal: paypalEnabled,
+            stripe: stripeEnabled,
+            bankTransfer: bankTransferEnabled
+          });
+        } else {
+          console.log('[AI Invoice Create] No payment options configured - all payment methods disabled');
+        }
+      } catch (paymentError) {
+        console.log('[AI Invoice Create] Error loading payment options (will disable all):', paymentError);
+      }
+      
       try {
         const { data: businessSettings } = await supabase
           .from('business_settings')
@@ -1367,7 +1535,7 @@ export class InvoiceFunctionService {
       const taxAmount = discountedAmount * ((taxPercentage || 0) / 100);
       const totalAmount = discountedAmount + taxAmount;
 
-      // Step 6: Create invoice
+      // Step 6: Create invoice with user's enabled payment methods
       const { data: invoice, error: invoiceError } = await supabase
         .from('invoices')
         .insert({
@@ -1385,7 +1553,10 @@ export class InvoiceFunctionService {
           total_amount: totalAmount,
           notes: params.notes || null,
           invoice_design: defaultDesign,
-          accent_color: defaultAccentColor
+          accent_color: defaultAccentColor,
+          paypal_active: paypalEnabled,
+          stripe_active: stripeEnabled,
+          bank_account_active: bankTransferEnabled
         })
         .select('*')
         .single();
@@ -3894,6 +4065,34 @@ The new client is ready to use for invoices!`
       let defaultDesign = 'classic';
       let defaultAccentColor = '#14B8A6';
       
+      // Get user's payment settings to determine which payment methods should be enabled
+      let paypalEnabled = false;
+      let stripeEnabled = false;
+      let bankTransferEnabled = false;
+      
+      try {
+        const { data: paymentOptions } = await supabase
+          .from('payment_options')
+          .select('paypal_enabled, stripe_enabled, bank_transfer_enabled')
+          .eq('user_id', userId)
+          .single();
+          
+        if (paymentOptions) {
+          paypalEnabled = paymentOptions.paypal_enabled || false;
+          stripeEnabled = paymentOptions.stripe_enabled || false;
+          bankTransferEnabled = paymentOptions.bank_transfer_enabled || false;
+          console.log('[AI Estimate Create] Payment settings:', {
+            paypal: paypalEnabled,
+            stripe: stripeEnabled,
+            bankTransfer: bankTransferEnabled
+          });
+        } else {
+          console.log('[AI Estimate Create] No payment options configured - all payment methods disabled');
+        }
+      } catch (paymentError) {
+        console.log('[AI Estimate Create] Error loading payment options (will disable all):', paymentError);
+      }
+      
       try {
         const { data: businessSettings } = await supabase
           .from('business_settings')
@@ -3985,7 +4184,7 @@ The new client is ready to use for invoices!`
         }
       }
 
-      // Create estimate record
+      // Create estimate record with user's enabled payment methods
       const estimateData = {
         user_id: userId,
         client_id: clientId,
@@ -4000,7 +4199,11 @@ The new client is ready to use for invoices!`
         status: 'draft',
         notes: params.notes || '',
         acceptance_terms: params.acceptance_terms || '',
-        estimate_template: defaultDesign
+        estimate_template: defaultDesign,
+        accent_color: defaultAccentColor,
+        paypal_active: paypalEnabled,
+        stripe_active: stripeEnabled,
+        bank_account_active: bankTransferEnabled
       };
 
       const { data: estimate, error: estimateError } = await supabase
@@ -4352,7 +4555,7 @@ The new client is ready to use for invoices!`
       const dueDate = new Date(invoiceDate);
       dueDate.setDate(dueDate.getDate() + (payment_terms_days || 30));
 
-      // Create invoice record
+      // Create invoice record - inherit payment methods from estimate
       const invoiceData = {
         user_id: userId,
         client_id: estimate.client_id,
@@ -4370,8 +4573,11 @@ The new client is ready to use for invoices!`
         status: 'unpaid',
         notes: estimate.notes,
         design_template: estimate.estimate_template || 'classic',
-        accent_color: '#14B8A6',
-        converted_from_estimate: estimate.id
+        accent_color: estimate.accent_color || '#14B8A6',
+        converted_from_estimate: estimate.id,
+        paypal_active: estimate.paypal_active || false,
+        stripe_active: estimate.stripe_active || false,
+        bank_account_active: estimate.bank_account_active || false
       };
 
       const { data: invoice, error: invoiceError } = await supabase
@@ -4465,5 +4671,557 @@ The new client is ready to use for invoices!`
     }
 
     return 'EST-0001';
+  }
+
+  // Edit recent invoice function
+  private static async editRecentInvoice(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log('[AI Edit Invoice] Editing invoice with params:', params);
+      
+      let invoiceToEdit;
+      
+      // If invoice_number is provided, find that specific invoice
+      if (params.invoice_number) {
+        const { data: invoice, error } = await supabase
+          .from('invoices')
+          .select(`
+            *,
+            clients(id, name, email, phone),
+            invoice_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .eq('invoice_number', params.invoice_number)
+          .single();
+          
+        if (error || !invoice) {
+          return {
+            success: false,
+            message: `Invoice ${params.invoice_number} not found.`,
+            error: 'Invoice not found'
+          };
+        }
+        invoiceToEdit = invoice;
+      } else {
+        // Find the most recent invoice from this user
+        const { data: recentInvoice, error } = await supabase
+          .from('invoices')
+          .select(`
+            *,
+            clients(id, name, email, phone),
+            invoice_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+          
+        if (error || !recentInvoice) {
+          return {
+            success: false,
+            message: 'No invoices found to edit. Please create an invoice first.',
+            error: 'No recent invoice found'
+          };
+        }
+        invoiceToEdit = recentInvoice;
+      }
+      
+      // Perform the requested operation
+      return await this.performInvoiceEdit(invoiceToEdit, params, userId);
+      
+    } catch (error) {
+      console.error('Error editing invoice:', error);
+      return {
+        success: false,
+        message: 'Failed to edit invoice. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  // Edit recent estimate function
+  private static async editRecentEstimate(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log('[AI Edit Estimate] Editing estimate with params:', params);
+      
+      let estimateToEdit;
+      
+      // If estimate_number is provided, find that specific estimate
+      if (params.estimate_number) {
+        const { data: estimate, error } = await supabase
+          .from('estimates')
+          .select(`
+            *,
+            clients(id, name, email, phone),
+            estimate_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .eq('estimate_number', params.estimate_number)
+          .single();
+          
+        if (error || !estimate) {
+          return {
+            success: false,
+            message: `Estimate ${params.estimate_number} not found.`,
+            error: 'Estimate not found'
+          };
+        }
+        estimateToEdit = estimate;
+      } else {
+        // Find the most recent estimate from this user
+        const { data: recentEstimate, error } = await supabase
+          .from('estimates')
+          .select(`
+            *,
+            clients(id, name, email, phone),
+            estimate_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+          
+        if (error || !recentEstimate) {
+          return {
+            success: false,
+            message: 'No estimates found to edit. Please create an estimate first.',
+            error: 'No recent estimate found'
+          };
+        }
+        estimateToEdit = recentEstimate;
+      }
+      
+      // Perform the requested operation
+      return await this.performEstimateEdit(estimateToEdit, params, userId);
+      
+    } catch (error) {
+      console.error('Error editing estimate:', error);
+      return {
+        success: false,
+        message: 'Failed to edit estimate. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  // Helper function to perform invoice edits
+  private static async performInvoiceEdit(invoice: any, params: any, userId: string): Promise<FunctionResult> {
+    try {
+      let updateData: any = {};
+      let lineItemChanges = false;
+      let operationDescription = '';
+      
+      switch (params.operation) {
+        case 'add_item':
+          if (!params.line_items_to_add || params.line_items_to_add.length === 0) {
+            return {
+              success: false,
+              message: 'No line items provided to add.',
+              error: 'Missing line items'
+            };
+          }
+          
+          // Add new line items
+          const newItems = params.line_items_to_add.map((item: any) => ({
+            invoice_id: invoice.id,
+            user_id: userId,
+            item_name: item.item_name,
+            item_description: item.item_description || null,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.quantity * item.unit_price
+          }));
+          
+          const { error: addError } = await supabase
+            .from('invoice_line_items')
+            .insert(newItems);
+            
+          if (addError) {
+            throw new Error(`Failed to add line items: ${addError.message}`);
+          }
+          
+          lineItemChanges = true;
+          operationDescription = `Added ${params.line_items_to_add.length} new item(s)`;
+          break;
+          
+        case 'remove_item':
+          if (!params.item_name_to_remove) {
+            return {
+              success: false,
+              message: 'No item name provided to remove.',
+              error: 'Missing item name'
+            };
+          }
+          
+          const { error: removeError } = await supabase
+            .from('invoice_line_items')
+            .delete()
+            .eq('invoice_id', invoice.id)
+            .ilike('item_name', `%${params.item_name_to_remove}%`);
+            
+          if (removeError) {
+            throw new Error(`Failed to remove item: ${removeError.message}`);
+          }
+          
+          lineItemChanges = true;
+          operationDescription = `Removed item: ${params.item_name_to_remove}`;
+          break;
+          
+        case 'update_due_date':
+          if (!params.due_date) {
+            return {
+              success: false,
+              message: 'No due date provided.',
+              error: 'Missing due date'
+            };
+          }
+          
+          let newDueDate;
+          if (params.due_date.includes('days')) {
+            const days = parseInt(params.due_date.match(/(\d+)/)?.[1] || '30');
+            newDueDate = new Date();
+            newDueDate.setDate(newDueDate.getDate() + days);
+          } else {
+            newDueDate = new Date(params.due_date);
+          }
+          
+          updateData.due_date = newDueDate.toISOString().split('T')[0];
+          operationDescription = `Updated due date to ${newDueDate.toLocaleDateString()}`;
+          break;
+          
+        case 'update_payment_methods':
+          if (!params.payment_methods) {
+            return {
+              success: false,
+              message: 'No payment method settings provided.',
+              error: 'Missing payment methods'
+            };
+          }
+          
+          if (params.payment_methods.paypal_active !== undefined) {
+            updateData.paypal_active = params.payment_methods.paypal_active;
+          }
+          if (params.payment_methods.stripe_active !== undefined) {
+            updateData.stripe_active = params.payment_methods.stripe_active;
+          }
+          if (params.payment_methods.bank_account_active !== undefined) {
+            updateData.bank_account_active = params.payment_methods.bank_account_active;
+          }
+          
+          operationDescription = 'Updated payment method settings';
+          break;
+          
+        case 'update_details':
+          if (params.notes !== undefined) {
+            updateData.notes = params.notes;
+          }
+          if (params.custom_headline !== undefined) {
+            updateData.custom_headline = params.custom_headline;
+          }
+          operationDescription = 'Updated invoice details';
+          break;
+          
+        default:
+          return {
+            success: false,
+            message: `Unknown operation: ${params.operation}`,
+            error: 'Invalid operation'
+          };
+      }
+      
+      // If we have line item changes, recalculate totals
+      if (lineItemChanges) {
+        // Get updated line items
+        const { data: updatedLineItems, error: lineItemsError } = await supabase
+          .from('invoice_line_items')
+          .select('*')
+          .eq('invoice_id', invoice.id);
+          
+        if (lineItemsError) {
+          throw new Error(`Failed to fetch updated line items: ${lineItemsError.message}`);
+        }
+        
+        // Recalculate totals
+        const subtotal = updatedLineItems.reduce((sum: number, item: any) => sum + item.total_price, 0);
+        const discountAmount = invoice.discount_type === 'percentage' 
+          ? subtotal * (invoice.discount_value / 100)
+          : invoice.discount_value || 0;
+        const discountedAmount = subtotal - discountAmount;
+        const taxAmount = discountedAmount * ((invoice.tax_percentage || 0) / 100);
+        const total = discountedAmount + taxAmount;
+        
+        updateData.subtotal_amount = subtotal;
+        updateData.total_amount = total;
+      }
+      
+      // Apply updates to invoice if any
+      if (Object.keys(updateData).length > 0) {
+        updateData.updated_at = new Date().toISOString();
+        
+        const { error: updateError } = await supabase
+          .from('invoices')
+          .update(updateData)
+          .eq('id', invoice.id);
+          
+        if (updateError) {
+          throw new Error(`Failed to update invoice: ${updateError.message}`);
+        }
+      }
+      
+      // Get the updated invoice with line items for the response
+      const { data: updatedInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          clients(id, name, email, phone),
+          invoice_line_items(*)
+        `)
+        .eq('id', invoice.id)
+        .single();
+        
+      if (fetchError) {
+        throw new Error(`Failed to fetch updated invoice: ${fetchError.message}`);
+      }
+      
+      const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
+      
+      const message = `✅ **Invoice ${invoice.invoice_number} updated successfully!**\n\n` +
+        `📝 **Change made:** ${operationDescription}\n` +
+        `💰 **Total amount:** ${businessCurrencySymbol}${updatedInvoice.total_amount.toFixed(2)}\n\n` +
+        `The updated invoice is ready for review.`;
+      
+      return {
+        success: true,
+        data: {
+          invoice: {
+            ...updatedInvoice,
+            client_name: updatedInvoice.clients?.name,
+            client_email: updatedInvoice.clients?.email
+          },
+          client_id: updatedInvoice.client_id,
+          line_items: updatedInvoice.invoice_line_items,
+          calculations: {
+            subtotal: updatedInvoice.subtotal_amount,
+            tax: (updatedInvoice.total_amount - updatedInvoice.subtotal_amount),
+            total: updatedInvoice.total_amount
+          }
+        },
+        message: message
+      };
+      
+    } catch (error) {
+      console.error('Error performing invoice edit:', error);
+      throw error;
+    }
+  }
+
+  // Helper function to perform estimate edits
+  private static async performEstimateEdit(estimate: any, params: any, userId: string): Promise<FunctionResult> {
+    try {
+      let updateData: any = {};
+      let lineItemChanges = false;
+      let operationDescription = '';
+      
+      switch (params.operation) {
+        case 'add_item':
+          if (!params.line_items_to_add || params.line_items_to_add.length === 0) {
+            return {
+              success: false,
+              message: 'No line items provided to add.',
+              error: 'Missing line items'
+            };
+          }
+          
+          // Add new line items
+          const newItems = params.line_items_to_add.map((item: any) => ({
+            estimate_id: estimate.id,
+            user_id: userId,
+            item_name: item.item_name,
+            item_description: item.item_description || null,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.quantity * item.unit_price
+          }));
+          
+          const { error: addError } = await supabase
+            .from('estimate_line_items')
+            .insert(newItems);
+            
+          if (addError) {
+            throw new Error(`Failed to add line items: ${addError.message}`);
+          }
+          
+          lineItemChanges = true;
+          operationDescription = `Added ${params.line_items_to_add.length} new item(s)`;
+          break;
+          
+        case 'remove_item':
+          if (!params.item_name_to_remove) {
+            return {
+              success: false,
+              message: 'No item name provided to remove.',
+              error: 'Missing item name'
+            };
+          }
+          
+          const { error: removeError } = await supabase
+            .from('estimate_line_items')
+            .delete()
+            .eq('estimate_id', estimate.id)
+            .ilike('item_name', `%${params.item_name_to_remove}%`);
+            
+          if (removeError) {
+            throw new Error(`Failed to remove item: ${removeError.message}`);
+          }
+          
+          lineItemChanges = true;
+          operationDescription = `Removed item: ${params.item_name_to_remove}`;
+          break;
+          
+        case 'update_validity':
+          if (!params.valid_until_date) {
+            return {
+              success: false,
+              message: 'No validity date provided.',
+              error: 'Missing validity date'
+            };
+          }
+          
+          let newValidDate;
+          if (params.valid_until_date.includes('days')) {
+            const days = parseInt(params.valid_until_date.match(/(\d+)/)?.[1] || '30');
+            newValidDate = new Date();
+            newValidDate.setDate(newValidDate.getDate() + days);
+          } else {
+            newValidDate = new Date(params.valid_until_date);
+          }
+          
+          updateData.valid_until_date = newValidDate.toISOString().split('T')[0];
+          operationDescription = `Updated validity date to ${newValidDate.toLocaleDateString()}`;
+          break;
+          
+        case 'update_payment_methods':
+          if (!params.payment_methods) {
+            return {
+              success: false,
+              message: 'No payment method settings provided.',
+              error: 'Missing payment methods'
+            };
+          }
+          
+          if (params.payment_methods.paypal_active !== undefined) {
+            updateData.paypal_active = params.payment_methods.paypal_active;
+          }
+          if (params.payment_methods.stripe_active !== undefined) {
+            updateData.stripe_active = params.payment_methods.stripe_active;
+          }
+          if (params.payment_methods.bank_account_active !== undefined) {
+            updateData.bank_account_active = params.payment_methods.bank_account_active;
+          }
+          
+          operationDescription = 'Updated payment method settings';
+          break;
+          
+        case 'update_details':
+          if (params.notes !== undefined) {
+            updateData.notes = params.notes;
+          }
+          if (params.acceptance_terms !== undefined) {
+            updateData.acceptance_terms = params.acceptance_terms;
+          }
+          operationDescription = 'Updated estimate details';
+          break;
+          
+        default:
+          return {
+            success: false,
+            message: `Unknown operation: ${params.operation}`,
+            error: 'Invalid operation'
+          };
+      }
+      
+      // If we have line item changes, recalculate totals
+      if (lineItemChanges) {
+        // Get updated line items
+        const { data: updatedLineItems, error: lineItemsError } = await supabase
+          .from('estimate_line_items')
+          .select('*')
+          .eq('estimate_id', estimate.id);
+          
+        if (lineItemsError) {
+          throw new Error(`Failed to fetch updated line items: ${lineItemsError.message}`);
+        }
+        
+        // Recalculate totals
+        const subtotal = updatedLineItems.reduce((sum: number, item: any) => sum + item.total_price, 0);
+        const discountAmount = estimate.discount_type === 'percentage' 
+          ? subtotal * (estimate.discount_value / 100)
+          : estimate.discount_value || 0;
+        const discountedAmount = subtotal - discountAmount;
+        const taxAmount = discountedAmount * ((estimate.tax_percentage || 0) / 100);
+        const total = discountedAmount + taxAmount;
+        
+        updateData.subtotal_amount = subtotal;
+        updateData.total_amount = total;
+      }
+      
+      // Apply updates to estimate if any
+      if (Object.keys(updateData).length > 0) {
+        updateData.updated_at = new Date().toISOString();
+        
+        const { error: updateError } = await supabase
+          .from('estimates')
+          .update(updateData)
+          .eq('id', estimate.id);
+          
+        if (updateError) {
+          throw new Error(`Failed to update estimate: ${updateError.message}`);
+        }
+      }
+      
+      // Get the updated estimate with line items for the response
+      const { data: updatedEstimate, error: fetchError } = await supabase
+        .from('estimates')
+        .select(`
+          *,
+          clients(id, name, email, phone),
+          estimate_line_items(*)
+        `)
+        .eq('id', estimate.id)
+        .single();
+        
+      if (fetchError) {
+        throw new Error(`Failed to fetch updated estimate: ${fetchError.message}`);
+      }
+      
+      const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
+      
+      const message = `✅ **Estimate ${estimate.estimate_number} updated successfully!**\n\n` +
+        `📝 **Change made:** ${operationDescription}\n` +
+        `💰 **Total amount:** ${businessCurrencySymbol}${updatedEstimate.total_amount.toFixed(2)}\n\n` +
+        `The updated estimate is ready for review.`;
+      
+      return {
+        success: true,
+        data: {
+          estimate: {
+            ...updatedEstimate,
+            client_name: updatedEstimate.clients?.name,
+            client_email: updatedEstimate.clients?.email
+          },
+          client_id: updatedEstimate.client_id,
+          line_items: updatedEstimate.estimate_line_items,
+          calculations: {
+            subtotal: updatedEstimate.subtotal_amount,
+            tax: (updatedEstimate.total_amount - updatedEstimate.subtotal_amount),
+            total: updatedEstimate.total_amount
+          }
+        },
+        message: message
+      };
+      
+    } catch (error) {
+      console.error('Error performing estimate edit:', error);
+      throw error;
+    }
   }
 } 

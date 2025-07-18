@@ -20,6 +20,7 @@ import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoiceDesign';
+import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
 import { ColorSelector } from '@/components/ColorSelector';
 import { SegmentedControl } from '@/components/SegmentedControl';
 
@@ -41,16 +42,18 @@ interface InvoicePreviewModalProps {
   initialAccentColor?: string;
   // Document type for proper labeling
   documentType?: 'invoice' | 'estimate';
+  // Callback when save is completed successfully
+  onSaveComplete?: () => void;
 }
 
 export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePreviewModalProps>(
-  ({ invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice' }, ref) => {
+  ({ invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice', onSaveComplete }, ref) => {
     const colorScheme = useColorScheme();
     const isLightMode = colorScheme === 'light';
     const themeColors = colors[colorScheme || 'light'];
+    const { supabase, user } = useSupabase();
     
     const [isVisible, setIsVisible] = useState(false);
-    const { supabase, user } = useSupabase();
     
     // Tab state for design/color selection
     const [activeTab, setActiveTab] = useState<'design' | 'color'>('design');
@@ -61,20 +64,35 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const gestureRef = useRef<PanGestureHandler>(null);
     
     // Design selection hook - use invoice-specific hook if we have an invoice ID
-    const {
-      currentDesign,
-      availableDesigns,
-      currentAccentColor,
-      isLoading: isDesignLoading,
-      selectDesign,
-      selectAccentColor,
-      saveToInvoice,
-      updateDefaultForNewInvoices,
-    } = useInvoiceDesignForInvoice(
-      invoiceId,
-      mode === 'settings' ? initialDesign : invoiceData?.invoice_design,
+    // Only use the hook for invoices, handle estimates manually
+    const shouldUseHook = documentType !== 'estimate';
+    const hookResult = useInvoiceDesignForInvoice(
+      shouldUseHook ? invoiceId : undefined,
+      mode === 'settings' ? initialDesign : (documentType === 'estimate' ? invoiceData?.estimate_template : invoiceData?.invoice_design),
       mode === 'settings' ? initialAccentColor : invoiceData?.accent_color
     );
+
+    // For estimates, we'll manage state manually since the hook is invoice-specific
+    const [estimateDesign, setEstimateDesign] = useState(() => {
+      const designId = mode === 'settings' ? initialDesign : (documentType === 'estimate' ? invoiceData?.estimate_template : invoiceData?.invoice_design);
+      return getDesignById(designId || 'classic') || getDefaultDesign();
+    });
+    const [estimateAccentColor, setEstimateAccentColor] = useState(
+      mode === 'settings' ? initialAccentColor : invoiceData?.accent_color || '#14B8A6'
+    );
+
+    // Use hook results for invoices, manual state for estimates
+    const currentDesign = shouldUseHook ? hookResult.currentDesign : estimateDesign;
+    const availableDesigns = hookResult.availableDesigns;
+    const currentAccentColor = shouldUseHook ? hookResult.currentAccentColor : estimateAccentColor;
+    const isDesignLoading = shouldUseHook ? hookResult.isLoading : false;
+    const selectDesign = shouldUseHook ? hookResult.selectDesign : (designId: string) => {
+      const design = getDesignById(designId);
+      if (design) setEstimateDesign(design);
+    };
+    const selectAccentColor = shouldUseHook ? hookResult.selectAccentColor : setEstimateAccentColor;
+    const saveToInvoice = hookResult.saveToInvoice;
+    const updateDefaultForNewInvoices = hookResult.updateDefaultForNewInvoices;
     
     // Send modal refs and setup
     const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
@@ -146,23 +164,50 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     // Handle saving design changes and closing modal
     const handleSave = useCallback(async () => {
       try {
+        let saveSuccess = false;
+        
         if (mode === 'settings') {
           // In settings mode, call the callback instead of saving to database
           onDesignSaved?.(currentDesign.id, currentAccentColor);
+          saveSuccess = true;
         } else if (invoiceId) {
-          // Save design and color to specific invoice
-          const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
-          if (success) {
-            console.log('Invoice design and color saved successfully');
-            // Also update default for new invoices
-            await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+          if (documentType === 'estimate') {
+            // Save design and color to specific estimate
+            const { error: updateError } = await supabase.from('estimates')
+              .update({
+                estimate_template: currentDesign.id,
+                accent_color: currentAccentColor,
+              })
+              .eq('id', invoiceId);
+            
+            if (!updateError) {
+              console.log('Estimate design and color saved successfully');
+              saveSuccess = true;
+            } else {
+              console.error('Error saving estimate design:', updateError);
+            }
+          } else {
+            // Save design and color to specific invoice
+            const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
+            if (success) {
+              console.log('Invoice design and color saved successfully');
+              // Also update default for new invoices
+              await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+              saveSuccess = true;
+            }
           }
         } else {
           // For new invoices, just update the default
           const success = await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
           if (success) {
             console.log('Default design and color preferences saved successfully');
+            saveSuccess = true;
           }
+        }
+        
+        // Call onSaveComplete if save was successful
+        if (saveSuccess) {
+          onSaveComplete?.();
         }
       } catch (error) {
         console.error('Error saving design preference:', error);
@@ -171,7 +216,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         setIsVisible(false);
         onClose?.();
       }
-    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose]);
+    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase]);
 
     // Send modal handlers
     const handleOpenSendModal = useCallback(() => {

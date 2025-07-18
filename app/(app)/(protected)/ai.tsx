@@ -5,7 +5,7 @@ import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone
 import TranscribeButton, { TranscribeButtonRef } from "@/components/TranscribeButton";
 import VoiceChatButton from "@/components/VoiceChatButton";
 import { VoiceModal } from "@/components/VoiceModal";
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 
 import { SafeAreaView } from "@/components/safe-area-view";
 import { Text } from "@/components/ui/text";
@@ -28,7 +28,9 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 // Estimate Preview Component for Chat
 const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: any }) => {
-	const { estimate, line_items, client_id } = estimateData;
+	const { estimate: initialEstimate, line_items: initialLineItems, client_id } = estimateData;
+	const [estimate, setEstimate] = useState(initialEstimate);
+	const [lineItems, setLineItems] = useState(initialLineItems);
 	const [businessSettings, setBusinessSettings] = useState<(BusinessSettingsRow & {
 		currency: string;
 		currency_symbol: string;
@@ -62,11 +64,73 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	
 	const { supabase } = useSupabase();
 	
-	// Load business settings and client data on mount and when client_id or estimate changes
+	// Load business settings, client data, and fresh estimate data on mount and when client_id or estimate changes
 	useEffect(() => {
 		loadBusinessSettings();
 		loadFullClientData();
-	}, [client_id, estimate.id]); // Re-run when client_id or estimate.id changes
+		loadFreshEstimateData();
+	}, [client_id, initialEstimate.id]); // Re-run when client_id or estimate.id changes
+
+	// Refresh when app comes back to foreground (user returns from editing)
+	useEffect(() => {
+		const handleAppStateChange = (nextAppState: string) => {
+			if (nextAppState === 'active') {
+				console.log('[AI Estimate Preview] App became active - refreshing data');
+				loadFreshEstimateData();
+			}
+		};
+
+		const { AppState } = require('react-native');
+		const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+		return () => subscription?.remove();
+	}, [initialEstimate.id]);
+
+	// Refresh when screen comes into focus (user navigates back to AI chat)
+	useFocusEffect(
+		React.useCallback(() => {
+			console.log('[AI Estimate Preview] Screen focused - refreshing data');
+			loadFreshEstimateData();
+		}, [initialEstimate.id])
+	);
+
+	const loadFreshEstimateData = async () => {
+		try {
+			console.log('[AI Estimate Preview] Loading fresh estimate data for ID:', initialEstimate.id);
+			
+			const { data: freshEstimateData, error } = await supabase
+				.from('estimates')
+				.select(`
+					*,
+					estimate_line_items(*)
+				`)
+				.eq('id', initialEstimate.id)
+				.single();
+
+			if (error) {
+				console.error('[AI Estimate Preview] Error loading fresh estimate data:', error);
+				return;
+			}
+
+			if (freshEstimateData) {
+				console.log('[AI Estimate Preview] Loaded fresh estimate data - template:', freshEstimateData.estimate_template, 'color:', freshEstimateData.accent_color);
+				
+				// Only update if design or color actually changed
+				if (freshEstimateData.estimate_template !== estimate.estimate_template || 
+					freshEstimateData.accent_color !== estimate.accent_color) {
+					console.log('[AI Estimate Preview] Design changed - updating preview');
+					setEstimate(freshEstimateData);
+					
+					// Update line items if they changed
+					if (freshEstimateData.estimate_line_items) {
+						setLineItems(freshEstimateData.estimate_line_items);
+					}
+				}
+			}
+		} catch (error) {
+			console.error('[AI Estimate Preview] Error loading fresh estimate data:', error);
+		}
+	};
 
 	const loadFullClientData = async () => {
 		if (!client_id) {
@@ -243,7 +307,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 		invoice_number: estimate?.estimate_number,
 		invoice_date: estimate?.estimate_date,
 		due_date: estimate?.valid_until_date,
-		invoice_line_items: line_items || [],
+		invoice_line_items: lineItems || [],
 	};
 
 	// Get the dynamic estimate component
@@ -354,7 +418,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 									currencySymbol={businessSettings?.currency_symbol || '$'}
 									accentColor={estimate?.accent_color || '#14B8A6'}
 									documentType="estimate"
-									estimateTerminology={businessSettings?.estimate_terminology || 'estimate'}
+									estimateTerminology={'estimate'}
 									displaySettings={{
 										show_business_logo: businessSettings?.show_business_logo ?? true,
 										show_business_name: businessSettings?.show_business_name ?? true,
@@ -392,6 +456,11 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 				businessSettings={businessSettings}
 				clientData={transformedClient}
 				documentType="estimate"
+				invoiceId={estimate?.id}
+				onSaveComplete={() => {
+					console.log('[AI Estimate Preview] Save completed - refreshing preview');
+					loadFreshEstimateData();
+				}}
 			/>
 		</>
 	);
@@ -399,7 +468,9 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 // Invoice Preview Component for Chat
 const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }) => {
-	const { invoice, line_items, client_id } = invoiceData;
+	const { invoice: initialInvoice, line_items: initialLineItems, client_id } = invoiceData;
+	const [invoice, setInvoice] = useState(initialInvoice);
+	const [lineItems, setLineItems] = useState(initialLineItems);
 	const [businessSettings, setBusinessSettings] = useState<(BusinessSettingsRow & {
 		currency: string;
 		currency_symbol: string;
@@ -433,11 +504,73 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	
 	const { supabase } = useSupabase();
 	
-	// Load business settings and client data on mount and when client_id or invoice changes
+	// Load business settings, client data, and fresh invoice data on mount and when client_id or invoice changes
 	useEffect(() => {
 		loadBusinessSettings();
 		loadFullClientData();
-	}, [client_id, invoice.id]); // Re-run when client_id or invoice.id changes
+		loadFreshInvoiceData();
+	}, [client_id, initialInvoice.id]); // Re-run when client_id or invoice.id changes
+
+	// Refresh when app comes back to foreground (user returns from editing)
+	useEffect(() => {
+		const handleAppStateChange = (nextAppState: string) => {
+			if (nextAppState === 'active') {
+				console.log('[AI Invoice Preview] App became active - refreshing data');
+				loadFreshInvoiceData();
+			}
+		};
+
+		const { AppState } = require('react-native');
+		const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+		return () => subscription?.remove();
+	}, [initialInvoice.id]);
+
+	// Refresh when screen comes into focus (user navigates back to AI chat)
+	useFocusEffect(
+		React.useCallback(() => {
+			console.log('[AI Invoice Preview] Screen focused - refreshing data');
+			loadFreshInvoiceData();
+		}, [initialInvoice.id])
+	);
+
+	const loadFreshInvoiceData = async () => {
+		try {
+			console.log('[AI Invoice Preview] Loading fresh invoice data for ID:', initialInvoice.id);
+			
+			const { data: freshInvoiceData, error } = await supabase
+				.from('invoices')
+				.select(`
+					*,
+					invoice_line_items(*)
+				`)
+				.eq('id', initialInvoice.id)
+				.single();
+
+			if (error) {
+				console.error('[AI Invoice Preview] Error loading fresh invoice data:', error);
+				return;
+			}
+
+			if (freshInvoiceData) {
+				console.log('[AI Invoice Preview] Loaded fresh invoice data - design:', freshInvoiceData.invoice_design, 'color:', freshInvoiceData.accent_color);
+				
+				// Only update if design or color actually changed
+				if (freshInvoiceData.invoice_design !== invoice.invoice_design || 
+					freshInvoiceData.accent_color !== invoice.accent_color) {
+					console.log('[AI Invoice Preview] Design changed - updating preview');
+					setInvoice(freshInvoiceData);
+					
+					// Update line items if they changed
+					if (freshInvoiceData.invoice_line_items) {
+						setLineItems(freshInvoiceData.invoice_line_items);
+					}
+				}
+			}
+		} catch (error) {
+			console.error('[AI Invoice Preview] Error loading fresh invoice data:', error);
+		}
+	};
 
 	const loadFullClientData = async () => {
 		if (!client_id) {
@@ -629,7 +762,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Transform data for our modal - separate client from invoice like the invoice viewer
 	const transformedInvoice = {
 		...invoice,
-		invoice_line_items: line_items || [],
+		invoice_line_items: lineItems || [],
 	};
 
 	// Get the dynamic invoice component
@@ -782,6 +915,11 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				invoiceData={transformedInvoice}
 				businessSettings={businessSettings}
 				clientData={transformedClient}
+				invoiceId={invoice?.id}
+				onSaveComplete={() => {
+					console.log('[AI Invoice Preview] Save completed - refreshing preview');
+					loadFreshInvoiceData();
+				}}
 			/>
 		</>
 	);
