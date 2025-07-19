@@ -40,6 +40,13 @@ export default function NewSettingsScreen() {
     },
     onPresent: (info) => {
       console.log('🔥 Superwall Paywall Presented:', info);
+      console.log('🔥 Products in paywall:', info.products || []);
+      console.log('🔥 Product IDs:', info.productIds || []);
+      console.log('🔥 Products load duration:', info.productsLoadDuration);
+      console.log('🔥 Products load fail time:', info.productsLoadFailTime);
+      if (info.productsLoadFailTime) {
+        console.log('🔥 ⚠️ PRODUCTS FAILED TO LOAD!');
+      }
       console.log('🔥 Superwall Paywall Presented Info:', JSON.stringify(info, null, 2));
     },
     onDismiss: (info, result) => {
@@ -116,6 +123,13 @@ export default function NewSettingsScreen() {
         
         console.log('🔥 Step 4: Preloading paywalls...');
         await superwall.preloadAllPaywalls();
+        
+        // 7. Check device attributes after refresh to see if products are available
+        const refreshedAttributes = await superwall.getDeviceAttributes();
+        console.log('🔥 Post-refresh device attributes:');
+        console.log('🔥 Active products:', refreshedAttributes.activeProducts);
+        console.log('🔥 Subscription status:', refreshedAttributes.subscriptionStatus);
+        console.log('🔥 Is sandbox:', refreshedAttributes.isSandbox);
         
         console.log('🔥 HARD REFRESH COMPLETE!');
       } catch (err) {
