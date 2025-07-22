@@ -106,7 +106,8 @@ class PaywallService {
   // Predefined paywall events
   static readonly EVENTS = {
     SETTINGS_UPGRADE: 'campaign_trigger', // Use the placement that works
-    ONBOARDING_COMPLETE: 'onboarding_complete',
+    ONBOARDING_COMPLETE: 'campaign_trigger', // Using same placement for now
+    SEND_BLOCK: 'send_block', // New send block campaign
     INVOICE_LIMIT_REACHED: 'invoice_limit_reached',
     PREMIUM_FEATURE_ACCESSED: 'premium_feature_accessed'
   } as const;

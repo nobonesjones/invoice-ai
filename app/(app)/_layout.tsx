@@ -41,6 +41,7 @@ export default function AppLayout() {
 				<Stack.Screen name="payment-reminders" options={{ headerShown: false }} />
 				{/* <Stack.Screen name="settings" options={{ headerShown: false }} /> */}
 				<Stack.Screen name="welcome" options={{ headerShown: false }} />
+				<Stack.Screen name="soft-paywall" options={{ headerShown: false }} />
 				<Stack.Screen name="(auth)" options={{ headerShown: false }} />
 				<Stack.Screen
 					name="modal"

@@ -18,6 +18,7 @@ import { useShineAnimation } from '@/lib/hooks/useShineAnimation'; // Import the
 import { usePaywall } from '@/context/paywall-provider';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 import { usePlacement, useSuperwall } from 'expo-superwall';
+import UsageTrackingService, { UsageStats } from '@/services/usageTrackingService';
 
 export default function NewSettingsScreen() {
   const router = useRouter();
@@ -26,6 +27,8 @@ export default function NewSettingsScreen() {
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { presentPaywall, isSubscribed, isLoading: paywallLoading } = usePaywall();
   const [searchTerm, setSearchTerm] = useState('');
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
+  const [isLoadingUsage, setIsLoadingUsage] = useState(true);
 
   // Test Superwall context
   const superwall = useSuperwall();
@@ -79,6 +82,25 @@ export default function NewSettingsScreen() {
       // return () => setIsTabBarVisible(false); // Example: if this screen should hide it on unfocus
     }, [setIsTabBarVisible])
   );
+
+  // Load usage stats when screen loads or user changes
+  useEffect(() => {
+    const loadUsageStats = async () => {
+      if (!user?.id) return;
+      
+      setIsLoadingUsage(true);
+      try {
+        const stats = await UsageTrackingService.getUserUsageStats(user.id);
+        setUsageStats(stats);
+      } catch (error) {
+        console.error('[Settings] Error loading usage stats:', error);
+      } finally {
+        setIsLoadingUsage(false);
+      }
+    };
+
+    loadUsageStats();
+  }, [user?.id]);
 
   const handleUpgradePress = async () => {
     console.log('🔥 Upgrade button pressed!');
@@ -463,6 +485,38 @@ export default function NewSettingsScreen() {
             />
           </View>
 
+          {/* Usage Counter */}
+          {!isSubscribed && usageStats && (
+            <View style={[styles.usageCounterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.usageCounterContent}>
+                <View style={styles.usageCounterMain}>
+                  <Text style={[styles.usageCounterTitle, { color: theme.foreground }]}>
+                    Free Plan Usage
+                  </Text>
+                  <View style={styles.usageCounterBar}>
+                    <View style={[styles.usageCounterProgress, { 
+                      backgroundColor: theme.primary,
+                      width: `${(usageStats.totalItemsCreated / 3) * 100}%`
+                    }]} />
+                  </View>
+                  <Text style={[styles.usageCounterText, { color: theme.mutedForeground }]}>
+                    {usageStats.totalItemsCreated}/3 items created
+                  </Text>
+                </View>
+                {usageStats.totalItemsCreated >= 3 && (
+                  <TouchableOpacity 
+                    style={[styles.usageUpgradeButton, { backgroundColor: theme.primary }]}
+                    onPress={handleUpgradePress}
+                  >
+                    <Text style={[styles.usageUpgradeButtonText, { color: theme.primaryForeground }]}>
+                      Upgrade
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
           {filteredSections.length > 0 ? (
             filteredSections.map((section, index) => (
               <React.Fragment key={section.section}>
@@ -593,5 +647,51 @@ const styles = StyleSheet.create({
   shineGradient: { // Style for the gradient itself
     width: '100%',
     height: '100%',
+  },
+  usageCounterContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  usageCounterContent: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  usageCounterMain: {
+    flex: 1,
+  },
+  usageCounterTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  usageCounterBar: {
+    height: 6,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 3,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  usageCounterProgress: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  usageCounterText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  usageUpgradeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginLeft: 12,
+  },
+  usageUpgradeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

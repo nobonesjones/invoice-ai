@@ -93,7 +93,8 @@ function RootLayoutNav() {
         !isAppLanguageScreen &&
         !isCustomerSupportScreen &&
         !isPaymentOptionsScreen &&
-        !isPaymentRemindersScreen
+        !isPaymentRemindersScreen &&
+        !isSoftPaywallScreen
       ) { 
 			// User is logged in but not in the main protected area OR any allowed app-level screens.
 			// Redirect to the main protected route (e.g., home screen).
