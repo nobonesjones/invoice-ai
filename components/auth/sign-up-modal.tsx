@@ -123,6 +123,7 @@ export function SignUpModal({
         }
       }
       
+      console.log('[SignUpModal] Calling onSuccess callback...');
       onSuccess?.();
     } catch (error: any) {
       console.error("Error signing up:", error);

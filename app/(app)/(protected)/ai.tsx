@@ -952,12 +952,12 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 };
 
 // Client Preview Component for Chat
-const ClientPreview = ({ clientData, theme }: { clientData: any; theme: any }) => {
+const ClientPreview = ({ clientData, theme, router }: { clientData: any; theme: any; router: any }) => {
 	const { client } = clientData;
 	
 	const handleClientTap = () => {
-		// Note: router hook should be used in the parent component
 		console.log('Client tap - navigate to client:', client.id);
+		router.push(`/customers/${client.id}`);
 	};
 
 	const getInitials = (name: string) => {
@@ -1290,7 +1290,6 @@ export default function AiScreen() {
 		}
 
 		const messageToSend = inputText.trim();
-		setInputText(''); // Clear input immediately
 
 		try {
 			console.log('[AI Screen] Sending message via useAIChat...');
@@ -1302,9 +1301,13 @@ export default function AiScreen() {
 			} : undefined;
 
 			await sendMessage(messageToSend, currencyContext);
+			
+			// Only clear input after successful send
+			setInputText('');
 			console.log('[AI Screen] Message sent successfully');
 		} catch (error) {
 			console.error('[AI Screen] Failed to send message:', error);
+			// Input text remains in the text box so user can retry
 		}
 	};
 
@@ -1647,7 +1650,8 @@ export default function AiScreen() {
 													<ClientPreview 
 														key={`client-${index}`}
 														clientData={attachment} 
-														theme={theme} 
+														theme={theme}
+														router={router} 
 													/>
 												);
 											}

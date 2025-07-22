@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { H1 } from '@/components/ui/typography';
 import { useTheme } from '@/context/theme-provider';
 import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from '../../../(app)/(protected)/invoices/InvoiceTemplateOne';
-import { generateInvoiceTemplateOneHtml } from '../../../utils/generateInvoiceTemplateOneHtml';
+import { generateInvoiceTemplateOneHtml } from '@/utils/generateInvoiceTemplateOneHtml';
 import { InvoiceShareService } from '../../../../services/invoiceShareService';
 
 interface SharedInvoiceData {

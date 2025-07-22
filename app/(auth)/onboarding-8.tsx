@@ -57,6 +57,7 @@ export default function OnboardingScreen8() {
   };
 
   const handleAuthSuccess = () => {
+    console.log('[Onboarding8] handleAuthSuccess called - navigating to soft-paywall');
     setAuthModalVisible(false);
     // Navigate to soft paywall after successful authentication
     router.replace("/(app)/soft-paywall");

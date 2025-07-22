@@ -32,6 +32,7 @@ import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useEstimateStatusUpdater } from '@/hooks/useEstimateStatusUpdater';
+import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 import type { Database } from "../../../../types/database.types"; 
 
 // Define filter options here to map type to label for initialization and sync
@@ -211,6 +212,7 @@ export default function EstimateDashboardScreen() {
 	const router = useRouter();
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  const { checkAndShowPaywall } = useItemCreationLimit();
   
   // Auto-update expired estimate statuses
   useEstimateStatusUpdater();
@@ -503,7 +505,12 @@ export default function EstimateDashboardScreen() {
             </Text>
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
-                onPress={() => router.push("/estimates/create" as any)}
+                onPress={async () => {
+                  const canProceed = await checkAndShowPaywall();
+                  if (canProceed) {
+                    router.push("/estimates/create" as any);
+                  }
+                }}
               >
                 <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
                   <LinearGradient

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import * as Sharing from 'expo-sharing';
-import { generateInvoiceTemplateOneHtml, PdfInvoiceData } from '../app/utils/generateInvoiceTemplateOneHtml'; // Updated function and file name
+import { generateInvoiceTemplateOneHtml, PdfInvoiceData } from '@/utils/generateInvoiceTemplateOneHtml'; // Updated function and file name
 import { InvoiceForTemplate, BusinessSettingsRow } from '../app/(app)/(protected)/invoices/InvoiceTemplateOne'; // Adjusted path
 
 interface UseInvoiceSenderProps {

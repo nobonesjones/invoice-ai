@@ -34,6 +34,7 @@ export default function NewSettingsScreen() {
   const superwall = useSuperwall();
   console.log('🔥 Superwall context:', superwall);
   console.log('🔥 Superwall context keys:', Object.keys(superwall || {}));
+  console.log('🔥 Button state - paywallLoading:', paywallLoading, 'isSubscribed:', isSubscribed);
 
   // Use the Superwall placement hook
   const { registerPlacement, state: placementState } = usePlacement({
@@ -78,168 +79,58 @@ export default function NewSettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       setIsTabBarVisible(true);
+      // Refresh usage stats when screen comes into focus
+      loadUsageStats();
       // Optional: Return a cleanup function if needed when the screen is unfocused
       // return () => setIsTabBarVisible(false); // Example: if this screen should hide it on unfocus
-    }, [setIsTabBarVisible])
+    }, [setIsTabBarVisible, loadUsageStats])
   );
+
+  // Load usage stats function
+  const loadUsageStats = useCallback(async () => {
+    if (!user?.id) return;
+    
+    setIsLoadingUsage(true);
+    try {
+      const stats = await UsageTrackingService.getUserUsageStats(user.id);
+      console.log('[Settings] Loaded usage stats:', stats);
+      setUsageStats(stats);
+    } catch (error) {
+      console.error('[Settings] Error loading usage stats:', error);
+    } finally {
+      setIsLoadingUsage(false);
+    }
+  }, [user?.id]);
 
   // Load usage stats when screen loads or user changes
   useEffect(() => {
-    const loadUsageStats = async () => {
-      if (!user?.id) return;
-      
-      setIsLoadingUsage(true);
-      try {
-        const stats = await UsageTrackingService.getUserUsageStats(user.id);
-        setUsageStats(stats);
-      } catch (error) {
-        console.error('[Settings] Error loading usage stats:', error);
-      } finally {
-        setIsLoadingUsage(false);
-      }
-    };
-
     loadUsageStats();
-  }, [user?.id]);
+  }, [user?.id, loadUsageStats]);
 
   const handleUpgradePress = async () => {
     console.log('🔥 Upgrade button pressed!');
+    console.log('🔥 Button working - this should appear in logs');
+    Alert.alert('Debug', 'Upgrade button clicked - check console for Superwall logs');
     try {
-      console.log('🔥 About to call registerPlacement...');
-      console.log('🔥 registerPlacement function:', typeof registerPlacement);
-      console.log('🔥 Current placement state before:', placementState);
+      console.log('🔥 Trying create_item_limit placement...');
       
-      // Use a custom placement for your Mainpaywall campaign
-      console.log('🔥 Presenting your Mainpaywall campaign using custom placement');
+      const result = await registerPlacement({
+        placement: 'create_item_limit'
+      });
       
-      // HARD REFRESH - Clear everything and reload
-      console.log('🔥 Performing HARD REFRESH of Superwall...');
-      try {
-        // 1. Reset the SDK completely
-        console.log('🔥 Step 1: Resetting SDK...');
-        await superwall.reset();
+      console.log('🔥 create_item_limit result:', result);
+      console.log('🔥 placement state:', placementState);
+      
+      // If placement not found, try campaign_trigger as fallback
+      if (placementState?.reason?.type === 'PlacementNotFound') {
+        console.log('🔥 create_item_limit not found, trying campaign_trigger...');
         
-        // 2. Wait for reset to complete
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // 3. Re-configure with API key to force fresh config download
-        console.log('🔥 Step 2: Re-configuring SDK...');
-        await superwall.configure({
-          apiKey: process.env.EXPO_PUBLIC_SUPERWALL_API_KEY!,
-          options: {
-            isDebugEnabled: true // Enable debug mode to see more logs
-          }
+        const fallbackResult = await registerPlacement({
+          placement: 'campaign_trigger'
         });
         
-        // 4. Wait for configuration
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // 5. Re-identify user
-        if (user?.id) {
-          console.log('🔥 Step 3: Re-identifying user...');
-          await superwall.identify(user.id);
-        }
-        
-        // 6. Wait and preload
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        console.log('🔥 Step 4: Preloading paywalls...');
-        await superwall.preloadAllPaywalls();
-        
-        // 7. Check device attributes after refresh to see if products are available
-        const refreshedAttributes = await superwall.getDeviceAttributes();
-        console.log('🔥 Post-refresh device attributes:');
-        console.log('🔥 Active products:', refreshedAttributes.activeProducts);
-        console.log('🔥 Subscription status:', refreshedAttributes.subscriptionStatus);
-        console.log('🔥 Is sandbox:', refreshedAttributes.isSandbox);
-        
-        console.log('🔥 HARD REFRESH COMPLETE!');
-      } catch (err) {
-        console.log('🔥 Hard refresh error:', err);
-        
-        // Nuclear option - offer to reload the entire app
-        Alert.alert(
-          'Cache Clear Failed',
-          'The paywall cache is stuck. Would you like to reload the entire app to clear it?',
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
-            {
-              text: 'Reload App',
-              onPress: async () => {
-                // For development, just alert
-                Alert.alert('Please restart the app manually to clear the cache');
-              }
-            }
-          ]
-        );
-      }
-      
-      // Extra wait to ensure everything is loaded
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // First, try to get available placements or campaign info
-      try {
-        const deviceAttributes = await superwall.getDeviceAttributes();
-        console.log('🔥 Device attributes:', deviceAttributes);
-      } catch (err) {
-        console.log('🔥 Could not get device attributes:', err);
-      }
-      
-      try {
-        // Let's try creating the placement on the fly
-        console.log('🔥 Creating placement dynamically...');
-        
-        // First, let's test if campaign_trigger still works
-        console.log('🔥 Testing if campaign_trigger (Example) still works...');
-        try {
-          const testResult = await registerPlacement({
-            placement: 'campaign_trigger'
-          });
-          console.log('🔥 campaign_trigger test result:', testResult);
-          console.log('🔥 campaign_trigger state:', placementState);
-          
-          if (placementState?.status === 'presented' || placementState?.paywallInfo) {
-            console.log('🔥 SUCCESS! campaign_trigger still works. The issue is with your custom placement.');
-            return; // Exit early since we showed a paywall
-          }
-        } catch (err) {
-          console.log('🔥 campaign_trigger test error:', err);
-        }
-        
-        // Try multiple placement names to see which one works
-        const placements = [
-          'settings_upgrade_button',
-          'settings-upgrade-button',
-          'upgrade_button',
-          'upgrade',
-          'settings_upgrade'
-        ];
-        
-        for (const placementName of placements) {
-          console.log(`🔥 Trying placement: ${placementName}`);
-          
-          const result = await registerPlacement({
-            placement: placementName
-          });
-          
-          console.log(`🔥 ${placementName} result:`, result);
-          console.log(`🔥 placement state:`, placementState);
-          
-          // If it's not PlacementNotFound, we found a working placement
-          if (placementState?.reason?.type !== 'PlacementNotFound' || placementState?.status !== 'skipped') {
-            console.log(`🔥 SUCCESS! Placement ${placementName} worked!`);
-            break;
-          }
-          
-          // Small delay between attempts
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-      } catch (error) {
-        console.error('🔥 Error with placement:', error);
+        console.log('🔥 campaign_trigger result:', fallbackResult);
+        console.log('🔥 campaign_trigger state:', placementState);
       }
       
     } catch (error) {
@@ -442,8 +333,13 @@ export default function NewSettingsScreen() {
                   opacity: paywallLoading ? 0.7 : 1
                 }
               ]} 
-              onPress={handleUpgradePress}
+              onPress={() => {
+                console.log('🔥🔥🔥 BASIC BUTTON PRESS DETECTED');
+                Alert.alert('Button Works!', 'The upgrade button is clickable');
+                handleUpgradePress();
+              }}
               disabled={paywallLoading}
+              activeOpacity={0.7}
             >
               {!isSubscribed && (
                 <Animated.View 
@@ -643,6 +539,7 @@ const styles = StyleSheet.create({
   shineOverlay: { // Style for the animated shine view
     ...StyleSheet.absoluteFillObject,
     zIndex: 1, // Ensure it's on top of the background, but content can be on top of it if needed
+    pointerEvents: 'none', // Allow touch events to pass through to the button
   },
   shineGradient: { // Style for the gradient itself
     width: '100%',

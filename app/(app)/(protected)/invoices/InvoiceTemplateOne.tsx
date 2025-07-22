@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { Tables } from '../../../../types/database.types'; // Corrected import path
 import { format } from 'date-fns';
-import { paginateInvoiceItems } from '../../../utils/invoicePagination';
+import { paginateInvoiceItems } from '@/utils/invoicePagination';
 
 // Define InvoiceForTemplate by explicitly listing properties
 // This gives more control than Omit if type conflicts are occurring

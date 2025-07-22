@@ -2,6 +2,7 @@ import { supabase } from '@/config/supabase';
 import { ReferenceNumberService } from './referenceNumberService';
 import { OpenAIFunction } from '@/services/openaiService';
 import { UsageService } from '@/services/usageService';
+import { UsageTrackingService } from '@/services/usageTrackingService';
 
 // Function definitions for OpenAI
 export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
@@ -1337,9 +1338,20 @@ export class InvoiceFunctionService {
 
   private static async createInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      // Note: No usage limit check for creation - users can create unlimited invoices
-      // The limit is now on sending, not creating
-      console.log('[AI Invoice Create] Creating invoice (unlimited creation in freemium model)');
+      // Check usage limit for free plan users
+      console.log('[AI Invoice Create] Checking usage limits...');
+      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
+      const totalItems = (usageStats.invoicesCount || 0) + (usageStats.estimatesCount || 0);
+      
+      if (totalItems >= 3) {
+        console.log('[AI Invoice Create] User has reached free plan limit');
+        return {
+          result: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
+          shouldContinueConversation: true
+        };
+      }
+      
+      console.log('[AI Invoice Create] Creating invoice...');
 
       // Step 0: Get user's business settings for default tax rate, design, and color
       let defaultTaxRate = 0;
@@ -4057,6 +4069,20 @@ The new client is ready to use for invoices!`
   private static async createEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
       console.log('🚨 CREATE ESTIMATE FUNCTION CALLED!!! 🚨');
+      
+      // Check usage limit for free plan users
+      console.log('[AI Estimate Create] Checking usage limits...');
+      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
+      const totalItems = (usageStats.invoicesCount || 0) + (usageStats.estimatesCount || 0);
+      
+      if (totalItems >= 3) {
+        console.log('[AI Estimate Create] User has reached free plan limit');
+        return {
+          result: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
+          shouldContinueConversation: true
+        };
+      }
+      
       console.log('[AI Estimate Create] Creating estimate with params:', params);
       
       // Get user's business settings for defaults
@@ -4550,6 +4576,19 @@ The new client is ready to use for invoices!`
 
   private static async convertEstimateToInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
+      // Check usage limit for free plan users
+      console.log('[AI Estimate Convert] Checking usage limits...');
+      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
+      const totalItems = (usageStats.invoicesCount || 0) + (usageStats.estimatesCount || 0);
+      
+      if (totalItems >= 3) {
+        console.log('[AI Estimate Convert] User has reached free plan limit');
+        return {
+          result: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
+          shouldContinueConversation: true
+        };
+      }
+      
       const { estimate_number, payment_terms_days } = params;
 
       if (!estimate_number) {

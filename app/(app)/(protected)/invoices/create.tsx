@@ -71,10 +71,10 @@ import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase 
 import { SwipeListView } from 'react-native-swipe-list-view'; // Added SwipeListView import
 import type { Database } from '../../../../types/database.types'; // Corrected path again
 import { Image } from 'react-native'; // Added Image import
-import { usePaymentOptions, PaymentOptionData } from './usePaymentOptions'; // Added correct import
+import { usePaymentOptions, PaymentOptionData } from './components/usePaymentOptions'; // Added correct import
 import { KeyboardAvoidingView } from 'react-native';
 import { INVOICE_STATUSES, InvoiceStatus, getStatusConfig, isEditable } from '@/constants/invoice-status';
-import { useInvoiceActivityLogger } from './useInvoiceActivityLogger';
+import { useInvoiceActivityLogger } from './components/useInvoiceActivityLogger';
 import { UsageService } from '@/services/usageService'; // Added UsageService import
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal'; // Added InvoicePreviewModal import
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 interface UsageStats {
   invoicesCreated: number;
@@ -8,7 +8,7 @@ interface UsageStats {
 
 class UsageTrackingService {
   private static instance: UsageTrackingService;
-  private supabase = createClient();
+  private supabase = supabase;
 
   static getInstance(): UsageTrackingService {
     if (!UsageTrackingService.instance) {
@@ -18,11 +18,13 @@ class UsageTrackingService {
   }
 
   /**
-   * Get current usage stats for a user
+   * Get current usage stats for a user (lifetime total)
    */
   async getUserUsageStats(userId: string): Promise<UsageStats> {
     try {
-      // Count invoices created by user
+      console.log('[UsageTracking] Checking lifetime usage for user:', userId);
+
+      // Count ALL invoices created by user
       const { count: invoicesCount, error: invoicesError } = await this.supabase
         .from('invoices')
         .select('*', { count: 'exact', head: true })
@@ -32,7 +34,7 @@ class UsageTrackingService {
         console.error('[UsageTracking] Error counting invoices:', invoicesError);
       }
 
-      // Count estimates created by user
+      // Count ALL estimates created by user
       const { count: estimatesCount, error: estimatesError } = await this.supabase
         .from('estimates')
         .select('*', { count: 'exact', head: true })
@@ -109,6 +111,21 @@ class UsageTrackingService {
     });
 
     return remaining;
+  }
+
+  /**
+   * Increment usage count (called after creating an invoice or estimate)
+   * Note: This is just for logging/tracking purposes since we count from the database
+   */
+  async incrementUsageCount(userId: string, type: 'invoice' | 'estimate'): Promise<void> {
+    console.log('[UsageTracking] Usage incremented:', {
+      userId,
+      type,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Force a refresh of the usage stats
+    await this.getUserUsageStats(userId);
   }
 
   /**

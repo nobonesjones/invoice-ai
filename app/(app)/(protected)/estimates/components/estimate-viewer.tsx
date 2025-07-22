@@ -36,11 +36,11 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { EstimateStatus, getEstimateStatusConfig, isEstimateEditable, getPreviousStatus } from '@/constants/estimate-status';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { useEstimateActivityLogger } from './useEstimateActivityLogger';
-import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistorySheet';
+import EstimateHistorySheet, { EstimateHistorySheetRef } from '../EstimateHistorySheet';
 import { EstimateConversionService } from '@/services/estimateConversionService';
 import { EstimateSenderService } from '@/services/estimateSenderService';
 import { usePaywall } from '@/context/paywall-provider';
-import { usePlacement } from 'expo-superwall';
+// import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // SKIA IMPORTS for estimate rendering
@@ -109,16 +109,16 @@ function EstimateViewerScreen() {
   const { isSubscribed } = usePaywall();
   
   // Paywall for send block
-  const { registerPlacement } = usePlacement({
-    onError: (err) => console.error('[EstimateViewer] Send block error:', err),
-    onPresent: (info) => console.log('[EstimateViewer] Send block presented:', info),
-    onDismiss: (info, result) => {
-      console.log('[EstimateViewer] Send block dismissed:', info, 'Result:', result);
-      if (result?.type === 'purchased') {
-        console.log('[EstimateViewer] User subscribed, continuing send...');
-      }
-    },
-  });
+  // const { registerPlacement } = usePlacement({
+  //   onError: (err) => console.error('[EstimateViewer] Send block error:', err),
+  //   onPresent: (info) => console.log('[EstimateViewer] Send block presented:', info),
+  //   onDismiss: (info, result) => {
+  //     console.log('[EstimateViewer] Send block dismissed:', info, 'Result:', result);
+  //     if (result?.type === 'purchased') {
+  //       console.log('[EstimateViewer] User subscribed, continuing send...');
+  //     }
+  //   },
+  // });
 
   const [estimate, setEstimate] = useState<EstimateForTemplate | null>(null);
   const [client, setClient] = useState<Tables<'clients'> | null>(null);
@@ -403,7 +403,10 @@ function EstimateViewerScreen() {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
       console.log('[handleSendPDF] Free user attempting to send - showing paywall');
-      try {
+      // Superwall disabled for Expo Go
+      Alert.alert('Upgrade Required', 'Sending estimates requires a subscription. This feature requires a development build.');
+      return;
+      /* try {
         await registerPlacement({
           placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
           params: {
@@ -415,7 +418,7 @@ function EstimateViewerScreen() {
       } catch (error) {
         console.error('[handleSendPDF] Failed to show paywall:', error);
         Alert.alert('Premium Feature', 'Sending estimates requires a premium subscription.');
-      }
+      } */
       return;
     }
 
@@ -487,7 +490,10 @@ function EstimateViewerScreen() {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
       console.log('[handleSendByEmail] Free user attempting to send - showing paywall');
-      try {
+      // Superwall disabled for Expo Go
+      Alert.alert('Upgrade Required', 'Sending estimates requires a subscription. This feature requires a development build.');
+      return;
+      /* try {
         await registerPlacement({
           placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
           params: {
@@ -499,8 +505,7 @@ function EstimateViewerScreen() {
       } catch (error) {
         console.error('[handleSendByEmail] Failed to show paywall:', error);
         Alert.alert('Premium Feature', 'Sending estimates requires a premium subscription.');
-      }
-      return;
+      } */
     }
 
     if (!estimate || !businessSettings || !user) {
@@ -537,7 +542,10 @@ function EstimateViewerScreen() {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
       console.log('[handleSendByLink] Free user attempting to send - showing paywall');
-      try {
+      // Superwall disabled for Expo Go
+      Alert.alert('Upgrade Required', 'Sending estimates requires a subscription. This feature requires a development build.');
+      return;
+      /* try {
         await registerPlacement({
           placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
           params: {
@@ -549,7 +557,7 @@ function EstimateViewerScreen() {
       } catch (error) {
         console.error('[handleSendByLink] Failed to show paywall:', error);
         Alert.alert('Premium Feature', 'Sending estimates requires a premium subscription.');
-      }
+      } */
       return;
     }
 
