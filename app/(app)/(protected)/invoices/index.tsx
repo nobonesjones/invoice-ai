@@ -18,6 +18,7 @@ import {
 	Animated,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -600,10 +601,12 @@ export default function InvoiceDashboardScreen() {
               }
               if (!invoices.length) {
                 return (
-                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }}>
-                    <Text style={[styles.placeholderText, { color: themeColors.mutedForeground }]}>
-                      No invoices found.
-                    </Text>
+                  <View style={styles.emptyStateContainer}>
+                    <Image 
+                      source={require('@/assets/invoices-empty.png')} 
+                      style={[styles.emptyStateImage, { opacity: 0.6 }]}
+                      resizeMode="contain"
+                    />
                   </View>
                 );
               }
@@ -782,6 +785,17 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		textAlign: "center",
 	},
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    marginTop: 100,
+  },
+  emptyStateImage: {
+    width: 150,
+    height: 150,
+  },
   shineOverlay: { 
     ...StyleSheet.absoluteFillObject,
     zIndex: 1, 

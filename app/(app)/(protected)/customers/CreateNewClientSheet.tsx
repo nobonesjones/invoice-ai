@@ -21,8 +21,13 @@ import {
 	Platform,
 	ActivityIndicator,
 	Alert,
+	Modal,
+	FlatList,
+	TextInput,
+	SafeAreaView,
 } from "react-native";
 
+import * as Contacts from 'expo-contacts';
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
 import { supabase } from "@/lib/supabase";
@@ -58,6 +63,9 @@ const CreateNewClientSheet = forwardRef<
 	const [taxNumber, setTaxNumber] = useState(editMode && initialData ? initialData.tax_number || "" : "");
 	const [address, setAddress] = useState(editMode && initialData ? formatInitialAddress(initialData) : "");
 	const [isLoading, setIsLoading] = useState(false);
+	const [contacts, setContacts] = useState<Contacts.Contact[]>([]);
+	const [showContactPicker, setShowContactPicker] = useState(false);
+	const [searchQuery, setSearchQuery] = useState('');
 
 	// Update form fields when initialData changes (important for edit mode)
 	useEffect(() => {
@@ -191,12 +199,65 @@ const CreateNewClientSheet = forwardRef<
 		}
 	};
 
-	const handleAddFromContacts = () => {
-		Alert.alert(
-			"Not Implemented",
-			"Adding from contacts is not yet implemented.",
-		);
+	const handleAddFromContacts = async () => {
+		try {
+			// Request contacts permission
+			const { status } = await Contacts.requestPermissionsAsync();
+			if (status !== 'granted') {
+				Alert.alert(
+					'Permission Required',
+					'Please allow access to contacts to use this feature.',
+					[{ text: 'OK' }]
+				);
+				return;
+			}
+
+			// Get contacts
+			const { data } = await Contacts.getContactsAsync({
+				fields: [
+					Contacts.Fields.Name,
+					Contacts.Fields.PhoneNumbers,
+					Contacts.Fields.Emails,
+				],
+				sort: Contacts.SortTypes.FirstName,
+			});
+
+			if (data.length === 0) {
+				Alert.alert('No Contacts', 'No contacts found on your device.');
+				return;
+			}
+
+			// Store contacts and show picker modal
+			setContacts(data);
+			setShowContactPicker(true);
+		} catch (error) {
+			console.error('Error accessing contacts:', error);
+			Alert.alert(
+				'Error',
+				'Unable to access contacts. Please try again.',
+				[{ text: 'OK' }]
+			);
+		}
 	};
+
+	const handleSelectContact = (contact: Contacts.Contact) => {
+		// Fill form with selected contact data
+		setFormData(prev => ({
+			...prev,
+			fullName: contact.name || '',
+			email: contact.emails?.[0]?.email || '',
+			phone: contact.phoneNumbers?.[0]?.number || '',
+		}));
+		setShowContactPicker(false);
+		setSearchQuery('');
+	};
+
+	const filteredContacts = useMemo(() => {
+		if (!searchQuery.trim()) return contacts;
+		return contacts.filter(contact => 
+			contact.name?.toLowerCase().includes(searchQuery.toLowerCase())
+		);
+	}, [contacts, searchQuery]);
 
 	const styles = StyleSheet.create({
 		modalBackground: { backgroundColor: themeColors.background },
@@ -317,9 +378,61 @@ const CreateNewClientSheet = forwardRef<
 			fontSize: 17,
 			fontWeight: "600",
 		},
+		// Contact Picker Styles
+		contactPickerContainer: {
+			flex: 1,
+		},
+		contactPickerHeader: {
+			flexDirection: 'row',
+			alignItems: 'center',
+			justifyContent: 'space-between',
+			paddingHorizontal: 16,
+			paddingVertical: 12,
+			borderBottomWidth: 1,
+			borderBottomColor: themeColors.border,
+		},
+		contactPickerCloseButton: {
+			padding: 4,
+		},
+		contactPickerTitle: {
+			fontSize: 18,
+			fontWeight: '600',
+		},
+		contactSearchContainer: {
+			margin: 16,
+			paddingHorizontal: 16,
+			paddingVertical: 12,
+			borderRadius: 10,
+		},
+		contactSearchInput: {
+			fontSize: 16,
+		},
+		contactItem: {
+			paddingHorizontal: 16,
+			paddingVertical: 12,
+			borderBottomWidth: 1,
+		},
+		contactName: {
+			fontSize: 16,
+			fontWeight: '500',
+			marginBottom: 4,
+		},
+		contactDetail: {
+			fontSize: 14,
+			marginTop: 2,
+		},
+		contactListContent: {
+			paddingBottom: 20,
+		},
+		noContactsText: {
+			textAlign: 'center',
+			marginTop: 50,
+			fontSize: 16,
+		},
 	});
 
 	return (
+		<>
 		<BottomSheetModal
 			ref={bottomSheetModalRef}
 			name="createNewClientModal"
@@ -462,6 +575,76 @@ const CreateNewClientSheet = forwardRef<
 				</TouchableOpacity>
 			</BottomSheetScrollView>
 		</BottomSheetModal>
+		
+		{/* Contact Picker Modal */}
+		<Modal
+			visible={showContactPicker}
+			animationType="slide"
+			transparent={false}
+			onRequestClose={() => {
+				setShowContactPicker(false);
+				setSearchQuery('');
+			}}
+		>
+			<SafeAreaView style={[styles.contactPickerContainer, { backgroundColor: themeColors.background }]}>
+				<View style={styles.contactPickerHeader}>
+					<TouchableOpacity
+						onPress={() => {
+							setShowContactPicker(false);
+							setSearchQuery('');
+						}}
+						style={styles.contactPickerCloseButton}
+					>
+						<X size={24} color={themeColors.foreground} />
+					</TouchableOpacity>
+					<Text style={[styles.contactPickerTitle, { color: themeColors.foreground }]}>Select Contact</Text>
+					<View style={{ width: 24 }} />
+				</View>
+				
+				<View style={[styles.contactSearchContainer, { backgroundColor: themeColors.card }]}>
+					<TextInput
+						style={[styles.contactSearchInput, { color: themeColors.foreground }]}
+						placeholder="Search contacts..."
+						placeholderTextColor={themeColors.mutedForeground}
+						value={searchQuery}
+						onChangeText={setSearchQuery}
+						autoCapitalize="none"
+					/>
+				</View>
+				
+				<FlatList
+					data={filteredContacts}
+					keyExtractor={(item, index) => item.id || index.toString()}
+					renderItem={({ item }) => (
+						<TouchableOpacity
+							style={[styles.contactItem, { borderBottomColor: themeColors.border }]}
+							onPress={() => handleSelectContact(item)}
+						>
+							<Text style={[styles.contactName, { color: themeColors.foreground }]}>
+								{item.name || 'No Name'}
+							</Text>
+							{item.phoneNumbers?.[0]?.number && (
+								<Text style={[styles.contactDetail, { color: themeColors.mutedForeground }]}>
+									{item.phoneNumbers[0].number}
+								</Text>
+							)}
+							{item.emails?.[0]?.email && (
+								<Text style={[styles.contactDetail, { color: themeColors.mutedForeground }]}>
+									{item.emails[0].email}
+								</Text>
+							)}
+						</TouchableOpacity>
+					)}
+					contentContainerStyle={styles.contactListContent}
+					ListEmptyComponent={
+						<Text style={[styles.noContactsText, { color: themeColors.mutedForeground }]}>
+							{searchQuery ? 'No contacts found' : 'No contacts available'}
+						</Text>
+					}
+				/>
+			</SafeAreaView>
+		</Modal>
+		</>
 	);
 });
 

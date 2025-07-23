@@ -536,9 +536,6 @@ export default function PaymentOptionsScreen() {
       user_id: user.id,
       paypal_enabled: isPayPalEnabled,
       paypal_email: isPayPalEnabled ? paypalEmail : null,
-      stripe_enabled: initialStripeEnabled,
-      bank_transfer_enabled: initialIsBankTransferEnabled,
-      bank_details: initialBankDetails,
     };
     try {
       const { error } = await supabase.from('payment_options').upsert(
@@ -624,10 +621,6 @@ export default function PaymentOptionsScreen() {
     const updateData: Partial<PaymentOption> & { user_id: string } = {
       user_id: user.id,
       stripe_enabled: isStripeEnabled,
-      paypal_enabled: initialPayPalEnabled,
-      paypal_email: initialPayPalEmail,
-      bank_transfer_enabled: initialIsBankTransferEnabled,
-      bank_details: initialBankDetails,
     };
     try {
       const { error } = await supabase.from('payment_options').upsert(
@@ -723,9 +716,6 @@ export default function PaymentOptionsScreen() {
       user_id: user.id,
       bank_transfer_enabled: isBankTransferEnabled,
       bank_details: isBankTransferEnabled ? bankDetails : null,
-      paypal_enabled: initialPayPalEnabled,
-      paypal_email: initialPayPalEmail,
-      stripe_enabled: initialStripeEnabled,
     };
     try {
       const { error } = await supabase.from('payment_options').upsert(

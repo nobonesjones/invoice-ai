@@ -386,6 +386,53 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_support_tickets: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          email: string
+          subject: string | null
+          message: string
+          status: string
+          priority: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          email: string
+          subject?: string | null
+          message: string
+          status?: string
+          priority?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          email?: string
+          subject?: string | null
+          message?: string
+          status?: string
+          priority?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_support_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       clients: {
         Row: {
           address_client: string | null

@@ -22,6 +22,12 @@
           "photosPermission": "The app accesses your photos to allow you to choose a logo for your business.",
           "cameraPermission": "The app accesses your camera to allow you to take a photo for your business logo."
         }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "The app accesses your contacts to allow you to quickly add clients from your address book."
+        }
       ]
     ],
     "ios": {
@@ -31,6 +37,7 @@
       },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
+        "NSContactsUsageDescription": "The app accesses your contacts to allow you to quickly add clients from your address book.",
         "UIBackgroundModes": [
           "audio"
         ],
@@ -63,8 +70,10 @@
       "permissions": [
         "RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",
+        "READ_CONTACTS",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_CONTACTS"
       ],
       "splash": {
         "image": "./assets/superinvoiceicon.png",

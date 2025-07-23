@@ -1002,6 +1002,15 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       },
       required: ["operation"]
     }
+  },
+  {
+    name: "check_usage_limits",
+    description: "Check if the user can create more invoices/estimates based on their subscription status and current usage. ALWAYS call this before attempting to create any invoice or estimate.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    }
   }
 ];
 
@@ -1102,6 +1111,8 @@ export class InvoiceFunctionService {
         case 'edit_recent_estimate':
           console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_ESTIMATE function called!');
           return await this.editRecentEstimate(parameters, userId);
+        case 'check_usage_limits':
+          return await this.checkUsageLimits(userId);
         default:
           return {
             success: false,
@@ -1340,15 +1351,29 @@ export class InvoiceFunctionService {
     try {
       // Check usage limit for free plan users
       console.log('[AI Invoice Create] Checking usage limits...');
-      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-      const totalItems = (usageStats.invoicesCount || 0) + (usageStats.estimatesCount || 0);
       
-      if (totalItems >= 3) {
-        console.log('[AI Invoice Create] User has reached free plan limit');
-        return {
-          result: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
-          shouldContinueConversation: true
-        };
+      // First check if user is subscribed
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('user_id', userId)
+        .single();
+      
+      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      
+      // Only check limits for free users
+      if (!isSubscribed) {
+        const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
+        const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
+        
+        if (totalItems >= 3) {
+          console.log('[AI Invoice Create] User has reached free plan limit');
+          return {
+            success: false,
+            message: "I notice you've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access!",
+            error: 'Free plan limit reached'
+          };
+        }
       }
       
       console.log('[AI Invoice Create] Creating invoice...');
@@ -2841,20 +2866,20 @@ Would you like to view the updated invoice or make more changes?`;
           const wordsMatch = allUserClients.find(c => {
             const clientWords = c.name.toLowerCase().split(/\s+/);
             const searchWords = searchName.split(/\s+/);
-            return searchWords.every(word => clientWords.some(cWord => cWord.includes(word)));
+            return searchWords.every((word: string) => clientWords.some((cWord: string) => cWord.includes(word)));
           });
 
           // Use the best match we can find
           existingClient = exactMatch || startsWithMatch || containsMatch || wordsMatch;
           
           if (exactMatch) {
-            console.log('[Update Client] Found exact match:', existingClient.name);
+            console.log('[Update Client] Found exact match:', existingClient?.name);
           } else if (startsWithMatch) {
-            console.log('[Update Client] Found starts-with match:', existingClient.name);
+            console.log('[Update Client] Found starts-with match:', existingClient?.name);
           } else if (containsMatch) {
-            console.log('[Update Client] Found contains match:', existingClient.name);
+            console.log('[Update Client] Found contains match:', existingClient?.name);
           } else if (wordsMatch) {
-            console.log('[Update Client] Found words match:', existingClient.name);
+            console.log('[Update Client] Found words match:', existingClient?.name);
           }
 
           // If we still don't have a match, try the most recently created client
@@ -4072,15 +4097,29 @@ The new client is ready to use for invoices!`
       
       // Check usage limit for free plan users
       console.log('[AI Estimate Create] Checking usage limits...');
-      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-      const totalItems = (usageStats.invoicesCount || 0) + (usageStats.estimatesCount || 0);
       
-      if (totalItems >= 3) {
-        console.log('[AI Estimate Create] User has reached free plan limit');
-        return {
-          result: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
-          shouldContinueConversation: true
-        };
+      // First check if user is subscribed
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('user_id', userId)
+        .single();
+      
+      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      
+      // Only check limits for free users
+      if (!isSubscribed) {
+        const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
+        const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
+        
+        if (totalItems >= 3) {
+          console.log('[AI Estimate Create] User has reached free plan limit');
+          return {
+            success: false,
+            message: "I notice you've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access!",
+            error: 'Free plan limit reached'
+          };
+        }
       }
       
       console.log('[AI Estimate Create] Creating estimate with params:', params);
@@ -4363,7 +4402,7 @@ The new client is ready to use for invoices!`
         };
       }
 
-      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
+      const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
 
       let message = `🔍 **Found ${estimates.length} estimate(s):**\n\n`;
       
@@ -4465,7 +4504,7 @@ The new client is ready to use for invoices!`
         };
       }
 
-      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
+      const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
       const clientName = estimate.clients?.name || 'No client assigned';
       const statusEmoji = estimate.status === 'accepted' ? '✅' : 
                          estimate.status === 'declined' ? '❌' : 
@@ -4543,7 +4582,7 @@ The new client is ready to use for invoices!`
         };
       }
 
-      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
+      const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
 
       let message = `📋 **Recent Estimates${statusFilter !== 'all' ? ` (${statusFilter})` : ''}:**\n\n`;
       
@@ -4579,13 +4618,14 @@ The new client is ready to use for invoices!`
       // Check usage limit for free plan users
       console.log('[AI Estimate Convert] Checking usage limits...');
       const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-      const totalItems = (usageStats.invoicesCount || 0) + (usageStats.estimatesCount || 0);
+      const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
       
       if (totalItems >= 3) {
         console.log('[AI Estimate Convert] User has reached free plan limit');
         return {
-          result: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
-          shouldContinueConversation: true
+          success: false,
+          message: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
+          error: 'Free plan limit reached'
         };
       }
       
@@ -4671,7 +4711,7 @@ The new client is ready to use for invoices!`
         discount_value: estimate.discount_value,
         discount_amount: 0,
         total: estimate.total_amount,
-        currency: businessSettings?.currency_code || 'USD',
+        currency: 'USD', // TODO: Get from user settings
         status: 'unpaid',
         notes: estimate.notes,
         design_template: estimate.estimate_template || 'classic',
@@ -4723,7 +4763,7 @@ The new client is ready to use for invoices!`
         console.error('Warning: Failed to update estimate status:', updateError);
       }
 
-      const businessCurrencySymbol = this.getCurrencySymbol(businessSettings?.currency_code || 'USD');
+      const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
       const clientName = estimate.clients?.name || 'No client';
 
       const message = `✅ **Estimate converted to Invoice successfully!**\n\n` +
@@ -5384,6 +5424,76 @@ The new client is ready to use for invoices!`
     } catch (error) {
       console.error('Error performing estimate edit:', error);
       throw error;
+    }
+  }
+
+  private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
+    try {
+      console.log('[AI Usage Check] Checking user limits...');
+      
+      // First check if user is subscribed
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('user_id', userId)
+        .single();
+      
+      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      
+      if (isSubscribed) {
+        console.log('[AI Usage Check] User is subscribed - unlimited access');
+        return {
+          success: true,
+          data: {
+            canCreate: true,
+            isSubscribed: true,
+            subscription_tier: profile.subscription_tier,
+            message: "You have unlimited access to create invoices and estimates with your premium subscription."
+          },
+          message: "✅ You can create unlimited invoices and estimates with your premium subscription!"
+        };
+      }
+      
+      // Free user - check usage
+      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
+      const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
+      const remaining = Math.max(0, 3 - totalItems);
+      
+      if (totalItems >= 3) {
+        console.log('[AI Usage Check] User has reached free plan limit');
+        return {
+          success: true,
+          data: {
+            canCreate: false,
+            isSubscribed: false,
+            totalItems: totalItems,
+            limit: 3,
+            remaining: 0
+          },
+          message: "❌ You've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access and can cancel anytime!"
+        };
+      }
+      
+      console.log('[AI Usage Check] User can still create items:', remaining, 'remaining');
+      return {
+        success: true,
+        data: {
+          canCreate: true,
+          isSubscribed: false,
+          totalItems: totalItems,
+          limit: 3,
+          remaining: remaining
+        },
+        message: `✅ You can create items! You have ${remaining} out of 3 free items remaining.`
+      };
+      
+    } catch (error) {
+      console.error('Error checking usage limits:', error);
+      return {
+        success: false,
+        message: 'Failed to check usage limits. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 } 

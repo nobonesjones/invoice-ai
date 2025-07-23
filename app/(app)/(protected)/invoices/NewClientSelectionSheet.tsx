@@ -28,8 +28,10 @@ import {
 	Image,
 	ActivityIndicator,
 	Platform,
+	Alert,
 } from "react-native";
 
+import * as Contacts from 'expo-contacts';
 import { supabase } from "@/config/supabase"; // Assuming your Supabase client is exported from here
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
@@ -60,6 +62,90 @@ const NewClientSelectionSheet = forwardRef<
 	const [error, setError] = useState<string | null>(null);
 
 	const snapPoints = useMemo(() => ["90%", "85%"], []);
+
+	const handleAddFromContacts = async () => {
+		try {
+			// Request contacts permission
+			const { status } = await Contacts.requestPermissionsAsync();
+			if (status !== 'granted') {
+				Alert.alert(
+					'Permission Required',
+					'Please allow access to contacts to use this feature.',
+					[{ text: 'OK' }]
+				);
+				return;
+			}
+
+			// Get contacts
+			const { data } = await Contacts.getContactsAsync({
+				fields: [
+					Contacts.Fields.Name,
+					Contacts.Fields.PhoneNumbers,
+					Contacts.Fields.Emails,
+				],
+				sort: Contacts.SortTypes.FirstName,
+			});
+
+			if (data.length === 0) {
+				Alert.alert('No Contacts', 'No contacts found on your device.');
+				return;
+			}
+
+			// Show contact selection
+			const contactOptions = data
+				.slice(0, 50) // Limit to first 50 contacts for performance
+				.map((contact, index) => ({
+					text: contact.name || `Contact ${index + 1}`,
+					onPress: async () => {
+						// Create client directly from contact
+						try {
+							const { data: newClient, error } = await supabase
+								.from('clients')
+								.insert([
+									{
+										name: contact.name || `Contact ${index + 1}`,
+										email: contact.emails?.[0]?.email || null,
+										phone: contact.phoneNumbers?.[0]?.number || null,
+									}
+								])
+								.select()
+								.single();
+
+							if (error) throw error;
+
+							// Select the newly created client
+							onClientSelect(newClient);
+							
+							// Refresh the client list
+							fetchClients();
+						} catch (error) {
+							console.error('Error creating client from contact:', error);
+							Alert.alert('Error', 'Failed to create client from contact.');
+						}
+					}
+				}));
+
+			// Add cancel option
+			contactOptions.push({
+				text: 'Cancel',
+				style: 'cancel',
+				onPress: () => {}
+			});
+
+			Alert.alert(
+				'Select Contact',
+				'Choose a contact to create as client:',
+				contactOptions
+			);
+		} catch (error) {
+			console.error('Error accessing contacts:', error);
+			Alert.alert(
+				'Error',
+				'Unable to access contacts. Please try again.',
+				[{ text: 'OK' }]
+			);
+		}
+	};
 
 	const fetchClients = async () => {
 		setLoading(true);
@@ -198,7 +284,7 @@ const NewClientSelectionSheet = forwardRef<
 			<View style={styles.actionButtonsContainer}>
 				<TouchableOpacity
 					style={styles.actionButton}
-					onPress={() => console.log("Add from contacts pressed")}
+					onPress={handleAddFromContacts}
 				>
 					<PlusCircle
 						size={20}

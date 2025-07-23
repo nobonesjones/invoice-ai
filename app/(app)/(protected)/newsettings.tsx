@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert, Animated } from 'react-native';
+import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert, Animated, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient'; 
@@ -158,17 +158,20 @@ export default function NewSettingsScreen() {
     setIsTabBarVisible(false);
     router.push('/payment-options');
   };
-  const handlePaymentRemindersPress = () => {
-    setIsTabBarVisible(false);
-    router.push('/payment-reminders');
-  };
+  // const handlePaymentRemindersPress = () => {
+  //   setIsTabBarVisible(false);
+  //   router.push('/payment-reminders');
+  // };
   const handleAppLanguagePress = () => {
-    setIsTabBarVisible(false);
-    router.push('/app-language');
+    Alert.alert(
+      'App Language',
+      'Coming soon! We\'re working to bring new languages to the app.',
+      [{ text: 'OK', style: 'default' }]
+    );
   };
   const handleStoragePress = () => console.log('Storage pressed');
-  const handlePrivacyPolicyPress = () => console.log('Privacy Policy pressed');
-  const handleTermsOfServicePress = () => console.log('Terms Of Service pressed');
+  const handlePrivacyPolicyPress = () => Linking.openURL('https://www.getsuperinvoice.com/privacy');
+  const handleTermsOfServicePress = () => Linking.openURL('https://www.getsuperinvoice.com/terms');
   const handleHelpPress = () => {
     setIsTabBarVisible(false);
     router.push('/customer-support');
@@ -223,13 +226,13 @@ export default function NewSettingsScreen() {
           onPress: handlePaymentOptionsPress,
           searchTerms: ['payment', 'options', 'credit', 'card', 'paypal', 'bank']
         },
-        {
-          id: 'payment-reminders',
-          icon: <Bell color={theme.foreground} size={24} />,
-          label: 'Payment Reminders',
-          onPress: handlePaymentRemindersPress,
-          searchTerms: ['payment', 'reminders', 'notifications', 'alerts']
-        }
+        // {
+        //   id: 'payment-reminders',
+        //   icon: <Bell color={theme.foreground} size={24} />,
+        //   label: 'Payment Reminders',
+        //   onPress: handlePaymentRemindersPress,
+        //   searchTerms: ['payment', 'reminders', 'notifications', 'alerts']
+        // }
       ]
     },
     {
@@ -399,16 +402,6 @@ export default function NewSettingsScreen() {
                     {usageStats.totalItemsCreated}/3 items created
                   </Text>
                 </View>
-                {usageStats.totalItemsCreated >= 3 && (
-                  <TouchableOpacity 
-                    style={[styles.usageUpgradeButton, { backgroundColor: theme.primary }]}
-                    onPress={handleUpgradePress}
-                  >
-                    <Text style={[styles.usageUpgradeButtonText, { color: theme.primaryForeground }]}>
-                      Upgrade
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
             </View>
           )}

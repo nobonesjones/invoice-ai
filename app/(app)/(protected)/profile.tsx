@@ -26,6 +26,7 @@ import {
 	ScrollView,
 	TouchableOpacity,
 	Alert,
+	Linking,
 } from "react-native";
 import { TouchableOpacity as GestureTouchableOpacity } from "react-native-gesture-handler";
 
@@ -62,16 +63,19 @@ export default function Profile() {
 	const handleUpgrade = () => console.log("Upgrade pressed");
 	const handleNamePress = () => setIsEditingName(true);
 	const handleTranscriptLang = () => {
-		setActiveModalTitle("App Language"); // Use renamed state
-		setIsModalVisible(true); // Use renamed state
+		Alert.alert(
+			'App Language',
+			'Coming soon! We\'re working to bring new languages to the app.',
+			[{ text: 'OK', style: 'default' }]
+		);
 	};
 	// Renamed handler for Storage
 	const handleStoragePress = () => {
 		setActiveModalTitle("Storage"); // Set title to 'Storage'
 		setIsModalVisible(true); // Use renamed state
 	};
-	const handlePrivacy = () => console.log("Privacy Policy pressed");
-	const handleTerms = () => console.log("Terms of Service pressed");
+	const handlePrivacy = () => Linking.openURL('https://www.getsuperinvoice.com/privacy');
+	const handleTerms = () => Linking.openURL('https://www.getsuperinvoice.com/terms');
 	const handleContact = () => setIsContactModalVisible(true); // Open contact modal
 	const handleReview = () => console.log("Leave Review pressed");
 
