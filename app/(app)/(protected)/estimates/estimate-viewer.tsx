@@ -47,6 +47,8 @@ import PaywallService, { PaywallService as PaywallServiceClass } from '@/service
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
 import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
+import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
+import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import { useCanvasRef } from '@shopify/react-native-skia';
 
 interface EstimateForTemplate {
@@ -336,11 +338,13 @@ function EstimateViewerScreen() {
   const currencySymbol = estimate?.currency ? getCurrencySymbol(estimate.currency) : '$';
 
   const getEstimateDesignComponent = () => {
-    const designType = estimate?.invoice_design || 'classic';
+    const designType = estimate?.invoice_design || DEFAULT_DESIGN_ID;
     
     switch (designType.toLowerCase()) {
       case 'modern':
         return SkiaInvoiceCanvasModern;
+      case 'clean':
+        return SkiaInvoiceCanvasClean;
       case 'simple':
         return SkiaInvoiceCanvasSimple;
       case 'classic':

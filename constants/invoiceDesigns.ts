@@ -2,6 +2,7 @@ import React from 'react';
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
 import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
+import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
 
 // Define the structure for invoice design templates
 export interface InvoiceDesign {
@@ -112,6 +113,20 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
       headerPosition: 'top',
       sectionsLayout: 'standard',
       spacing: 'compact',
+    },
+  },
+  {
+    id: 'clean',
+    name: 'clean',
+    displayName: 'Clean',
+    description: 'Clean design with accent color header and alternating rows',
+    thumbnail: '/assets/invoice-designs/clean-thumb.png',
+    component: SkiaInvoiceCanvasClean,
+    colorScheme: COLOR_SCHEMES.modern, // Uses dynamic accent color
+    layoutConfig: {
+      headerPosition: 'top',
+      sectionsLayout: 'standard',
+      spacing: 'normal',
     },
   },
   // Additional designs will be added here

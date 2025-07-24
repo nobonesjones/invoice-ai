@@ -216,7 +216,7 @@ export const useInvoiceDesignForInvoice = (
             console.error('Error loading invoice design:', invoiceError);
             // Fall back to business defaults
           } else if (invoiceData) {
-            const designId = invoiceData.invoice_design || 'classic';
+            const designId = invoiceData.invoice_design || DEFAULT_DESIGN_ID;
             const accentColor = invoiceData.accent_color || '#14B8A6';
             
             const design = getDesignById(designId);

@@ -75,7 +75,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     // For estimates, we'll manage state manually since the hook is invoice-specific
     const [estimateDesign, setEstimateDesign] = useState(() => {
       const designId = mode === 'settings' ? initialDesign : (documentType === 'estimate' ? invoiceData?.estimate_template : invoiceData?.invoice_design);
-      return getDesignById(designId || 'classic') || getDefaultDesign();
+      return getDesignById(designId) || getDefaultDesign();
     });
     const [estimateAccentColor, setEstimateAccentColor] = useState(
       mode === 'settings' ? initialAccentColor : invoiceData?.accent_color || '#14B8A6'

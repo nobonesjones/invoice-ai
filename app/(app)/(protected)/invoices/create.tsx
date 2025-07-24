@@ -78,6 +78,7 @@ import { useInvoiceActivityLogger } from './components/useInvoiceActivityLogger'
 import { UsageService } from '@/services/usageService'; // Added UsageService import
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal'; // Added InvoicePreviewModal import
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -657,7 +658,7 @@ export default function CreateInvoiceScreen() {
             .single();
           
           if (businessSettings) {
-            defaultDesign = businessSettings.default_invoice_design || 'classic';
+            defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
             defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
             console.log('[handleSaveInvoice] Using default design:', defaultDesign, 'color:', defaultAccentColor);
           }

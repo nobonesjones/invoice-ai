@@ -71,7 +71,9 @@ import PaywallService, { PaywallService as PaywallServiceClass } from '@/service
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
 import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
+import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
 import { useCanvasRef } from '@shopify/react-native-skia';
+import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
 import { PDFDocument } from 'pdf-lib';
@@ -1018,13 +1020,16 @@ function InvoiceViewerScreen() {
 
   // Get the correct design component based on invoice-specific settings
   const getInvoiceDesignComponent = () => {
-    const designType = invoice?.invoice_design || 'classic';
+    const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
     console.log('[InvoiceViewer] Selected design type for invoice:', designType);
     
     switch (designType.toLowerCase()) {
       case 'modern':
         console.log('[InvoiceViewer] Using SkiaInvoiceCanvasModern');
         return SkiaInvoiceCanvasModern;
+      case 'clean':
+        console.log('[InvoiceViewer] Using SkiaInvoiceCanvasClean');
+        return SkiaInvoiceCanvasClean;
       case 'simple':
         console.log('[InvoiceViewer] Using SkiaInvoiceCanvasSimple');
         return SkiaInvoiceCanvasSimple;

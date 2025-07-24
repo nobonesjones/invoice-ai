@@ -66,6 +66,7 @@ import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } fro
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from './EditInvoiceTaxSheet';
 import EditEstimateDetailsSheet, { EditEstimateDetailsSheetRef, EstimateDetailsData } from './EditEstimateDetailsSheet';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
+import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -703,7 +704,7 @@ export default function CreateEstimateScreen() {
             .single();
           
           if (businessSettings) {
-            defaultDesign = businessSettings.default_invoice_design || 'classic';
+            defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
             defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
             console.log('[handleSaveEstimate] Using default design:', defaultDesign, 'color:', defaultAccentColor);
           }

@@ -20,9 +20,11 @@ import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
 import { SkiaInvoiceCanvasSimple } from "@/components/skia/SkiaInvoiceCanvasSimple";
 import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
 import SkiaInvoiceCanvasModern from "@/components/skia/SkiaInvoiceCanvasModern";
+import SkiaInvoiceCanvasClean from "@/components/skia/SkiaInvoiceCanvasClean";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Simple Invoice Modal using our new InvoicePreviewModal component
 
@@ -45,13 +47,16 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 	// Get the correct invoice design component based on estimate design type
 	const getEstimateDesignComponent = () => {
-		const designType = estimate?.estimate_template || 'classic';
+		const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
 		console.log('[AI EstimatePreview] Selected design type for estimate:', designType);
 		
 		switch (designType.toLowerCase()) {
 			case 'modern':
 				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasModern');
 				return SkiaInvoiceCanvasModern;
+			case 'clean':
+				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasClean');
+				return SkiaInvoiceCanvasClean;
 			case 'simple':
 				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasSimple');
 				return SkiaInvoiceCanvasSimple;
@@ -498,13 +503,16 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 
 	// Get the correct invoice design component based on invoice design type
 	const getInvoiceDesignComponent = () => {
-		const designType = invoice?.invoice_design || 'classic';
+		const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
 		console.log('[AI InvoicePreview] Selected design type for invoice:', designType);
 		
 		switch (designType.toLowerCase()) {
 			case 'modern':
 				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasModern');
 				return SkiaInvoiceCanvasModern;
+			case 'clean':
+				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasClean');
+				return SkiaInvoiceCanvasClean;
 			case 'simple':
 				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasSimple');
 				return SkiaInvoiceCanvasSimple;

@@ -3,6 +3,7 @@ import { ReferenceNumberService } from './referenceNumberService';
 import { OpenAIFunction } from '@/services/openaiService';
 import { UsageService } from '@/services/usageService';
 import { UsageTrackingService } from '@/services/usageTrackingService';
+import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Function definitions for OpenAI
 export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
@@ -4714,7 +4715,7 @@ The new client is ready to use for invoices!`
         currency: 'USD', // TODO: Get from user settings
         status: 'unpaid',
         notes: estimate.notes,
-        design_template: estimate.estimate_template || 'classic',
+        design_template: estimate.estimate_template || DEFAULT_DESIGN_ID,
         accent_color: estimate.accent_color || '#14B8A6',
         converted_from_estimate: estimate.id,
         paypal_active: estimate.paypal_active || false,
