@@ -46,8 +46,8 @@ import PaywallService, { PaywallService as PaywallServiceClass } from '@/service
 // SKIA IMPORTS for estimate rendering
 import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
-import { SkiaInvoiceCanvasSimple } from '@/components/skia/SkiaInvoiceCanvasSimple';
 import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
+import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import { useCanvasRef } from '@shopify/react-native-skia';
 

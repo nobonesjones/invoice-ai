@@ -332,14 +332,24 @@ export default function NewSettingsScreen() {
               style={[
                 styles.upgradeButton, 
                 { 
-                  backgroundColor: isSubscribed ? theme.primary : theme.gold,
+                  backgroundColor: theme.gold,
                   opacity: paywallLoading ? 0.7 : 1
                 }
               ]} 
               onPress={() => {
-                console.log('🔥🔥🔥 BASIC BUTTON PRESS DETECTED');
-                Alert.alert('Button Works!', 'The upgrade button is clickable');
-                handleUpgradePress();
+                if (isSubscribed) {
+                  // User is already subscribed, show a confirmation message instead of paywall
+                  Alert.alert(
+                    'Already Subscribed', 
+                    'You are currently subscribed to the premium plan with unlimited access.',
+                    [{ text: 'OK', style: 'default' }]
+                  );
+                } else {
+                  // User is not subscribed, show upgrade paywall
+                  console.log('🔥🔥🔥 BASIC BUTTON PRESS DETECTED');
+                  Alert.alert('Button Works!', 'The upgrade button is clickable');
+                  handleUpgradePress();
+                }
               }}
               disabled={paywallLoading}
               activeOpacity={0.7}
@@ -362,13 +372,13 @@ export default function NewSettingsScreen() {
               {paywallLoading ? (
                 <ActivityIndicator size="small" color={theme.goldContrastText} style={{ marginRight: 6 }} />
               ) : (
-                <Crown size={16} color={isSubscribed ? theme.primaryForeground : theme.goldContrastText} style={{ marginRight: 6 }} />
+                <Crown size={16} color={theme.goldContrastText} style={{ marginRight: 6 }} />
               )}
               <Text style={[
                 styles.upgradeButtonText, 
-                { color: isSubscribed ? theme.primaryForeground : theme.goldContrastText }
+                { color: theme.goldContrastText }
               ]}>
-                {isSubscribed ? 'Pro' : 'Upgrade'}
+                {isSubscribed ? 'Subscribed' : 'Upgrade'}
               </Text> 
             </TouchableOpacity>
           </View>
@@ -384,8 +394,8 @@ export default function NewSettingsScreen() {
             />
           </View>
 
-          {/* Usage Counter */}
-          {!isSubscribed && usageStats && (
+          {/* Usage Counter - Only show for non-premium users */}
+          {!isSubscribed && usageStats && usageStats.subscriptionTier === 'free' && (
             <View style={[styles.usageCounterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.usageCounterContent}>
                 <View style={styles.usageCounterMain}>

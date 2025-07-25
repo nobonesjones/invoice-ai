@@ -641,7 +641,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           </PanGestureHandler>
         </Modal>
 
-        {/* Quick Send Modal */}
+        {/* Quick Send Modal - moved outside main Modal to appear on top */}
         <BottomSheetModal
           ref={sendInvoiceModalRef}
           index={0}

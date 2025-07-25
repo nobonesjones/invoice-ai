@@ -73,9 +73,29 @@ class PaywallService {
 
   async isUserSubscribed(): Promise<boolean> {
     try {
-      // Return false until RevenueCat is properly configured
-      console.log('[PaywallService] Subscription check disabled - RevenueCat needs public key');
-      return false;
+      // Check database subscription status since RevenueCat is disabled
+      const { supabase } = await import('@/lib/supabase');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.log('[PaywallService] No authenticated user found');
+        return false;
+      }
+
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('[PaywallService] Failed to fetch user profile:', error);
+        return false;
+      }
+
+      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      console.log('[PaywallService] Database subscription check:', profile?.subscription_tier, 'isSubscribed:', isSubscribed);
+      return isSubscribed;
     } catch (error) {
       console.error('[PaywallService] Failed to check subscription status:', error);
       return false;
