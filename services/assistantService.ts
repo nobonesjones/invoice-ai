@@ -769,8 +769,17 @@ Use tools to take action. Reference previous conversation naturally.`;
     threadId: string, 
     runId: string, 
     userId: string,
-    statusCallback?: (status: string) => void
+    statusCallback?: (status: string) => void,
+    recursionDepth: number = 0
   ): Promise<AssistantRunResult> {
+    // Prevent infinite recursion
+    const MAX_RECURSION_DEPTH = 3;
+    if (recursionDepth > MAX_RECURSION_DEPTH) {
+      console.error(`[AssistantService] Maximum recursion depth (${MAX_RECURSION_DEPTH}) exceeded`);
+      throw new Error('Assistant processing exceeded maximum depth - please try again');
+    }
+    
+    console.log(`[AssistantService] waitForRunCompletion called with depth: ${recursionDepth}`);
     let run = await openai.beta.threads.runs.retrieve(threadId, runId);
     let collectedAttachments: any[] = [];
     
@@ -812,26 +821,72 @@ Use tools to take action. Reference previous conversation naturally.`;
         }
       }
       
-      const { toolOutputs, attachments } = await this.handleToolCalls(
-        toolCalls,
-        userId
-      );
-
-      // Collect attachments from tool calls
-      collectedAttachments = attachments;
+      let toolOutputs: any[];
+      let attachments: any[];
+      
+      try {
+        const toolResult = await this.handleToolCalls(toolCalls, userId);
+        toolOutputs = toolResult.toolOutputs;
+        attachments = toolResult.attachments;
+        
+        // Collect attachments from tool calls
+        collectedAttachments = attachments;
+        
+        console.log(`[AssistantService] Tool calls handled successfully at depth ${recursionDepth}, ${toolOutputs.length} outputs`);
+      } catch (toolError) {
+        console.error(`[AssistantService] Error handling tool calls at depth ${recursionDepth}:`, toolError);
+        
+        // For critical functions like invoice/client/estimate creation, fail gracefully
+        const hasCriticalCreation = toolCalls.some(call => 
+          call.function.name.includes('create_invoice') || 
+          call.function.name.includes('create_client') ||
+          call.function.name.includes('create_estimate')
+        );
+        if (hasCriticalCreation) {
+          const criticalCall = toolCalls.find(call => 
+            call.function.name.includes('create_invoice') || 
+            call.function.name.includes('create_client') ||
+            call.function.name.includes('create_estimate')
+          );
+          
+          let functionType = 'item';
+          if (criticalCall?.function.name.includes('invoice')) functionType = 'invoice';
+          else if (criticalCall?.function.name.includes('client')) functionType = 'client';
+          else if (criticalCall?.function.name.includes('estimate')) functionType = 'estimate';
+          
+          throw new Error(`Failed to process ${functionType} creation - please try again`);
+        }
+        
+        // For other functions, provide empty outputs to let the assistant continue
+        toolOutputs = toolCalls.map(call => ({
+          tool_call_id: call.id,
+          output: JSON.stringify({ 
+            success: false, 
+            error: 'Tool execution failed', 
+            message: 'There was an error processing this request. Please try again.' 
+          })
+        }));
+        attachments = [];
+        collectedAttachments = [];
+      }
 
       statusCallback?.('SuperAI is completing response...');
 
-      // Submit tool outputs
-      run = await openai.beta.threads.runs.submitToolOutputs(threadId, runId, {
-        tool_outputs: toolOutputs
-      });
+      try {
+        // Submit tool outputs
+        run = await openai.beta.threads.runs.submitToolOutputs(threadId, runId, {
+          tool_outputs: toolOutputs
+        });
 
-      // Wait for completion after tool execution
-      const result = await this.waitForRunCompletion(threadId, runId, userId, statusCallback);
-      // Merge attachments from recursive calls
-      result.attachments = [...collectedAttachments, ...result.attachments];
-      return result;
+        // Wait for completion after tool execution with incremented depth
+        const result = await this.waitForRunCompletion(threadId, runId, userId, statusCallback, recursionDepth + 1);
+        // Merge attachments from recursive calls
+        result.attachments = [...collectedAttachments, ...result.attachments];
+        return result;
+      } catch (submitError) {
+        console.error(`[AssistantService] Error submitting tool outputs at depth ${recursionDepth}:`, submitError);
+        throw new Error('Failed to process assistant response - please try again');
+      }
     }
 
     if (run.status === 'completed') {

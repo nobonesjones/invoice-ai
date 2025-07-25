@@ -469,7 +469,7 @@ function InvoiceViewerScreen() {
 
       // Use React Native's Share API for better text sharing compatibility
       await Share.share({
-        message: `View Invoice ${invoice.invoice_number}: ${result.shareUrl}`,
+        message: result.shareUrl,
         url: result.shareUrl,
         title: `Invoice ${invoice.invoice_number}`,
       }, {
@@ -895,7 +895,11 @@ function InvoiceViewerScreen() {
       console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
       setInvoice(fetchedInvoiceForTemplate);
       if (invoiceData.clients) {
+        console.log('[fetchInvoiceData] Setting client data:', invoiceData.clients);
         setClient(invoiceData.clients as ClientRow);
+      } else {
+        console.warn('[fetchInvoiceData] No client data found in invoice! This may cause fallback to appear.');
+        setClient(null);
       }
       setError(null);
       return fetchedInvoiceForTemplate as any; // Use type assertion to bypass type conflicts
@@ -1789,7 +1793,7 @@ function InvoiceViewerScreen() {
 
   const shareInvoiceLink = async (shareUrl: string) => {
     try {
-      const shareMessage = `View Invoice ${invoice?.invoice_number}: ${shareUrl}`;
+      const shareMessage = shareUrl;
       
       // Create a temporary text file for sharing
       const fileName = `invoice-${invoice?.invoice_number}-link.txt`;

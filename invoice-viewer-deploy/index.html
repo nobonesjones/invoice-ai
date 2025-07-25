@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Viewer - SuperInvoice</title>
+    <link rel="icon" type="image/png" href="https://www.getsuperinvoice.com/favicon.png">
+    
+    <!-- PDF.js for PDF viewing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            height: 40px;
+            width: auto;
+        }
+
+        .brand-name {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #14B8A6;
+        }
+
+        .invoice-info {
+            text-align: right;
+        }
+
+        .invoice-number {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .invoice-status {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        /* Main Content */
+        .main-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        /* Action Buttons Bar */
+        .action-bar {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-primary {
+            background: #14B8A6;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6B7280;
+            color: white;
+        }
+
+        .btn-outline {
+            background: white;
+            color: #333;
+            border: 2px solid #E5E7EB;
+        }
+
+        /* PDF Viewer Container */
+        .pdf-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            min-height: 80vh;
+            position: relative;
+        }
+
+        .pdf-loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 80vh;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        .pdf-error {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 80vh;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .pdf-error h2 {
+            color: #DC2626;
+            margin-bottom: 1rem;
+        }
+
+        #pdf-viewer {
+            width: 100%;
+            height: 80vh;
+            border: none;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 4rem;
+            padding: 2rem 0;
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .footer a {
+            color: #14B8A6;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .invoice-info {
+                text-align: center;
+            }
+
+            .action-bar {
+                justify-content: stretch;
+            }
+
+            .action-button {
+                flex: 1;
+                justify-content: center;
+                min-width: 150px;
+            }
+
+            .main-container {
+                padding: 0 1rem;
+            }
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #14B8A6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Icons */
+        .icon {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-section">
+                <img src="https://www.getsuperinvoice.com/logo.png" alt="SuperInvoice" class="logo" onerror="this.style.display='none'">
+                <div class="brand-name">SuperInvoice</div>
+            </div>
+            <div class="invoice-info">
+                <div class="invoice-number" id="invoice-number">Loading...</div>
+                <div class="invoice-status" id="invoice-status"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <!-- Action Buttons -->
+        <div class="action-bar" id="action-bar" style="display: none;">
+            <!-- Payment buttons will be inserted here dynamically -->
+            <button class="action-button btn-secondary" onclick="downloadPDF()">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Download PDF
+            </button>
+            <button class="action-button btn-outline" onclick="printPDF()">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                </svg>
+                Print
+            </button>
+            <button class="action-button btn-outline" onclick="shareInvoice()">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.032 4.026a3 3 0 10-2.684-4.026m-9.032 0a3 3 0 102.684 4.026m9.032 0l-9.032-4.026"></path>
+                </svg>
+                Share
+            </button>
+        </div>
+
+        <!-- PDF Viewer -->
+        <div class="pdf-container">
+            <div class="pdf-loading" id="pdf-loading">
+                <div>
+                    <div class="spinner"></div>
+                    <p style="margin-top: 1rem;">Loading invoice...</p>
+                </div>
+            </div>
+            <div class="pdf-error" id="pdf-error" style="display: none;">
+                <h2>Unable to Load Invoice</h2>
+                <p>The invoice could not be loaded. Please check the link and try again.</p>
+                <button class="action-button btn-primary" onclick="location.reload()">Retry</button>
+            </div>
+            <iframe id="pdf-viewer" style="display: none;"></iframe>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>
+            Powered by <a href="https://www.getsuperinvoice.com" target="_blank">SuperInvoice</a> | 
+            <a href="https://www.getsuperinvoice.com/privacy" target="_blank">Privacy</a> | 
+            <a href="https://www.getsuperinvoice.com/terms" target="_blank">Terms</a>
+        </p>
+    </footer>
+
+    <script>
+        // Configuration
+        const SUPABASE_URL = 'https://wzpuzqzsjdizmpiobsuo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cHV6cXpzamRpem1waW9ic3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MjE3OTIsImV4cCI6MjA2MjE5Nzc5Mn0._XypJP5hEZT06UfA1uuHY5-TvsKzj5JnwjGa3LMKnyI';
+        
+        // Get token from URL
+        function getTokenFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token') || window.location.pathname.split('/').pop();
+            return token;
+        }
+
+        // Load invoice data
+        async function loadInvoice() {
+            const token = getTokenFromURL();
+            if (!token || token === 'index.html' || token === '') {
+                showError('No invoice token provided');
+                return;
+            }
+
+            try {
+                console.log('Loading invoice with token:', token);
+                
+                // Fetch invoice share data from database to get the correct PDF path
+                await fetchInvoiceShareData(token);
+                                
+            } catch (error) {
+                console.error('Error loading invoice:', error);
+                showError('Failed to load invoice');
+            }
+        }
+
+
+        // Fetch invoice share data from database
+        async function fetchInvoiceShareData(token) {
+            try {
+                console.log('Fetching invoice share data for token:', token);
+                
+                const response = await fetch(
+                    `${SUPABASE_URL}/rest/v1/invoice_shares?share_token=eq.${token}&select=pdf_path,invoices(invoice_number)&is_active=eq.true`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'Prefer': 'return=representation'
+                        }
+                    }
+                );
+
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API response error:', errorText);
+                    throw new Error(`Failed to fetch invoice data: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Invoice share data:', data);
+                
+                if (data && data.length > 0 && data[0].pdf_path) {
+                    const pdfUrl = `${SUPABASE_URL}/storage/v1/object/public/shared-invoices/${data[0].pdf_path}`;
+                    console.log('Loading PDF from URL:', pdfUrl);
+                    
+                    loadPDF(pdfUrl);
+                    
+                    // Update invoice number if available
+                    if (data[0].invoices?.invoice_number) {
+                        document.getElementById('invoice-number').textContent = `Invoice ${data[0].invoices.invoice_number}`;
+                    }
+                    
+                    // Show action bar
+                    document.getElementById('action-bar').style.display = 'flex';
+                } else {
+                    console.error('No invoice data found or missing pdf_path:', data);
+                    showError('Invoice not found or no PDF available');
+                }
+            } catch (error) {
+                console.error('Error fetching invoice data:', error);
+                showError('Failed to load invoice data: ' + error.message);
+            }
+        }
+
+        // Load PDF into viewer
+        function loadPDF(url) {
+            const viewer = document.getElementById('pdf-viewer');
+            const loading = document.getElementById('pdf-loading');
+            const error = document.getElementById('pdf-error');
+
+            // Hide loading, show viewer
+            loading.style.display = 'none';
+            error.style.display = 'none';
+            viewer.style.display = 'block';
+
+            // Load PDF in iframe
+            viewer.src = url;
+            
+            // Store URL for download
+            window.currentPDFUrl = url;
+        }
+
+        // Show error message
+        function showError(message) {
+            document.getElementById('pdf-loading').style.display = 'none';
+            document.getElementById('pdf-error').style.display = 'flex';
+            document.querySelector('#pdf-error p').textContent = message;
+        }
+
+        // Action button functions
+        function downloadPDF() {
+            if (window.currentPDFUrl) {
+                const link = document.createElement('a');
+                link.href = window.currentPDFUrl;
+                link.download = 'invoice.pdf';
+                link.click();
+            }
+        }
+
+        function printPDF() {
+            if (window.currentPDFUrl) {
+                const printWindow = window.open(window.currentPDFUrl, '_blank');
+                printWindow.onload = function() {
+                    printWindow.print();
+                };
+            }
+        }
+
+        function shareInvoice() {
+            const shareUrl = window.location.href;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Invoice',
+                    url: shareUrl
+                });
+            } else {
+                // Fallback - copy to clipboard
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                    alert('Invoice link copied to clipboard!');
+                });
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', loadInvoice);
+    </script>
+</body>
+</html>

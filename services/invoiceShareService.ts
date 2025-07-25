@@ -152,12 +152,12 @@ export class InvoiceShareService {
       // Clean up temporary PDF file
       await FileSystem.deleteAsync(pdfUri, { idempotent: true });
 
-      // Return tracking URL through the app's web version
-      const trackingUrl = `https://invoices.getsuperinvoice.com/shared/invoice/${shareToken}`;
+      // Return branded invoice viewer URL with query parameter
+      const shareUrl = `https://invoices.getsuperinvoice.com?token=${shareToken}`;
 
       return {
         success: true,
-        shareUrl: trackingUrl,
+        shareUrl: shareUrl,
         shareToken,
         expiresAt: shareRecord.expires_at || undefined
       };
@@ -235,8 +235,8 @@ export class InvoiceShareService {
         shareRecord = newShare;
       }
 
-      // Use subdomain for invoice viewer to avoid main website conflicts
-      const shareUrl = `https://invoices.getsuperinvoice.com/invoice-viewer-v2.html#/${shareToken}`;
+      // Use branded invoice viewer with query parameter
+      const shareUrl = `https://invoices.getsuperinvoice.com?token=${shareToken}`;
 
       return {
         success: true,

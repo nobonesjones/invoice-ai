@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Invoice Viewer</title>
+</head>
+<body>
+    <h1>Invoice Viewer Test</h1>
+    <div id="token-display"></div>
+    <div id="url-info"></div>
+    
+    <script>
+        // Show current URL and extracted token
+        const currentUrl = window.location.href;
+        const pathParts = window.location.pathname.split('/');
+        const token = pathParts[pathParts.length - 1];
+        
+        document.getElementById('url-info').innerHTML = `
+            <p><strong>Full URL:</strong> ${currentUrl}</p>
+            <p><strong>Pathname:</strong> ${window.location.pathname}</p>
+            <p><strong>Path Parts:</strong> ${JSON.stringify(pathParts)}</p>
+            <p><strong>Extracted Token:</strong> ${token}</p>
+        `;
+        
+        if (token && token !== '' && token !== 'test.html') {
+            document.getElementById('token-display').innerHTML = `
+                <h2>SUCCESS!</h2>
+                <p>Token found: <strong>${token}</strong></p>
+                <p>Now we can fetch the invoice data from database</p>
+            `;
+        } else {
+            document.getElementById('token-display').innerHTML = `
+                <h2>No token found</h2>
+                <p>Try visiting: <a href="/6WeKcdW65rNxohAKt0Ok1tuasN1BN988">this link with a test token</a></p>
+            `;
+        }
+    </script>
+</body>
+</html>

@@ -1034,6 +1034,10 @@ export interface FunctionResult {
 }
 
 export class InvoiceFunctionService {
+  // Track ongoing invoice creations to prevent duplicates
+  private static ongoingCreations = new Map<string, Promise<FunctionResult>>();
+  private static readonly CREATION_TIMEOUT = 30000; // 30 seconds
+
   static async executeFunction(
     functionName: string,
     parameters: any,
@@ -1053,9 +1057,9 @@ export class InvoiceFunctionService {
         case 'get_invoice_summary':
           return await this.getInvoiceSummary(parameters, userId);
         case 'create_invoice':
-          return await this.createInvoice(parameters, userId);
+          return await this.createInvoiceWithDeduplication(parameters, userId);
         case 'create_client':
-          return await this.createClient(parameters, userId);
+          return await this.createClientWithDeduplication(parameters, userId);
         case 'search_clients':
           return await this.searchClients(parameters, userId);
         case 'get_business_settings':
@@ -1097,7 +1101,7 @@ export class InvoiceFunctionService {
         case 'duplicate_client':
           return await this.duplicateClient(parameters, userId);
         case 'create_estimate':
-          return await this.createEstimate(parameters, userId);
+          return await this.createEstimateWithDeduplication(parameters, userId);
         case 'search_estimates':
           return await this.searchEstimates(parameters, userId);
         case 'get_estimate_by_number':
@@ -1346,6 +1350,66 @@ export class InvoiceFunctionService {
       data: summary,
       message: message
     };
+  }
+
+  // Wrapper to prevent duplicate invoice creation
+  private static async createInvoiceWithDeduplication(params: any, userId: string): Promise<FunctionResult> {
+    // Create a unique key for this invoice creation attempt
+    const clientName = params.client_name || 'unknown_client';
+    const itemsHash = JSON.stringify(params.line_items || []).slice(0, 50);
+    const deduplicationKey = `${userId}-${clientName}-${itemsHash}-${Date.now().toString().slice(-6)}`;
+    
+    console.log(`[AI Invoice Create] Deduplication key: ${deduplicationKey}`);
+    
+    // Check if there's already an ongoing creation for this user
+    const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
+    
+    if (ongoingUserCreations.length > 0) {
+      console.log(`[AI Invoice Create] Found ${ongoingUserCreations.length} ongoing creation(s) for user ${userId}`);
+      
+      // Wait a short time and check if the creation is still ongoing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
+      if (stillOngoing.length > 0) {
+        console.log(`[AI Invoice Create] Blocking duplicate creation attempt for user ${userId}`);
+        return {
+          success: false,
+          message: "I'm already creating an invoice for you. Please wait a moment for it to complete.",
+          error: 'Duplicate creation blocked'
+        };
+      }
+    }
+    
+    // Create the invoice creation promise
+    const creationPromise = this.createInvoice(params, userId);
+    
+    // Store it in the map
+    this.ongoingCreations.set(deduplicationKey, creationPromise);
+    
+    // Set up cleanup after timeout
+    const timeoutHandle = setTimeout(() => {
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Invoice Create] Cleaned up timed-out creation: ${deduplicationKey}`);
+    }, this.CREATION_TIMEOUT);
+    
+    try {
+      // Wait for the creation to complete
+      const result = await creationPromise;
+      
+      // Clean up immediately on completion
+      clearTimeout(timeoutHandle);
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Invoice Create] Cleaned up completed creation: ${deduplicationKey}`);
+      
+      return result;
+    } catch (error) {
+      // Clean up on error
+      clearTimeout(timeoutHandle);
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Invoice Create] Cleaned up failed creation: ${deduplicationKey}`);
+      throw error;
+    }
   }
 
   private static async createInvoice(params: any, userId: string): Promise<FunctionResult> {
@@ -1822,6 +1886,70 @@ Would you like me to help you send this invoice or make any changes?`;
     if (!code) return '$';
     const normalized = code.split(' ')[0]; // Handle "GBP - British Pound" format
     return mapping[normalized] || '$';
+  }
+
+  // Wrapper to prevent duplicate client creation
+  private static async createClientWithDeduplication(params: any, userId: string): Promise<FunctionResult> {
+    // Create a unique key for this client creation attempt
+    const clientName = (params.name || 'unknown_client').toLowerCase().trim();
+    const clientEmail = (params.email || '').toLowerCase().trim();
+    const deduplicationKey = `${userId}-client-${clientName}-${clientEmail}-${Date.now().toString().slice(-6)}`;
+    
+    console.log(`[AI Client Create] Deduplication key: ${deduplicationKey}`);
+    
+    // Check if there's already an ongoing client creation for this user
+    const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => 
+      key.startsWith(userId) && key.includes('-client-')
+    );
+    
+    if (ongoingUserCreations.length > 0) {
+      console.log(`[AI Client Create] Found ${ongoingUserCreations.length} ongoing client creation(s) for user ${userId}`);
+      
+      // Wait a short time and check if the creation is still ongoing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => 
+        key.startsWith(userId) && key.includes('-client-')
+      );
+      if (stillOngoing.length > 0) {
+        console.log(`[AI Client Create] Blocking duplicate client creation attempt for user ${userId}`);
+        return {
+          success: false,
+          message: "I'm already creating a client for you. Please wait a moment for it to complete.",
+          error: 'Duplicate client creation blocked'
+        };
+      }
+    }
+    
+    // Create the client creation promise
+    const creationPromise = this.createClient(params, userId);
+    
+    // Store it in the map
+    this.ongoingCreations.set(deduplicationKey, creationPromise);
+    
+    // Set up cleanup after timeout
+    const timeoutHandle = setTimeout(() => {
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Client Create] Cleaned up timed-out creation: ${deduplicationKey}`);
+    }, this.CREATION_TIMEOUT);
+    
+    try {
+      // Wait for the creation to complete
+      const result = await creationPromise;
+      
+      // Clean up immediately on completion
+      clearTimeout(timeoutHandle);
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Client Create] Cleaned up completed creation: ${deduplicationKey}`);
+      
+      return result;
+    } catch (error) {
+      // Clean up on error
+      clearTimeout(timeoutHandle);
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Client Create] Cleaned up failed creation: ${deduplicationKey}`);
+      throw error;
+    }
   }
 
   private static async createClient(params: any, userId: string): Promise<FunctionResult> {
@@ -2704,6 +2832,22 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
       if (client_name) {
         console.warn('[updateInvoiceDetails] ⚠️ CHANGING CLIENT NAME from', currentInvoice.client_name, 'to', client_name);
         updateData.client_name = client_name;
+        
+        // Try to find matching client to preserve client_id relationship
+        const { data: matchingClient } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('user_id', userId)
+          .ilike('name', client_name)
+          .limit(1)
+          .single();
+          
+        if (matchingClient) {
+          updateData.client_id = matchingClient.id;
+          console.log('[updateInvoiceDetails] Preserving client_id relationship:', matchingClient.id);
+        } else {
+          console.warn('[updateInvoiceDetails] No matching client found for name:', client_name);
+        }
       }
       if (client_email) {
         console.warn('[updateInvoiceDetails] ⚠️ CHANGING CLIENT EMAIL from', currentInvoice.client_email, 'to', client_email);
@@ -4088,6 +4232,70 @@ The new client is ready to use for invoices!`
         message: 'Failed to duplicate client. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
+    }
+  }
+
+  // Wrapper to prevent duplicate estimate creation
+  private static async createEstimateWithDeduplication(params: any, userId: string): Promise<FunctionResult> {
+    // Create a unique key for this estimate creation attempt
+    const clientName = params.client_name || 'unknown_client';
+    const itemsHash = JSON.stringify(params.line_items || []).slice(0, 50);
+    const deduplicationKey = `${userId}-estimate-${clientName}-${itemsHash}-${Date.now().toString().slice(-6)}`;
+    
+    console.log(`[AI Estimate Create] Deduplication key: ${deduplicationKey}`);
+    
+    // Check if there's already an ongoing estimate creation for this user
+    const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => 
+      key.startsWith(userId) && key.includes('-estimate-')
+    );
+    
+    if (ongoingUserCreations.length > 0) {
+      console.log(`[AI Estimate Create] Found ${ongoingUserCreations.length} ongoing estimate creation(s) for user ${userId}`);
+      
+      // Wait a short time and check if the creation is still ongoing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => 
+        key.startsWith(userId) && key.includes('-estimate-')
+      );
+      if (stillOngoing.length > 0) {
+        console.log(`[AI Estimate Create] Blocking duplicate estimate creation attempt for user ${userId}`);
+        return {
+          success: false,
+          message: "I'm already creating an estimate for you. Please wait a moment for it to complete.",
+          error: 'Duplicate estimate creation blocked'
+        };
+      }
+    }
+    
+    // Create the estimate creation promise
+    const creationPromise = this.createEstimate(params, userId);
+    
+    // Store it in the map
+    this.ongoingCreations.set(deduplicationKey, creationPromise);
+    
+    // Set up cleanup after timeout
+    const timeoutHandle = setTimeout(() => {
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Estimate Create] Cleaned up timed-out creation: ${deduplicationKey}`);
+    }, this.CREATION_TIMEOUT);
+    
+    try {
+      // Wait for the creation to complete
+      const result = await creationPromise;
+      
+      // Clean up immediately on completion
+      clearTimeout(timeoutHandle);
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Estimate Create] Cleaned up completed creation: ${deduplicationKey}`);
+      
+      return result;
+    } catch (error) {
+      // Clean up on error
+      clearTimeout(timeoutHandle);
+      this.ongoingCreations.delete(deduplicationKey);
+      console.log(`[AI Estimate Create] Cleaned up failed creation: ${deduplicationKey}`);
+      throw error;
     }
   }
 

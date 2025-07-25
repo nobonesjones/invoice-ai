@@ -544,7 +544,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
         fontSize: 10, 
         fontStyle: { weight: 700 }
       })
-      .addText(`${client?.name || 'Chill Free Ltd'}`)
+      .addText(`${client?.name || '[Client Name Required]'}`)
       .build();
 
       // Client address paragraphs - handle both newline and comma-separated formats

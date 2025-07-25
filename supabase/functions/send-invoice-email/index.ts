@@ -89,6 +89,21 @@ serve(async (req) => {
       )
     }
 
+    // Get existing share record for this invoice
+    const { data: shareRecord } = await supabase
+      .from('invoice_shares')
+      .select('pdf_path')
+      .eq('invoice_id', invoiceId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    
+    // Generate shareable invoice URL from PDF path
+    const shareUrl = shareRecord?.pdf_path 
+      ? `https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/shared-invoices/${shareRecord.pdf_path}`
+      : `https://invoices.getsuperinvoice.com/shared/invoice/unavailable`
+    
     // Generate email content
     const subject = `Invoice ${invoice.invoice_number} from ${fromName}`
     
@@ -175,7 +190,7 @@ ${fromName}
     <div style="white-space: pre-line;">${defaultMessage}</div>
     
     <div style="text-align: center;">
-        <a href="#" class="button">View Invoice Online</a>
+        <a href="${shareUrl}" class="button">View Invoice Online</a>
     </div>
     
     <div class="footer">
