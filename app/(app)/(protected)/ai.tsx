@@ -1298,6 +1298,10 @@ export default function AiScreen() {
 		}
 
 		const messageToSend = inputText.trim();
+		
+		// Clear input immediately to prevent the text from staying
+		// Store it in case we need to restore on error
+		setInputText('');
 
 		try {
 			console.log('[AI Screen] Sending message via useAIChat...');
@@ -1310,12 +1314,11 @@ export default function AiScreen() {
 
 			await sendMessage(messageToSend, currencyContext);
 			
-			// Only clear input after successful send
-			setInputText('');
 			console.log('[AI Screen] Message sent successfully');
 		} catch (error) {
 			console.error('[AI Screen] Failed to send message:', error);
-			// Input text remains in the text box so user can retry
+			// Restore the text on error so user can retry
+			setInputText(messageToSend);
 		}
 	};
 

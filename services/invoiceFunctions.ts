@@ -1012,6 +1012,40 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       properties: {},
       required: []
     }
+  },
+  {
+    name: "update_tax_settings",
+    description: "Update tax-related settings including tax rate, tax name (VAT/GST/Sales Tax), tax number, and auto-apply tax toggle. Use this when user wants to change tax settings, remove tax, or disable tax on invoices.",
+    parameters: {
+      type: "object",
+      properties: {
+        default_tax_rate: {
+          type: "number",
+          description: "Default tax rate percentage (e.g., 20 for 20%). Set to 0 or null to remove tax."
+        },
+        tax_name: {
+          type: "string",
+          description: "Name for tax on invoices (e.g., 'VAT', 'Sales Tax', 'GST', 'None', or custom name)"
+        },
+        tax_number: {
+          type: "string",
+          description: "Business tax number/VAT number/GST number/TIN"
+        },
+        auto_apply_tax: {
+          type: "boolean",
+          description: "Whether to automatically apply tax to new invoices. Set to false to disable tax by default."
+        }
+      }
+    }
+  },
+  {
+    name: "get_tax_settings_navigation",
+    description: "Provide step-by-step instructions on how to navigate to the Tax & Currency settings page in the app. Use this when user asks how to change tax settings manually.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    }
   }
 ];
 
@@ -1118,6 +1152,10 @@ export class InvoiceFunctionService {
           return await this.editRecentEstimate(parameters, userId);
         case 'check_usage_limits':
           return await this.checkUsageLimits(userId);
+        case 'update_tax_settings':
+          return await this.updateTaxSettings(parameters, userId);
+        case 'get_tax_settings_navigation':
+          return await this.getTaxSettingsNavigation(parameters, userId);
         default:
           return {
             success: false,
@@ -5701,6 +5739,155 @@ The new client is ready to use for invoices!`
       return {
         success: false,
         message: 'Failed to check usage limits. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateTaxSettings(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log('[AI Tax Settings Update] Updating tax settings with params:', params);
+      
+      // Check if business settings exist, create if not
+      const { data: existingSettings } = await supabase
+        .from('business_settings')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      const updateData: any = {
+        user_id: userId,
+        updated_at: new Date().toISOString()
+      };
+
+      // Only update fields that are provided
+      if (params.default_tax_rate !== undefined) {
+        // Handle removing tax (0 or null)
+        updateData.default_tax_rate = params.default_tax_rate === 0 ? null : params.default_tax_rate;
+      }
+      if (params.tax_name !== undefined) {
+        // Handle "None" as empty tax name
+        updateData.tax_name = params.tax_name === 'None' ? '' : params.tax_name;
+      }
+      if (params.tax_number !== undefined) {
+        updateData.tax_number = params.tax_number || null;
+      }
+      if (params.auto_apply_tax !== undefined) {
+        updateData.auto_apply_tax = params.auto_apply_tax;
+      }
+
+      let result;
+      if (existingSettings) {
+        // Update existing settings
+        result = await supabase
+          .from('business_settings')
+          .update(updateData)
+          .eq('user_id', userId)
+          .select()
+          .single();
+      } else {
+        // Create new settings
+        updateData.created_at = new Date().toISOString();
+        result = await supabase
+          .from('business_settings')
+          .insert(updateData)
+          .select()
+          .single();
+      }
+
+      if (result.error) {
+        throw new Error(`Failed to update tax settings: ${result.error.message}`);
+      }
+
+      // Build success message showing what was updated
+      const updatedFields = [];
+      if (params.default_tax_rate !== undefined) {
+        if (params.default_tax_rate === 0 || params.default_tax_rate === null) {
+          updatedFields.push('Removed tax rate');
+        } else {
+          updatedFields.push(`Tax rate set to ${params.default_tax_rate}%`);
+        }
+      }
+      if (params.tax_name !== undefined) {
+        if (params.tax_name === 'None' || params.tax_name === '') {
+          updatedFields.push('Removed tax name');
+        } else {
+          updatedFields.push(`Tax name set to "${params.tax_name}"`);
+        }
+      }
+      if (params.tax_number !== undefined) {
+        if (params.tax_number) {
+          updatedFields.push(`Tax number set to "${params.tax_number}"`);
+        } else {
+          updatedFields.push('Removed tax number');
+        }
+      }
+      if (params.auto_apply_tax !== undefined) {
+        updatedFields.push(`Auto-apply tax ${params.auto_apply_tax ? 'enabled' : 'disabled'}`);
+      }
+
+      const message = `✅ Tax settings updated successfully!\n\n${updatedFields.map(field => `• ${field}`).join('\n')}`;
+
+      // Add helpful context based on what was changed
+      let additionalInfo = '';
+      if (params.auto_apply_tax === false) {
+        additionalInfo = '\n\nTax will no longer be automatically added to new invoices. You can still add tax manually when creating each invoice.';
+      } else if (params.default_tax_rate === 0 || params.default_tax_rate === null) {
+        additionalInfo = '\n\nTax has been removed from your default settings. New invoices will not include tax unless you add it manually.';
+      }
+
+      return {
+        success: true,
+        data: result.data,
+        message: message + additionalInfo
+      };
+    } catch (error) {
+      console.error('Error updating tax settings:', error);
+      return {
+        success: false,
+        message: 'Failed to update tax settings. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getTaxSettingsNavigation(params: {}, userId: string): Promise<FunctionResult> {
+    try {
+      const navigationMessage = `📱 **How to access Tax & Currency Settings:**
+
+1. **Go to Settings Tab**
+   - Tap the "Settings" tab at the bottom of your screen (gear icon)
+
+2. **Find Tax & Currency**
+   - Look for "Tax & Currency" in the list of settings
+   - It has a coins icon (💰)
+   - Tap on it to open
+
+3. **In Tax & Currency Settings, you can:**
+   • **Change Currency** - Select your business currency (USD, EUR, GBP, etc.)
+   • **Set Tax Rate** - Enter your default tax percentage (e.g., 20 for 20%)
+   • **Choose Tax Name** - Select VAT, GST, Sales Tax, or enter a custom name
+   • **Add Tax Number** - Enter your VAT/GST/Tax ID number
+   • **Toggle Auto-Apply Tax** - Turn on/off automatic tax on new invoices
+
+4. **Save Your Changes**
+   - After making changes, tap the "Save Settings" button at the bottom
+
+💡 **Quick tip:** I can also update these settings for you directly! Just tell me what you'd like to change, for example:
+- "Set my tax rate to 20%"
+- "Change tax name to VAT"
+- "Disable auto-apply tax"
+- "Remove tax from invoices"`;
+
+      return {
+        success: true,
+        message: navigationMessage
+      };
+    } catch (error) {
+      console.error('Error getting tax settings navigation:', error);
+      return {
+        success: false,
+        message: 'Failed to get navigation instructions.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
