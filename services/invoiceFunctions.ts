@@ -5676,16 +5676,20 @@ The new client is ready to use for invoices!`
 
   private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Usage Check] Checking user limits...');
+      console.log('[AI Usage Check] Checking user limits for userId:', userId);
       
       // First check if user is subscribed
-      const { data: profile } = await supabase
-        .from('profiles')
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
         .select('subscription_tier')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
       
+      console.log('[AI Usage Check] Profile query result:', { profile, error: profileError });
+      console.log('[AI Usage Check] Profile subscription_tier:', profile?.subscription_tier);
+      
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      console.log('[AI Usage Check] Is subscribed?', isSubscribed);
       
       if (isSubscribed) {
         console.log('[AI Usage Check] User is subscribed - unlimited access');

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Animated } from "react-native";
 import * as Clipboard from 'expo-clipboard';
+import * as Haptics from "expo-haptics";
 import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin, Activity, X, Check } from "lucide-react-native";
 import TranscribeButton, { TranscribeButtonRef } from "@/components/TranscribeButton";
 import VoiceChatButton from "@/components/VoiceChatButton";
@@ -1755,7 +1756,10 @@ export default function AiScreen() {
 						>
 							{/* Cancel Button */}
 							<TouchableOpacity
-								onPress={handleCancelRecording}
+								onPress={() => {
+									Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+									handleCancelRecording();
+								}}
 								style={{
 									width: 32,
 									height: 32,
@@ -1783,7 +1787,10 @@ export default function AiScreen() {
 
 							{/* Finish/Check Button */}
 							<TouchableOpacity
-								onPress={handleFinishRecording}
+								onPress={() => {
+									Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+									handleFinishRecording();
+								}}
 								style={{
 									width: 32,
 									height: 32,
@@ -1835,6 +1842,9 @@ export default function AiScreen() {
 												console.log('[AI Screen] Visible mic button pressed');
 												console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
 												console.log('[AI Screen] Current isRecording state:', isRecording);
+												if (!aiIsLoading && !showSetupMessage) {
+													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+												}
 												transcribeButtonRef.current?.startRecording();
 											}}
 											disabled={aiIsLoading || showSetupMessage}
@@ -1861,6 +1871,9 @@ export default function AiScreen() {
 												console.log('[AI Screen] aiIsLoading:', aiIsLoading);
 												console.log('[AI Screen] showSetupMessage:', showSetupMessage);
 												console.log('[AI Screen] Button disabled:', !inputText.trim() || aiIsLoading || showSetupMessage);
+												if (inputText.trim() && !aiIsLoading && !showSetupMessage) {
+													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+												}
 												handleSendMessage();
 											}}
 											disabled={!inputText.trim() || aiIsLoading || showSetupMessage}
