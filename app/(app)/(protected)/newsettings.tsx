@@ -32,42 +32,23 @@ export default function NewSettingsScreen() {
 
   // Test Superwall context
   const superwall = useSuperwall();
-  console.log('🔥 Superwall context:', superwall);
-  console.log('🔥 Superwall context keys:', Object.keys(superwall || {}));
-  console.log('🔥 Button state - paywallLoading:', paywallLoading, 'isSubscribed:', isSubscribed);
 
   // Use the Superwall placement hook
   const { registerPlacement, state: placementState } = usePlacement({
     onError: (err) => {
-      console.error('🔥 Superwall Placement Error:', err);
-      console.error('🔥 Superwall Placement Error Stack:', err.stack);
+      console.error('Superwall Placement Error:', err);
     },
     onPresent: (info) => {
-      console.log('🔥 Superwall Paywall Presented:', info);
-      console.log('🔥 Products in paywall:', info.products || []);
-      console.log('🔥 Product IDs:', info.productIds || []);
-      console.log('🔥 Products load duration:', info.productsLoadDuration);
-      console.log('🔥 Products load fail time:', info.productsLoadFailTime);
       if (info.productsLoadFailTime) {
-        console.log('🔥 ⚠️ PRODUCTS FAILED TO LOAD!');
+        console.warn('Products failed to load in paywall');
       }
-      console.log('🔥 Superwall Paywall Presented Info:', JSON.stringify(info, null, 2));
     },
     onDismiss: (info, result) => {
-      console.log('🔥 Superwall Paywall Dismissed:', info, 'Result:', result);
-      console.log('🔥 Superwall Paywall Dismissed Info:', JSON.stringify(info, null, 2));
-      console.log('🔥 Superwall Paywall Dismissed Result:', JSON.stringify(result, null, 2));
+      // Paywall dismissed - no action needed
     },
   });
   
-  console.log('🔥 usePlacement hook initialized:', {
-    registerPlacement: typeof registerPlacement,
-    placementState,
-  });
-  
-  // Test if registerPlacement is available
-  console.log('🔥 registerPlacement available:', !!registerPlacement);
-  console.log('🔥 registerPlacement is function:', typeof registerPlacement === 'function');
+  // Placement hook initialized
 
   // Use the custom hook for shine animation
   const shineTranslateX = useShineAnimation({
@@ -108,33 +89,20 @@ export default function NewSettingsScreen() {
   }, [user?.id, loadUsageStats]);
 
   const handleUpgradePress = async () => {
-    console.log('🔥 Upgrade button pressed!');
-    console.log('🔥 Button working - this should appear in logs');
-    Alert.alert('Debug', 'Upgrade button clicked - check console for Superwall logs');
     try {
-      console.log('🔥 Trying create_item_limit placement...');
-      
       const result = await registerPlacement({
         placement: 'create_item_limit'
       });
       
-      console.log('🔥 create_item_limit result:', result);
-      console.log('🔥 placement state:', placementState);
-      
       // If placement not found, try campaign_trigger as fallback
       if (placementState?.reason?.type === 'PlacementNotFound') {
-        console.log('🔥 create_item_limit not found, trying campaign_trigger...');
-        
         const fallbackResult = await registerPlacement({
           placement: 'campaign_trigger'
         });
-        
-        console.log('🔥 campaign_trigger result:', fallbackResult);
-        console.log('🔥 campaign_trigger state:', placementState);
       }
       
     } catch (error) {
-      console.error('🔥 Failed to present paywall:', error);
+      console.error('Failed to present paywall:', error);
       Alert.alert('Error', 'Unable to show upgrade options. Please try again.');
     }
   };
@@ -346,8 +314,6 @@ export default function NewSettingsScreen() {
                   );
                 } else {
                   // User is not subscribed, show upgrade paywall
-                  console.log('🔥🔥🔥 BASIC BUTTON PRESS DETECTED');
-                  Alert.alert('Button Works!', 'The upgrade button is clickable');
                   handleUpgradePress();
                 }
               }}

@@ -132,6 +132,7 @@ export class ChatService {
       };
     } catch (error) {
       console.error('[ChatService] Assistants API error:', error);
+      // Don't re-throw - let the fallback mechanism handle it
       throw error;
     }
   }

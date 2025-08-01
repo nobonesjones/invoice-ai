@@ -26,9 +26,14 @@ class PaywallService {
     try {
       console.log('[PaywallService] Initializing RevenueCat and Superwall...');
       
-      // Temporarily disable RevenueCat until we get the public key
-      // await RevenueCatService.initialize(userId);
-      console.log('[PaywallService] RevenueCat temporarily disabled - need public key');
+      // Initialize RevenueCat
+      try {
+        await RevenueCatService.initialize(userId);
+        console.log('[PaywallService] RevenueCat initialized successfully');
+      } catch (error) {
+        console.error('[PaywallService] RevenueCat initialization failed:', error);
+        // Continue with Superwall only
+      }
       
       // Initialize Superwall
       await SuperwallService.initialize();
@@ -104,8 +109,8 @@ class PaywallService {
 
   async restorePurchases(): Promise<void> {
     try {
-      console.log('[PaywallService] Restore purchases disabled - RevenueCat needs public key');
-      // await RevenueCatService.restorePurchases();
+      await RevenueCatService.restorePurchases();
+      console.log('[PaywallService] Purchases restored successfully');
     } catch (error) {
       console.error('[PaywallService] Failed to restore purchases:', error);
       throw error;

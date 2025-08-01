@@ -1046,6 +1046,108 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
       properties: {},
       required: []
     }
+  },
+  {
+    name: "get_design_options",
+    description: "Get available invoice design templates with detailed descriptions, personality traits, and industry recommendations. Use this when user asks about design options or wants to change invoice appearance.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "get_color_options",
+    description: "Get available accent color options with color psychology, industry associations, and personality traits. Use this when user asks about colors or wants to change invoice colors.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "update_invoice_design",
+    description: "Update the design template for a specific invoice or set new business default design. Use when user wants to change invoice appearance, make it more professional, modern, clean, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "Invoice number to update (optional - if not provided, updates business default)"
+        },
+        design_id: {
+          type: "string",
+          description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
+          enum: ["classic", "modern", "clean", "simple"]
+        },
+        apply_to_defaults: {
+          type: "boolean",
+          description: "Whether to also update business default design (default: false)"
+        },
+        reasoning: {
+          type: "string",
+          description: "Explanation of why this design was chosen (for user feedback)"
+        }
+      },
+      required: ["design_id"]
+    }
+  },
+  {
+    name: "update_invoice_color",
+    description: "Update the accent color for a specific invoice or set new business default color. Use when user wants to change colors, match brand, or requests specific color personality.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "Invoice number to update (optional - if not provided, updates business default)"
+        },
+        accent_color: {
+          type: "string",
+          description: "Hex color code (e.g., '#3B82F6')"
+        },
+        apply_to_defaults: {
+          type: "boolean",
+          description: "Whether to also update business default color (default: false)"
+        },
+        reasoning: {
+          type: "string",
+          description: "Explanation of why this color was chosen (for user feedback)"
+        }
+      },
+      required: ["accent_color"]
+    }
+  },
+  {
+    name: "update_invoice_appearance",
+    description: "Update both design and color for a specific invoice. Use when user wants comprehensive appearance changes or mentions both design and color preferences.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "Invoice number to update (optional - if not provided, updates business defaults)"
+        },
+        design_id: {
+          type: "string",
+          description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
+          enum: ["classic", "modern", "clean", "simple"]
+        },
+        accent_color: {
+          type: "string",
+          description: "Hex color code (e.g., '#3B82F6')"
+        },
+        apply_to_defaults: {
+          type: "boolean",
+          description: "Whether to also update business defaults (default: false)"
+        },
+        reasoning: {
+          type: "string",
+          description: "Explanation of the design and color choices (for user feedback)"
+        }
+      },
+      required: []
+    }
   }
 ];
 
@@ -1151,11 +1253,25 @@ export class InvoiceFunctionService {
           console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_ESTIMATE function called!');
           return await this.editRecentEstimate(parameters, userId);
         case 'check_usage_limits':
-          return await this.checkUsageLimits(userId);
+          console.error('🚨🚨🚨 CHECK_USAGE_LIMITS CASE HIT!!! 🚨🚨🚨');
+          console.error('🚨 About to call checkUsageLimits with userId:', userId);
+          const result = await this.checkUsageLimits(userId);
+          console.error('🚨 checkUsageLimits result:', result);
+          return result;
         case 'update_tax_settings':
           return await this.updateTaxSettings(parameters, userId);
         case 'get_tax_settings_navigation':
           return await this.getTaxSettingsNavigation(parameters, userId);
+        case 'get_design_options':
+          return await this.getDesignOptions(parameters, userId);
+        case 'get_color_options':
+          return await this.getColorOptions(parameters, userId);
+        case 'update_invoice_design':
+          return await this.updateInvoiceDesign(parameters, userId);
+        case 'update_invoice_color':
+          return await this.updateInvoiceColor(parameters, userId);
+        case 'update_invoice_appearance':
+          return await this.updateInvoiceAppearance(parameters, userId);
         default:
           return {
             success: false,
@@ -1457,9 +1573,9 @@ export class InvoiceFunctionService {
       
       // First check if user is subscribed
       const { data: profile } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('subscription_tier')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
       
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
@@ -3118,22 +3234,22 @@ If you just created an invoice for this client, please try again in a moment, or
         updated_at: new Date().toISOString()
       };
 
-      if (new_name) {
+      if (new_name !== undefined) {
         updateData.name = new_name;
       }
-      if (email) {
+      if (email !== undefined) {
         updateData.email = email;
       }
-      if (phone) {
+      if (phone !== undefined) {
         updateData.phone = phone;
       }
-      if (address) {
+      if (address !== undefined) {
         updateData.address_client = address;
       }
-      if (tax_number) {
+      if (tax_number !== undefined) {
         updateData.tax_number = tax_number;
       }
-      if (notes) {
+      if (notes !== undefined) {
         updateData.notes = notes;
       }
 
@@ -4347,9 +4463,9 @@ The new client is ready to use for invoices!`
       
       // First check if user is subscribed
       const { data: profile } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('subscription_tier')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
       
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
@@ -5675,6 +5791,9 @@ The new client is ready to use for invoices!`
   }
 
   private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
+    console.error('🚨🚨🚨 CHECK USAGE LIMITS CALLED!!! 🚨🚨🚨');
+    console.error('🚨 USER ID:', userId);
+    console.error('🚨 TIMESTAMP:', new Date().toISOString());
     try {
       console.log('[AI Usage Check] Checking user limits for userId:', userId);
       
@@ -5892,6 +6011,511 @@ The new client is ready to use for invoices!`
       return {
         success: false,
         message: 'Failed to get navigation instructions.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  // Design Options Functions
+  private static async getDesignOptions(params: {}, userId: string): Promise<FunctionResult> {
+    try {
+      const designOptions = {
+        designs: [
+          {
+            id: 'classic',
+            name: 'Classic',
+            displayName: 'Classic',
+            description: 'Traditional business invoice with blue accents',
+            aiDescription: 'Professional and traditional design. Perfect for established businesses, formal industries (law, finance, consulting), and corporate clients who value trust and reliability.',
+            personality: ['professional', 'trustworthy', 'traditional', 'formal', 'established'],
+            industries: ['legal', 'finance', 'consulting', 'corporate', 'accounting', 'real estate'],
+            colorScheme: { primary: '#2563EB', accent: '#3B82F6' },
+            layoutFeatures: ['clean header', 'standard sections', 'business-focused', 'formal structure'],
+            bestFor: 'Traditional businesses, formal client relationships, professional services',
+            avoid: 'Creative industries, casual businesses, very modern startups'
+          },
+          {
+            id: 'modern',
+            name: 'Modern',
+            displayName: 'Modern',
+            description: 'Clean and contemporary with green accents',
+            aiDescription: 'Contemporary and fresh design. Ideal for tech companies, creative agencies, modern businesses, and companies that want to appear innovative and forward-thinking.',
+            personality: ['modern', 'innovative', 'fresh', 'contemporary', 'forward-thinking'],
+            industries: ['technology', 'creative', 'marketing', 'design', 'startups', 'digital agencies'],
+            colorScheme: { primary: '#059669', accent: '#10B981' },
+            layoutFeatures: ['centered header', 'side-by-side sections', 'clean lines', 'contemporary spacing'],
+            bestFor: 'Tech companies, creative agencies, modern businesses, innovative services',
+            avoid: 'Very traditional industries, formal legal/finance (unless specifically modern)'
+          },
+          {
+            id: 'clean',
+            name: 'Clean',
+            displayName: 'Clean',
+            description: 'Minimalist design with accent color header and clean lines',
+            aiDescription: 'Minimalist and professional. Great for businesses that value simplicity, clean aesthetics, and want their content to be the focus without distraction.',
+            personality: ['minimalist', 'clean', 'focused', 'professional', 'efficient'],
+            industries: ['consulting', 'professional services', 'healthcare', 'education', 'non-profit'],
+            colorScheme: { primary: '#059669', accent: '#10B981' },
+            layoutFeatures: ['accent header', 'alternating rows', 'minimal design', 'content-focused'],
+            bestFor: 'Professional services, consultants, businesses wanting clean aesthetics',
+            avoid: 'Creative industries that need more personality, very formal corporate'
+          },
+          {
+            id: 'simple',
+            name: 'Simple',
+            displayName: 'Simple',
+            description: 'Straightforward design with minimal styling',
+            aiDescription: 'Straightforward and no-nonsense design. Perfect for small businesses, personal services, or anyone who wants a clean, simple invoice without complex styling.',
+            personality: ['simple', 'straightforward', 'honest', 'accessible', 'practical'],
+            industries: ['small business', 'personal services', 'trades', 'local services', 'freelancers'],
+            colorScheme: { primary: '#000000', accent: '#374151' },
+            layoutFeatures: ['split header', 'standard layout', 'minimal styling', 'practical focus'],
+            bestFor: 'Small businesses, personal services, trades, straightforward invoicing',
+            avoid: 'Large corporations, businesses needing strong brand presence'
+          }
+        ],
+        categories: {
+          professional: ['classic', 'clean'],
+          modern: ['modern'],
+          simple: ['simple', 'clean'],
+          creative: ['modern'],
+          traditional: ['classic']
+        }
+      };
+
+      return {
+        success: true,
+        data: designOptions,
+        message: 'Available invoice design templates with detailed descriptions and recommendations.'
+      };
+    } catch (error) {
+      console.error('Error getting design options:', error);
+      return {
+        success: false,
+        message: 'Failed to get design options.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async getColorOptions(params: {}, userId: string): Promise<FunctionResult> {
+    try {
+      const colorOptions = {
+        colors: [
+          {
+            name: 'Navy Blue',
+            hex: '#1E40AF',
+            psychology: 'Trust, stability, professionalism, reliability',
+            industries: ['finance', 'legal', 'healthcare', 'insurance', 'consulting'],
+            personality: ['professional', 'trustworthy', 'stable', 'conservative', 'reliable'],
+            aiDescription: 'Deep blue that conveys trust and professionalism. Perfect for financial services, law firms, healthcare, and established businesses where trust is paramount.',
+            emotions: ['trust', 'security', 'stability', 'confidence'],
+            avoid: 'Creative industries wanting playful/energetic feel'
+          },
+          {
+            name: 'Bright Blue',
+            hex: '#3B82F6',
+            psychology: 'Communication, openness, clarity, innovation',
+            industries: ['technology', 'communication', 'education', 'software'],
+            personality: ['open', 'communicative', 'innovative', 'approachable', 'modern'],
+            aiDescription: 'Bright blue that suggests clarity and innovation. Great for tech companies, educational services, and businesses focused on communication.',
+            emotions: ['clarity', 'innovation', 'openness', 'communication'],
+            avoid: 'Very traditional industries, luxury brands'
+          },
+          {
+            name: 'Purple',
+            hex: '#8B5CF6',
+            psychology: 'Creativity, luxury, innovation, sophistication',
+            industries: ['creative', 'design', 'luxury', 'beauty', 'entertainment'],
+            personality: ['creative', 'sophisticated', 'innovative', 'unique', 'premium'],
+            aiDescription: 'Rich purple that represents creativity and sophistication. Perfect for design agencies, luxury brands, creative services, and businesses wanting to stand out.',
+            emotions: ['creativity', 'luxury', 'sophistication', 'uniqueness'],
+            avoid: 'Very conservative industries, traditional finance/legal'
+          },
+          {
+            name: 'Green',
+            hex: '#10B981',
+            psychology: 'Growth, nature, freshness, prosperity, harmony',
+            industries: ['environmental', 'health', 'finance', 'organic', 'sustainability'],
+            personality: ['growing', 'natural', 'fresh', 'prosperous', 'balanced'],
+            aiDescription: 'Fresh green that suggests growth and prosperity. Excellent for environmental businesses, health services, financial growth, and organic/natural brands.',
+            emotions: ['growth', 'prosperity', 'freshness', 'harmony'],
+            avoid: 'Industries where green might seem unprofessional'
+          },
+          {
+            name: 'Orange',
+            hex: '#F59E0B',
+            psychology: 'Energy, enthusiasm, warmth, creativity, confidence',
+            industries: ['creative', 'food', 'entertainment', 'sports', 'energy'],
+            personality: ['energetic', 'enthusiastic', 'warm', 'confident', 'bold'],
+            aiDescription: 'Vibrant orange that conveys energy and enthusiasm. Great for creative agencies, food businesses, entertainment, and brands wanting to appear energetic and approachable.',
+            emotions: ['energy', 'enthusiasm', 'warmth', 'confidence'],
+            avoid: 'Very professional services, legal, healthcare (unless specifically energetic brand)'
+          },
+          {
+            name: 'Red',
+            hex: '#EF4444',
+            psychology: 'Power, urgency, passion, strength, attention',
+            industries: ['emergency', 'automotive', 'sports', 'entertainment', 'urgency-based'],
+            personality: ['powerful', 'urgent', 'passionate', 'strong', 'bold'],
+            aiDescription: 'Bold red that commands attention and suggests urgency or power. Best for businesses that need to convey strength, urgency, or passion.',
+            emotions: ['power', 'urgency', 'passion', 'strength'],
+            avoid: 'Calming services (healthcare/wellness), conservative professional services'
+          },
+          {
+            name: 'Pink',
+            hex: '#EC4899',
+            psychology: 'Compassion, care, femininity, creativity, approachability',
+            industries: ['beauty', 'wellness', 'childcare', 'creative', 'personal services'],
+            personality: ['caring', 'approachable', 'creative', 'gentle', 'personal'],
+            aiDescription: 'Warm pink that suggests care and approachability. Perfect for beauty services, wellness, childcare, personal services, and businesses with a caring, personal touch.',
+            emotions: ['compassion', 'care', 'approachability', 'gentleness'],
+            avoid: 'Traditional masculine industries, very professional corporate services'
+          }
+        ],
+        colorCategories: {
+          professional: ['#1E40AF', '#374151', '#000000', '#10B981'],
+          creative: ['#8B5CF6', '#EC4899', '#F59E0B', '#EF4444'],
+          trustworthy: ['#1E40AF', '#3B82F6', '#10B981'],
+          energetic: ['#EF4444', '#F59E0B', '#EC4899'],
+          natural: ['#10B981', '#059669', '#84CC16'],
+          luxury: ['#8B5CF6', '#1E40AF', '#000000'],
+          modern: ['#3B82F6', '#8B5CF6', '#10B981'],
+          traditional: ['#1E40AF', '#374151', '#000000']
+        },
+        recommendations: {
+          'first_time_user': '#1E40AF',
+          'creative_business': '#8B5CF6',
+          'professional_service': '#1E40AF',
+          'tech_company': '#3B82F6',
+          'healthcare': '#10B981',
+          'finance': '#1E40AF',
+          'legal': '#1E40AF',
+          'design_agency': '#8B5CF6'
+        }
+      };
+
+      return {
+        success: true,
+        data: colorOptions,
+        message: 'Available accent colors with psychology, industry associations, and personality traits.'
+      };
+    } catch (error) {
+      console.error('Error getting color options:', error);
+      return {
+        success: false,
+        message: 'Failed to get color options.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateInvoiceDesign(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, design_id, apply_to_defaults = false, reasoning } = params;
+
+      // Validate design_id
+      const validDesigns = ['classic', 'modern', 'clean', 'simple'];
+      if (!validDesigns.includes(design_id)) {
+        return {
+          success: false,
+          message: `Invalid design ID: ${design_id}. Available designs: ${validDesigns.join(', ')}`,
+          error: 'Invalid design ID'
+        };
+      }
+
+      let updatedInvoice = null;
+      let updatedDefaults = null;
+
+      // Update specific invoice if provided
+      if (invoice_number) {
+        const { data: invoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .update({ 
+            invoice_design: design_id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('invoice_number', invoice_number)
+          .select()
+          .single();
+
+        if (invoiceError || !invoice) {
+          return {
+            success: false,
+            message: `Invoice ${invoice_number} not found or could not be updated.`,
+            error: 'Invoice not found'
+          };
+        }
+        updatedInvoice = invoice;
+      }
+
+      // Update business defaults if requested or no specific invoice
+      if (apply_to_defaults || !invoice_number) {
+        const { data: settings, error: settingsError } = await supabase
+          .from('business_settings')
+          .update({ 
+            default_invoice_design: design_id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (settingsError) {
+          console.error('Error updating business defaults:', settingsError);
+        } else {
+          updatedDefaults = settings;
+        }
+      }
+
+      // Build success message
+      const designName = design_id.charAt(0).toUpperCase() + design_id.slice(1);
+      let message = '';
+      
+      if (updatedInvoice && updatedDefaults) {
+        message = `✅ Updated ${invoice_number} design to **${designName}** and set as your business default.`;
+      } else if (updatedInvoice) {
+        message = `✅ Updated ${invoice_number} design to **${designName}**.`;
+      } else if (updatedDefaults) {
+        message = `✅ Set **${designName}** as your default invoice design for future invoices.`;
+      }
+
+      if (reasoning) {
+        message += `\n\n💡 **Why ${designName}?** ${reasoning}`;
+      }
+
+      return {
+        success: true,
+        data: {
+          invoice: updatedInvoice,
+          businessDefaults: updatedDefaults,
+          design_id,
+          design_name: designName
+        },
+        message
+      };
+    } catch (error) {
+      console.error('Error updating invoice design:', error);
+      return {
+        success: false,
+        message: 'Failed to update invoice design.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateInvoiceColor(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, accent_color, apply_to_defaults = false, reasoning } = params;
+
+      // Validate hex color format
+      const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+      if (!hexColorRegex.test(accent_color)) {
+        return {
+          success: false,
+          message: `Invalid color format: ${accent_color}. Please use hex format like #3B82F6`,
+          error: 'Invalid color format'
+        };
+      }
+
+      let updatedInvoice = null;
+      let updatedDefaults = null;
+
+      // Update specific invoice if provided
+      if (invoice_number) {
+        const { data: invoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .update({ 
+            accent_color: accent_color,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('invoice_number', invoice_number)
+          .select()
+          .single();
+
+        if (invoiceError || !invoice) {
+          return {
+            success: false,
+            message: `Invoice ${invoice_number} not found or could not be updated.`,
+            error: 'Invoice not found'
+          };
+        }
+        updatedInvoice = invoice;
+      }
+
+      // Update business defaults if requested or no specific invoice
+      if (apply_to_defaults || !invoice_number) {
+        const { data: settings, error: settingsError } = await supabase
+          .from('business_settings')
+          .update({ 
+            default_accent_color: accent_color,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (settingsError) {
+          console.error('Error updating business defaults:', settingsError);
+        } else {
+          updatedDefaults = settings;
+        }
+      }
+
+      // Build success message
+      let message = '';
+      
+      if (updatedInvoice && updatedDefaults) {
+        message = `🎨 Updated ${invoice_number} accent color to **${accent_color}** and set as your business default.`;
+      } else if (updatedInvoice) {
+        message = `🎨 Updated ${invoice_number} accent color to **${accent_color}**.`;
+      } else if (updatedDefaults) {
+        message = `🎨 Set **${accent_color}** as your default accent color for future invoices.`;
+      }
+
+      if (reasoning) {
+        message += `\n\n💡 **Color Choice:** ${reasoning}`;
+      }
+
+      return {
+        success: true,
+        data: {
+          invoice: updatedInvoice,
+          businessDefaults: updatedDefaults,
+          accent_color,
+          color_preview: accent_color
+        },
+        message
+      };
+    } catch (error) {
+      console.error('Error updating invoice color:', error);
+      return {
+        success: false,
+        message: 'Failed to update invoice color.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async updateInvoiceAppearance(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { invoice_number, design_id, accent_color, apply_to_defaults = false, reasoning } = params;
+
+      // Validate inputs
+      if (design_id) {
+        const validDesigns = ['classic', 'modern', 'clean', 'simple'];
+        if (!validDesigns.includes(design_id)) {
+          return {
+            success: false,
+            message: `Invalid design ID: ${design_id}. Available designs: ${validDesigns.join(', ')}`,
+            error: 'Invalid design ID'
+          };
+        }
+      }
+
+      if (accent_color) {
+        const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+        if (!hexColorRegex.test(accent_color)) {
+          return {
+            success: false,
+            message: `Invalid color format: ${accent_color}. Please use hex format like #3B82F6`,
+            error: 'Invalid color format'
+          };
+        }
+      }
+
+      let updatedInvoice = null;
+      let updatedDefaults = null;
+
+      // Prepare update data
+      const invoiceUpdateData: any = { updated_at: new Date().toISOString() };
+      const businessUpdateData: any = { updated_at: new Date().toISOString() };
+
+      if (design_id) {
+        invoiceUpdateData.invoice_design = design_id;
+        businessUpdateData.default_invoice_design = design_id;
+      }
+      
+      if (accent_color) {
+        invoiceUpdateData.accent_color = accent_color;
+        businessUpdateData.default_accent_color = accent_color;
+      }
+
+      // Update specific invoice if provided
+      if (invoice_number) {
+        const { data: invoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .update(invoiceUpdateData)
+          .eq('user_id', userId)
+          .eq('invoice_number', invoice_number)
+          .select()
+          .single();
+
+        if (invoiceError || !invoice) {
+          return {
+            success: false,
+            message: `Invoice ${invoice_number} not found or could not be updated.`,
+            error: 'Invoice not found'
+          };
+        }
+        updatedInvoice = invoice;
+      }
+
+      // Update business defaults if requested or no specific invoice
+      if (apply_to_defaults || !invoice_number) {
+        const { data: settings, error: settingsError } = await supabase
+          .from('business_settings')
+          .update(businessUpdateData)
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (settingsError) {
+          console.error('Error updating business defaults:', settingsError);
+        } else {
+          updatedDefaults = settings;
+        }
+      }
+
+      // Build success message
+      const designName = design_id ? design_id.charAt(0).toUpperCase() + design_id.slice(1) : null;
+      const changes = [];
+      
+      if (designName) changes.push(`**${designName}** design`);
+      if (accent_color) changes.push(`**${accent_color}** accent color`);
+      
+      let message = '';
+      
+      if (updatedInvoice && updatedDefaults) {
+        message = `✨ Updated ${invoice_number} with ${changes.join(' and ')} and set as your business defaults.`;
+      } else if (updatedInvoice) {
+        message = `✨ Updated ${invoice_number} with ${changes.join(' and ')}.`;
+      } else if (updatedDefaults) {
+        message = `✨ Set ${changes.join(' and ')} as your business defaults for future invoices.`;
+      }
+
+      if (reasoning) {
+        message += `\n\n💡 **Design Choices:** ${reasoning}`;
+      }
+
+      return {
+        success: true,
+        data: {
+          invoice: updatedInvoice,
+          businessDefaults: updatedDefaults,
+          design_id,
+          accent_color,
+          changes: changes
+        },
+        message
+      };
+    } catch (error) {
+      console.error('Error updating invoice appearance:', error);
+      return {
+        success: false,
+        message: 'Failed to update invoice appearance.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
