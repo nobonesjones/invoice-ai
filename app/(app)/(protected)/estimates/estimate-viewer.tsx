@@ -33,6 +33,8 @@ import type { Tables } from '../../../types/database.types';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as Clipboard from 'expo-clipboard';
+import { Share } from 'react-native';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EstimateStatus, getEstimateStatusConfig, isEstimateEditable, getPreviousStatus } from '@/constants/estimate-status';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
@@ -42,6 +44,7 @@ import { EstimateConversionService } from '@/services/estimateConversionService'
 import { EstimateSenderService } from '@/services/estimateSenderService';
 import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
+import { EstimateShareService } from '@/services/estimateShareService';
 // import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
@@ -451,8 +454,6 @@ function EstimateViewerScreen() {
           color={variant === 'destructive' ? '#DC2626' : themeColors.foreground}
           style={styles.moreOptionIcon} 
         />
-      </View>
-      <View style={styles.moreOptionContent}>
         <Text style={[
           styles.moreOptionTitle, 
           { color: variant === 'destructive' ? '#DC2626' : themeColors.foreground }
@@ -655,6 +656,51 @@ function EstimateViewerScreen() {
       
     } catch (error: any) {
       console.error('[handleSendByLink] Error:', error);
+    }
+  };
+
+  const handleShareEstimate = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!estimate || !supabase || !user) {
+      Alert.alert('Error', 'Unable to share estimate at this time.');
+      return;
+    }
+
+    try {
+      // Generate shareable PDF link from Skia canvas for estimate
+      const result = await EstimateShareService.generateShareLinkFromCanvas(
+        estimateId,
+        user.id,
+        skiaEstimateRef,
+        30 // Expires in 30 days
+      );
+
+      if (result.success && result.shareUrl) {
+        // Show success with development note
+        Alert.alert(
+          'Share Link Generated ✅',
+          `Estimate sharing is working! Link generated successfully.\\n\\nNote: Web viewer for estimates is still in development. For now, the link creates a shareable record in the database.\\n\\nLink: ${result.shareUrl}`,
+          [
+            {
+              text: 'Copy Link',
+              onPress: async () => {
+                await Clipboard.setStringAsync(result.shareUrl!);
+                Alert.alert('Copied!', 'Share link copied to clipboard.');
+              }
+            },
+            {
+              text: 'OK',
+              style: 'default'
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.error || 'Failed to generate share link.');
+      }
+    } catch (error) {
+      console.error('[handleShareEstimate] Error:', error);
+      Alert.alert('Error', 'Failed to generate share link.');
     }
   };
 
@@ -1290,6 +1336,11 @@ function EstimateViewerScreen() {
             </View>
 
             <ScrollView style={styles.moreOptionsContent} showsVerticalScrollIndicator={false}>
+              <MoreOptionItem
+                icon={Share2}
+                title="Generate Share Link"
+                onPress={handleShareEstimate}
+              />
               <MoreOptionItem
                 icon={History}
                 title="History"
