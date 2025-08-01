@@ -23,6 +23,7 @@ import {
   X as XIcon,
   Mail,
   Link2,
+  Settings,
 } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
@@ -40,6 +41,7 @@ import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistory
 import { EstimateConversionService } from '@/services/estimateConversionService';
 import { EstimateSenderService } from '@/services/estimateSenderService';
 import { usePaywall } from '@/context/paywall-provider';
+import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 // import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
@@ -70,7 +72,7 @@ interface EstimateForTemplate {
   user_id: string;
   created_at: string;
   updated_at: string;
-  invoice_design?: string | null;
+  estimate_template?: string | null;
   accent_color?: string | null;
   estimate_tax_label?: string;
   is_accepted?: boolean | null;
@@ -134,6 +136,7 @@ function EstimateViewerScreen() {
   const sendEstimateModalRef = useRef<BottomSheetModal>(null);
   const moreOptionsSheetRef = useRef<BottomSheetModal>(null);
   const historyModalRef = useRef<EstimateHistorySheetRef>(null);
+  const previewModalRef = useRef<InvoicePreviewModalRef>(null);
 
   // Skia canvas ref for PDF export
   const skiaEstimateRef = useCanvasRef();
@@ -338,7 +341,7 @@ function EstimateViewerScreen() {
   const currencySymbol = estimate?.currency ? getCurrencySymbol(estimate.currency) : '$';
 
   const getEstimateDesignComponent = () => {
-    const designType = estimate?.invoice_design || DEFAULT_DESIGN_ID;
+    const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
     
     switch (designType.toLowerCase()) {
       case 'modern':
@@ -398,6 +401,67 @@ function EstimateViewerScreen() {
     console.log('[handleViewHistory] Opening history for estimate:', estimate.id);
     historyModalRef.current?.present(estimate.id, estimate.estimate_number || undefined);
   };
+
+  const handleChangeDesign = () => {
+    console.log('Design pressed');
+    // Open the invoice preview modal for design selection
+    if (estimate && businessSettings && client) {
+      previewModalRef.current?.present();
+    } else {
+      Alert.alert('Error', 'Please wait for estimate data to load before changing design.');
+    }
+  };
+
+  const handleDesignModalClose = useCallback(async () => {
+    console.log('Design Preview Modal Dismissed');
+    // Refresh the estimate data to reflect any design changes
+    if (estimateId && supabase) {
+      try {
+        console.log('[handleDesignModalClose] Refreshing estimate data...');
+        const updatedEstimate = await fetchEstimateData(estimateId);
+        if (updatedEstimate) {
+          console.log('[handleDesignModalClose] Updated estimate design:', updatedEstimate.estimate_template);
+          setEstimate(updatedEstimate);
+          // Force a re-render by updating the ready state
+          setIsEstimateReady(false);
+          setTimeout(() => setIsEstimateReady(true), 100);
+        }
+      } catch (error) {
+        console.error('[handleDesignModalClose] Error refreshing estimate:', error);
+      }
+    }
+  }, [estimateId, supabase, fetchEstimateData]);
+
+  // More options action item component
+  const MoreOptionItem = ({ 
+    icon: IconComponent, 
+    title, 
+    onPress, 
+    variant = 'default' 
+  }: { 
+    icon: React.ElementType; 
+    title: string; 
+    onPress: () => void;
+    variant?: 'default' | 'destructive';
+  }) => (
+    <TouchableOpacity style={styles.moreOptionItem} onPress={onPress}>
+      <View style={styles.moreOptionLeft}>
+        <IconComponent 
+          size={20} 
+          color={variant === 'destructive' ? '#DC2626' : themeColors.foreground}
+          style={styles.moreOptionIcon} 
+        />
+      </View>
+      <View style={styles.moreOptionContent}>
+        <Text style={[
+          styles.moreOptionTitle, 
+          { color: variant === 'destructive' ? '#DC2626' : themeColors.foreground }
+        ]}>
+          {title}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   const handleSend = () => {
     sendEstimateModalRef.current?.present();
@@ -954,10 +1018,10 @@ function EstimateViewerScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
-              onPress={handleViewHistory}
+              onPress={handleChangeDesign}
             >
-              <History size={20} color={themeColors.primary} />
-              <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>History</Text>
+              <Settings size={20} color={themeColors.primary} />
+              <Text style={[styles.actionButtonText, { color: themeColors.primary }]}>Design</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
@@ -1226,6 +1290,11 @@ function EstimateViewerScreen() {
             </View>
 
             <ScrollView style={styles.moreOptionsContent} showsVerticalScrollIndicator={false}>
+              <MoreOptionItem
+                icon={History}
+                title="History"
+                onPress={handleViewHistory}
+              />
               <TouchableOpacity style={styles.moreOptionItem} onPress={handleDeleteEstimate}>
                 <View style={styles.moreOptionLeft}>
                   <Trash2 size={20} color="#DC2626" style={styles.moreOptionIcon} />
@@ -1243,6 +1312,28 @@ function EstimateViewerScreen() {
           ref={historyModalRef}
           onClose={() => console.log('Estimate History Modal Dismissed')}
         />
+
+        {/* Invoice Preview Modal for Design Selection */}
+        {estimate && businessSettings && client && (
+          <InvoicePreviewModal
+            ref={previewModalRef}
+            invoiceData={{
+              ...estimate,
+              // Map estimate fields to invoice fields for preview
+              invoice_number: estimate.estimate_number,
+              invoice_date: estimate.estimate_date,
+              due_date: estimate.valid_until_date,
+              invoice_line_items: estimate.estimate_line_items,
+              estimate_template: estimate.estimate_template // Use estimate_template directly
+            }}
+            businessSettings={businessSettings}
+            clientData={client}
+            invoiceId={estimateId}
+            documentType="estimate"
+            mode="preview"
+            onClose={handleDesignModalClose}
+          />
+        )}
       </SafeAreaView>
     </BottomSheetModalProvider>
   );

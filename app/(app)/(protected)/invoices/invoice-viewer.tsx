@@ -1856,9 +1856,8 @@ ${analytics.countries.length > 0 ?
   };
 
   const handleChangeDesign = () => {
-    moreOptionsSheetRef.current?.dismiss();
-    console.log('Change design pressed');
-    // Open the invoice preview modal for design selection
+    console.log('Customize pressed');
+    // Open the invoice preview modal for design selection directly from action button
     if (invoice && businessSettings && client) {
       previewModalRef.current?.present();
     } else {
@@ -2253,11 +2252,11 @@ ${analytics.countries.length > 0 ?
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
-            onPress={handleViewHistory}
+            onPress={handleChangeDesign}
             disabled={isPreviewingFromCreate}
           >
-            <History size={20} color={isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary} />
-            <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>History</Text>
+            <Settings size={20} color={isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary} />
+            <Text style={[styles.actionButtonText, { color: isPreviewingFromCreate ? themeColors.mutedForeground : themeColors.primary }]}>Design</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }, isPreviewingFromCreate && styles.disabledButton]} 
@@ -2505,9 +2504,9 @@ ${analytics.countries.length > 0 ?
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
             
             <MoreOptionItem
-              icon={Settings}
-              title="Change Design"
-              onPress={handleChangeDesign}
+              icon={History}
+              title="History"
+              onPress={handleViewHistory}
             />
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
