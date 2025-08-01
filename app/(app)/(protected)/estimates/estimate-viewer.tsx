@@ -24,6 +24,10 @@ import {
   Mail,
   Link2,
   Settings,
+  User,
+  Copy,
+  Ban,
+  FileText,
 } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
@@ -704,6 +708,201 @@ function EstimateViewerScreen() {
     }
   };
 
+  const handleViewClientProfile = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!estimate?.client_id) {
+      Alert.alert('Error', 'No client associated with this estimate.');
+      return;
+    }
+    
+    console.log('Navigating to client profile:', estimate.client_id);
+    router.push(`/customers/${estimate.client_id}`);
+  };
+
+  const handleDuplicateEstimate = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!estimate?.estimate_number) {
+      Alert.alert('Error', 'Unable to duplicate this estimate.');
+      return;
+    }
+
+    Alert.alert(
+      'Duplicate Estimate',
+      `Create a copy of estimate ${estimate.estimate_number}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Duplicate',
+          style: 'default',
+          onPress: async () => {
+            try {
+              // Import InvoiceFunctionService locally to avoid circular dependencies
+              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
+              
+              if (!user) {
+                Alert.alert('Error', 'User not found.');
+                return;
+              }
+
+              const result = await InvoiceFunctionService.executeFunction(
+                'duplicate_estimate',
+                { estimate_number: estimate.estimate_number },
+                user.id
+              );
+
+              if (result.success) {
+                Alert.alert(
+                  'Success',
+                  `Estimate duplicated successfully!\n\nNew Estimate: ${result.data?.estimate?.estimate_number || 'Unknown'}`,
+                  [
+                    { text: 'OK', style: 'default' }
+                  ]
+                );
+              } else {
+                Alert.alert('Error', result.message || 'Failed to duplicate estimate.');
+              }
+            } catch (error) {
+              console.error('[handleDuplicateEstimate] Error:', error);
+              Alert.alert('Error', 'Failed to duplicate estimate. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleVoidEstimate = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!estimate || !supabase || !user) {
+      Alert.alert('Error', 'Unable to void estimate at this time.');
+      return;
+    }
+
+    // Check if estimate can be voided
+    if (estimate.status === 'cancelled') {
+      Alert.alert('Info', 'This estimate is already voided.');
+      return;
+    }
+
+    Alert.alert(
+      'Void Estimate',
+      `Are you sure you want to void estimate ${estimate.estimate_number}? This action cannot be undone and will mark the estimate as cancelled.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Void Estimate',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('estimates')
+                .update({ 
+                  status: 'cancelled',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', estimate.id)
+                .eq('user_id', user.id);
+
+              if (error) {
+                console.error('[handleVoidEstimate] Error:', error);
+                Alert.alert('Error', 'Failed to void estimate. Please try again.');
+                return;
+              }
+
+              // Update local state
+              setEstimate(prev => prev ? { ...prev, status: 'cancelled' } : null);
+              
+              // Log activity if activity logger is available
+              if (logActivity) {
+                logActivity('estimate_voided', {
+                  estimate_id: estimate.id,
+                  estimate_number: estimate.estimate_number
+                });
+              }
+
+              Alert.alert('Success', 'Estimate has been voided successfully.');
+            } catch (error) {
+              console.error('[handleVoidEstimate] Unexpected error:', error);
+              Alert.alert('Error', 'An unexpected error occurred while voiding the estimate.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleConvertToInvoiceNew = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    if (!estimate || !user) {
+      Alert.alert('Error', 'Unable to convert estimate at this time.');
+      return;
+    }
+
+    // Check if estimate can be converted
+    if (estimate.status === 'cancelled') {
+      Alert.alert('Error', 'Cannot convert a voided estimate to an invoice.');
+      return;
+    }
+
+    if (estimate.status === 'accepted' && estimate.invoice_id) {
+      Alert.alert('Info', 'This estimate has already been converted to an invoice.');
+      return;
+    }
+
+    Alert.alert(
+      'Convert to Invoice',
+      `Convert estimate ${estimate.estimate_number} to an invoice? This will create a new invoice with the same line items and mark the estimate as accepted.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Convert',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const result = await EstimateConversionService.convertEstimateToInvoice(
+                estimate.id,
+                user.id
+              );
+
+              if (result.success && result.invoiceId && result.invoiceNumber) {
+                Alert.alert(
+                  'Success',
+                  `Estimate converted successfully!\n\nNew Invoice: ${result.invoiceNumber}`,
+                  [
+                    {
+                      text: 'View Invoice',
+                      onPress: () => {
+                        router.push(`/invoices/invoice-viewer?id=${result.invoiceId}`);
+                      }
+                    },
+                    { text: 'Stay Here', style: 'cancel' }
+                  ]
+                );
+                
+                // Update local estimate state
+                setEstimate(prev => prev ? { 
+                  ...prev, 
+                  status: 'accepted',
+                  invoice_id: result.invoiceId 
+                } : null);
+
+              } else {
+                Alert.alert('Error', result.message || 'Failed to convert estimate to invoice.');
+              }
+            } catch (error) {
+              console.error('[handleConvertToInvoiceNew] Error:', error);
+              Alert.alert('Error', 'Failed to convert estimate. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleDeleteEstimate = () => {
     moreOptionsSheetRef.current?.dismiss();
     Alert.alert(
@@ -1317,7 +1516,7 @@ function EstimateViewerScreen() {
         {/* More Options Modal */}
         <BottomSheetModal
           ref={moreOptionsSheetRef}
-          snapPoints={['40%']}
+          snapPoints={['65%']}
           backdropComponent={renderBackdrop}
           handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
           backgroundStyle={{ backgroundColor: themeColors.card }}
@@ -1345,6 +1544,26 @@ function EstimateViewerScreen() {
                 icon={History}
                 title="History"
                 onPress={handleViewHistory}
+              />
+              <MoreOptionItem
+                icon={User}
+                title="View Client Profile"
+                onPress={handleViewClientProfile}
+              />
+              <MoreOptionItem
+                icon={Copy}
+                title="Duplicate Estimate"
+                onPress={handleDuplicateEstimate}
+              />
+              <MoreOptionItem
+                icon={FileText}
+                title="Convert to Invoice"
+                onPress={handleConvertToInvoiceNew}
+              />
+              <MoreOptionItem
+                icon={Ban}
+                title="Void Estimate"
+                onPress={handleVoidEstimate}
               />
               <TouchableOpacity style={styles.moreOptionItem} onPress={handleDeleteEstimate}>
                 <View style={styles.moreOptionLeft}>

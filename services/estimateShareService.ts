@@ -78,6 +78,7 @@ export class EstimateShareService {
     }
   }
 
+
   /**
    * Generate a unique token for sharing
    */

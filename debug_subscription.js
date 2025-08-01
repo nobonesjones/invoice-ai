@@ -1,114 +1,86 @@
 #!/usr/bin/env node
 
-// Debug script to check user subscription status
+/**
+ * Debug script to test subscription checking for harryhello@gmail.com
+ * This replicates the exact same logic the AI functions use
+ */
+
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
-const supabaseKey = process.env.EXPO_PUBLIC_API_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase credentials');
-  process.exit(1);
-}
+const supabaseUrl = 'https://wzpuzqzsjdizmpiobsuo.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cHV6cXpzamRpem1waW9ic3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MjE3OTIsImV4cCI6MjA2MjE5Nzc5Mn0._XypJP5hEZT06UfA1uuHY5-TvsKzj5JnwjGa3LMKnyI';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function debugUserSubscription(userId) {
-  console.log('=== DEBUG USER SUBSCRIPTION STATUS ===');
-  console.log('User ID:', userId);
-  
+const TEST_USER_ID = '79a88e2d-7f69-4eb1-a30c-0c4750835959'; // harryhello@gmail.com
+
+async function testSubscriptionCheck() {
+  console.log('🔍 Testing subscription check for harryhello@gmail.com');
+  console.log('User ID:', TEST_USER_ID);
+  console.log('Time:', new Date().toISOString());
+  console.log('---');
+
   try {
-    // Check user_profiles table
+    // Test 1: Direct database query (same as AI functions)
+    console.log('📊 Test 1: Direct subscription_tier check');
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
+      .select('subscription_tier, free_limit, subscription_expires_at')
+      .eq('id', TEST_USER_ID)
       .single();
     
-    console.log('\n1. USER PROFILE QUERY:');
-    console.log('Error:', profileError);
-    console.log('Profile:', profile);
+    console.log('Profile query result:', { profile, error: profileError });
     
     if (profile) {
-      console.log('\n2. SUBSCRIPTION ANALYSIS:');
-      console.log('subscription_tier:', profile.subscription_tier);
-      console.log('Is premium/grandfathered?', ['premium', 'grandfathered'].includes(profile.subscription_tier));
-      
-      // Count invoices
-      const { count: invoicesCount, error: invoicesError } = await supabase
-        .from('invoices')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      
-      // Count estimates  
-      const { count: estimatesCount, error: estimatesError } = await supabase
-        .from('estimates')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      
-      console.log('\n3. USAGE COUNTS:');
-      console.log('Invoices count:', invoicesCount, 'Error:', invoicesError);
-      console.log('Estimates count:', estimatesCount, 'Error:', estimatesError);
-      console.log('Total items:', (invoicesCount || 0) + (estimatesCount || 0));
-      
-      // Simulate the checkUsageLimits logic
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
-      const totalItems = (invoicesCount || 0) + (estimatesCount || 0);
-      const remaining = Math.max(0, 3 - totalItems);
-      const canCreate = isSubscribed || totalItems < 3;
-      
-      console.log('\n4. SIMULATED checkUsageLimits RESULT:');
-      console.log('isSubscribed:', isSubscribed);
-      console.log('totalItems:', totalItems);
-      console.log('remaining:', remaining);
-      console.log('canCreate:', canCreate);
-      
-      // The exact response format
-      if (isSubscribed) {
-        console.log('\n5. AI WOULD RECEIVE (Premium User):');
-        console.log({
-          success: true,
-          data: {
-            canCreate: true,
-            isSubscribed: true,
-            subscription_tier: profile.subscription_tier,
-            message: "You have unlimited access to create invoices and estimates with your premium subscription."
-          },
-          message: "✅ You can create unlimited invoices and estimates with your premium subscription!"
-        });
-      } else if (totalItems >= 3) {
-        console.log('\n5. AI WOULD RECEIVE (Limit Reached):');
-        console.log({
-          success: true,
-          data: {
-            canCreate: false,
-            isSubscribed: false,
-            totalItems: totalItems,
-            limit: 3,
-            remaining: 0
-          },
-          message: "❌ You've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access and can cancel anytime!"
-        });
-      } else {
-        console.log('\n5. AI WOULD RECEIVE (Can Still Create):');
-        console.log({
-          success: true,
-          data: {
-            canCreate: true,
-            isSubscribed: false,
-            totalItems: totalItems,
-            limit: 3,
-            remaining: remaining
-          },
-          message: `✅ You can create items! You have ${remaining} out of 3 free items remaining.`
-        });
-      }
+      console.log('Subscription tier:', profile.subscription_tier);
+      console.log('Is subscribed?', isSubscribed);
+      console.log('Free limit:', profile.free_limit);
+      console.log('Expires at:', profile.subscription_expires_at);
     }
     
+    console.log('---');
+
+    // Test 2: User auth check
+    console.log('🔐 Test 2: Auth user check');
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('Auth check result:', { user: user?.id, email: user?.email, error: authError });
+    } catch (e) {
+      console.log('Auth check not available (expected in Node.js)');
+    }
+    
+    console.log('---');
+
+    // Test 3: Usage tracking check
+    console.log('📈 Test 3: Usage stats check');
+    const { data: invoices, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('user_id', TEST_USER_ID);
+    
+    const { data: estimates, error: estimateError } = await supabase
+      .from('estimates')
+      .select('id')
+      .eq('user_id', TEST_USER_ID);
+      
+    console.log('Invoice count:', invoices?.length || 0, 'Error:', invoiceError);
+    console.log('Estimate count:', estimates?.length || 0, 'Error:', estimateError);
+    console.log('Total items:', (invoices?.length || 0) + (estimates?.length || 0));
+    
+    console.log('---');
+    console.log('✅ Subscription check complete');
+
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Error during subscription check:', error);
   }
 }
 
-const userId = process.argv[2] || '716845bd-0294-4a24-84ef-a9a03998bff8';
-debugUserSubscription(userId);
+// Run the test
+testSubscriptionCheck().then(() => {
+  console.log('🏁 Test completed');
+  process.exit(0);
+}).catch(error => {
+  console.error('💥 Test failed:', error);
+  process.exit(1);
+});

@@ -651,6 +651,29 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
     }
   },
   {
+    name: "duplicate_estimate",
+    description: "Create a copy of an existing estimate with a new estimate number. Useful for recurring estimates or similar work. ⚠️ PRESERVES original client unless explicitly told to change it.",
+    parameters: {
+      type: "object",
+      properties: {
+        estimate_number: {
+          type: "string",
+          description: "The estimate number to duplicate"
+        },
+        new_client_name: {
+          type: "string",
+          description: "⚠️ ONLY use this if user explicitly says to change the client (e.g., 'duplicate for Sarah'). Otherwise, preserve original client."
+        },
+        new_estimate_date: {
+          type: "string",
+          format: "date",
+          description: "Optional: Set a new date for the duplicated estimate (YYYY-MM-DD)"
+        }
+      },
+      required: ["estimate_number"]
+    }
+  },
+  {
     name: "duplicate_client",
     description: "Create a copy of an existing client with a new name. Useful for similar clients or companies with multiple locations.",
     parameters: {
@@ -1234,6 +1257,8 @@ export class InvoiceFunctionService {
           return await this.deleteClient(parameters, userId);
         case 'duplicate_invoice':
           return await this.duplicateInvoice(parameters, userId);
+        case 'duplicate_estimate':
+          return await this.duplicateEstimate(parameters, userId);
         case 'duplicate_client':
           return await this.duplicateClient(parameters, userId);
         case 'create_estimate':
@@ -1572,27 +1597,35 @@ export class InvoiceFunctionService {
       console.log('[AI Invoice Create] Checking usage limits...');
       
       // First check if user is subscribed
+      console.error('🔄 CREATE INVOICE - CHECKING SUBSCRIPTION STATUS 🔄');
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('subscription_tier')
         .eq('id', userId)
         .single();
       
+      console.error('🔄 CREATE INVOICE - PROFILE RESULT:', profile);
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      console.error('🔄 CREATE INVOICE - IS SUBSCRIBED?', isSubscribed);
       
       // Only check limits for free users
       if (!isSubscribed) {
+        console.error('❌ CREATE INVOICE - USER NOT SUBSCRIBED - CHECKING LIMITS ❌');
         const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
         const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
+        console.error('❌ CREATE INVOICE - USAGE STATS:', { totalItems, limit: 3 });
         
         if (totalItems >= 3) {
           console.log('[AI Invoice Create] User has reached free plan limit');
+          console.error('❌ CREATE INVOICE - LIMIT REACHED - BLOCKING CREATION ❌');
           return {
             success: false,
             message: "I notice you've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access!",
             error: 'Free plan limit reached'
           };
         }
+      } else {
+        console.error('✅ CREATE INVOICE - USER IS SUBSCRIBED - PROCEEDING ✅');
       }
       
       console.log('[AI Invoice Create] Creating invoice...');
@@ -4286,6 +4319,163 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
     }
   }
 
+  private static async duplicateEstimate(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      const { estimate_number, new_client_name, new_estimate_date } = params;
+
+      if (!estimate_number) {
+        return {
+          success: false,
+          message: 'Estimate number is required.',
+          error: 'Missing required parameter: estimate_number'
+        };
+      }
+
+      // Get the original estimate with line items
+      const { data: originalEstimate, error: fetchError } = await supabase
+        .from('estimates')
+        .select(`
+          *,
+          line_items:estimate_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('estimate_number', estimate_number)
+        .single();
+
+      if (fetchError || !originalEstimate) {
+        return {
+          success: false,
+          message: `Estimate ${estimate_number} not found.`,
+          error: 'Estimate not found'
+        };
+      }
+
+      // Handle client change if requested
+      let clientId = originalEstimate.client_id;
+      let clientName = originalEstimate.client_name;
+      
+      if (new_client_name) {
+        // Find the new client
+        const { data: newClient, error: clientError } = await supabase
+          .from('clients')
+          .select('id, name')
+          .eq('user_id', userId)
+          .ilike('name', `%${new_client_name}%`)
+          .single();
+
+        if (clientError || !newClient) {
+          return {
+            success: false,
+            message: `Client "${new_client_name}" not found. Please create the client first or use an existing client name.`,
+            error: 'Client not found'
+          };
+        }
+
+        clientId = newClient.id;
+        clientName = newClient.name;
+      }
+
+      // Generate new estimate number
+      const newEstimateNumber = await ReferenceNumberService.generateNextReference(userId, 'estimate');
+
+      // Set dates
+      const estimateDate = new_estimate_date || new Date().toISOString().split('T')[0];
+      let validUntil = originalEstimate.valid_until;
+      
+      // If we're changing the estimate date, recalculate valid_until based on original validity period
+      if (new_estimate_date && originalEstimate.valid_until && originalEstimate.estimate_date) {
+        const originalEstimateDate = new Date(originalEstimate.estimate_date);
+        const originalValidUntil = new Date(originalEstimate.valid_until);
+        const daysDiff = Math.round((originalValidUntil.getTime() - originalEstimateDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const newEstimateDateObj = new Date(estimateDate);
+        newEstimateDateObj.setDate(newEstimateDateObj.getDate() + daysDiff);
+        validUntil = newEstimateDateObj.toISOString().split('T')[0];
+      }
+
+      // Create the duplicated estimate
+      const { data: newEstimate, error: estimateError } = await supabase
+        .from('estimates')
+        .insert({
+          user_id: userId,
+          client_id: clientId,
+          estimate_number: newEstimateNumber,
+          status: 'draft', // Always start as draft
+          estimate_date: estimateDate,
+          valid_until: validUntil,
+          custom_headline: originalEstimate.custom_headline,
+          subtotal_amount: originalEstimate.subtotal_amount,
+          discount_type: originalEstimate.discount_type,
+          discount_value: originalEstimate.discount_value,
+          tax_percentage: originalEstimate.tax_percentage,
+          total_amount: originalEstimate.total_amount,
+          notes: originalEstimate.notes,
+          estimate_template: originalEstimate.estimate_template
+        })
+        .select('*')
+        .single();
+
+      if (estimateError) {
+        throw new Error(`Failed to create duplicated estimate: ${estimateError.message}`);
+      }
+
+      // Duplicate line items
+      if (originalEstimate.line_items && originalEstimate.line_items.length > 0) {
+        const lineItemsToInsert = originalEstimate.line_items.map((item: any) => ({
+          estimate_id: newEstimate.id,
+          user_id: userId,
+          item_name: item.item_name,
+          item_description: item.item_description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price
+        }));
+
+        const { error: lineItemsError } = await supabase
+          .from('estimate_line_items')
+          .insert(lineItemsToInsert);
+
+        if (lineItemsError) {
+          // If line items fail, clean up the estimate
+          await supabase.from('estimates').delete().eq('id', newEstimate.id);
+          throw new Error(`Failed to duplicate line items: ${lineItemsError.message}`);
+        }
+      }
+
+      const changesSummary = [];
+      if (new_client_name) changesSummary.push(`Client changed to "${clientName}"`);
+      if (new_estimate_date) changesSummary.push(`Date changed to ${new Date(estimateDate).toLocaleDateString()}`);
+      
+      return {
+        success: true,
+        data: {
+          estimate: {
+            ...newEstimate,
+            client_name: clientName
+          },
+          client_id: clientId,
+          line_items: originalEstimate.line_items || []
+        },
+        message: `✅ **Estimate duplicated successfully!**
+
+**Original:** ${estimate_number}
+**New:** ${newEstimateNumber}
+**Client:** ${clientName}
+**Total:** $${originalEstimate.total_amount?.toFixed(2) || '0.00'}
+
+${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}`).join('\n')}\n\n` : ''}The duplicated estimate is saved as a draft. Would you like me to help you send it or make any changes?`
+      };
+
+    } catch (error) {
+      console.error('Error duplicating estimate:', error);
+      return {
+        success: false,
+        message: 'Failed to duplicate estimate. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
   private static async duplicateClient(params: any, userId: string): Promise<FunctionResult> {
     try {
       const { client_name, new_client_name } = params;
@@ -5812,6 +6002,10 @@ The new client is ready to use for invoices!`
       
       if (isSubscribed) {
         console.log('[AI Usage Check] User is subscribed - unlimited access');
+        console.error('🎉🎉🎉 PREMIUM USER DETECTED - SHOULD ALLOW CREATION!!! 🎉🎉🎉');
+        console.error('🎉 USER:', userId);
+        console.error('🎉 SUBSCRIPTION TIER:', profile.subscription_tier);
+        console.error('🎉 RETURNING SUCCESS WITH UNLIMITED ACCESS');
         return {
           success: true,
           data: {

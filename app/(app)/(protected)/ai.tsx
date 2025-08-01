@@ -123,10 +123,16 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 					estimate_line_items(*)
 				`)
 				.eq('id', initialEstimate.id)
-				.single();
+				.maybeSingle();
 
 			if (error) {
 				console.error('[AI Estimate Preview] Error loading fresh estimate data:', error);
+				return;
+			}
+
+			// If estimate was deleted, gracefully handle it
+			if (!freshEstimateData) {
+				console.log('[AI Estimate Preview] Estimate no longer exists - it may have been deleted');
 				return;
 			}
 

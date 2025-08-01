@@ -39,7 +39,6 @@ import {
   RefreshCw,
   Bell,
   Share2,
-  BarChart3,
 } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
@@ -1812,48 +1811,6 @@ function InvoiceViewerScreen() {
     }
   };
 
-  const handleViewAnalytics = async () => {
-    moreOptionsSheetRef.current?.dismiss();
-    
-    if (!invoice || !user) {
-      Alert.alert('Error', 'Unable to view analytics at this time.');
-      return;
-    }
-
-    try {
-      const analytics = await InvoiceShareService.getShareAnalytics(invoice.id, user.id);
-      
-      if (!analytics) {
-        Alert.alert(
-          'No Share Data',
-          'This invoice hasn\'t been shared yet. Use "Generate Share Link" to create a trackable link.'
-        );
-        return;
-      }
-
-      const analyticsMessage = `
-📊 Invoice Analytics for ${invoice.invoice_number}
-
-👀 Total Views: ${analytics.totalViews}
-📥 Downloads: ${analytics.totalDownloads}
-🖨️ Prints: ${analytics.totalPrints}
-👥 Unique Visitors: ${analytics.uniqueVisitors}
-
-${analytics.lastViewed ? `Last Viewed: ${new Date(analytics.lastViewed).toLocaleDateString()}` : ''}
-${analytics.lastDownloaded ? `Last Downloaded: ${new Date(analytics.lastDownloaded).toLocaleDateString()}` : ''}
-
-${analytics.countries.length > 0 ? 
-  `\n🌍 Top Countries:\n${analytics.countries.slice(0, 3).map(c => `${c.country}: ${c.count} views`).join('\n')}` : ''
-}
-      `.trim();
-
-      Alert.alert('Invoice Analytics', analyticsMessage);
-
-    } catch (error) {
-      console.error('Error loading analytics:', error);
-      Alert.alert('Error', 'Failed to load analytics. Please try again.');
-    }
-  };
 
   const handleChangeDesign = () => {
     console.log('Customize pressed');
@@ -2463,7 +2420,7 @@ ${analytics.countries.length > 0 ?
       {/* More Options Bottom Sheet */}
       <BottomSheetModal
         ref={moreOptionsSheetRef}
-        snapPoints={['80%']}
+        snapPoints={['85%']}
         enablePanDownToClose={true}
         backdropComponent={(props) => (
           <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
@@ -2495,11 +2452,6 @@ ${analytics.countries.length > 0 ?
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
             
-            <MoreOptionItem
-              icon={BarChart3}
-              title="View Share Analytics"
-              onPress={handleViewAnalytics}
-            />
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
             
