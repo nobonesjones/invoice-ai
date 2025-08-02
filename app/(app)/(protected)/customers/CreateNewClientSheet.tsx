@@ -56,6 +56,8 @@ const CreateNewClientSheet = forwardRef<
 	const themeColors = isLightMode ? colors.light : colors.dark;
 
 	const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+	const scrollViewRef = useRef<any>(null);
+	const fullNameInputRef = useRef<any>(null);
 
 	const [fullName, setFullName] = useState(editMode && initialData ? initialData.name : "");
 	const [email, setEmail] = useState(editMode && initialData ? initialData.email || "" : "");
@@ -95,7 +97,15 @@ const CreateNewClientSheet = forwardRef<
 	}
 
 	React.useImperativeHandle(ref, () => ({
-		present: () => bottomSheetModalRef.current?.present(),
+		present: () => {
+			bottomSheetModalRef.current?.present();
+			// Auto-focus Full Name field when modal opens (for new clients only)
+			if (!editMode) {
+				setTimeout(() => {
+					fullNameInputRef.current?.focus();
+				}, 500);
+			}
+		},
 		dismiss: () => bottomSheetModalRef.current?.dismiss(),
 	}));
 
@@ -201,6 +211,16 @@ const CreateNewClientSheet = forwardRef<
 
 	const handleAddFromContacts = async () => {
 		try {
+			// Check if running in Expo Go
+			if (!Contacts.requestPermissionsAsync) {
+				Alert.alert(
+					'Feature Not Available',
+					'Contact access requires a development build. Please use manual entry instead.',
+					[{ text: 'OK' }]
+				);
+				return;
+			}
+			
 			// Request contacts permission
 			const { status } = await Contacts.requestPermissionsAsync();
 			if (status !== 'granted') {
@@ -286,7 +306,7 @@ const CreateNewClientSheet = forwardRef<
 		contentContainerStyle: {
 			paddingHorizontal: 20,
 			paddingTop: Platform.OS === "ios" ? 10 : 15,
-			paddingBottom: Platform.OS === "ios" ? 70 : 60,
+			paddingBottom: Platform.OS === "ios" ? 120 : 100,
 		},
 		addFromContactsButton: {
 			flexDirection: "row",
@@ -368,7 +388,7 @@ const CreateNewClientSheet = forwardRef<
 			borderRadius: 10,
 			alignItems: "center",
 			justifyContent: "center",
-			marginTop: 10,
+			marginTop: -1,
 		},
 		saveButtonDisabled: {
 			backgroundColor: themeColors.secondaryForeground,
@@ -445,6 +465,7 @@ const CreateNewClientSheet = forwardRef<
 			enablePanDownToClose={!isLoading}
 			keyboardBehavior="extend"
 			keyboardBlurBehavior="restore"
+			android_keyboardInputMode="adjustResize"
 			onDismiss={onClose}
 		>
 			<View style={styles.headerContainer}>
@@ -459,6 +480,7 @@ const CreateNewClientSheet = forwardRef<
 			</View>
 
 			<BottomSheetScrollView
+				ref={scrollViewRef}
 				style={styles.contentScrollView}
 				contentContainerStyle={styles.contentContainerStyle}
 			>
@@ -480,6 +502,7 @@ const CreateNewClientSheet = forwardRef<
 						</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
+								ref={fullNameInputRef}
 								style={styles.textInputStyled}
 								placeholder="e.g. John Doe"
 								placeholderTextColor={themeColors.mutedForeground}
@@ -487,6 +510,14 @@ const CreateNewClientSheet = forwardRef<
 								onChangeText={setFullName}
 								autoCapitalize="words"
 								editable={!isLoading}
+								onFocus={() => {
+									// Snap to higher position and scroll to show more content
+									bottomSheetModalRef.current?.snapToIndex(1); // Snap to 90%
+									setTimeout(() => {
+										// Scroll down to show Full Name and ensure Save button is visible
+										scrollViewRef.current?.scrollTo({ y: 80, animated: true });
+									}, 200);
+								}}
 							/>
 						</View>
 					</View>

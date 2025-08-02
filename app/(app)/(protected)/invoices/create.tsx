@@ -77,7 +77,7 @@ import { INVOICE_STATUSES, InvoiceStatus, getStatusConfig, isEditable } from '@/
 import { useInvoiceActivityLogger } from './components/useInvoiceActivityLogger';
 import { UsageService } from '@/services/usageService'; // Added UsageService import
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal'; // Added InvoicePreviewModal import
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+// import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'; // Removed to match estimates behavior
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Currency symbol mapping function
@@ -1744,13 +1744,12 @@ export default function CreateInvoiceScreen() {
   };
 
   return (
-    <BottomSheetModalProvider>
+      <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // Adjust offset if header is present
       >
-      <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
         <Stack.Screen
           options={{
             headerTitle: isEditMode ? 'Edit Invoice' : '', 
@@ -2134,9 +2133,8 @@ export default function CreateInvoiceScreen() {
           invoiceId={currentInvoiceId || undefined}
           onClose={() => setPreviewData(null)}
         />
+      </KeyboardAvoidingView>
       </SafeAreaView>
-    </KeyboardAvoidingView>
-    </BottomSheetModalProvider>
   );
 }
 

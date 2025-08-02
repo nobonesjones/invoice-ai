@@ -65,6 +65,16 @@ const NewClientSelectionSheet = forwardRef<
 
 	const handleAddFromContacts = async () => {
 		try {
+			// Check if running in Expo Go
+			if (!Contacts.requestPermissionsAsync) {
+				Alert.alert(
+					'Feature Not Available',
+					'Contact access requires a development build. Please use manual entry instead.',
+					[{ text: 'OK' }]
+				);
+				return;
+			}
+
 			// Request contacts permission
 			const { status } = await Contacts.requestPermissionsAsync();
 			if (status !== 'granted') {
