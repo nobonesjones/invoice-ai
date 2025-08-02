@@ -1299,18 +1299,10 @@ Use tools to take action. Reference previous conversation naturally.`;
         console.log(`[AssistantService] Tool ${functionName} completed in ${Date.now() - toolStartTime}ms`);
 
         // Extract attachments from successful function results
-        console.log('=== ASSISTANT SERVICE ATTACHMENT DEBUG ===');
-        console.log('Function name:', functionName);
-        console.log('Result success:', result.success);
-        console.log('Result data:', result.data);
-        console.log('Result attachments:', result.attachments);
-        console.log('Result keys:', Object.keys(result));
-        
         if (result.success && result.attachments && result.attachments.length > 0) {
-          console.log('✅ Adding attachments from result.attachments');
           attachments.push(...result.attachments);
         } else if (result.success && result.data) {
-          console.log('⚠️ Falling back to result.data');
+          // Some functions return data in result.data instead of result.attachments
           attachments.push(result.data);
         }
 

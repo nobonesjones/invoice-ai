@@ -1278,11 +1278,7 @@ export class InvoiceFunctionService {
           console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_ESTIMATE function called!');
           return await this.editRecentEstimate(parameters, userId);
         case 'check_usage_limits':
-          console.error('🚨🚨🚨 CHECK_USAGE_LIMITS CASE HIT!!! 🚨🚨🚨');
-          console.error('🚨 About to call checkUsageLimits with userId:', userId);
-          const result = await this.checkUsageLimits(userId);
-          console.error('🚨 checkUsageLimits result:', result);
-          return result;
+          return await this.checkUsageLimits(userId);
         case 'update_tax_settings':
           return await this.updateTaxSettings(parameters, userId);
         case 'get_tax_settings_navigation':
@@ -1538,8 +1534,6 @@ export class InvoiceFunctionService {
     const itemsHash = JSON.stringify(params.line_items || []).slice(0, 50);
     const deduplicationKey = `${userId}-${clientName}-${itemsHash}-${Date.now().toString().slice(-6)}`;
     
-    console.log(`[AI Invoice Create] Deduplication key: ${deduplicationKey}`);
-    
     // Check if there's already an ongoing creation for this user
     const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
     
@@ -1593,42 +1587,7 @@ export class InvoiceFunctionService {
 
   private static async createInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      // Check usage limit for free plan users
-      console.log('[AI Invoice Create] Checking usage limits...');
-      
-      // First check if user is subscribed
-      console.error('🔄 CREATE INVOICE - CHECKING SUBSCRIPTION STATUS 🔄');
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('id', userId)
-        .single();
-      
-      console.error('🔄 CREATE INVOICE - PROFILE RESULT:', profile);
-      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
-      console.error('🔄 CREATE INVOICE - IS SUBSCRIBED?', isSubscribed);
-      
-      // Only check limits for free users
-      if (!isSubscribed) {
-        console.error('❌ CREATE INVOICE - USER NOT SUBSCRIBED - CHECKING LIMITS ❌');
-        const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-        const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
-        console.error('❌ CREATE INVOICE - USAGE STATS:', { totalItems, limit: 3 });
-        
-        if (totalItems >= 3) {
-          console.log('[AI Invoice Create] User has reached free plan limit');
-          console.error('❌ CREATE INVOICE - LIMIT REACHED - BLOCKING CREATION ❌');
-          return {
-            success: false,
-            message: "I notice you've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access!",
-            error: 'Free plan limit reached'
-          };
-        }
-      } else {
-        console.error('✅ CREATE INVOICE - USER IS SUBSCRIBED - PROCEEDING ✅');
-      }
-      
-      console.log('[AI Invoice Create] Creating invoice...');
+      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
 
       // Step 0: Get user's business settings for default tax rate, design, and color
       let defaultTaxRate = 0;
@@ -4646,34 +4605,8 @@ The new client is ready to use for invoices!`
   // Estimate-specific methods
   private static async createEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('🚨 CREATE ESTIMATE FUNCTION CALLED!!! 🚨');
-      
-      // Check usage limit for free plan users
-      console.log('[AI Estimate Create] Checking usage limits...');
-      
-      // First check if user is subscribed
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('id', userId)
-        .single();
-      
-      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
-      
-      // Only check limits for free users
-      if (!isSubscribed) {
-        const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-        const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
-        
-        if (totalItems >= 3) {
-          console.log('[AI Estimate Create] User has reached free plan limit');
-          return {
-            success: false,
-            message: "I notice you've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access!",
-            error: 'Free plan limit reached'
-          };
-        }
-      }
+      console.log('[AI Estimate Create] Creating estimate for user:', userId);
+      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
       
       console.log('[AI Estimate Create] Creating estimate with params:', params);
       
@@ -5168,19 +5101,8 @@ The new client is ready to use for invoices!`
 
   private static async convertEstimateToInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      // Check usage limit for free plan users
-      console.log('[AI Estimate Convert] Checking usage limits...');
-      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-      const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
-      
-      if (totalItems >= 3) {
-        console.log('[AI Estimate Convert] User has reached free plan limit');
-        return {
-          success: false,
-          message: "I notice you've reached your free plan limit of 3 items. You'll need to upgrade to a premium plan to continue creating invoices and estimates. You can upgrade by tapping the upgrade button in your settings.",
-          error: 'Free plan limit reached'
-        };
-      }
+      console.log('[AI Estimate Convert] Converting estimate to invoice for user:', userId);
+      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
       
       const { estimate_number, payment_terms_days } = params;
 
@@ -5981,31 +5903,26 @@ The new client is ready to use for invoices!`
   }
 
   private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
-    console.error('🚨🚨🚨 CHECK USAGE LIMITS CALLED!!! 🚨🚨🚨');
-    console.error('🚨 USER ID:', userId);
-    console.error('🚨 TIMESTAMP:', new Date().toISOString());
     try {
-      console.log('[AI Usage Check] Checking user limits for userId:', userId);
-      
-      // First check if user is subscribed
+      // Check if user is subscribed
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('subscription_tier')
         .eq('id', userId)
         .single();
       
-      console.log('[AI Usage Check] Profile query result:', { profile, error: profileError });
-      console.log('[AI Usage Check] Profile subscription_tier:', profile?.subscription_tier);
+      if (profileError) {
+        console.error('[AI Usage Check] Error fetching profile:', profileError);
+        return {
+          success: false,
+          message: 'Unable to check subscription status. Please try again.',
+          error: 'Profile fetch failed'
+        };
+      }
       
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
-      console.log('[AI Usage Check] Is subscribed?', isSubscribed);
       
       if (isSubscribed) {
-        console.log('[AI Usage Check] User is subscribed - unlimited access');
-        console.error('🎉🎉🎉 PREMIUM USER DETECTED - SHOULD ALLOW CREATION!!! 🎉🎉🎉');
-        console.error('🎉 USER:', userId);
-        console.error('🎉 SUBSCRIPTION TIER:', profile.subscription_tier);
-        console.error('🎉 RETURNING SUCCESS WITH UNLIMITED ACCESS');
         return {
           success: true,
           data: {

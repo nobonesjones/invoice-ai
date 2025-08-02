@@ -73,7 +73,7 @@ export const useInvoiceDesign = (initialDesignId?: string, initialAccentColor?: 
       }
 
       setCurrentAccentColor(accentColor);
-      console.log('[useInvoiceDesign] Loaded design:', designId, 'color:', accentColor);
+      // console.log('[useInvoiceDesign] Loaded design:', designId, 'color:', accentColor);
 
     } catch (err: any) {
       console.error('Exception loading design preference:', err);
@@ -104,7 +104,7 @@ export const useInvoiceDesign = (initialDesignId?: string, initialAccentColor?: 
   const selectAccentColor = useCallback((color: string) => {
     setCurrentAccentColor(color);
     setError(null);
-    console.log('[useInvoiceDesign] Selected accent color:', color);
+    // console.log('[useInvoiceDesign] Selected accent color:', color);
   }, []);
 
   // Save design as user's default preference
@@ -224,7 +224,7 @@ export const useInvoiceDesignForInvoice = (
               setCurrentDesign(design);
             }
             setCurrentAccentColor(accentColor);
-            console.log(`[useInvoiceDesignForInvoice] Loaded invoice design: ${designId}, color: ${accentColor}`);
+            // console.log(`[useInvoiceDesignForInvoice] Loaded invoice design: ${designId}, color: ${accentColor}`);
             setIsLoading(false);
             return;
           }
@@ -259,7 +259,7 @@ export const useInvoiceDesignForInvoice = (
         }
 
         setCurrentAccentColor(accentColor);
-        console.log(`[useInvoiceDesignForInvoice] Loaded default design: ${designId}, color: ${accentColor}`);
+        // console.log(`[useInvoiceDesignForInvoice] Loaded default design: ${designId}, color: ${accentColor}`);
 
       } catch (err: any) {
         console.error('Exception loading invoice design:', err);
@@ -287,7 +287,7 @@ export const useInvoiceDesignForInvoice = (
   const selectAccentColor = useCallback((color: string) => {
     setCurrentAccentColor(color);
     setError(null);
-    console.log('[useInvoiceDesignForInvoice] Selected accent color:', color);
+    // console.log('[useInvoiceDesignForInvoice] Selected accent color:', color);
   }, []);
 
   // Save design and color to specific invoice
@@ -314,7 +314,7 @@ export const useInvoiceDesignForInvoice = (
         return false;
       }
 
-      console.log(`[useInvoiceDesignForInvoice] Saved invoice design: ${designId}, color: ${accentColor}`);
+      // console.log(`[useInvoiceDesignForInvoice] Saved invoice design: ${designId}, color: ${accentColor}`);
       return true;
 
     } catch (err: any) {
@@ -350,7 +350,7 @@ export const useInvoiceDesignForInvoice = (
         return false;
       }
 
-      console.log(`[useInvoiceDesignForInvoice] Updated default design: ${designId}, color: ${accentColor}`);
+      // console.log(`[useInvoiceDesignForInvoice] Updated default design: ${designId}, color: ${accentColor}`);
       return true;
 
     } catch (err: any) {

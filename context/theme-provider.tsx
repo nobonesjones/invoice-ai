@@ -40,7 +40,7 @@ interface ThemeProviderProps {
 
 // ThemeProvider component
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-	console.log("[ThemeProvider] Rendering..."); // Log on every render
+	// console.log("[ThemeProvider] Rendering..."); // Log on every render
 	const systemColorScheme = useColorScheme(); // 'light' or 'dark'
 	const { user, session, isLoading: isAuthLoading } = useSupabase(); // Get auth state
 
@@ -53,31 +53,31 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 	useEffect(() => {
 		// Wait for authentication status to be determined
 		if (isAuthLoading) {
-			console.log("[ThemeProvider Load] Waiting for auth state...");
+			// console.log("[ThemeProvider Load] Waiting for auth state...");
 			return;
 		}
 
 		const loadThemePreference = async () => {
 			if (!user || !session) {
 				// Not logged in: Use system preference
-				console.log(
-					"[ThemeProvider Load] User not logged in. Using system theme.",
-				);
+				// console.log(
+				//	"[ThemeProvider Load] User not logged in. Using system theme.",
+				// );
 				const systemIsLight = systemColorScheme === "light";
 				setIsLightMode(systemIsLight);
 				setThemePreferenceState("system");
 			} else {
 				// Logged in: Try loading saved preference
-				console.log(
-					"[ThemeProvider Load] User logged in. Loading saved preference...",
-				);
+				// console.log(
+				//	"[ThemeProvider Load] User logged in. Loading saved preference...",
+				// );
 				try {
 					const storedPreference =
 						await AsyncStorage.getItem("themePreference");
-					console.log(
-						"[ThemeProvider Load] AsyncStorage value:",
-						storedPreference,
-					);
+					// console.log(
+					//	"[ThemeProvider Load] AsyncStorage value:",
+					//	storedPreference,
+					// );
 					const initialPreference =
 						storedPreference === "light" ||
 						storedPreference === "dark" ||
@@ -85,10 +85,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 							? storedPreference
 							: "system";
 					setThemePreferenceState(initialPreference);
-					console.log(
-						"[ThemeProvider Load] Setting initialPreference state:",
-						initialPreference,
-					);
+					// console.log(
+					//	"[ThemeProvider Load] Setting initialPreference state:",
+					//	initialPreference,
+					// );
 
 					let lightMode;
 					if (initialPreference === "system") {
@@ -97,10 +97,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 						lightMode = initialPreference === "light";
 					}
 					setIsLightMode(lightMode);
-					console.log(
-						"[ThemeProvider Load] Setting initial isLightMode state:",
-						lightMode,
-					);
+					// console.log(
+					//	"[ThemeProvider Load] Setting initial isLightMode state:",
+					//	lightMode,
+					// );
 				} catch (error) {
 					console.error(
 						"[ThemeProvider Load] Failed to load theme preference:",
@@ -118,7 +118,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 	const setThemePreference = async (
 		preference: "light" | "dark" | "system",
 	) => {
-		console.log("[ThemeProvider] setThemePreference called with:", preference);
+		// console.log("[ThemeProvider] setThemePreference called with:", preference);
 		try {
 			await AsyncStorage.setItem("themePreference", preference);
 			setThemePreferenceState(preference);
@@ -130,7 +130,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 				lightMode = preference === "light";
 			}
 			setIsLightMode(lightMode);
-			console.log("[ThemeProvider] Updated isLightMode state to:", lightMode);
+			// console.log("[ThemeProvider] Updated isLightMode state to:", lightMode);
 		} catch (error) {
 			console.error(
 				"[ThemeProvider Save] Failed to save theme preference:",

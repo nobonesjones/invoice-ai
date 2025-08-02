@@ -69,20 +69,20 @@ function RootLayoutNav() {
 
 		const isInProtectedGroup = inAppProtectedRoute;
 
-		console.log("[Auth Effect] Running Effect..."); // Log start
-		console.log("[Auth Effect] Session:", session ? "Exists" : "null"); // Log session state
-		console.log("[Auth Effect] Segments:", JSON.stringify(segments)); // Log current route segments
-		console.log("[Auth Effect] inAuthGroup:", inAuthGroup); // Log if in auth group
-		console.log("[Auth Effect] inPublicGroup:", inPublicGroup); // Log if in public group
-		console.log("[Auth Effect] isInProtectedGroup:", isInProtectedGroup);
-    console.log("[Auth Effect] isAccountDetailsScreen:", isAccountDetailsScreen);
-    console.log("[Auth Effect] isBusinessInformationScreen:", isBusinessInformationScreen);
-    console.log("[Auth Effect] isInvoiceSettingsScreen:", isInvoiceSettingsScreen);
-    console.log("[Auth Effect] isTaxCurrencyScreen:", isTaxCurrencyScreen);
-    console.log("[Auth Effect] isAppLanguageScreen:", isAppLanguageScreen);
-    console.log("[Auth Effect] isCustomerSupportScreen:", isCustomerSupportScreen);
-    console.log("[Auth Effect] isPaymentOptionsScreen:", isPaymentOptionsScreen);
-    console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
+		// console.log("[Auth Effect] Running Effect..."); // Log start
+		// console.log("[Auth Effect] Session:", session ? "Exists" : "null"); // Log session state
+		// console.log("[Auth Effect] Segments:", JSON.stringify(segments)); // Log current route segments
+		// console.log("[Auth Effect] inAuthGroup:", inAuthGroup); // Log if in auth group
+		// console.log("[Auth Effect] inPublicGroup:", inPublicGroup); // Log if in public group
+		// console.log("[Auth Effect] isInProtectedGroup:", isInProtectedGroup);
+    // console.log("[Auth Effect] isAccountDetailsScreen:", isAccountDetailsScreen);
+    // console.log("[Auth Effect] isBusinessInformationScreen:", isBusinessInformationScreen);
+    // console.log("[Auth Effect] isInvoiceSettingsScreen:", isInvoiceSettingsScreen);
+    // console.log("[Auth Effect] isTaxCurrencyScreen:", isTaxCurrencyScreen);
+    // console.log("[Auth Effect] isAppLanguageScreen:", isAppLanguageScreen);
+    // console.log("[Auth Effect] isCustomerSupportScreen:", isCustomerSupportScreen);
+    // console.log("[Auth Effect] isPaymentOptionsScreen:", isPaymentOptionsScreen);
+    // console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
 
 		if (session && 
         !inAppProtectedRoute && 
@@ -98,7 +98,7 @@ function RootLayoutNav() {
       ) { 
 			// User is logged in but not in the main protected area OR any allowed app-level screens.
 			// Redirect to the main protected route (e.g., home screen).
-			console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
+			// console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
 			router.replace("/(app)/(protected)");
 		} else if (
 			!session &&
@@ -106,7 +106,7 @@ function RootLayoutNav() {
 		) {
 			// User is not logged in AND is not on any allowed auth/onboarding/welcome/public screen.
 			// Redirect to the start of the onboarding flow.
-			console.log("[Auth Effect] Redirecting to /(auth)/onboarding-1"); // Log redirection case 2
+			// console.log("[Auth Effect] Redirecting to /(auth)/onboarding-1"); // Log redirection case 2
 			router.replace("/(auth)/onboarding-1");
 		}
 	}, [initialized, session, segments]);

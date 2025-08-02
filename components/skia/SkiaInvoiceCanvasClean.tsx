@@ -53,40 +53,40 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
   };
   
   const documentTitle = getDocumentTitle();
-  console.log('[SkiaInvoiceCanvasClean] Rendering Clean Design');
+  // console.log('[SkiaInvoiceCanvasClean] Rendering Clean Design');
 
   // DEBUG: Add payment status logging
-  console.log('[SkiaInvoiceCanvas] Payment Debug Info:', {
-    invoice_id: invoice?.id,
-    invoice_number: invoice?.invoice_number,
-    paid_amount: invoice?.paid_amount,
-    payment_date: invoice?.payment_date,
-    payment_notes: invoice?.payment_notes,
-    status: invoice?.status,
-    total_amount: invoice?.total_amount
-  });
+  // console.log('[SkiaInvoiceCanvas] Payment Debug Info:', {
+  //   invoice_id: invoice?.id,
+  //   invoice_number: invoice?.invoice_number,
+  //   paid_amount: invoice?.paid_amount,
+  //   payment_date: invoice?.payment_date,
+  //   payment_notes: invoice?.payment_notes,
+  //   status: invoice?.status,
+  //   total_amount: invoice?.total_amount
+  // });
 
   // CANVAS DIMENSIONS - control export size by limiting Canvas dimensions
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  console.log('[SkiaInvoiceCanvas] DEBUG: devicePixelRatio =', devicePixelRatio);
+  // console.log('[SkiaInvoiceCanvas] DEBUG: devicePixelRatio =', devicePixelRatio);
   
   // Try larger canvas for better text quality
   const renderScale = 2; // 2x larger canvas for crisp text
   const baseCanvasWidth = renderSinglePage !== undefined ? (style?.width || 200) * renderScale : (style?.width || 370); // Respect style prop
   const baseCanvasHeight = renderSinglePage !== undefined ? (style?.height || 250) * renderScale : (style?.height || 560); // Respect style prop
   
-  console.log('[SkiaInvoiceCanvas] DEBUG - renderSinglePage:', renderSinglePage);
-  console.log('[SkiaInvoiceCanvas] DEBUG - style?.width:', style?.width);
-  console.log('[SkiaInvoiceCanvas] DEBUG - style?.height:', style?.height);
-  console.log('[SkiaInvoiceCanvas] DEBUG - baseCanvasWidth:', baseCanvasWidth);
-  console.log('[SkiaInvoiceCanvas] DEBUG - baseCanvasHeight:', baseCanvasHeight);
+  // console.log('[SkiaInvoiceCanvas] DEBUG - renderSinglePage:', renderSinglePage);
+  // console.log('[SkiaInvoiceCanvas] DEBUG - style?.width:', style?.width);
+  // console.log('[SkiaInvoiceCanvas] DEBUG - style?.height:', style?.height);
+  // console.log('[SkiaInvoiceCanvas] DEBUG - baseCanvasWidth:', baseCanvasWidth);
+  // console.log('[SkiaInvoiceCanvas] DEBUG - baseCanvasHeight:', baseCanvasHeight);
   
   // COORDINATE OFFSET: No offset needed for smaller Canvas
   const OFFSET_X = 0; // No left margin needed
   const OFFSET_RIGHT = 0; // No right margin needed  
   const USABLE_WIDTH = baseCanvasWidth;
   
-  console.log('[SkiaInvoiceCanvas] Canvas fix - Original:', baseCanvasWidth, 'Usable:', USABLE_WIDTH, 'Offset:', OFFSET_X);
+  // console.log('[SkiaInvoiceCanvas] Canvas fix - Original:', baseCanvasWidth, 'Usable:', USABLE_WIDTH, 'Offset:', OFFSET_X);
   
   const canvasWidth = baseCanvasWidth;
   
@@ -264,7 +264,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
   let showExportFooter = false;
   
   if (exportPageNumber) {
-    console.log(`[SkiaInvoiceCanvas] EXPORT MODE: Rendering page ${exportPageNumber} of ${totalPages}`);
+    // console.log(`[SkiaInvoiceCanvas] EXPORT MODE: Rendering page ${exportPageNumber} of ${totalPages}`);
     
     // Force standard single-page canvas size for export
     finalCanvasHeight = 560; // Standard single page height
@@ -285,35 +285,35 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
       exportRemainingItems = [];
       showExportFooter = (exportPageNumber === totalPages); // Only show footer on last page
       
-      console.log(`[SkiaInvoiceCanvas] EXPORT PAGE ${exportPageNumber}: items ${startIndex}-${endIndex}, showFooter=${showExportFooter}`);
+      // console.log(`[SkiaInvoiceCanvas] EXPORT PAGE ${exportPageNumber}: items ${startIndex}-${endIndex}, showFooter=${showExportFooter}`);
     }
   }
   
   
-  console.log(`[SkiaInvoiceCanvas] PAGINATION: Items=${totalItems}, IsTwoPage=${isTwoPageInvoice}, MaxFirst=${adjustedMaxItemsFirstPage}, Pages=${totalPages}, Compact=${isCompactMode}, Scale=${scaleFactor}`);
-  console.log(`[SkiaInvoiceCanvas] HEIGHT: base=${canvasHeight}, final=${totalCanvasHeight} (matching display exactly)`);
-  console.log(`[SkiaInvoiceCanvas] HEIGHT DEBUG:`, {
-    actualNeedsPagination,
-    totalPages,
-    canvasHeight,
-    separatorHeight,
-    calculation: actualNeedsPagination ? ((totalPages * canvasHeight) + separatorHeight + 30) : (totalItems >= 12 ? 800 : 560),
-    'totalPages * canvasHeight': totalPages * canvasHeight,
-    'final formula': `((${totalPages} * ${canvasHeight}) + ${separatorHeight} + 30) = ${((totalPages * canvasHeight) + separatorHeight + 30)}`
-  });
-  console.log(`[SkiaInvoiceCanvas] RENDER_SINGLE_PAGE: ${renderSinglePage}, actualNeedsPagination: ${actualNeedsPagination}, actualFirstPageItems: ${actualFirstPageItems.length}`);
-  console.log(`[SkiaInvoiceCanvas] PAGINATION DEBUG:`, {
-    availableSpaceFirstPage,
-    itemRowHeight,
-    maxItemsFirstPage,
-    scaledRowHeight,
-    itemsPerSubsequentPage,
-    totalItems,
-    actualRemainingItems: actualRemainingItems.length,
-    'footerStartY - firstItemY': footerStartY - firstItemY
-  });
-  console.log(`[SkiaInvoiceCanvas] BORDER: canvasWidth=${canvasWidth}, totalCanvasHeight=${totalCanvasHeight}, borderRect should be: x=10.5, y=10.5, width=${canvasWidth - 21}, height=${totalCanvasHeight - 21}`);
-  console.log(`[SkiaInvoiceCanvas] BORDER: canvasWidth=${canvasWidth}, totalCanvasHeight=${totalCanvasHeight}, borderRect: x=10.5, y=10.5, width=${canvasWidth - 21}, height=${totalCanvasHeight - 21}`);
+  // console.log(`[SkiaInvoiceCanvas] PAGINATION: Items=${totalItems}, IsTwoPage=${isTwoPageInvoice}, MaxFirst=${adjustedMaxItemsFirstPage}, Pages=${totalPages}, Compact=${isCompactMode}, Scale=${scaleFactor}`);
+  // console.log(`[SkiaInvoiceCanvas] HEIGHT: base=${canvasHeight}, final=${totalCanvasHeight} (matching display exactly)`);
+  // console.log(`[SkiaInvoiceCanvas] HEIGHT DEBUG:`, {
+  //   actualNeedsPagination,
+  //   totalPages,
+  //   canvasHeight,
+  //   separatorHeight,
+  //   calculation: actualNeedsPagination ? ((totalPages * canvasHeight) + separatorHeight + 30) : (totalItems >= 12 ? 800 : 560),
+  //   'totalPages * canvasHeight': totalPages * canvasHeight,
+  //   'final formula': `((${totalPages} * ${canvasHeight}) + ${separatorHeight} + 30) = ${((totalPages * canvasHeight) + separatorHeight + 30)}`
+  // });
+  // console.log(`[SkiaInvoiceCanvas] RENDER_SINGLE_PAGE: ${renderSinglePage}, actualNeedsPagination: ${actualNeedsPagination}, actualFirstPageItems: ${actualFirstPageItems.length}`);
+  // console.log(`[SkiaInvoiceCanvas] PAGINATION DEBUG:`, {
+  //   availableSpaceFirstPage,
+  //   itemRowHeight,
+  //   maxItemsFirstPage,
+  //   scaledRowHeight,
+  //   itemsPerSubsequentPage,
+  //   totalItems,
+  //   actualRemainingItems: actualRemainingItems.length,
+  //   'footerStartY - firstItemY': footerStartY - firstItemY
+  // });
+  // console.log(`[SkiaInvoiceCanvas] BORDER: canvasWidth=${canvasWidth}, totalCanvasHeight=${totalCanvasHeight}, borderRect should be: x=10.5, y=10.5, width=${canvasWidth - 21}, height=${totalCanvasHeight - 21}`);
+  // console.log(`[SkiaInvoiceCanvas] BORDER: canvasWidth=${canvasWidth}, totalCanvasHeight=${totalCanvasHeight}, borderRect: x=10.5, y=10.5, width=${canvasWidth - 21}, height=${totalCanvasHeight - 21}`);
 
   // Calculate discount values outside useMemo so they can be used in both places
   const hasDiscount = invoice?.discount_value && invoice?.discount_value > 0;
@@ -349,21 +349,22 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
             fontWeight: fontWeight as const,
           });
         } catch (e) {
-          console.log(`[SkiaInvoiceCanvas] Font ${fallbackFont} failed for ${fontSize}px ${fontWeight}:`, e);
+          // console.log(`[SkiaInvoiceCanvas] Font ${fallbackFont} failed for ${fontSize}px ${fontWeight}:`, e);
           continue;
         }
       }
 
       // If all fonts fail, try one last fallback without any font family
       try {
-        console.log(`[SkiaInvoiceCanvas] All fonts failed for ${fontSize}px ${fontWeight}, trying system default`);
+        // console.log(`[SkiaInvoiceCanvas] All fonts failed for ${fontSize}px ${fontWeight}, trying system default`);
         return matchFont({
           fontSize,
           fontStyle: "normal" as const,
           fontWeight: fontWeight as const,
         });
       } catch (e) {
-        console.log(`[SkiaInvoiceCanvas] Even system default failed, this might be a Skia issue:`, e);
+        // Keep critical error logs
+        console.log(`[SkiaInvoiceCanvas] CRITICAL ERROR: Font system failure`, e);
         return null;
       }
     };
@@ -416,21 +417,22 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
             fontWeight: fontWeight as const,
           });
         } catch (e) {
-          console.log(`[SkiaInvoiceCanvas] Scaled font ${fallbackFont} failed for ${fontSize}px ${fontWeight}:`, e);
+          // console.log(`[SkiaInvoiceCanvas] Scaled font ${fallbackFont} failed for ${fontSize}px ${fontWeight}:`, e);
           continue;
         }
       }
 
       // If all fonts fail, try one last fallback without any font family
       try {
-        console.log(`[SkiaInvoiceCanvas] All scaled fonts failed for ${fontSize}px ${fontWeight}, trying system default`);
+        // console.log(`[SkiaInvoiceCanvas] All scaled fonts failed for ${fontSize}px ${fontWeight}, trying system default`);
         return matchFont({
           fontSize: Math.round(fontSize * scaleFactor),
           fontStyle: "normal" as const,
           fontWeight: fontWeight as const,
         });
       } catch (e) {
-        console.log(`[SkiaInvoiceCanvas] Even system default failed for scaled font, this might be a Skia issue:`, e);
+        // Keep critical error logs
+        console.log(`[SkiaInvoiceCanvas] CRITICAL ERROR: Scaled font system failure`, e);
         return null;
       }
     };
@@ -824,12 +826,12 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
       // Payment status paragraphs (conditional - only if payment has been made)
       const hasPaidAmount = invoice?.paid_amount && invoice.paid_amount > 0;
       
-      console.log('[SkiaInvoiceCanvas] Payment Status Debug:', {
-        hasPaidAmount,
-        paid_amount: invoice?.paid_amount,
-        total_amount: invoice?.total_amount,
-        balance_due: (invoice?.total_amount || 0) - (invoice?.paid_amount || 0)
-      });
+      // console.log('[SkiaInvoiceCanvas] Payment Status Debug:', {
+      //   hasPaidAmount,
+      //   paid_amount: invoice?.paid_amount,
+      //   total_amount: invoice?.total_amount,
+      //   balance_due: (invoice?.total_amount || 0) - (invoice?.paid_amount || 0)
+      // });
       
       const paidLabelParagraph = hasPaidAmount ? Skia.ParagraphBuilder.Make({
         textAlign: TextAlign.Left,
@@ -914,7 +916,8 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
         balanceDueValueParagraph
       };
     } catch (e) {
-      console.log('Paragraph creation failed:', e);
+      // Keep critical error logs
+      console.log('[SkiaInvoiceCanvas] CRITICAL ERROR: Paragraph creation failed:', e);
       return null;
     }
   }, [scaledFonts, invoice, business, client, hasDiscount, discountAmount]);
@@ -940,7 +943,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
   };
 
   if (!scaledFonts.body || !scaledFonts.title || !scaledFonts.small) {
-    console.log('[SkiaInvoiceCanvas] Fonts not available, skipping render');
+    // console.log('[SkiaInvoiceCanvas] Fonts not available, skipping render');
     return <View style={[styles.container, style]} />;
   }
 
@@ -989,7 +992,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
   // Calculate footer positioning based on where line items actually end
   const lineItemsEndY = scaledFirstItemY + (actualFirstPageItems.length * scaledRowHeight) + 15; // 15px buffer
   const footerY = Math.max(lineItemsEndY, 350); // Minimum 350px to avoid overlap with meta section
-  console.log(`[SkiaInvoiceCanvas] POSITIONING: lineItemsEndY=${lineItemsEndY}, footerY=${footerY}, items=${actualFirstPageItems.length}`);
+  // console.log(`[SkiaInvoiceCanvas] POSITIONING: lineItemsEndY=${lineItemsEndY}, footerY=${footerY}, items=${actualFirstPageItems.length}`);
 
   // Calculate dynamic positioning for Payment Methods based on notes
   const notesLineCount = invoice?.notes ? invoice.notes.split('\n').filter(line => line.trim()).length : 0;

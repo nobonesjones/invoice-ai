@@ -49,21 +49,21 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	// Get the correct invoice design component based on estimate design type
 	const getEstimateDesignComponent = () => {
 		const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
-		console.log('[AI EstimatePreview] Selected design type for estimate:', designType);
+		// console.log('[AI EstimatePreview] Selected design type for estimate:', designType);
 		
 		switch (designType.toLowerCase()) {
 			case 'modern':
-				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasModern');
+				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasModern');
 				return SkiaInvoiceCanvasModern;
 			case 'clean':
-				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasClean');
+				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasClean');
 				return SkiaInvoiceCanvasClean;
 			case 'simple':
-				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasSimple');
+				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasSimple');
 				return SkiaInvoiceCanvasSimple;
 			case 'classic':
 			default:
-				console.log('[AI EstimatePreview] Using SkiaInvoiceCanvas (classic)');
+				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvas (classic)');
 				return SkiaInvoiceCanvas;
 		}
 	};
@@ -81,7 +81,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	useEffect(() => {
 		const handleAppStateChange = (nextAppState: string) => {
 			if (nextAppState === 'active') {
-				console.log('[AI Estimate Preview] App became active - refreshing data and client info');
+				// console.log('[AI Estimate Preview] App became active - refreshing data and client info');
 				loadFreshEstimateData();
 				loadFullClientData(); // Also refresh client data
 			}
@@ -96,7 +96,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	// Refresh when screen comes into focus (user navigates back to AI chat)
 	useFocusEffect(
 		React.useCallback(() => {
-			console.log('[AI Estimate Preview] Screen focused - refreshing data and client info');
+			// console.log('[AI Estimate Preview] Screen focused - refreshing data and client info');
 			loadFreshEstimateData();
 			loadFullClientData(); // Also refresh client data
 		}, [initialEstimate.id])
@@ -105,7 +105,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	// Periodic refresh for client data changes (useful when AI updates client info)
 	useEffect(() => {
 		const interval = setInterval(() => {
-			console.log('[AI Estimate Preview] Periodic client data refresh');
+			// console.log('[AI Estimate Preview] Periodic client data refresh');
 			loadFullClientData();
 		}, 10000); // Refresh client data every 10 seconds
 
@@ -114,7 +114,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 	const loadFreshEstimateData = async () => {
 		try {
-			console.log('[AI Estimate Preview] Loading fresh estimate data for ID:', initialEstimate.id);
+			// console.log('[AI Estimate Preview] Loading fresh estimate data for ID:', initialEstimate.id);
 			
 			const { data: freshEstimateData, error } = await supabase
 				.from('estimates')
@@ -132,17 +132,17 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 			// If estimate was deleted, gracefully handle it
 			if (!freshEstimateData) {
-				console.log('[AI Estimate Preview] Estimate no longer exists - it may have been deleted');
+				// console.log('[AI Estimate Preview] Estimate no longer exists - it may have been deleted');
 				return;
 			}
 
 			if (freshEstimateData) {
-				console.log('[AI Estimate Preview] Loaded fresh estimate data - template:', freshEstimateData.estimate_template, 'color:', freshEstimateData.accent_color);
+				// console.log('[AI Estimate Preview] Loaded fresh estimate data - template:', freshEstimateData.estimate_template, 'color:', freshEstimateData.accent_color);
 				
 				// Only update if design or color actually changed
 				if (freshEstimateData.estimate_template !== estimate.estimate_template || 
 					freshEstimateData.accent_color !== estimate.accent_color) {
-					console.log('[AI Estimate Preview] Design changed - updating preview');
+						// console.log('[AI Estimate Preview] Design changed - updating preview');
 					setEstimate(freshEstimateData);
 					
 					// Update line items if they changed
@@ -158,14 +158,14 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 	const loadFullClientData = async () => {
 		if (!client_id) {
-			console.log('[AI Estimate Preview] No client_id provided, clearing client data');
+			// console.log('[AI Estimate Preview] No client_id provided, clearing client data');
 			setFullClientData(null);
 			return;
 		}
 		
 		try {
-			console.log('[AI Estimate Preview] Loading full client data for client_id:', client_id);
-			console.log('[AI Estimate Preview] Estimate client_name for comparison:', estimate.client_name);
+			// console.log('[AI Estimate Preview] Loading full client data for client_id:', client_id);
+			// console.log('[AI Estimate Preview] Estimate client_name for comparison:', estimate.client_name);
 			
 			const { data: clientData, error } = await supabase
 				.from('clients')
@@ -177,7 +177,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 				console.error('Error loading client data:', error);
 				setFullClientData(null);
 			} else {
-				console.log('[AI Estimate Preview] Loaded full client data:', clientData);
+				// console.log('[AI Estimate Preview] Loaded full client data:', clientData);
 				setFullClientData(clientData);
 			}
 		} catch (error) {
@@ -188,7 +188,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 	const loadBusinessSettings = async () => {
 		try {
-			console.log('[AI Estimate Preview] Loading business settings for user:', estimate.user_id);
+			// console.log('[AI Estimate Preview] Loading business settings for user:', estimate.user_id);
 			
 			// Fetch actual business settings from the database
 			const { data: businessSettings, error } = await supabase
@@ -240,7 +240,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 				};
 				setBusinessSettings(defaultSettings);
 			} else {
-				console.log('[AI Estimate Preview] Loaded business settings:', businessSettings);
+				// console.log('[AI Estimate Preview] Loaded business settings:', businessSettings);
 				
 				// Map currency_code to currency_symbol
 				const currencySymbol = getCurrencySymbol(businessSettings.currency_code || 'USD');
@@ -492,7 +492,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 				documentType="estimate"
 				invoiceId={estimate?.id}
 				onSaveComplete={() => {
-					console.log('[AI Estimate Preview] Save completed - refreshing preview and client data');
+					// console.log('[AI Estimate Preview] Save completed - refreshing preview and client data');
 					loadFreshEstimateData();
 					loadFullClientData();
 				}}
@@ -521,21 +521,21 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Get the correct invoice design component based on invoice design type
 	const getInvoiceDesignComponent = () => {
 		const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-		console.log('[AI InvoicePreview] Selected design type for invoice:', designType);
+		// console.log('[AI InvoicePreview] Selected design type for invoice:', designType);
 		
 		switch (designType.toLowerCase()) {
 			case 'modern':
-				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasModern');
+				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasModern');
 				return SkiaInvoiceCanvasModern;
 			case 'clean':
-				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasClean');
+				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasClean');
 				return SkiaInvoiceCanvasClean;
 			case 'simple':
-				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasSimple');
+				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasSimple');
 				return SkiaInvoiceCanvasSimple;
 			case 'classic':
 			default:
-				console.log('[AI InvoicePreview] Using SkiaInvoiceCanvas (classic)');
+				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvas (classic)');
 				return SkiaInvoiceCanvas;
 		}
 	};
@@ -553,7 +553,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	useEffect(() => {
 		const handleAppStateChange = (nextAppState: string) => {
 			if (nextAppState === 'active') {
-				console.log('[AI Invoice Preview] App became active - refreshing data and client info');
+				// console.log('[AI Invoice Preview] App became active - refreshing data and client info');
 				loadFreshInvoiceData();
 				loadFullClientData(); // Also refresh client data
 			}
@@ -568,7 +568,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Refresh when screen comes into focus (user navigates back to AI chat)
 	useFocusEffect(
 		React.useCallback(() => {
-			console.log('[AI Invoice Preview] Screen focused - refreshing data and client info');
+			// console.log('[AI Invoice Preview] Screen focused - refreshing data and client info');
 			loadFreshInvoiceData();
 			loadFullClientData(); // Also refresh client data
 		}, [initialInvoice.id])
@@ -577,7 +577,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Periodic refresh for client data changes (useful when AI updates client info)
 	useEffect(() => {
 		const interval = setInterval(() => {
-			console.log('[AI Invoice Preview] Periodic client data refresh');
+			// console.log('[AI Invoice Preview] Periodic client data refresh');
 			loadFullClientData();
 		}, 10000); // Refresh client data every 10 seconds
 
@@ -586,7 +586,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 
 	const loadFreshInvoiceData = async () => {
 		try {
-			console.log('[AI Invoice Preview] Loading fresh invoice data for ID:', initialInvoice.id);
+			// console.log('[AI Invoice Preview] Loading fresh invoice data for ID:', initialInvoice.id);
 			
 			const { data: freshInvoiceData, error } = await supabase
 				.from('invoices')
@@ -603,12 +603,12 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			}
 
 			if (freshInvoiceData) {
-				console.log('[AI Invoice Preview] Loaded fresh invoice data - design:', freshInvoiceData.invoice_design, 'color:', freshInvoiceData.accent_color);
+				// console.log('[AI Invoice Preview] Loaded fresh invoice data - design:', freshInvoiceData.invoice_design, 'color:', freshInvoiceData.accent_color);
 				
 				// Only update if design or color actually changed
 				if (freshInvoiceData.invoice_design !== invoice.invoice_design || 
 					freshInvoiceData.accent_color !== invoice.accent_color) {
-					console.log('[AI Invoice Preview] Design changed - updating preview');
+						// console.log('[AI Invoice Preview] Design changed - updating preview');
 					setInvoice(freshInvoiceData);
 					
 					// Update line items if they changed
@@ -624,14 +624,14 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 
 	const loadFullClientData = async () => {
 		if (!client_id) {
-			console.log('[AI Invoice Preview] No client_id provided, clearing client data');
+			// console.log('[AI Invoice Preview] No client_id provided, clearing client data');
 			setFullClientData(null);
 			return;
 		}
 		
 		try {
-			console.log('[AI Invoice Preview] Loading full client data for client_id:', client_id);
-			console.log('[AI Invoice Preview] Invoice client_name for comparison:', invoice.client_name);
+			// console.log('[AI Invoice Preview] Loading full client data for client_id:', client_id);
+			// console.log('[AI Invoice Preview] Invoice client_name for comparison:', invoice.client_name);
 			
 			const { data: clientData, error } = await supabase
 				.from('clients')
@@ -644,8 +644,8 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				// If we can't load client data, clear it to force fallback to invoice data
 				setFullClientData(null);
 			} else {
-				console.log('[AI Invoice Preview] Loaded full client data:', clientData);
-				console.log('[AI Invoice Preview] DB client name vs invoice client name:', clientData.name, 'vs', invoice.client_name);
+				// console.log('[AI Invoice Preview] Loaded full client data:', clientData);
+				// console.log('[AI Invoice Preview] DB client name vs invoice client name:', clientData.name, 'vs', invoice.client_name);
 				setFullClientData(clientData);
 			}
 		} catch (error) {
@@ -657,7 +657,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 
 	const loadBusinessSettings = async () => {
 		try {
-			console.log('[AI Invoice Preview] Loading business settings for user:', invoice.user_id);
+			// console.log('[AI Invoice Preview] Loading business settings for user:', invoice.user_id);
 			
 			// Fetch actual business settings from the database
 			const { data: businessSettings, error } = await supabase
@@ -710,7 +710,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				setBusinessSettings(defaultSettings);
 			} else {
 				// Use actual business settings from database
-				console.log('[AI Invoice Preview] Loaded business settings:', businessSettings);
+				// console.log('[AI Invoice Preview] Loaded business settings:', businessSettings);
 				
 				// Map currency_code to currency_symbol
 				const currencySymbol = getCurrencySymbol(businessSettings.currency_code || 'USD');
@@ -734,7 +734,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					show_notes_section: businessSettings.show_notes_section ?? true,
 				};
 				
-				console.log('[AI Invoice Preview] Using currency symbol:', currencySymbol, 'for currency:', businessSettings.currency_code);
+				// console.log('[AI Invoice Preview] Using currency symbol:', currencySymbol, 'for currency:', businessSettings.currency_code);
 				setBusinessSettings(enhancedSettings);
 			}
 		} catch (error) {
@@ -807,17 +807,17 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	};
 
 	// DEBUG: Log the invoice data to see what fields are available
-	console.log('[AI Invoice Preview] Available invoice fields:', Object.keys(invoice));
-	console.log('[AI Invoice Preview] Full invoiceData structure:', invoiceData);
-	console.log('[AI Invoice Preview] Invoice data:', {
-		client_name: invoice.client_name,
-		client_email: invoice.client_email,
-		client_phone: invoice.client_phone,
-		client_address: invoice.client_address,
-		client_tax_number: invoice.client_tax_number,
-		all_client_fields: Object.keys(invoice).filter(key => key.startsWith('client_'))
-	});
-	console.log('[AI Invoice Preview] client_id from invoiceData:', client_id);
+	// console.log('[AI Invoice Preview] Available invoice fields:', Object.keys(invoice));
+	// console.log('[AI Invoice Preview] Full invoiceData structure:', invoiceData);
+	// console.log('[AI Invoice Preview] Invoice data:', {
+	//	client_name: invoice.client_name,
+	//	client_email: invoice.client_email,
+	//	client_phone: invoice.client_phone,
+	//	client_address: invoice.client_address,
+	//	client_tax_number: invoice.client_tax_number,
+	//	all_client_fields: Object.keys(invoice).filter(key => key.startsWith('client_'))
+	// });
+	// console.log('[AI Invoice Preview] client_id from invoiceData:', client_id);
 
 	// Transform data for our modal - separate client from invoice like the invoice viewer
 	const transformedInvoice = {
@@ -855,8 +855,8 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	}
 
 	// DEBUG: Log the transformed client to see what we're passing
-	console.log('[AI Invoice Preview] Transformed client:', transformedClient);
-	console.log('[AI Invoice Preview] Using full client data:', !!fullClientData);
+	// console.log('[AI Invoice Preview] Transformed client:', transformedClient);
+	// console.log('[AI Invoice Preview] Using full client data:', !!fullClientData);
 
 	const handleTapToView = () => {
 		invoicePreviewModalRef.current?.present();
@@ -977,7 +977,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				clientData={transformedClient}
 				invoiceId={invoice?.id}
 				onSaveComplete={() => {
-					console.log('[AI Invoice Preview] Save completed - refreshing preview and client data');
+					// console.log('[AI Invoice Preview] Save completed - refreshing preview and client data');
 					loadFreshInvoiceData();
 					loadFullClientData();
 				}}
@@ -991,7 +991,7 @@ const ClientPreview = ({ clientData, theme, router }: { clientData: any; theme: 
 	const { client } = clientData;
 	
 	const handleClientTap = () => {
-		console.log('Client tap - navigate to client:', client.id);
+		// console.log('Client tap - navigate to client:', client.id);
 		router.push(`/customers/${client.id}`);
 	};
 
@@ -1111,7 +1111,7 @@ export default function AiScreen() {
 		if (!user?.id) return;
 		
 		try {
-			console.log('[AI Screen] Loading business settings for currency context...');
+			// console.log('[AI Screen] Loading business settings for currency context...');
 			
 			const { data: settings, error } = await supabase
 				.from('business_settings')
@@ -1120,7 +1120,7 @@ export default function AiScreen() {
 				.single();
 
 			if (error) {
-				console.log('[AI Screen] No business settings found, using default USD');
+				// console.log('[AI Screen] No business settings found, using default USD');
 				// Default to USD if no settings found
 				const defaultSettings: BusinessSettingsRow & {
 					currency: string;
@@ -1194,7 +1194,7 @@ export default function AiScreen() {
 					show_notes_section: settings.show_notes_section ?? true,
 				};
 				
-				console.log('[AI Screen] Loaded currency:', enhancedSettings.currency, 'symbol:', currencySymbol);
+				// console.log('[AI Screen] Loaded currency:', enhancedSettings.currency, 'symbol:', currencySymbol);
 				setBusinessSettings(enhancedSettings);
 			}
 		} catch (error) {
@@ -1209,9 +1209,9 @@ export default function AiScreen() {
 			await loadBusinessSettings();
 			
 			// Test OpenAI configuration
-			console.log('[AI Screen] Testing OpenAI configuration...');
+			// console.log('[AI Screen] Testing OpenAI configuration...');
 			const isConfigured = OpenAIService.isConfigured();
-			console.log('[AI Screen] OpenAI configured:', isConfigured);
+			// console.log('[AI Screen] OpenAI configured:', isConfigured);
 			
 			if (!isConfigured) {
 				setShowSetupMessage(true);
@@ -1336,7 +1336,7 @@ export default function AiScreen() {
 		setInputText('');
 
 		try {
-			console.log('[AI Screen] Sending message via useAIChat...');
+			// console.log('[AI Screen] Sending message via useAIChat...');
 			
 			// Prepare currency context if business settings are loaded
 			const currencyContext = businessSettings ? {
@@ -1346,7 +1346,7 @@ export default function AiScreen() {
 
 			await sendMessage(messageToSend, currencyContext);
 			
-			console.log('[AI Screen] Message sent successfully');
+			// console.log('[AI Screen] Message sent successfully');
 		} catch (error) {
 			console.error('[AI Screen] Failed to send message:', error);
 			// Restore the text on error so user can retry
@@ -1356,12 +1356,12 @@ export default function AiScreen() {
 
 	const handleRefresh = async () => {
 		try {
-			console.log('[AI Screen] Clearing conversation and starting fresh...');
+			// console.log('[AI Screen] Clearing conversation and starting fresh...');
 			
 			// Clear the conversation and start fresh
 			await clearConversation();
 			
-			console.log('[AI Screen] New conversation ready');
+			// console.log('[AI Screen] New conversation ready');
 		} catch (error) {
 			console.error('[AI Screen] Failed to clear conversation:', error);
 			Alert.alert('Error', 'Failed to clear conversation');
@@ -1370,16 +1370,16 @@ export default function AiScreen() {
 
 	// Handle voice transcription
 	const handleTranscript = (transcript: string) => {
-		console.log('[AI Screen] Received transcript:', transcript);
+		// console.log('[AI Screen] Received transcript:', transcript);
 		setInputText(transcript);
 		setIsTranscribing(false);
 	};
 
 	const handleRecordingStateChange = (recording: boolean) => {
-		console.log('[AI Screen] Recording state changed:', recording);
-		console.log('[AI Screen] Previous isRecording state:', isRecording);
+		// console.log('[AI Screen] Recording state changed:', recording);
+		// console.log('[AI Screen] Previous isRecording state:', isRecording);
 		setIsRecording(recording);
-		console.log('[AI Screen] New isRecording state will be:', recording);
+		// console.log('[AI Screen] New isRecording state will be:', recording);
 		
 		// Reset listening dots when recording stops
 		if (!recording) {
@@ -1388,7 +1388,7 @@ export default function AiScreen() {
 	};
 
 	const handleProcessing = (processing: boolean) => {
-		console.log('[AI Screen] Processing state changed:', processing);
+		// console.log('[AI Screen] Processing state changed:', processing);
 		setIsTranscribing(processing);
 	};
 
@@ -1496,17 +1496,17 @@ export default function AiScreen() {
 	}, []);
 
 	const handleCancelRecording = async () => {
-		console.log('[AI Screen] Cancel recording button pressed');
-		console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
-		console.log('[AI Screen] Available methods:', transcribeButtonRef.current ? Object.keys(transcribeButtonRef.current) : 'none');
+		// console.log('[AI Screen] Cancel recording button pressed');
+		// console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
+		// console.log('[AI Screen] Available methods:', transcribeButtonRef.current ? Object.keys(transcribeButtonRef.current) : 'none');
 		
 		try {
 			if (transcribeButtonRef.current) {
-				console.log('[AI Screen] Calling cancelRecording...');
+				// console.log('[AI Screen] Calling cancelRecording...');
 				await transcribeButtonRef.current.cancelRecording();
-				console.log('[AI Screen] Cancel recording completed');
+				// console.log('[AI Screen] Cancel recording completed');
 			} else {
-				console.log('[AI Screen] TranscribeButton ref not available');
+				// console.log('[AI Screen] TranscribeButton ref not available');
 			}
 		} catch (error) {
 			console.error('[AI Screen] Error canceling recording:', error);
@@ -1514,28 +1514,28 @@ export default function AiScreen() {
 	};
 
 	const handleFinishRecording = async () => {
-		console.log('[AI Screen] Finish recording button pressed');
-		console.log('[AI Screen] Current isRecording state:', isRecording);
-		console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
-		console.log('[AI Screen] Available methods:', transcribeButtonRef.current ? Object.keys(transcribeButtonRef.current) : 'none');
+		// console.log('[AI Screen] Finish recording button pressed');
+		// console.log('[AI Screen] Current isRecording state:', isRecording);
+		// console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
+		// console.log('[AI Screen] Available methods:', transcribeButtonRef.current ? Object.keys(transcribeButtonRef.current) : 'none');
 		
 		try {
 			if (transcribeButtonRef.current) {
-				console.log('[AI Screen] Calling stopRecording...');
+				// console.log('[AI Screen] Calling stopRecording...');
 				await transcribeButtonRef.current.stopRecording();
-				console.log('[AI Screen] Finish recording completed');
+				// console.log('[AI Screen] Finish recording completed');
 				
 				// Force UI update in case the callback doesn't fire
 				setTimeout(() => {
-					console.log('[AI Screen] Force checking recording state after stop...');
+					// console.log('[AI Screen] Force checking recording state after stop...');
 					if (isRecording) {
-						console.log('[AI Screen] Recording state still true, forcing to false');
+						// console.log('[AI Screen] Recording state still true, forcing to false');
 						setIsRecording(false);
 						setListeningDots(1);
 					}
 				}, 100);
 			} else {
-				console.log('[AI Screen] TranscribeButton ref not available');
+				// console.log('[AI Screen] TranscribeButton ref not available');
 			}
 		} catch (error) {
 			console.error('[AI Screen] Error finishing recording:', error);
@@ -1653,19 +1653,19 @@ export default function AiScreen() {
 									{message.role === 'assistant' && (message as any).attachments && (message as any).attachments.length > 0 && (
 										(message as any).attachments.map((attachment: any, index: number) => {
 										// DEBUG LOGGING
-										console.log('=== ATTACHMENT DEBUG ===');
-										console.log('Message ID:', message.id);
-										console.log('Attachment index:', index);
-										console.log('Attachment keys:', Object.keys(attachment || {}));
-										console.log('Has attachment.invoice:', !!attachment?.invoice);
-										console.log('Has attachment.line_items:', !!attachment?.line_items);
-										console.log('Has attachment.estimate:', !!attachment?.estimate);
-										console.log('Attachment type:', attachment?.type);
-										console.log('Full attachment:', JSON.stringify(attachment, null, 2));
+										// console.log('=== ATTACHMENT DEBUG ===');
+										// console.log('Message ID:', message.id);
+										// console.log('Attachment index:', index);
+										// console.log('Attachment keys:', Object.keys(attachment || {}));
+										// console.log('Has attachment.invoice:', !!attachment?.invoice);
+										// console.log('Has attachment.line_items:', !!attachment?.line_items);
+										// console.log('Has attachment.estimate:', !!attachment?.estimate);
+										// console.log('Attachment type:', attachment?.type);
+										// console.log('Full attachment:', JSON.stringify(attachment, null, 2));
 										
 										// Check if attachment has invoice data
 										if (attachment && attachment.invoice && attachment.line_items) {
-											console.log('✅ Rendering InvoicePreview');
+											// console.log('✅ Rendering InvoicePreview');
 											return (
 												<InvoicePreview 
 														key={`invoice-${index}`}
@@ -1677,7 +1677,7 @@ export default function AiScreen() {
 										
 										// Check if attachment has estimate data
 										if (attachment && attachment.estimate && attachment.line_items) {
-											console.log('✅ Rendering EstimatePreview');
+											// console.log('✅ Rendering EstimatePreview');
 											return (
 												<EstimatePreview 
 													key={`estimate-${index}`}
@@ -1870,9 +1870,9 @@ export default function AiScreen() {
 										{/* Visible Voice Transcribe Button - for quick transcription */}
 										<TouchableOpacity
 											onPress={() => {
-												console.log('[AI Screen] Visible mic button pressed');
-												console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
-												console.log('[AI Screen] Current isRecording state:', isRecording);
+												// console.log('[AI Screen] Visible mic button pressed');
+												// console.log('[AI Screen] transcribeButtonRef.current:', !!transcribeButtonRef.current);
+												// console.log('[AI Screen] Current isRecording state:', isRecording);
 												if (!aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 												}
@@ -1897,11 +1897,11 @@ export default function AiScreen() {
 									<View style={{ flex: 1, alignItems: 'center' }}>
 										<TouchableOpacity
 											onPress={() => {
-												console.log('[AI Screen] Send button pressed');
-												console.log('[AI Screen] inputText.trim():', !!inputText.trim());
-												console.log('[AI Screen] aiIsLoading:', aiIsLoading);
-												console.log('[AI Screen] showSetupMessage:', showSetupMessage);
-												console.log('[AI Screen] Button disabled:', !inputText.trim() || aiIsLoading || showSetupMessage);
+												// console.log('[AI Screen] Send button pressed');
+												// console.log('[AI Screen] inputText.trim():', !!inputText.trim());
+												// console.log('[AI Screen] aiIsLoading:', aiIsLoading);
+												// console.log('[AI Screen] showSetupMessage:', showSetupMessage);
+												// console.log('[AI Screen] Button disabled:', !inputText.trim() || aiIsLoading || showSetupMessage);
 												if (inputText.trim() && !aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 												}

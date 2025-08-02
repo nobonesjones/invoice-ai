@@ -33,7 +33,6 @@ export class ChatService {
     // For now, enable for all users. Later you can add user-specific logic
     // or environment variables for gradual rollout
     const shouldUse = true;
-    console.log('[ChatService] shouldUseAssistants result:', shouldUse);
     return shouldUse;
     
     // Example for gradual rollout:
@@ -52,7 +51,6 @@ export class ChatService {
       const useAssistants = await this.shouldUseAssistants(userId);
       
       if (useAssistants) {
-        console.log('[ChatService] Using Assistants API');
         try {
           return await this.processWithAssistants(userId, userMessage, currencyContext, statusCallback);
         } catch (assistantError) {
@@ -61,7 +59,6 @@ export class ChatService {
           return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
         }
       } else {
-        console.log('[ChatService] Using Chat Completions API');
         return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
       }
     } catch (error) {
@@ -78,7 +75,6 @@ export class ChatService {
     statusCallback?: (status: string) => void
   ): Promise<{ thread: any; messages: any[] }> {
     try {
-      console.log('[ChatService] Starting processWithAssistants...');
       
       // Check if Assistants API is configured
       if (!AssistantService.isConfigured()) {
@@ -86,24 +82,17 @@ export class ChatService {
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
-      console.log('[ChatService] AssistantService is configured, proceeding...');
       statusCallback?.('SuperAI is preparing...');
 
       // Send message via Assistants API with currency context and status updates
       const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext, statusCallback);
 
-      console.log('[ChatService] AssistantService.sendMessage completed successfully');
       statusCallback?.('SuperAI is finalizing response...');
 
       // Get updated messages for UI
       const messages = await AssistantService.getThreadMessages(userId);
       const thread = await AssistantService.getCurrentThread(userId);
 
-      console.log('[ChatService] Assistants API result:', {
-        status: result.status,
-        content: result.content.substring(0, 100) + '...',
-        messagesCount: messages.length
-      });
 
       return {
         thread,
@@ -118,14 +107,6 @@ export class ChatService {
             created_at: msg.created_at
           };
           
-          // DEBUG LOGGING for attachments
-          if (msg.attachments && msg.attachments.length > 0) {
-            console.log('=== CHATSERVICE MESSAGE MAPPING DEBUG ===');
-            console.log('Message ID:', msg.id);
-            console.log('Role:', msg.role);
-            console.log('Original attachments:', JSON.stringify(msg.attachments, null, 2));
-            console.log('Mapped attachments:', JSON.stringify(mappedMessage.attachments, null, 2));
-          }
           
           return mappedMessage;
         })
@@ -167,7 +148,6 @@ export class ChatService {
         allPreviousMessages.slice(0, -1) // Exclude the just-saved user message
       );
 
-      console.log('[ChatService] Conversation history length:', conversationHistory.length);
 
       // Get user name for personalization
       const userName = await this.getUserName(userId);
@@ -193,7 +173,6 @@ export class ChatService {
             userId
           );
 
-          console.log('[ChatService] Function result:', functionResult);
 
           // Save function call and result messages
           await this.saveMessage(
@@ -283,7 +262,6 @@ export class ChatService {
   }
 
   static async getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
-    console.log('[ChatService] Getting messages for conversation:', conversationId);
     
     const { data: messages, error } = await supabase
       .from('chat_messages')
@@ -299,9 +277,6 @@ export class ChatService {
     // Filter out function call messages from user display - they're internal only
     const filteredMessages = (messages || []).filter(msg => msg.role !== 'function');
     
-    console.log('[ChatService] Retrieved messages from DB:', messages?.length || 0);
-    console.log('[ChatService] After filtering:', filteredMessages.length);
-    console.log('[ChatService] Message roles:', filteredMessages.map(m => m.role));
 
     return filteredMessages;
   }
@@ -348,8 +323,6 @@ export class ChatService {
         content: msg.content
       }));
 
-    console.log('[ChatService] Converting messages to OpenAI format:');
-    console.log(`[ChatService] Input: ${messages.length} messages, Output: ${converted.length} messages`);
     
     return converted;
   }
