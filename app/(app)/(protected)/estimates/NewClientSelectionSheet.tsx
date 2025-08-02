@@ -294,17 +294,6 @@ const NewClientSelectionSheet = forwardRef<
 			<View style={styles.actionButtonsContainer}>
 				<TouchableOpacity
 					style={styles.actionButton}
-					onPress={handleAddFromContacts}
-				>
-					<PlusCircle
-						size={20}
-						color={themeColors.primary}
-						style={styles.actionButtonIcon}
-					/>
-					<Text style={styles.actionButtonText}>Add from Device Contacts</Text>
-				</TouchableOpacity>
-				<TouchableOpacity
-					style={styles.actionButton}
 					onPress={() => createNewClientSheetRef.current?.present()}
 				>
 					<UserPlus
@@ -313,6 +302,17 @@ const NewClientSelectionSheet = forwardRef<
 						style={styles.actionButtonIcon}
 					/>
 					<Text style={styles.actionButtonText}>Create New Client</Text>
+				</TouchableOpacity>
+				<TouchableOpacity
+					style={styles.actionButton}
+					onPress={handleAddFromContacts}
+				>
+					<PlusCircle
+						size={20}
+						color={themeColors.primary}
+						style={styles.actionButtonIcon}
+					/>
+					<Text style={styles.actionButtonText}>Add from Device Contacts</Text>
 				</TouchableOpacity>
 
 				{/* Create New Client Sheet Modal */}

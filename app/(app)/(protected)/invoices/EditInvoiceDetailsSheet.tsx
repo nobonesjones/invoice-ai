@@ -72,6 +72,14 @@ const EditInvoiceDetailsSheet = forwardRef<
 	const [invoiceNumber, setInvoiceNumber] = useState(
 		initialDetails?.invoiceNumber || "",
 	);
+	
+	// Update state when initialDetails changes
+	React.useEffect(() => {
+		if (initialDetails?.invoiceNumber && initialDetails.invoiceNumber !== invoiceNumber) {
+			console.log('[EditInvoiceDetailsSheet] Updating invoice number from:', invoiceNumber, 'to:', initialDetails.invoiceNumber);
+			setInvoiceNumber(initialDetails.invoiceNumber);
+		}
+	}, [initialDetails?.invoiceNumber]);
 	const initialCreationDate = initialDetails?.creationDate
 		? typeof initialDetails.creationDate === "string"
 			? parseISO(initialDetails.creationDate)

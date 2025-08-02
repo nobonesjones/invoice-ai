@@ -44,11 +44,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft } from 'lucide-react-native';
+import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft, Palette } from 'lucide-react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { addDays } from 'date-fns';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { Controller, useForm } from 'react-hook-form';
 import { useSupabase } from '@/context/supabase-provider';
 import { SwipeListView } from 'react-native-swipe-list-view';
@@ -65,7 +66,6 @@ import { NewItemData } from './AddNewItemFormSheet';
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet';
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from './EditInvoiceTaxSheet';
 import EditEstimateDetailsSheet, { EditEstimateDetailsSheetRef, EstimateDetailsData } from './EditEstimateDetailsSheet';
-import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Currency symbol mapping function
@@ -389,6 +389,47 @@ export default function CreateEstimateScreen() {
   const [isNewClientSelectionSheetOpen, setIsNewClientSelectionSheetOpen] = useState(false);
   const [isSelectDiscountTypeSheetOpen, setIsSelectDiscountTypeSheetOpen] = useState(false);
   const [isEditInvoiceTaxSheetOpen, setIsEditInvoiceTaxSheetOpen] = useState(false);
+  
+  // State for global tax settings
+  const [globalTaxRatePercent, setGlobalTaxRatePercent] = useState<number | null>(null);
+  const [globalTaxName, setGlobalTaxName] = useState<string | null>(null);
+  const [isLoadingTaxSettings, setIsLoadingTaxSettings] = useState<boolean>(true);
+  
+  // Effect to fetch global tax settings
+  useEffect(() => {
+    if (!user || !supabase) {
+      setIsLoadingTaxSettings(false);
+      return;
+    }
+    const fetchGlobalTaxSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('business_settings')
+          .select('default_tax_rate, tax_name, currency_code')
+          .eq('user_id', user.id)
+          .single();
+        if (error) {
+          console.error('Error fetching business_settings:', error);
+        } else if (data) {
+          console.log('Fetched business_settings:', data);
+          setGlobalTaxName(data.tax_name || null);
+          // Ensure default_tax_rate is treated as a number
+          const rate = data.default_tax_rate;
+          if (rate !== null && rate !== undefined) {
+            setGlobalTaxRatePercent(parseFloat(String(rate)));
+          } else {
+            setGlobalTaxRatePercent(null);
+          }
+          setCurrencyCode(data.currency_code || 'USD'); // Store currency code in state
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching global tax settings:', error);
+      } finally {
+        setIsLoadingTaxSettings(false);
+      }
+    };
+    fetchGlobalTaxSettings();
+  }, [user, supabase]);
   const [isAddNewItemFormSheetOpen, setIsAddNewItemFormSheetOpen] = useState(false);
   const [formUpdateKey, setFormUpdateKey] = useState(0); // Force re-render key
 
@@ -1161,9 +1202,115 @@ export default function CreateEstimateScreen() {
     }, 100);
   };
 
-  const handleChangeDesign = () => {
-    console.log('[handleChangeDesign] Button pressed - testing functionality');
-    Alert.alert('Design Change', 'Change Design button is working! Modal integration will be added next.');
+  const handleChangeDesign = async () => {
+    console.log('[handleChangeDesign] Design change requested');
+    
+    // Get current form data without saving to database
+    const formData = getValues();
+    
+    // Validate that we have the minimum required data for design change
+    if (!formData.items || formData.items.length === 0) {
+      Alert.alert('Design Preview Error', 'Please add at least one item to preview the estimate design.');
+      return;
+    }
+    
+    try {
+      // Fetch actual business settings from database
+      console.log('[handleChangeDesign] Fetching business settings for design preview');
+      let businessSettingsForPreview = {
+        business_name: '',
+        business_address: '',
+        business_email: '',
+        business_phone: '',
+        business_website: '',
+        currency_code: currencyCode,
+        tax_name: globalTaxName || 'Tax',
+        default_tax_rate: globalTaxRatePercent || 0,
+        business_logo_url: null,
+      };
+      
+      // Fetch client data if client is selected
+      let clientData = null;
+      if (formData.client_id && supabase && user) {
+        console.log('[handleChangeDesign] Fetching client data for:', formData.client_id);
+        const { data: client, error: clientError } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', formData.client_id)
+          .eq('user_id', user.id)
+          .single();
+        if (clientError) {
+          console.warn('[handleChangeDesign] Could not fetch client:', clientError.message);
+        } else if (client) {
+          console.log('[handleChangeDesign] Client data loaded:', client);
+          clientData = client;
+        }
+      } else if (selectedClient) {
+        // Use selectedClient state as fallback
+        console.log('[handleChangeDesign] Using selectedClient state:', selectedClient);
+        clientData = selectedClient;
+      }
+      
+      if (supabase && user) {
+        const { data: businessData, error: businessError } = await supabase
+          .from('business_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        if (businessError) {
+          console.warn('[handleChangeDesign] Could not fetch business settings:', businessError.message);
+          // Continue with default settings
+        } else if (businessData) {
+          console.log('[handleChangeDesign] Business settings loaded:', businessData);
+          businessSettingsForPreview = {
+            business_name: businessData.business_name || '',
+            business_address: businessData.business_address || '',
+            business_email: businessData.business_email || '',
+            business_phone: businessData.business_phone || '',
+            business_website: businessData.business_website || '',
+            currency_code: businessData.currency_code || currencyCode,
+            tax_name: businessData.tax_name || globalTaxName || 'Tax',
+            default_tax_rate: businessData.default_tax_rate || globalTaxRatePercent || 0,
+            business_logo_url: businessData.business_logo_url || null,
+          };
+        }
+      }
+      
+      // Prepare estimate data for design preview (InvoicePreviewModal expects invoice field names)
+      const enhancedFormData = {
+        ...formData,
+        // Map estimate fields to invoice field names that the modal expects
+        invoice_number: formData.estimate_number || '',
+        invoice_date: formData.estimate_date || new Date(),
+        due_date: formData.valid_until_date || addDays(new Date(), 30),
+        subtotal: displaySubtotal,
+        total_amount: displayEstimateTotal,
+        discount_amount: displayDiscountAmount,
+        tax_amount: displayTaxAmount,
+        currency: currencyCode,
+        currency_symbol: getCurrencySymbol(currencyCode),
+        // Transform items to match expected structure (modal expects invoice_line_items)
+        invoice_line_items: formData.items || [],
+        // Map payment method fields
+        stripe_active: formData.stripe_active_on_estimate || false,
+        paypal_active: formData.paypal_active_on_estimate || false,
+        bank_account_active: formData.bank_account_active_on_estimate || false,
+        // Add tax label
+        invoice_tax_label: globalTaxName || 'Tax',
+      };
+      
+      // Set preview data and open modal in settings mode (design change only)
+      console.log('[handleChangeDesign] Opening design modal with data');
+      setPreviewData({
+        estimateData: enhancedFormData,
+        businessSettings: businessSettingsForPreview,
+        clientData: clientData,
+      });
+      estimatePreviewModalRef.current?.present();
+    } catch (error: any) {
+      console.error('[handleChangeDesign] Error preparing design preview:', error);
+      Alert.alert('Design Preview Error', 'Failed to load design preview. Please try again.');
+    }
   };
 
   const handleDesignSaved = (designId: string, accentColor: string) => {
@@ -1376,7 +1523,7 @@ export default function CreateEstimateScreen() {
               <View style={styles.detailsRow1}>
                 <View style={styles.estimateNumberEditContainer}>
                   <Text style={[styles.estimateNumberDisplay, { color: safeThemeColors.foreground }]}>
-                    {watchedEstimateNumber || (isLoadingEstimateNumber ? 'Loading...' : 'INV-001')}
+                    {watchedEstimateNumber || 'INV-001'}
                   </Text>
                 </View>
                                   <Text style={{ color: safeThemeColors.foreground, fontWeight: 'bold' }}>
@@ -1569,6 +1716,7 @@ export default function CreateEstimateScreen() {
                 style={styles.changeDesignSelector} 
                 onPress={handleChangeDesign}
               >
+                <Palette size={20} color={safeThemeColors.primary} style={styles.changeDesignIcon} />
                 <Text style={[styles.changeDesignText, { color: safeThemeColors.primary }]}>Change {estimateTerminology === 'quote' ? 'Quote' : 'Estimate'} Design</Text>
               </TouchableOpacity>
             </FormSection>
@@ -1646,7 +1794,7 @@ export default function CreateEstimateScreen() {
             ref={editEstimateDetailsSheetRef}
             terminology={estimateTerminology === 'quote' ? 'quote' : 'estimate'}
             initialDetails={{
-              estimateNumber: watchedEstimateNumber || 'EST-001',
+              estimateNumber: watchedEstimateNumber || 'INV-001',
               creationDate: watchedEstimateDate || new Date(),
               validUntilType: watch('valid_until_option') || 'net_30',
               customValidUntilDate: watch('valid_until_date'),
@@ -1676,15 +1824,6 @@ export default function CreateEstimateScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Estimate Design Preview Modal - Temporarily Disconnected */}
-      {/* <InvoicePreviewModal
-        ref={estimatePreviewModalRef}
-        mode="settings"
-        initialDesign={currentDesign}
-        initialAccentColor={currentAccentColor}
-        onDesignSaved={handleDesignSaved}
-        onClose={() => console.log('[EstimateDesign] Modal closed')}
-      /> */}
 
     </SafeAreaView>
     </>
@@ -1877,8 +2016,13 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
     fontWeight: 'bold',
   },
   changeDesignSelector: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
+  },
+  changeDesignIcon: {
+    marginRight: 8,
   },
   changeDesignText: {
     fontSize: 16,

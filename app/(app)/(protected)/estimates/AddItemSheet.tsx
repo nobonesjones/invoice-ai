@@ -381,7 +381,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
             filteredSavedItems.length === 0 && { flex: 1, justifyContent: 'center' } // Center empty state
           ]}
           ListEmptyComponent={
-            <>
+            <View>
               {isLoading && (
                 <View style={styles.loadingIndicatorContainer}>
                   <ActivityIndicator size="large" color={themeColors.primary} />
@@ -394,7 +394,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
               {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery !== '' && (
                  <Text style={styles.emptyListText}>No items match your search.</Text>
               )}
-            </>
+            </View>
           }
           style={{ flex: 1, minHeight: 200 }} // Ensure FlatList takes up available vertical space with minimum height
         />

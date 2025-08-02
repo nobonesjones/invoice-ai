@@ -74,6 +74,14 @@ const EditEstimateDetailsSheet = forwardRef<
 		initialDetails?.estimateNumber || "",
 	);
 	
+	// Update state when initialDetails changes
+	React.useEffect(() => {
+		if (initialDetails?.estimateNumber && initialDetails.estimateNumber !== estimateNumber) {
+			console.log('[EditEstimateDetailsSheet] Updating estimate number from:', estimateNumber, 'to:', initialDetails.estimateNumber);
+			setEstimateNumber(initialDetails.estimateNumber);
+		}
+	}, [initialDetails?.estimateNumber]);
+	
 	// Debug log for initial values
 	React.useEffect(() => {
 		console.log('[EditEstimateDetailsSheet] Initial details:', initialDetails);
@@ -355,7 +363,7 @@ const EditEstimateDetailsSheet = forwardRef<
 								style={styles.textInputStyled}
 								value={estimateNumber}
 								onChangeText={setEstimateNumber}
-								placeholder="EST-001"
+								placeholder="INV-001"
 								placeholderTextColor={themeColors.mutedForeground}
 								editable={!isLoading}
 							/>

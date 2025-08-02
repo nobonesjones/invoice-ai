@@ -116,6 +116,12 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 		try {
 			// console.log('[AI Estimate Preview] Loading fresh estimate data for ID:', initialEstimate.id);
 			
+			// Add validation for initialEstimate.id
+			if (!initialEstimate?.id) {
+				console.warn('[AI Estimate Preview] No estimate ID available, skipping fresh data load');
+				return;
+			}
+			
 			const { data: freshEstimateData, error } = await supabase
 				.from('estimates')
 				.select(`
@@ -127,6 +133,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 
 			if (error) {
 				console.error('[AI Estimate Preview] Error loading fresh estimate data:', error);
+				console.error('[AI Estimate Preview] Estimate ID that failed:', initialEstimate.id);
 				return;
 			}
 
@@ -139,16 +146,12 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 			if (freshEstimateData) {
 				// console.log('[AI Estimate Preview] Loaded fresh estimate data - template:', freshEstimateData.estimate_template, 'color:', freshEstimateData.accent_color);
 				
-				// Only update if design or color actually changed
-				if (freshEstimateData.estimate_template !== estimate.estimate_template || 
-					freshEstimateData.accent_color !== estimate.accent_color) {
-						// console.log('[AI Estimate Preview] Design changed - updating preview');
-					setEstimate(freshEstimateData);
-					
-					// Update line items if they changed
-					if (freshEstimateData.estimate_line_items) {
-						setLineItems(freshEstimateData.estimate_line_items);
-					}
+				// Always update with fresh data to ensure we have the latest design/color
+				setEstimate(freshEstimateData);
+				
+				// Update line items if they exist
+				if (freshEstimateData.estimate_line_items) {
+					setLineItems(freshEstimateData.estimate_line_items);
 				}
 			}
 		} catch (error) {
@@ -492,7 +495,8 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 				documentType="estimate"
 				invoiceId={estimate?.id}
 				onSaveComplete={() => {
-					// console.log('[AI Estimate Preview] Save completed - refreshing preview and client data');
+					// console.log('[AI Estimate Preview] Save completed - refreshing estimate and client data');
+					// Reload fresh estimate data to get the updated design/color
 					loadFreshEstimateData();
 					loadFullClientData();
 				}}
@@ -506,6 +510,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	const { invoice: initialInvoice, line_items: initialLineItems, client_id } = invoiceData;
 	const [invoice, setInvoice] = useState(initialInvoice);
 	const [lineItems, setLineItems] = useState(initialLineItems);
+	const [isDeleted, setIsDeleted] = useState(false);
 	const [businessSettings, setBusinessSettings] = useState<(BusinessSettingsRow & {
 		currency: string;
 		currency_symbol: string;
@@ -588,6 +593,12 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 		try {
 			// console.log('[AI Invoice Preview] Loading fresh invoice data for ID:', initialInvoice.id);
 			
+			// Add validation for initialInvoice.id
+			if (!initialInvoice?.id) {
+				console.warn('[AI Invoice Preview] No invoice ID available, skipping fresh data load');
+				return;
+			}
+			
 			const { data: freshInvoiceData, error } = await supabase
 				.from('invoices')
 				.select(`
@@ -595,26 +606,30 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					invoice_line_items(*)
 				`)
 				.eq('id', initialInvoice.id)
-				.single();
+				.maybeSingle();
 
 			if (error) {
 				console.error('[AI Invoice Preview] Error loading fresh invoice data:', error);
+				console.error('[AI Invoice Preview] Invoice ID that failed:', initialInvoice.id);
+				return;
+			}
+
+			// If invoice was deleted, gracefully handle it
+			if (!freshInvoiceData) {
+				console.warn('[AI Invoice Preview] Invoice no longer exists - it may have been deleted');
+				setIsDeleted(true);
 				return;
 			}
 
 			if (freshInvoiceData) {
 				// console.log('[AI Invoice Preview] Loaded fresh invoice data - design:', freshInvoiceData.invoice_design, 'color:', freshInvoiceData.accent_color);
 				
-				// Only update if design or color actually changed
-				if (freshInvoiceData.invoice_design !== invoice.invoice_design || 
-					freshInvoiceData.accent_color !== invoice.accent_color) {
-						// console.log('[AI Invoice Preview] Design changed - updating preview');
-					setInvoice(freshInvoiceData);
-					
-					// Update line items if they changed
-					if (freshInvoiceData.invoice_line_items) {
-						setLineItems(freshInvoiceData.invoice_line_items);
-					}
+				// Always update with fresh data to ensure we have the latest design/color
+				setInvoice(freshInvoiceData);
+				
+				// Update line items if they exist
+				if (freshInvoiceData.invoice_line_items) {
+					setLineItems(freshInvoiceData.invoice_line_items);
 				}
 			}
 		} catch (error) {
@@ -859,6 +874,14 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// console.log('[AI Invoice Preview] Using full client data:', !!fullClientData);
 
 	const handleTapToView = () => {
+		if (isDeleted) {
+			Alert.alert(
+				'Invoice Deleted', 
+				'This invoice has been deleted and is no longer available.',
+				[{ text: 'OK' }]
+			);
+			return;
+		}
 		invoicePreviewModalRef.current?.present();
 	};
 
@@ -889,17 +912,26 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					style={{
 						backgroundColor: theme.background,
 						borderWidth: 1,
-						borderColor: theme.border,
+						borderColor: isDeleted ? '#FECACA' : theme.border,
 						borderRadius: 12,
 						padding: 4,
 						marginTop: 8,
 						overflow: 'hidden',
+						opacity: isDeleted ? 0.6 : 1,
 					}}
 				>
 					{/* Tap to view hint in top right */}
 					<View style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-						<Text style={{ color: theme.mutedForeground, fontSize: 12, backgroundColor: theme.background + 'E6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-							Tap to view
+						<Text style={{ 
+							color: isDeleted ? '#DC2626' : theme.mutedForeground, 
+							fontSize: 12, 
+							backgroundColor: isDeleted ? '#FEF2F2' : theme.background + 'E6', 
+							paddingHorizontal: 6, 
+							paddingVertical: 2, 
+							borderRadius: 4,
+							fontWeight: isDeleted ? 'bold' : 'normal'
+						}}>
+							{isDeleted ? 'Deleted' : 'Tap to view'}
 						</Text>
 					</View>
 
@@ -977,7 +1009,8 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 				clientData={transformedClient}
 				invoiceId={invoice?.id}
 				onSaveComplete={() => {
-					// console.log('[AI Invoice Preview] Save completed - refreshing preview and client data');
+					// console.log('[AI Invoice Preview] Save completed - refreshing invoice and client data');
+					// Reload fresh invoice data to get the updated design/color
 					loadFreshInvoiceData();
 					loadFullClientData();
 				}}

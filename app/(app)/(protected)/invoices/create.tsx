@@ -54,7 +54,7 @@ import {
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2, Landmark } from 'lucide-react-native'; // Added Trash2 and Landmark
+import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2, Landmark, Palette } from 'lucide-react-native'; // Added Trash2, Landmark, and Palette
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -1091,22 +1091,8 @@ export default function CreateInvoiceScreen() {
 
   const screenBackgroundColor = isLightMode ? '#F0F2F5' : themeColors.background;
 
-  // Function to generate initial details for the modal
-  const getInitialModalDetails = () => {
-    const values = getValues(); // Get current form values
-    const defaultDueDateOption = DUE_DATE_OPTIONS.find(opt => opt.type === 'on_receipt');
-    return {
-      invoiceNumber: values.invoice_number || '',
-      creationDate: values.invoice_date || new Date(),
-      dueDateType: 'on_receipt', // Default due date type
-      customDueDate: values.due_date, // Use form's due_date if available
-      poNumber: values.po_number || '',
-      customHeadline: values.custom_headline || '',
-      dueDateDisplayLabel: defaultDueDateOption ? defaultDueDateOption.label : 'Due on receipt', // Explicitly set initial display label
-    };
-  };
 
-  const [invoiceDetails, setInvoiceDetails] = useState<any>(getInitialModalDetails()); // Reverted to original initialization
+  const [invoiceDetails, setInvoiceDetails] = useState<any>(null);
 
   const watchedInvoiceNumber = watch('invoice_number');
   const watchedInvoiceDate = watch('invoice_date');
@@ -2041,6 +2027,7 @@ export default function CreateInvoiceScreen() {
 
           <FormSection title="" themeColors={themeColors}>
             <TouchableOpacity onPress={handlePreviewInvoice} style={styles.changeDesignSelector}>
+              <Palette size={20} color={themeColors.primary} style={styles.changeDesignIcon} />
               <Text style={styles.changeDesignText}>Change Invoice Design</Text>
             </TouchableOpacity>
           </FormSection>
@@ -2100,7 +2087,15 @@ export default function CreateInvoiceScreen() {
 
         <EditInvoiceDetailsSheet
           ref={editInvoiceDetailsSheetRef}
-          initialDetails={getInitialModalDetails()} // Pass current details
+          initialDetails={{
+            invoiceNumber: watchedInvoiceNumber || 'INV001',
+            creationDate: watchedInvoiceDate || new Date(),
+            dueDateType: watchedDueDateOption || 'on_receipt',
+            customDueDate: watchedDueDate,
+            poNumber: watchedPoNumber || '',
+            customHeadline: watchedCustomHeadline || '',
+            dueDateDisplayLabel: invoiceDetails?.dueDateDisplayLabel || 'Due on receipt',
+          }}
           onSave={handleSaveDetailsFromModal} // Handle save action
         />
 
@@ -2618,9 +2613,13 @@ const getStyles = (themeColors: ThemeColorPalette) => {
       marginLeft: 2,
     },
     changeDesignSelector: {
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 16,
+    },
+    changeDesignIcon: {
+      marginRight: 8,
     },
     changeDesignText: {
       fontSize: 17,
