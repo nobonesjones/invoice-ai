@@ -9,6 +9,7 @@ import {
   StatusBar,
   Dimensions,
 } from "react-native";
+import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -16,6 +17,13 @@ import { useTheme } from "@/context/theme-provider";
 export default function OnboardingScreen2_2() {
   const router = useRouter();
   const { theme } = useTheme();
+
+  // Initialize video player
+  const player = useVideoPlayer(require('@/assets/videos/manual.mp4'), (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -33,27 +41,23 @@ export default function OnboardingScreen2_2() {
   const styles = getStyles(theme);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.contentContainer}>
-        {/* Header */}
-        <View style={styles.headerContent}>
-          <Text style={[styles.headline, { color: theme.foreground }]}>
-            Or create a perfect invoice manually in a few clicks.
-          </Text>
-        </View>
-
-        {/* Spacer */}
-        <View style={styles.spacer} />
-
-        {/* Button */}
-        <View style={styles.buttonContainer}>
-          <Button
-            onPress={handleContinue}
-            style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-          >
-            <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
-          </Button>
-        </View>
+    <View style={styles.container}>
+      {/* Full screen video */}
+      <VideoView
+        style={styles.video}
+        player={player}
+        allowsFullscreen={false}
+        allowsPictureInPicture={false}
+      />
+      
+      {/* Button overlay at the bottom */}
+      <View style={styles.buttonOverlay}>
+        <Button
+          onPress={handleContinue}
+          style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+        >
+          <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
+        </Button>
       </View>
     </View>
   );
@@ -64,35 +68,25 @@ const { height, width } = Dimensions.get('window');
 const getStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    height: height,
+    position: 'relative',
+  },
+  video: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
     width: width,
+    height: height,
   },
-  contentContainer: {
-    flex: 1,
+  buttonOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingTop: 30,
-  },
-  headerContent: {
-    alignItems: 'center',
-    marginTop: 75,
-    marginBottom: 30,
-  },
-  headline: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-    lineHeight: 42,
-    paddingHorizontal: 10,
-  },
-  spacer: {
-    flex: 1,
-    minHeight: 20,
-  },
-  buttonContainer: {
-    paddingBottom: 30,
-    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 35 : 15,
+    paddingTop: 20,
   },
   primaryButton: {
     paddingVertical: 16,

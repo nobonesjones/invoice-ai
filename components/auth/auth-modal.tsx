@@ -259,7 +259,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   // New Video Header Styles
   videoHeaderSection: {
-    height: '70%',
+    flex: 0.7,
     backgroundColor: '#000',
   },
   backgroundVideo: {
@@ -307,7 +307,7 @@ const getStyles = (theme: any) => StyleSheet.create({
 
   // Auth Choices Section
   choiceSection: {
-    height: '30%',
+    flex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -20, // Creates the overlap effect

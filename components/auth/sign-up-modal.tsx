@@ -507,7 +507,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 12,
     marginTop: 10,
-    marginBottom: 20,
+    marginBottom: 8,
     ...Platform.select({
       ios: {
         shadowColor: '#000',

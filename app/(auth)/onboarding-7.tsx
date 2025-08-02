@@ -117,8 +117,7 @@ export default function OnboardingScreen7() {
         {/* Progress Information */}
         <View style={styles.progressSection}>
           <Text style={[styles.progressDescription, { color: theme.mutedForeground }]}>
-            We are creating your account with all the business details.{'\n'}
-            This should take only seconds...
+            We're setting up your account with your business details. Ready in a few seconds.
           </Text>
 
           {/* Progress Bar */}
