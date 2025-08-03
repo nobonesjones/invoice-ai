@@ -68,7 +68,7 @@ export default function OnboardingScreen7() {
         if (index === progressSteps.length - 1) {
           setTimeout(() => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            router.push("/onboarding-8");
+            router.push("/(auth)/onboarding-8");
           }, 500);
         }
       }, totalDelay);

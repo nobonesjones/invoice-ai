@@ -113,7 +113,7 @@ export default function OnboardingScreen3() {
     console.log('[Onboarding3] Saving business info:', { businessName, selectedRegion });
     updateBusinessInfo({ businessName, selectedRegion });
     
-    router.push("/onboarding-4");
+    router.push("/(auth)/onboarding-4");
   };
 
   const handleRegionPress = () => {

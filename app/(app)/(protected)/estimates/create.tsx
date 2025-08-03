@@ -55,8 +55,8 @@ import { useSupabase } from '@/context/supabase-provider';
 import { SwipeListView } from 'react-native-swipe-list-view';
 import { ESTIMATE_STATUSES } from '@/constants/estimate-status';
 import { UsageService } from '@/services/usageService';
-import { usePaymentOptions } from '../invoices/components/usePaymentOptions';
-import { useEstimateActivityLogger } from './components/useEstimateActivityLogger';
+import { usePaymentOptions } from '@/hooks/invoices/usePaymentOptions';
+import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivityLogger';
 import { ReferenceNumberService } from '@/services/referenceNumberService';
 
 // Import estimate-specific components and modals

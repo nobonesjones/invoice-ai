@@ -92,7 +92,7 @@ export default function OnboardingScreen4() {
     // Store the industry selection
     console.log('[Onboarding4] Saving industry:', selectedIndustry);
     updateIndustry(selectedIndustry);
-    router.push("/onboarding-5");
+    router.push("/(auth)/onboarding-5");
   };
 
   const handleIndustrySelect = (industry: string) => {

@@ -57,7 +57,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { StatusSelectorSheet } from '@/components/StatusSelectorSheet';
 import { PaymentAmountSheet } from '@/components/PaymentAmountSheet';
 import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } from '@/constants/invoice-status';
-import { useInvoiceActivityLogger } from './components/useInvoiceActivityLogger';
+import { useInvoiceActivityLogger } from '@/hooks/invoices/useInvoiceActivityLogger';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
 import { InvoiceShareService } from '@/services/invoiceShareService';

@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   StatusBar,
   Dimensions,
 } from "react-native";
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { Video, ResizeMode } from 'expo-av';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -18,12 +18,7 @@ export default function OnboardingScreen2_2() {
   const router = useRouter();
   const { theme } = useTheme();
 
-  // Initialize video player
-  const player = useVideoPlayer(require('@/assets/videos/manual.mp4'), (player) => {
-    player.loop = true;
-    player.muted = true;
-    player.play();
-  });
+  const videoRef = useRef<Video>(null);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -35,7 +30,7 @@ export default function OnboardingScreen2_2() {
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push("/onboarding-3");
+    router.push("/(auth)/onboarding-3");
   };
 
   const styles = getStyles(theme);
@@ -43,11 +38,15 @@ export default function OnboardingScreen2_2() {
   return (
     <View style={styles.container}>
       {/* Full screen video */}
-      <VideoView
+      <Video
+        ref={videoRef}
         style={styles.video}
-        player={player}
-        allowsFullscreen={false}
-        allowsPictureInPicture={false}
+        source={require('@/assets/videos/manual.mp4')}
+        useNativeControls={false}
+        resizeMode={ResizeMode.COVER}
+        isLooping
+        shouldPlay
+        isMuted
       />
       
       {/* Button overlay at the bottom */}

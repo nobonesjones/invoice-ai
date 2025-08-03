@@ -52,7 +52,7 @@ export default function OnboardingScreen6() {
 
   const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push("/onboarding-7");
+    router.push("/(auth)/onboarding-7");
   };
 
   const styles = getStyles(theme);

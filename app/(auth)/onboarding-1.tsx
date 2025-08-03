@@ -32,7 +32,7 @@ export default function OnboardingScreen1() {
 
   const handleGetStarted = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push("/onboarding-2");
+    router.push("/(auth)/onboarding-2");
   };
 
   const handleSignIn = () => {

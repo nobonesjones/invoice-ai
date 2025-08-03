@@ -4,7 +4,7 @@ import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { X as XIcon, Clock, CheckCircle, XCircle, Edit, Send, Eye, FileText, RotateCcw, TrendingUp } from 'lucide-react-native'; 
-import { useEstimateActivityLogger, EstimateActivityType } from './components/useEstimateActivityLogger';
+import { useEstimateActivityLogger, EstimateActivityType } from '@/hooks/estimates/useEstimateActivityLogger';
 
 export interface EstimateHistorySheetProps {
   estimateId?: string;

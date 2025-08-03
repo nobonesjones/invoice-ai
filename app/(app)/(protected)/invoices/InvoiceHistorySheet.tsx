@@ -4,7 +4,7 @@ import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { X as XIcon, Clock, CreditCard, Edit, Send, Eye, FileText, Printer, Link, Globe, Download } from 'lucide-react-native'; 
-import { useInvoiceActivityLogger, InvoiceActivityType } from './components/useInvoiceActivityLogger';
+import { useInvoiceActivityLogger, InvoiceActivityType } from '@/hooks/invoices/useInvoiceActivityLogger';
 
 export interface InvoiceHistorySheetProps {
   invoiceId?: string;

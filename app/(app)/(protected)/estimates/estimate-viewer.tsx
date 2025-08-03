@@ -42,7 +42,7 @@ import { Share } from 'react-native';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EstimateStatus, getEstimateStatusConfig, isEstimateEditable, getPreviousStatus } from '@/constants/estimate-status';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
-import { useEstimateActivityLogger } from './components/useEstimateActivityLogger';
+import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivityLogger';
 import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistorySheet';
 import { EstimateConversionService } from '@/services/estimateConversionService';
 import { EstimateSenderService } from '@/services/estimateSenderService';

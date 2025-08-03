@@ -42,7 +42,7 @@ export default function OnboardingScreen5() {
     console.log('[Onboarding5] Saving logo:', logoUri);
     updateLogo(logoUri);
     
-    router.push("/onboarding-6");
+    router.push("/(auth)/onboarding-6");
   };
 
   const requestCameraPermission = async () => {
