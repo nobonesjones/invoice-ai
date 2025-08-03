@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
@@ -47,6 +47,13 @@ export function AuthModal({
   const [showSignUp, setShowSignUp] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // Initialize video player
+  const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
 
   const handleGoogleAuth = async () => {
     setIsGoogleLoading(true);
@@ -155,14 +162,11 @@ export function AuthModal({
         <View style={styles.container}>
           {/* Video Header Section */}
           <View style={styles.videoHeaderSection}>
-            <Video
+            <VideoView
               style={styles.backgroundVideo}
-              source={require('../../assets/videos/0629.mp4')}
-              useNativeControls={false}
-              resizeMode={ResizeMode.COVER}
-              isLooping
-              shouldPlay
-              isMuted
+              player={player}
+              nativeControls={false}
+              contentFit="cover"
             />
             <View style={styles.overlay}>
               

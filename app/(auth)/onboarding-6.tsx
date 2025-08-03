@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -29,7 +29,13 @@ export default function OnboardingScreen6() {
   const router = useRouter();
   const { theme } = useTheme();
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0);
-  const videoRef = useRef<Video>(null);
+  
+  // Initialize video player
+  const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -61,15 +67,11 @@ export default function OnboardingScreen6() {
     <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <View style={styles.backgroundContainer}>
         {/* Video Background */}
-        <Video
-          ref={videoRef}
+        <VideoView
           style={styles.background}
-          source={require('../../assets/videos/0629.mp4')}
-          useNativeControls={false}
-          resizeMode={ResizeMode.COVER}
-          isLooping
-          shouldPlay
-          isMuted
+          player={player}
+          nativeControls={false}
+          contentFit="cover"
         />
         
         {/* Content overlay */}

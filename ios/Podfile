@@ -60,9 +60,5 @@ target 'SuperInvoice' do
         end
       end
     end
-
-    # Clear extended attributes from all shell scripts to prevent sandbox issues
-    puts "Clearing extended attributes from Pods scripts..."
-    system('find "' + __dir__ + '/Pods" -type f -name "*.sh" -exec xattr -c {} \; 2>/dev/null')
   end
 end

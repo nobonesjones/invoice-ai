@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useRef, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  Image,
 } from "react-native";
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -17,8 +18,25 @@ import { useTheme } from "@/context/theme-provider";
 export default function OnboardingScreen2_2() {
   const router = useRouter();
   const { theme } = useTheme();
+  const [videoReady, setVideoReady] = useState(false);
 
-  const videoRef = useRef<Video>(null);
+  // Initialize video player
+  const player = useVideoPlayer(require('@/assets/videos/manual.mp4'), (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
+
+  // Listen for video ready state
+  useEffect(() => {
+    const subscription = player.addListener('statusChange', (status) => {
+      if (status.status === 'readyToPlay') {
+        setVideoReady(true);
+      }
+    });
+
+    return () => subscription?.remove();
+  }, [player]);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -37,16 +55,21 @@ export default function OnboardingScreen2_2() {
 
   return (
     <View style={styles.container}>
-      {/* Full screen video */}
-      <Video
-        ref={videoRef}
-        style={styles.video}
-        source={require('@/assets/videos/manual.mp4')}
-        useNativeControls={false}
-        resizeMode={ResizeMode.COVER}
-        isLooping
-        shouldPlay
-        isMuted
+      {/* Still image placeholder - shows instantly */}
+      {!videoReady && (
+        <Image
+          source={require('@/assets/onboarding/ideo_2.png')}
+          style={styles.video}
+          resizeMode="cover"
+        />
+      )}
+      
+      {/* Full screen video - shows when ready */}
+      <VideoView
+        style={[styles.video, { opacity: videoReady ? 1 : 0 }]}
+        player={player}
+        nativeControls={false}
+        contentFit="cover"
       />
       
       {/* Button overlay at the bottom */}
