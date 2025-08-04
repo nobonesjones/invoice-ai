@@ -4,6 +4,7 @@ import { OpenAIFunction } from '@/services/openaiService';
 import { UsageService } from '@/services/usageService';
 import { UsageTrackingService } from '@/services/usageTrackingService';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
+import UserContextService from '@/services/userContextService';
 
 // Function definitions for OpenAI
 export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
@@ -1835,7 +1836,25 @@ export class InvoiceFunctionService {
         throw new Error(`Failed to create line items: ${lineItemsError.message}`);
       }
 
-      // Step 8: Return success with invoice details
+      // Step 8: Check if this was user's first invoice and set default styling
+      try {
+        // Check how many invoices the user had BEFORE this one was created
+        const { count: existingInvoicesCount } = await supabase
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        
+        const isFirstInvoice = (existingInvoicesCount || 0) === 1; // They now have exactly 1 (this one)
+        if (isFirstInvoice) {
+          console.log('[Invoice Create] First invoice detected - setting default Clean + Navy styling');
+          await UserContextService.markFirstInvoiceCompleted(userId);
+        }
+      } catch (contextError) {
+        console.error('[Invoice Create] Error handling first invoice styling:', contextError);
+        // Don't fail the invoice creation if styling fails
+      }
+
+      // Step 9: Return success with invoice details
       const successMessage = `Great! I've successfully created invoice #${invoiceNumber} for ${params.client_name}.
 
 The invoice includes:
