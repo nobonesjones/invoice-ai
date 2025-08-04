@@ -263,7 +263,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   // New Video Header Styles
   videoHeaderSection: {
-    flex: 0.7,
+    flex: 2,  // Changed from 0.7 to 2 (2/3 of screen)
     backgroundColor: '#000',
   },
   backgroundVideo: {
@@ -332,7 +332,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 16,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',  // Changed from 'space-between' to reduce whitespace
+    gap: 20,  // Add controlled gap between elements
   },
   planBadge: {
     flexDirection: 'row',
@@ -387,6 +388,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   signInLink: {
     alignItems: 'center',
     paddingVertical: 8,
+    marginTop: 'auto',  // Push to bottom of the container
   },
   signInText: {
     fontSize: 15,
