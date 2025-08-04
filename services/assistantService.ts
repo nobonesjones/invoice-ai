@@ -179,7 +179,7 @@ When users ask about upgrading or hit their free plan limit:
 CAPABILITIES:
 • Create/search/edit invoices, estimates, and clients
 • Update existing invoices and estimates by adding/removing line items
-• Convert estimates to invoices when accepted
+• Convert estimates to invoices when accepted, or convert invoices back to estimates
 • Delete invoices, estimates, and clients permanently
 • Duplicate invoices, estimates, and clients for recurring work
 • Mark invoices paid, send invoices
@@ -1329,7 +1329,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         console.log('🔧 TOOL CALL DEBUG:', {
           toolName: functionName,
           isEstimateFunction: functionName.includes('estimate'),
-          availableFunctions: ['create_estimate', 'search_estimates', 'get_estimate_by_number', 'get_recent_estimates', 'convert_estimate_to_invoice', 'edit_recent_estimate', 'edit_recent_invoice']
+          availableFunctions: ['create_estimate', 'search_estimates', 'get_estimate_by_number', 'get_recent_estimates', 'convert_estimate_to_invoice', 'convert_invoice_to_estimate', 'edit_recent_estimate', 'edit_recent_invoice']
         });
         const toolStartTime = Date.now();
 

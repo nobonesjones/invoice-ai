@@ -39,6 +39,7 @@ import {
   RefreshCw,
   Bell,
   Share2,
+  Copy,
 } from 'lucide-react-native';
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
@@ -1558,6 +1559,73 @@ function InvoiceViewerScreen() {
     router.push(`/customers/${invoice.client_id}`);
   };
 
+  const handleDuplicateInvoice = () => {
+    moreOptionsSheetRef.current?.dismiss();
+    
+    Alert.alert(
+      'Duplicate Invoice',
+      `Create a copy of invoice ${invoice.invoice_number}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Duplicate',
+          onPress: async () => {
+            try {
+              if (!user?.id) {
+                Alert.alert('Error', 'User information not available.');
+                return;
+              }
+
+              // Import InvoiceFunctionService locally to avoid circular dependencies
+              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
+
+              // Check usage limits first
+              const usageLimits = await InvoiceFunctionService.executeFunction(
+                'check_usage_limits',
+                {},
+                user.id
+              );
+
+              if (!usageLimits.success || !usageLimits.data?.canCreate) {
+                // Navigate directly to subscription screen
+                router.push('/subscription');
+                return;
+              }
+
+              // Proceed with duplication if limits allow
+              const result = await InvoiceFunctionService.executeFunction(
+                'duplicate_invoice',
+                { invoice_number: invoice.invoice_number },
+                user.id
+              );
+
+              if (result.success) {
+                Alert.alert(
+                  'Success',
+                  result.message || `Invoice duplicated successfully as ${result.data?.invoice_number}`,
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        // Navigate to invoices list to see the new invoice
+                        router.push('/invoices');
+                      }
+                    }
+                  ]
+                );
+              } else {
+                Alert.alert('Error', result.message || 'Failed to duplicate invoice.');
+              }
+            } catch (error: any) {
+              console.error('Error duplicating invoice:', error);
+              Alert.alert('Error', 'An unexpected error occurred while duplicating the invoice.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleVoidInvoice = async () => {
     moreOptionsSheetRef.current?.dismiss();
     
@@ -2499,6 +2567,14 @@ function InvoiceViewerScreen() {
               icon={User}
               title="View Client Profile"
               onPress={handleViewClientProfile}
+            />
+            
+            <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
+            
+            <MoreOptionItem
+              icon={Copy}
+              title="Duplicate Invoice"
+              onPress={handleDuplicateInvoice}
             />
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />

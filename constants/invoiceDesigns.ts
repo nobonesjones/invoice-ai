@@ -38,8 +38,16 @@ export const COLOR_SCHEMES = {
     border: '#E5E7EB',
   },
   modern: {
+    primary: '#EAB308', // Yellow Gold
+    accent: '#EAB308', // Yellow Gold
+    text: '#111827',
+    mutedText: '#6B7280',
+    background: '#FFFFFF',
+    border: '#D1D5DB',
+  },
+  modernOriginal: {
     primary: '#059669', // Green
-    accent: '#10B981',
+    accent: '#10B981', // Original green accent
     text: '#111827',
     mutedText: '#6B7280',
     background: '#FFFFFF',
@@ -108,7 +116,7 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
     description: 'Clean design with accent color header and alternating rows',
     thumbnail: '/assets/invoice-designs/clean-thumb.png',
     component: SkiaInvoiceCanvasClean,
-    colorScheme: COLOR_SCHEMES.modern, // Uses dynamic accent color
+    colorScheme: COLOR_SCHEMES.modernOriginal, // Uses original green accent color
     layoutConfig: {
       headerPosition: 'top',
       sectionsLayout: 'standard',

@@ -1181,7 +1181,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {item.item_description && (
                   <Text 
                     x={descX + 30 + (item.item_name.length * 6)} 
-                    y={rowY + textOffsetY} 
+                    y={rowY + textOffsetY + 3} 
                     text={` (${item.item_description})`} 
                     font={scaledFonts.tiny} 
                     color="#999" 
@@ -1308,7 +1308,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                         {item.item_description && (
                           <Text 
                             x={descX + 30 + (item.item_name.length * 6)} 
-                            y={rowY + textOffsetY} 
+                            y={rowY + textOffsetY + 3} 
                             text={` (${item.item_description})`} 
                             font={scaledFonts.tiny} 
                             color="#999" 
@@ -1498,42 +1498,42 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                   {rightAlignedParagraphs ? (
                     <>
                       {/* Subtotal row */}
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 31} y={footerY + 15} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 29} y={footerY + 15} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 24} y={footerY + 15} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 36} y={footerY + 15} width={60} />
                       
                       {/* Discount row (conditional) */}
                       {rightAlignedParagraphs.discountLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 31} y={footerY + 35} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 29} y={footerY + 35} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 24} y={footerY + 35} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 36} y={footerY + 35} width={60} />
                         </>
                       ) : null}
                       
                       {/* Tax row - adjusts position based on discount presence */}
-                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 55 : 35)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 29} y={footerY + (hasDiscount ? 55 : 35)} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 24} y={footerY + (hasDiscount ? 55 : 35)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 36} y={footerY + (hasDiscount ? 55 : 35)} width={60} />
                       
                       {/* Paid row (conditional - between VAT and Balance Due) */}
                       {rightAlignedParagraphs.paidLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 75 : 55)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 29} y={footerY + (hasDiscount ? 75 : 55)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 24} y={footerY + (hasDiscount ? 75 : 55)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 36} y={footerY + (hasDiscount ? 75 : 55)} width={60} />
                           
                           {/* Balance Due row (directly under Paid) */}
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 29} y={footerY + (hasDiscount ? 95 : 75)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 24} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 36} y={footerY + (hasDiscount ? 95 : 75)} width={60} />
                         </>
                       ) : null}
                     </>
                   ) : null}
                   
                   {/* Grand Total Box with green background - positioned after Balance Due line if present */}
-                  <Rect x={totalX - 33} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
+                  <Rect x={totalX - 26} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
                   
                   {rightAlignedParagraphs ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 31} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 27} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 24} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 34} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                     </>
                   ) : null}
                 </>
@@ -1708,42 +1708,42 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                   {rightAlignedParagraphs ? (
                     <>
                       {/* Subtotal row */}
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 31} y={lastPageFooterY + 15} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 29} y={lastPageFooterY + 15} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 24} y={lastPageFooterY + 15} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 36} y={lastPageFooterY + 15} width={60} />
                       
                       {/* Discount row (conditional) */}
                       {rightAlignedParagraphs.discountLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 31} y={lastPageFooterY + 35} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 29} y={lastPageFooterY + 35} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 24} y={lastPageFooterY + 35} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 36} y={lastPageFooterY + 35} width={60} />
                         </>
                       ) : null}
                       
                       {/* Tax row - adjusts position based on discount presence */}
-                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 31} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 29} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 24} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 36} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={60} />
                       
                       {/* Paid row (conditional - between VAT and Balance Due) */}
                       {rightAlignedParagraphs.paidLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 31} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 29} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 24} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 36} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={60} />
                           
                           {/* Balance Due row (directly under Paid) */}
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 31} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 29} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 24} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 36} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={60} />
                         </>
                       ) : null}
                     </>
                   ) : null}
                   
                   {/* Grand Total Box with green background on last page */}
-                  <Rect x={totalX - 33} y={lastPageFooterY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
+                  <Rect x={totalX - 26} y={lastPageFooterY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
                   
                   {rightAlignedParagraphs ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 31} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 27} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 24} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 34} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                     </>
                   ) : null}
                 </>

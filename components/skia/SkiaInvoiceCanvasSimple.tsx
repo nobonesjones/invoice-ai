@@ -90,16 +90,16 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   
   const canvasWidth = baseCanvasWidth;
   
-  // Pagination calculations with original spacing
-  const itemRowHeight = 20;
-  const tableHeaderY = 180;
-  const tableHeaderHeight = 25;
-  const firstItemY = 210;
-  const footerStartY = 410; // Back to original footer position that looked good
+  // Pagination calculations with very tight spacing for Simple design
+  const itemRowHeight = 13; // Very tight: only ~3px between items
+  const tableHeaderY = 235; // Closer to client info 
+  const tableHeaderHeight = 18; 
+  const firstItemY = 258; // Closer to header
+  const footerStartY = 410; // Keep footer position the same
   
-  // Calculate how many items fit on first page
+  // Calculate how many items fit on first page - now we have more room!
   const availableSpaceFirstPage = footerStartY - firstItemY;
-  const maxItemsFirstPage = Math.floor(availableSpaceFirstPage / itemRowHeight); // Restored proper calculation - was: 5
+  const maxItemsFirstPage = Math.floor(availableSpaceFirstPage / itemRowHeight); // More items will fit now
   
   // Get dynamic line items from invoice data
   const lineItems = invoice?.invoice_line_items || [
@@ -1116,27 +1116,27 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
           )}
           
           {/* === SIMPLE LINE ITEMS TABLE === */}
-          {/* Simple horizontal line before table - dynamic accent color - moved up 5px */}
-          <Rect x={OFFSET_X + 15} y={245} width={canvasWidth - 30} height={1} color={colors.greenAccent} />
+          {/* Simple horizontal line before table - dynamic accent color - reduced gap from client info */}
+          <Rect x={OFFSET_X + 15} y={235} width={canvasWidth - 30} height={1} color={colors.greenAccent} />
           
           {/* Table header - no background color, just clean lines */}
           
           {/* Simple table headers */}
           {scaledFonts.bodyBold && (
             <>
-          <Text x={qtyX + 20} y={260} text="QTY" font={scaledFonts.bodyBold} color="black" />
-          <Text x={descX + 30} y={260} text="DESCRIPTION" font={scaledFonts.bodyBold} color="black" />
-          <Text x={priceX + 65} y={260} text="PRICE" font={scaledFonts.bodyBold} color="black" />
-          <Text x={totalX + 62} y={260} text="TOTAL" font={scaledFonts.bodyBold} color="black" />
+          <Text x={qtyX + 20} y={248} text="QTY" font={scaledFonts.bodyBold} color="black" />
+          <Text x={descX + 30} y={248} text="DESCRIPTION" font={scaledFonts.bodyBold} color="black" />
+          <Text x={priceX + 65} y={248} text="PRICE" font={scaledFonts.bodyBold} color="black" />
+          <Text x={totalX + 62} y={248} text="TOTAL" font={scaledFonts.bodyBold} color="black" />
             </>
           )}
           
-          {/* Line under headers - dynamic accent color - moved up 5px */}
-          <Rect x={OFFSET_X + 15} y={265} width={canvasWidth - 30} height={1} color={colors.greenAccent} />
+          {/* Line under headers - dynamic accent color - adjusted for new header position */}
+          <Rect x={OFFSET_X + 15} y={253} width={canvasWidth - 30} height={1} color={colors.greenAccent} />
           
           {/* Simple line items without alternating backgrounds */}
           {exportFirstPageItems.map((item: any, index: number) => {
-            const rowY = 275 + (index * scaledRowHeight); // Start at 275px after header line - moved up 5px
+            const rowY = 258 + (index * scaledRowHeight); // Start at 258px after header line - compressed spacing
             
             // Create paragraphs with same font as business address (fontSize: 9, weight: 400)
             const qtyParagraph = Skia.ParagraphBuilder.Make({
@@ -1210,7 +1210,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                 {item.item_description && (
                   <Text 
                     x={descX + 30 + (item.item_name.length * 6)} 
-                    y={rowY + textOffsetY + 2} 
+                    y={rowY + textOffsetY + 5} 
                     text={` (${item.item_description})`} 
                     font={scaledFonts.tiny} 
                     color="#999" 
@@ -1338,7 +1338,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                         {item.item_description && (
                           <Text 
                             x={descX + 30 + (item.item_name.length * 6)} 
-                            y={rowY + textOffsetY + 2} 
+                            y={rowY + textOffsetY + 5} 
                             text={` (${item.item_description})`} 
                             font={scaledFonts.tiny} 
                             color="#999" 
@@ -1531,42 +1531,42 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                   {rightAlignedParagraphs ? (
                     <>
                       {/* Subtotal row */}
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 30} y={footerY + 15} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 30} y={footerY + 15} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 23} y={footerY + 15} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 37} y={footerY + 15} width={60} />
                       
                       {/* Discount row (conditional) */}
                       {rightAlignedParagraphs.discountLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 30} y={footerY + 35} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 30} y={footerY + 35} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 23} y={footerY + 35} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 37} y={footerY + 35} width={60} />
                         </>
                       ) : null}
                       
                       {/* Tax row - adjusts position based on discount presence */}
-                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 30} y={footerY + (hasDiscount ? 55 : 35)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 30} y={footerY + (hasDiscount ? 55 : 35)} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 23} y={footerY + (hasDiscount ? 55 : 35)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 37} y={footerY + (hasDiscount ? 55 : 35)} width={60} />
                       
                       {/* Paid row (conditional - between VAT and Balance Due) */}
                       {rightAlignedParagraphs.paidLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 30} y={footerY + (hasDiscount ? 75 : 55)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 30} y={footerY + (hasDiscount ? 75 : 55)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 23} y={footerY + (hasDiscount ? 75 : 55)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 37} y={footerY + (hasDiscount ? 75 : 55)} width={60} />
                           
                           {/* Balance Due row (directly under Paid) */}
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 30} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 30} y={footerY + (hasDiscount ? 95 : 75)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 23} y={footerY + (hasDiscount ? 95 : 75)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 37} y={footerY + (hasDiscount ? 95 : 75)} width={60} />
                         </>
                       ) : null}
                     </>
                   ) : null}
                   
                   {/* Grand Total Box with accent color background - positioned after Balance Due line if present */}
-                  <Rect x={totalX - 32} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
+                  <Rect x={totalX - 25} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
                   
                   {rightAlignedParagraphs ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 30} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 28} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 23} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 35} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                     </>
                   ) : null}
                 </>
@@ -1744,42 +1744,42 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                   {rightAlignedParagraphs ? (
                     <>
                       {/* Subtotal row */}
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 30} y={lastPageFooterY + 15} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 30} y={lastPageFooterY + 15} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalLabelParagraph} x={totalX - 23} y={lastPageFooterY + 15} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.subtotalValueParagraph} x={totalX + 37} y={lastPageFooterY + 15} width={60} />
                       
                       {/* Discount row (conditional) */}
                       {rightAlignedParagraphs.discountLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 30} y={lastPageFooterY + 35} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 30} y={lastPageFooterY + 35} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountLabelParagraph} x={totalX - 23} y={lastPageFooterY + 35} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.discountValueParagraph} x={totalX + 37} y={lastPageFooterY + 35} width={60} />
                         </>
                       ) : null}
                       
                       {/* Tax row - adjusts position based on discount presence */}
-                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 30} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 30} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={60} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxLabelParagraph} x={totalX - 23} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.taxValueParagraph} x={totalX + 37} y={lastPageFooterY + (hasDiscount ? 55 : 35)} width={60} />
                       
                       {/* Paid row (conditional - between VAT and Balance Due) */}
                       {rightAlignedParagraphs.paidLabelParagraph ? (
                         <>
-                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 30} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 30} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidLabelParagraph} x={totalX - 23} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.paidValueParagraph} x={totalX + 37} y={lastPageFooterY + (hasDiscount ? 75 : 55)} width={60} />
                           
                           {/* Balance Due row (directly under Paid) */}
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 30} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={70} />
-                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 30} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={60} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueLabelParagraph} x={totalX - 23} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={70} />
+                          <Paragraph paragraph={rightAlignedParagraphs.balanceDueValueParagraph} x={totalX + 37} y={lastPageFooterY + (hasDiscount ? 95 : 75)} width={60} />
                         </>
                       ) : null}
                     </>
                   ) : null}
                   
                   {/* Grand Total Box with accent color background on last page */}
-                  <Rect x={totalX - 32} y={lastPageFooterY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
+                  <Rect x={totalX - 25} y={lastPageFooterY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
                   
                   {rightAlignedParagraphs ? (
                     <>
-                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 30} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 28} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 23} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 35} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                     </>
                   ) : null}
                 </>

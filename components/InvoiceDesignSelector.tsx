@@ -154,14 +154,14 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     height: 140, // Increased height to use available space
   },
   scrollContent: {
-    paddingRight: 20,
+    paddingRight: 10,
   },
   designItem: {
-    marginRight: 20,
+    marginRight: 12,
     alignItems: 'center',
     borderWidth: 2,
     borderRadius: 12,
-    padding: 10,
+    padding: 8,
     backgroundColor: 'white',
     ...Platform.select({
       ios: {

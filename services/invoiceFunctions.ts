@@ -897,6 +897,20 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
     }
   },
   {
+    name: "convert_invoice_to_estimate",
+    description: "Convert an existing invoice to an estimate, copying all details including line items",
+    parameters: {
+      type: "object",
+      properties: {
+        invoice_number: {
+          type: "string",
+          description: "The invoice number to convert (e.g., 'INV-001')"
+        }
+      },
+      required: ["invoice_number"]
+    }
+  },
+  {
     name: "edit_recent_invoice",
     description: "Edit the most recently created INVOICE in the conversation. This function is optimized to find the most recent invoice even if the exact number doesn't match. Use this function when: 1) You just created an invoice and user wants to edit it, 2) User mentions editing an 'invoice', 3) The document was created as an invoice. Use this ONLY for actual invoices, NOT for estimates. The function will automatically find the most recent invoice if the specified number cannot be found. This allows making changes like adding/removing line items, updating amounts, changing due dates, modifying payment methods, etc.",
     parameters: {
@@ -1272,6 +1286,8 @@ export class InvoiceFunctionService {
           return await this.getRecentEstimates(parameters, userId);
         case 'convert_estimate_to_invoice':
           return await this.convertEstimateToInvoice(parameters, userId);
+        case 'convert_invoice_to_estimate':
+          return await this.convertInvoiceToEstimate(parameters, userId);
         case 'edit_recent_invoice':
           console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_INVOICE function called!');
           return await this.editRecentInvoice(parameters, userId);
@@ -4139,6 +4155,19 @@ Deleted:
 
   private static async duplicateInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
+      // Check usage limits first
+      const usageLimits = await this.checkUsageLimits(userId);
+      if (!usageLimits.success || !usageLimits.data?.canCreate) {
+        return {
+          success: false,
+          message: usageLimits.data?.canCreate === false 
+            ? 'You have reached your free plan limit of 3 items. Please upgrade to duplicate more invoices.'
+            : 'Unable to check usage limits. Please try again.',
+          error: 'Usage limit exceeded',
+          showPaywall: true
+        };
+      }
+
       const { invoice_number, new_client_name, new_invoice_date } = params;
 
       if (!invoice_number) {
@@ -4228,10 +4257,13 @@ Deleted:
           tax_percentage: originalInvoice.tax_percentage,
           total_amount: originalInvoice.total_amount,
           notes: originalInvoice.notes,
+          design_template: originalInvoice.design_template,
+          accent_color: originalInvoice.accent_color,
+          currency: originalInvoice.currency,
           // Payment method settings from original
-          stripe_active: originalInvoice.stripe_active,
-          paypal_active: originalInvoice.paypal_active,
-          bank_account_active: originalInvoice.bank_account_active
+          stripe_active: originalInvoice.stripe_active || false,
+          paypal_active: originalInvoice.paypal_active || false,
+          bank_account_active: originalInvoice.bank_account_active || false
         })
         .select('*')
         .single();
@@ -4299,6 +4331,19 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
 
   private static async duplicateEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
+      // Check usage limits first
+      const usageLimits = await this.checkUsageLimits(userId);
+      if (!usageLimits.success || !usageLimits.data?.canCreate) {
+        return {
+          success: false,
+          message: usageLimits.data?.canCreate === false 
+            ? 'You have reached your free plan limit of 3 items. Please upgrade to duplicate more estimates.'
+            : 'Unable to check usage limits. Please try again.',
+          error: 'Usage limit exceeded',
+          showPaywall: true
+        };
+      }
+
       const { estimate_number, new_client_name, new_estimate_date } = params;
 
       if (!estimate_number) {
@@ -4388,7 +4433,12 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
           tax_percentage: originalEstimate.tax_percentage,
           total_amount: originalEstimate.total_amount,
           notes: originalEstimate.notes,
-          estimate_template: originalEstimate.estimate_template
+          estimate_template: originalEstimate.estimate_template,
+          accent_color: originalEstimate.accent_color,
+          paypal_active: originalEstimate.paypal_active || false,
+          stripe_active: originalEstimate.stripe_active || false,
+          bank_account_active: originalEstimate.bank_account_active || false,
+          currency: originalEstimate.currency
         })
         .select('*')
         .single();
@@ -5285,6 +5335,150 @@ The new client is ready to use for invoices!`
         success: false,
         message: 'Failed to convert estimate to invoice. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async convertInvoiceToEstimate(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log('[AI Invoice Convert] Converting invoice to estimate for user:', userId);
+      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
+      
+      const { invoice_number } = params;
+
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: 'Invoice number is required.',
+          error: 'Missing required parameter: invoice_number'
+        };
+      }
+
+      // Get the invoice with line items - handle unified numbering
+      let invoice;
+      const { data: initialInvoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          clients(id, name, email, phone, address),
+          invoice_line_items(*)
+        `)
+        .eq('user_id', userId)
+        .eq('invoice_number', invoice_number)
+        .single();
+
+      if (invoiceError || !initialInvoice) {
+        // Try pattern matching for backward compatibility
+        const { data: invoices, error: searchError } = await supabase
+          .from('invoices')
+          .select(`
+            *,
+            clients(id, name, email, phone, address),
+            invoice_line_items(*)
+          `)
+          .eq('user_id', userId)
+          .or(`invoice_number.eq.${invoice_number},invoice_number.ilike.%${invoice_number}%`);
+          
+        if (searchError || !invoices || invoices.length === 0) {
+          return {
+            success: false,
+            message: `Invoice ${invoice_number} not found.`,
+            error: 'Invoice not found'
+          };
+        }
+        
+        // Use the most recent matching invoice
+        const foundInvoice = invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        invoice = foundInvoice;
+      } else {
+        invoice = initialInvoice;
+      }
+
+      // Generate estimate number using unified numbering
+      const estimateNumber = await this.generateNextEstimateNumber(userId);
+      
+      // Create estimate record - inherit settings from invoice
+      const estimateData = {
+        user_id: userId,
+        client_id: invoice.client_id,
+        estimate_number: estimateNumber,
+        estimate_date: new Date().toISOString().split('T')[0],
+        subtotal_amount: invoice.subtotal,
+        tax_percentage: invoice.tax_percentage,
+        discount_type: invoice.discount_type,
+        discount_value: invoice.discount_value,
+        total_amount: invoice.total,
+        currency: invoice.currency || 'USD',
+        status: 'pending',
+        notes: invoice.notes,
+        estimate_template: invoice.design_template || DEFAULT_DESIGN_ID,
+        accent_color: invoice.accent_color || '#14B8A6',
+        converted_from_invoice: invoice.id,
+        paypal_active: invoice.paypal_active || false,
+        stripe_active: invoice.stripe_active || false,
+        bank_account_active: invoice.bank_account_active || false
+      };
+
+      const { data: estimate, error: estimateCreateError } = await supabase
+        .from('estimates')
+        .insert(estimateData)
+        .select()
+        .single();
+
+      if (estimateCreateError || !estimate) {
+        throw new Error(`Failed to create estimate: ${estimateCreateError?.message}`);
+      }
+
+      // Copy all line items from invoice to estimate
+      const estimateLineItems = invoice.invoice_line_items.map((item: any) => ({
+        estimate_id: estimate.id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total: item.total
+      }));
+
+      const { error: lineItemsError } = await supabase
+        .from('estimate_line_items')
+        .insert(estimateLineItems);
+
+      if (lineItemsError) {
+        throw new Error(`Failed to create estimate line items: ${lineItemsError.message}`);
+      }
+
+      // Optionally update invoice to mark it as converted to estimate
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ 
+          converted_to_estimate_id: estimate.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', invoice.id);
+
+      if (updateError) {
+        console.error('Warning: Failed to update invoice conversion tracking:', updateError);
+      }
+
+      console.log(`[AI Invoice Convert] Successfully converted invoice ${invoice_number} to estimate ${estimateNumber}`);
+
+      return {
+        success: true,
+        message: `Successfully converted invoice ${invoice_number} to estimate ${estimateNumber}. The new estimate includes all ${invoice.invoice_line_items.length} line items from the original invoice.`,
+        data: {
+          estimate_id: estimate.id,
+          estimate_number: estimateNumber,
+          original_invoice_number: invoice_number,
+          line_items_count: invoice.invoice_line_items.length,
+          total_amount: estimate.total_amount
+        }
+      };
+
+    } catch (error: any) {
+      console.error('[AI Invoice Convert] Error converting invoice to estimate:', error);
+      return {
+        success: false,
+        message: 'Failed to convert invoice to estimate. Please try again.',
+        error: error.message
       };
     }
   }

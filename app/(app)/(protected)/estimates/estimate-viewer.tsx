@@ -738,14 +738,26 @@ function EstimateViewerScreen() {
           style: 'default',
           onPress: async () => {
             try {
-              // Import InvoiceFunctionService locally to avoid circular dependencies
-              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
-              
-              if (!user) {
-                Alert.alert('Error', 'User not found.');
+              if (!user?.id) {
+                Alert.alert('Error', 'User information not available.');
                 return;
               }
 
+              // Check usage limits first
+              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
+              const usageLimits = await InvoiceFunctionService.executeFunction(
+                'check_usage_limits',
+                {},
+                user.id
+              );
+
+              if (!usageLimits.success || !usageLimits.data?.canCreate) {
+                // Navigate directly to subscription screen
+                router.push('/subscription');
+                return;
+              }
+
+              // Proceed with duplication if limits allow
               const result = await InvoiceFunctionService.executeFunction(
                 'duplicate_estimate',
                 { estimate_number: estimate.estimate_number },
@@ -757,7 +769,14 @@ function EstimateViewerScreen() {
                   'Success',
                   `Estimate duplicated successfully!\n\nNew Estimate: ${result.data?.estimate?.estimate_number || 'Unknown'}`,
                   [
-                    { text: 'OK', style: 'default' }
+                    { 
+                      text: 'OK', 
+                      style: 'default',
+                      onPress: () => {
+                        // Navigate to estimates list to see the new estimate
+                        router.push('/estimates');
+                      }
+                    }
                   ]
                 );
               } else {
