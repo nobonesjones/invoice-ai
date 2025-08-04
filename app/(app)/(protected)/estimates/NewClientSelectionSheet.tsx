@@ -35,6 +35,7 @@ import * as Contacts from 'expo-contacts';
 import { supabase } from "@/config/supabase"; // Assuming your Supabase client is exported from here
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
+import { useSupabase } from "@/context/supabase-provider";
 import CreateNewClientSheet, { CreateNewClientSheetRef } from "../customers/CreateNewClientSheet";
 import { useRef } from "react";
 import { Tables } from '../../../../types/database.types';
@@ -52,6 +53,7 @@ const NewClientSelectionSheet = forwardRef<
 >(({ onClientSelect, onClose }, ref) => {
 	const createNewClientSheetRef = useRef<CreateNewClientSheetRef>(null);
 	const { isLightMode } = useTheme();
+	const { user } = useSupabase();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const styles = getStyles(themeColors);
 
@@ -158,12 +160,19 @@ const NewClientSelectionSheet = forwardRef<
 	};
 
 	const fetchClients = async () => {
+		if (!user?.id) {
+			console.log("No user ID available, skipping client fetch");
+			setLoading(false);
+			return;
+		}
+		
 		setLoading(true);
 		setError(null);
 		try {
 			const { data, error: fetchError } = await supabase
 				.from("clients")
 				.select("*")
+				.eq("user_id", user.id)  // Filter by current user
 				.order("name", { ascending: true });
 
 			if (fetchError) throw fetchError;
@@ -180,7 +189,7 @@ const NewClientSelectionSheet = forwardRef<
 
 	useEffect(() => {
 		fetchClients();
-	}, []);
+	}, [user?.id]); // Re-fetch when user changes
 
 	useEffect(() => {
 		if (searchTerm === "") {

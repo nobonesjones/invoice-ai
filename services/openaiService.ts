@@ -94,7 +94,7 @@ export class OpenAIService {
     }
   }
 
-  static getSystemPrompt(userName?: string): string {
+  static getSystemPrompt(userName?: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }): string {
     return `You are a friendly AI assistant for an invoice and estimate management application. You help users create, manage, and track invoices and estimates for their business in a conversational, helpful way.
 
 IMPORTANT: You are having a CONVERSATION with the user. Be friendly, natural, and personable. Ask questions one at a time in a conversational way, not as formal lists.
@@ -164,6 +164,22 @@ Key guidelines:
 
 ${userName ? `The user's name is ${userName}. Feel free to use their name in conversation to be more personal.` : ''}
 
+${userContext?.isFirstInvoice ? `
+FIRST INVOICE MODE: This user is creating their FIRST invoice! Be extra helpful and encouraging. Show some examples of what they could create:
+
+Currency-aware examples (using ${userContext.symbol}):
+- "Invoice John Smith for 1 days labour ${userContext.symbol}500"
+- "Bill Sarah for 6 rooms painted ${userContext.symbol}450 per room"  
+- "Invoice ABC Company for 2 bathroom renovations ${userContext.symbol}3000 each"
+- "Bill Tom for 8 hours consulting ${userContext.symbol}150 per hour"
+
+Make these suggestions in a friendly, encouraging way. Help them feel confident about getting started.
+
+${!userContext.hasLogo ? `
+LOGO GUIDANCE: After they create their first invoice, gently suggest adding a business logo to make their invoices look more professional. You can say something like "Great job! Your invoice is ready. Want to make it even more professional by adding your business logo?"
+` : ''}
+` : ''}
+
 You have access to function calling to perform actual operations. Use them when the user requests specific actions.`;
   }
 
@@ -171,7 +187,8 @@ You have access to function calling to perform actual operations. Use them when 
     userMessage: string,
     conversationHistory: OpenAIMessage[] = [],
     userName?: string,
-    availableFunctions?: OpenAIFunction[]
+    availableFunctions?: OpenAIFunction[],
+    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }
   ): Promise<{
     response: string;
     functionCall?: {
@@ -185,7 +202,7 @@ You have access to function calling to perform actual operations. Use them when 
       const messages: OpenAIMessage[] = [
         {
           role: 'system',
-          content: this.getSystemPrompt(userName)
+          content: this.getSystemPrompt(userName, userContext)
         },
         ...conversationHistory.slice(-15), // Keep last 15 messages for context (increased from 10)
         {

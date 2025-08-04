@@ -44,7 +44,7 @@ export class ChatService {
   static async processUserMessage(
     userId: string,
     userMessage: string,
-    currencyContext?: { currency: string; symbol: string },
+    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean },
     statusCallback?: (status: string) => void
   ): Promise<{ conversation?: ChatConversation; thread?: any; messages: any[] }> {
     try {
@@ -52,14 +52,14 @@ export class ChatService {
       
       if (useAssistants) {
         try {
-          return await this.processWithAssistants(userId, userMessage, currencyContext, statusCallback);
+          return await this.processWithAssistants(userId, userMessage, userContext, statusCallback);
         } catch (assistantError) {
           console.error('[ChatService] Assistants API failed, falling back to Chat Completions:', assistantError);
           // Fall back to Chat Completions if Assistants fails
-          return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
+          return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
         }
       } else {
-        return await this.processWithChatCompletions(userId, userMessage, currencyContext, statusCallback);
+        return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
       }
     } catch (error) {
       console.error('[ChatService] Error processing message:', error);
@@ -71,7 +71,7 @@ export class ChatService {
   private static async processWithAssistants(
     userId: string,
     userMessage: string,
-    currencyContext?: { currency: string; symbol: string },
+    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean },
     statusCallback?: (status: string) => void
   ): Promise<{ thread: any; messages: any[] }> {
     try {
@@ -84,8 +84,8 @@ export class ChatService {
 
       statusCallback?.('SuperAI is preparing...');
 
-      // Send message via Assistants API with currency context and status updates
-      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, currencyContext, statusCallback);
+      // Send message via Assistants API with user context and status updates
+      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, userContext, statusCallback);
 
       statusCallback?.('SuperAI is finalizing response...');
 
@@ -122,7 +122,7 @@ export class ChatService {
   private static async processWithChatCompletions(
     userId: string,
     userMessage: string,
-    currencyContext?: { currency: string; symbol: string },
+    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean },
     statusCallback?: (status: string) => void
   ): Promise<{ conversation: ChatConversation; messages: ChatMessage[] }> {
     try {
@@ -157,7 +157,8 @@ export class ChatService {
         userMessage,
         conversationHistory,
         userName,
-        INVOICE_FUNCTIONS
+        INVOICE_FUNCTIONS,
+        userContext
       );
 
       let aiResponseMessage = aiResult.response;

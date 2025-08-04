@@ -95,7 +95,7 @@ export function useAIChat(): UseAIChatReturn {
     }
   }, [user?.id, isUsingAssistants, updateStatus, clearStatus]);
 
-  const sendMessage = useCallback(async (messageContent: string, currencyContext?: { currency: string; symbol: string }) => {
+  const sendMessage = useCallback(async (messageContent: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }) => {
     if (!user?.id || !messageContent.trim()) return;
 
     // Create optimistic user message to show immediately in UI
@@ -126,8 +126,8 @@ export function useAIChat(): UseAIChatReturn {
 
       console.log('[useAIChat] Sending message via ChatService...');
       
-      // Prepare currency context if business settings are loaded
-      const result = await ChatService.processUserMessage(user.id, messageContent.trim(), currencyContext, updateStatus);
+      // Prepare user context if available
+      const result = await ChatService.processUserMessage(user.id, messageContent.trim(), userContext, updateStatus);
       
       if (result.thread) {
         // Assistants API result

@@ -116,11 +116,11 @@ export class AssistantService {
   }
 
   // Enhanced system instructions for Assistant
-  private static async getSystemInstructions(userId?: string, currencyContext?: { currency: string; symbol: string }): Promise<string> {
-    const currencyInstruction = currencyContext 
+  private static async getSystemInstructions(userId?: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }): Promise<string> {
+    const currencyInstruction = userContext 
       ? `\n\nCURRENCY CONTEXT - CRITICAL:
-The user's business currency is ${currencyContext.currency} (${currencyContext.symbol}). 
-ALWAYS use ${currencyContext.symbol} when displaying prices, amounts, or totals.
+The user's business currency is ${userContext.currency} (${userContext.symbol}). 
+ALWAYS use ${userContext.symbol} when displaying prices, amounts, or totals.
 NEVER use $ if the user's currency is different.
 Examples:
 • If user currency is GBP (£): "Total: £250" not "Total: $250"
@@ -128,7 +128,22 @@ Examples:
 • If user currency is USD ($): "Total: $150" is correct\n`
       : '';
 
-    const baseInstructions = `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.${currencyInstruction}
+    const firstInvoiceMode = userContext?.isFirstInvoice
+      ? `\n\nFIRST INVOICE MODE - CRITICAL:
+This user is creating their FIRST invoice! Use guided assistance:
+• Be extra helpful and encouraging
+• Use simple language and clear steps
+• After successful invoice creation, offer logo guidance if they don't have one
+• Celebrate their first invoice completion with "🎉 Congratulations on your first invoice!"\n`
+      : '';
+
+    const logoContext = userContext && !userContext.hasLogo
+      ? `\n\nLOGO GUIDANCE - CRITICAL:
+This user doesn't have a business logo. After creating their first invoice, suggest:
+"I notice you don't have a business logo yet. Invoices with logos look more professional and build trust with clients. Would you like to add one? You can go to Settings → Business Profile → Add Logo to upload one."\n`
+      : '';
+
+    const baseInstructions = `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.${currencyInstruction}${firstInvoiceMode}${logoContext}
 
 UNDERSTANDING INVOICE STRUCTURE - CRITICAL:
 An invoice contains TWO types of information:
@@ -838,7 +853,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   }
 
   // Send message and get response
-  static async sendMessage(userId: string, message: string, currencyContext?: { currency: string; symbol: string }, statusCallback?: (status: string) => void): Promise<AssistantRunResult> {
+  static async sendMessage(userId: string, message: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }, statusCallback?: (status: string) => void): Promise<AssistantRunResult> {
     try {
       statusCallback?.('SuperAI is initializing...');
       
@@ -916,9 +931,24 @@ Use tools to take action. Reference previous conversation naturally.`;
         assistant_id: this.assistantId
       };
 
-      // Add currency-specific instructions if provided
-      if (currencyContext) {
-        runOptions.additional_instructions = `CURRENCY CONTEXT: User's business currency is ${currencyContext.currency} (${currencyContext.symbol}). ALWAYS use ${currencyContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`;
+      // Add user context instructions if provided
+      if (userContext) {
+        const contextInstructions = [];
+        
+        // Currency context
+        contextInstructions.push(`CURRENCY CONTEXT: User's business currency is ${userContext.currency} (${userContext.symbol}). ALWAYS use ${userContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`);
+        
+        // First invoice mode
+        if (userContext.isFirstInvoice) {
+          contextInstructions.push(`FIRST INVOICE MODE: This user is creating their FIRST invoice! Be extra helpful, encouraging, use simple language, and celebrate their completion.`);
+        }
+        
+        // Logo guidance
+        if (!userContext.hasLogo) {
+          contextInstructions.push(`LOGO GUIDANCE: User doesn't have a business logo. After invoice creation, suggest adding one: "I notice you don't have a business logo yet. Invoices with logos look more professional. You can add one in Settings → Business Profile → Add Logo."`);
+        }
+        
+        runOptions.additional_instructions = contextInstructions.join(' ');
       }
 
       const run = await openai.beta.threads.runs.create(threadId, runOptions);
@@ -968,8 +998,23 @@ Use tools to take action. Reference previous conversation naturally.`;
             assistant_id: this.assistantId
           };
 
-          if (currencyContext) {
-            recoveryRunOptions.additional_instructions = `CURRENCY CONTEXT: User's business currency is ${currencyContext.currency} (${currencyContext.symbol}). ALWAYS use ${currencyContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`;
+          if (userContext) {
+            const contextInstructions = [];
+            
+            // Currency context
+            contextInstructions.push(`CURRENCY CONTEXT: User's business currency is ${userContext.currency} (${userContext.symbol}). ALWAYS use ${userContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`);
+            
+            // First invoice mode
+            if (userContext.isFirstInvoice) {
+              contextInstructions.push(`FIRST INVOICE MODE: This user is creating their FIRST invoice! Be extra helpful, encouraging, use simple language, and celebrate their completion.`);
+            }
+            
+            // Logo guidance
+            if (!userContext.hasLogo) {
+              contextInstructions.push(`LOGO GUIDANCE: User doesn't have a business logo. After invoice creation, suggest adding one: "I notice you don't have a business logo yet. Invoices with logos look more professional. You can add one in Settings → Business Profile → Add Logo."`);
+            }
+            
+            recoveryRunOptions.additional_instructions = contextInstructions.join(' ');
           }
 
           const run = await openai.beta.threads.runs.create(newThreadId, recoveryRunOptions);

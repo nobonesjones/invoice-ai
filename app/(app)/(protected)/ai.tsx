@@ -17,6 +17,7 @@ import { ChatService } from "@/services/chatService";
 import { OpenAIService } from "@/services/openaiService";
 import { useAIChat } from "@/hooks/useAIChat";
 import { ChatMessage } from "@/services/chatService";
+import UserContextService from "@/services/userContextService";
 import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
 import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
 import SkiaInvoiceCanvasModern from "@/components/skia/SkiaInvoiceCanvasModern";
@@ -1113,6 +1114,7 @@ export default function AiScreen() {
 	const [businessSettings, setBusinessSettings] = useState<any>(null);
 	const [showSetupMessage, setShowSetupMessage] = useState(false);
 	const [currentAudioLevel, setCurrentAudioLevel] = useState(0);
+	const [userContext, setUserContext] = useState<any>(null);
 
 	// Animated values for waveform
 	const waveformAnims = useRef([
@@ -1138,6 +1140,19 @@ export default function AiScreen() {
 		error: aiError, 
 		clearError: aiClearError 
 	} = useAIChat();
+
+	// Load user context for first invoice detection and currency
+	const loadUserContext = async () => {
+		if (!user?.id) return;
+		
+		try {
+			const context = await UserContextService.getUserContext(user.id);
+			console.log('[AI Screen] Loaded user context:', context);
+			setUserContext(context);
+		} catch (error) {
+			console.error('[AI Screen] Error loading user context:', error);
+		}
+	};
 
 	// Load business settings for currency context
 	const loadBusinessSettings = async () => {
@@ -1238,6 +1253,9 @@ export default function AiScreen() {
 	// Load business settings and test OpenAI configuration on mount
 	useEffect(() => {
 		const initialize = async () => {
+			// Load user context for first invoice detection and currency
+			await loadUserContext();
+			
 			// Load business settings for currency context
 			await loadBusinessSettings();
 			
@@ -1338,6 +1356,31 @@ export default function AiScreen() {
 		const firstName = getFirstName();
 		const greeting = firstName ? `Hi ${firstName}` : 'Hello';
 		
+		// Check if this is the user's first invoice
+		if (userContext?.isFirstInvoice) {
+			const currencySymbol = userContext.currencySymbol || '$';
+			const examples = UserContextService.getCurrencyExamples(currencySymbol);
+			const example1 = examples[0];
+			const example2 = examples[1];
+			
+			return {
+				id: 'welcome-first-invoice',
+				conversation_id: '',
+				role: 'assistant' as const,
+				content: `${greeting}, I'm SuperAI your invoice and estimate assistant! 🎉
+
+I'll help you create your first invoice! Just tell me:
+• Who it's for (name/email)
+• What you're charging for
+
+Example: '${example1}'
+or '${example2}'`,
+				message_type: 'text' as const,
+				created_at: new Date().toISOString()
+			};
+		}
+		
+		// Regular welcome message
 		return {
 			id: 'welcome',
 			conversation_id: '',
@@ -1371,13 +1414,15 @@ export default function AiScreen() {
 		try {
 			// console.log('[AI Screen] Sending message via useAIChat...');
 			
-			// Prepare currency context if business settings are loaded
-			const currencyContext = businessSettings ? {
-				currency: businessSettings.currency,
-				symbol: businessSettings.currency_symbol
+			// Prepare user context if loaded
+			const contextForMessage = userContext ? {
+				currency: userContext.currency,
+				symbol: userContext.currencySymbol,
+				isFirstInvoice: userContext.isFirstInvoice,
+				hasLogo: userContext.hasLogo
 			} : undefined;
 
-			await sendMessage(messageToSend, currencyContext);
+			await sendMessage(messageToSend, contextForMessage);
 			
 			// console.log('[AI Screen] Message sent successfully');
 		} catch (error) {
