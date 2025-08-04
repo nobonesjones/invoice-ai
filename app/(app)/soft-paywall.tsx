@@ -127,46 +127,15 @@ export default function SoftPaywallScreen() {
         
         // If result is undefined and no callbacks fired, something's wrong
         if (result === undefined) {
-          console.log('[SoftPaywall] registerPlacement returned undefined - this might indicate the placement was skipped');
+          console.log('[SoftPaywall] registerPlacement returned undefined - paywall might be skipped or user already subscribed');
           
-          // Try alternative approach using campaign_trigger (which works in settings)
-          try {
-            console.log('[SoftPaywall] Trying with campaign_trigger placement...');
-            const altResult = await registerPlacement({
-              placement: 'campaign_trigger', // This works in settings
-              params: {
-                source: 'post_signup_fallback',
-                userId: user.id,
-                timing: 'onboarding_complete'
-              }
-            });
-            console.log('[SoftPaywall] campaign_trigger result:', altResult);
-          } catch (altError) {
-            console.log('[SoftPaywall] campaign_trigger also failed:', altError);
-          }
-          
-          // Also try superwall.register directly
-          if (superwall) {
-            try {
-              console.log('[SoftPaywall] Trying direct superwall.register approach...');
-              await superwall.register('onboarding_paywall', {
-                source: 'post_signup',
-                userId: user.id,
-                timing: 'onboarding_complete'
-              });
-              console.log('[SoftPaywall] superwall.register called successfully');
-            } catch (altError) {
-              console.log('[SoftPaywall] Direct register also failed:', altError);
-            }
-          }
-          
-          // Wait a bit to see if callbacks fire, then navigate
+          // Just wait a bit to see if callbacks fire, then navigate
           setTimeout(() => {
             if (!isPaywallPresented) {
-              console.log('[SoftPaywall] No paywall presented after 3 seconds, navigating to main app');
+              console.log('[SoftPaywall] No paywall presented after 2 seconds, navigating to main app');
               setShouldNavigate(true);
             }
-          }, 3000);
+          }, 2000);
         }
         
       } catch (error) {

@@ -1342,7 +1342,7 @@ export default function AiScreen() {
 			id: 'welcome',
 			conversation_id: '',
 			role: 'assistant' as const,
-			content: `${greeting}, I'm SuperAI your invoice and estimate assistant. I can help create, manage, update or chase unpaid invoices and estimates (and much more). You can type or send a voice note and I will understand. What can I help with?`,
+			content: `${greeting}, I'm SuperAI your invoice and estimate assistant. I can create, manage, update, invoices and estimates (and much more). Just type or record a voice note to tell me what to do first.`,
 			message_type: 'text' as const,
 			created_at: new Date().toISOString()
 		};

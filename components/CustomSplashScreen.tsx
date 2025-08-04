@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Image, Dimensions } from 'react-native';
-import { useTheme } from '@/context/theme-provider';
+import { View, StyleSheet, Animated, Image, Dimensions, useColorScheme } from 'react-native';
 
 interface CustomSplashScreenProps {
   onLoadingComplete?: () => void;
@@ -13,7 +12,8 @@ export const CustomSplashScreen: React.FC<CustomSplashScreenProps> = ({
   onLoadingComplete, 
   loadingProgress = 0 
 }) => {
-  const { isLightMode } = useTheme();
+  const colorScheme = useColorScheme();
+  const isLightMode = colorScheme === 'light';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const logoScaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -42,7 +42,14 @@ export const CustomSplashScreen: React.FC<CustomSplashScreenProps> = ({
       duration: 300,
       useNativeDriver: false,
     }).start();
-  }, [loadingProgress]);
+    
+    // Call onLoadingComplete when progress reaches 100
+    if (loadingProgress >= 100 && onLoadingComplete) {
+      setTimeout(() => {
+        onLoadingComplete();
+      }, 300); // Wait for animation to complete
+    }
+  }, [loadingProgress, onLoadingComplete]);
 
   const backgroundColor = isLightMode ? '#ffffff' : '#000000';
   const progressBarColor = isLightMode ? '#14B8A6' : '#14B8A6';

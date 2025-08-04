@@ -52,6 +52,9 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
   const startAudioLevelMonitoring = useCallback(() => {
     if (!recordingRef.current || !onAudioLevel) return;
 
+    // Clear any existing interval first
+    stopAudioLevelMonitoring();
+
     audioLevelInterval.current = setInterval(async () => {
       try {
         if (!recordingRef.current) {
@@ -69,10 +72,13 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
           stopAudioLevelMonitoring();
         }
       } catch (error: any) {
-        console.log('[TranscribeButton] Error getting audio level:', error);
+        // Suppress the common -50 error spam
+        if (!error.message?.includes('-50') && !error.toString().includes('-50')) {
+          console.log('[TranscribeButton] Error getting audio level:', error);
+        }
         stopAudioLevelMonitoring();
       }
-    }, 100);
+    }, 200); // Increased interval from 100ms to 200ms to reduce frequency
   }, [onAudioLevel, stopAudioLevelMonitoring]);
 
   const transcribeAudio = useCallback(async (audioUri: string) => {

@@ -59,11 +59,14 @@ export function AuthModal({
     setIsGoogleLoading(true);
     
     try {
-      const explicitRedirectTo = "expo-supabase-starter://oauth/callback";
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: explicitRedirectTo,
+          skipBrowserRedirect: true,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
 
@@ -78,12 +81,25 @@ export function AuthModal({
       }
 
       if (data?.url) {
+        console.log("OAuth URL from Supabase:", data.url);
+        
+        // Use the original approach - the token extraction should handle localhost redirects
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          explicitRedirectTo,
+          "superinvoice://oauth/callback",
         );
-        if (result.type === "success" && result.url) {
-          const params = new URLSearchParams(result.url.split("#")[1]);
+        
+        console.log("WebBrowser result:", result);
+        
+        // Handle the case where we get redirected to localhost with tokens
+        if (result.type === "success" && result.url && result.url.includes("access_token")) {
+          console.log("Got auth tokens from redirect URL:", result.url);
+          
+          // Extract tokens from the URL (could be after # or ?)
+          const urlParts = result.url.includes('#') ? result.url.split("#") : result.url.split("?");
+          const tokenString = urlParts[1] || urlParts[0];
+          const params = new URLSearchParams(tokenString);
+          
           const access_token = params.get("access_token");
           const refresh_token = params.get("refresh_token");
           if (access_token && refresh_token) {

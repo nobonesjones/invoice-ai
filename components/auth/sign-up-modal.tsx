@@ -109,22 +109,30 @@ export function SignUpModal({
 
     try {
       setIsLoading(true);
-      await signUp(email, password);
+      const result = await signUp(email, password);
       
-      // Get the current session to get user ID and save onboarding data
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData?.session?.user?.id) {
-        try {
-          await saveOnboardingData(sessionData.session.user.id);
-          console.log('[SignUpModal] Onboarding data saved after signup');
-        } catch (error) {
-          console.error('[SignUpModal] Error saving onboarding data:', error);
-          // Don't block the flow if onboarding data save fails
+      if (result?.requiresEmailConfirmation) {
+        // Show success message for email confirmation
+        setGeneralError("Success! Please check your email to confirm your account. Once confirmed, you can sign in.");
+        // Clear form and switch to sign in after showing message
+        setTimeout(() => {
+          handleClose();
+          onSwitchToSignIn();
+        }, 4000);
+      } else {
+        // User is signed up and logged in
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user?.id) {
+          try {
+            await saveOnboardingData(sessionData.session.user.id);
+            console.log('[SignUpModal] Onboarding data saved after signup');
+          } catch (error) {
+            console.error('[SignUpModal] Error saving onboarding data:', error);
+          }
         }
+        console.log('[SignUpModal] Calling onSuccess callback...');
+        onSuccess?.();
       }
-      
-      console.log('[SignUpModal] Calling onSuccess callback...');
-      onSuccess?.();
     } catch (error: any) {
       console.error("Error signing up:", error);
       if (error.message.includes("already registered")) {

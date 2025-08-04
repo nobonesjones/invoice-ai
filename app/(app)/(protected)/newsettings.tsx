@@ -361,7 +361,7 @@ export default function NewSettingsScreen() {
           </View>
 
           {/* Usage Counter - Only show for non-premium users */}
-          {!isSubscribed && usageStats && usageStats.subscriptionTier === 'free' && (
+          {!isSubscribed && usageStats && (
             <View style={[styles.usageCounterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.usageCounterContent}>
                 <View style={styles.usageCounterMain}>
@@ -377,6 +377,11 @@ export default function NewSettingsScreen() {
                   <Text style={[styles.usageCounterText, { color: theme.mutedForeground }]}>
                     {usageStats.totalItemsCreated}/3 items created
                   </Text>
+                  {usageStats.totalItemsCreated >= 3 && (
+                    <Text style={[styles.usageUpgradeText, { color: '#25D366' }]}>
+                      Upgrade to continue using SuperInvoice
+                    </Text>
+                  )}
                 </View>
               </View>
             </View>
@@ -549,6 +554,11 @@ const styles = StyleSheet.create({
   usageCounterText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  usageUpgradeText: {
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 4,
   },
   usageUpgradeButton: {
     paddingVertical: 8,

@@ -42,7 +42,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
 	const signUp = async (email: string, password: string) => {
 		// Sign up the user
-		const { error: signUpError } = await supabase.auth.signUp({
+		const { data, error: signUpError } = await supabase.auth.signUp({
 			email,
 			password,
 		});
@@ -50,13 +50,27 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 			throw signUpError;
 		}
 
-		// After successful sign-up, sign in the user
-		const { error: signInError } = await supabase.auth.signInWithPassword({
-			email,
-			password,
-		});
-		if (signInError) {
-			throw signInError;
+		// Check if email confirmation is required
+		if (data?.user && !data.session) {
+			// User created but needs email confirmation
+			console.log('[SupabaseProvider] User created successfully, email confirmation required');
+			// Return a special response that indicates success but needs confirmation
+			return { 
+				success: true, 
+				requiresEmailConfirmation: true,
+				message: 'Please check your email to confirm your account'
+			};
+		}
+
+		// If we have a session, the user is already confirmed (or confirmation is disabled)
+		if (data?.session) {
+			console.log('[SupabaseProvider] User signed up and logged in successfully');
+			setSession(data.session);
+			setUser(data.user);
+			return { 
+				success: true, 
+				requiresEmailConfirmation: false 
+			};
 		}
 	};
 
@@ -79,10 +93,12 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
 	useEffect(() => {
 		const initializeApp = async () => {
+			console.log('[SupabaseProvider] Starting initialization...');
 			// Simulate loading progress
 			setLoadingProgress(20);
 			
 			const { data: { session } } = await supabase.auth.getSession();
+			console.log('[SupabaseProvider] Session retrieved:', !!session);
 			setLoadingProgress(60);
 			
 			setSession(session);
@@ -91,6 +107,7 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 			
 			// Small delay to show 100% completion
 			setTimeout(() => {
+				console.log('[SupabaseProvider] Setting progress to 100% and initialized to true');
 				setLoadingProgress(100);
 				setInitialized(true);
 			}, 200);
@@ -107,8 +124,10 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	useEffect(() => {
 		if (!initialized) return;
 		
+		console.log('[SupabaseProvider] App initialized, hiding splash screen...');
 		// Hide custom splash screen after a brief delay
 		setTimeout(() => {
+			console.log('[SupabaseProvider] Hiding custom splash and Expo splash');
 			setShowCustomSplash(false);
 			SplashScreen.hideAsync();
 		}, 800);
