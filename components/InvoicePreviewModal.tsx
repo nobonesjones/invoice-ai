@@ -83,7 +83,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
       return getDesignById(designId) || getDefaultDesign();
     });
     const [estimateAccentColor, setEstimateAccentColor] = useState(
-      mode === 'settings' ? initialAccentColor : invoiceData?.accent_color || '#14B8A6'
+      mode === 'settings' ? initialAccentColor : invoiceData?.accent_color || '#1E40AF'
     );
 
     // Use hook results for invoices, manual state for estimates

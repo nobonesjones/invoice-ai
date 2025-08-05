@@ -86,6 +86,8 @@ serve(async (req) => {
       tax_name: 'Tax',
       default_tax_rate: 0, // 0% default tax rate
       business_logo_url: null,
+      default_invoice_design: 'clean', // Set default template to clean
+      default_accent_color: '#1E40AF', // Set default color to navy
     };
 
     const { data: businessSettingsData, error: businessError } = await supabase

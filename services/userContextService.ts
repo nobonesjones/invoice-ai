@@ -91,52 +91,9 @@ class UserContextService {
   async markFirstInvoiceCompleted(userId: string): Promise<void> {
     try {
       console.log('[UserContext] First invoice completed for user:', userId);
-      
-      // Set default Clean + Navy styling for first-time users
-      await this.setDefaultStylingForNewUser(userId);
-      
+      // Note: Default styling is now handled by the edge function on user signup
     } catch (error) {
       console.error('[UserContext] Error marking first invoice completed:', error);
-    }
-  }
-
-  private async setDefaultStylingForNewUser(userId: string): Promise<void> {
-    try {
-      const { data: existingSettings } = await supabase
-        .from('business_settings')
-        .select('default_invoice_design, default_accent_color')
-        .eq('user_id', userId)
-        .single();
-
-      // Only set defaults if they haven't been customized yet
-      const needsDesignDefault = !existingSettings?.default_invoice_design;
-      const needsColorDefault = !existingSettings?.default_accent_color;
-
-      if (needsDesignDefault || needsColorDefault) {
-        const updates: any = {};
-        
-        if (needsDesignDefault) {
-          updates.default_invoice_design = 'clean';
-          console.log('[UserContext] Setting default design to Clean for new user');
-        }
-        
-        if (needsColorDefault) {
-          updates.default_accent_color = '#1E40AF'; // Navy Blue
-          console.log('[UserContext] Setting default color to Navy Blue for new user');
-        }
-
-        await supabase
-          .from('business_settings')
-          .upsert({
-            user_id: userId,
-            ...updates,
-            updated_at: new Date().toISOString()
-          });
-
-        console.log('[UserContext] Applied default Clean + Navy styling for first-time user');
-      }
-    } catch (error) {
-      console.error('[UserContext] Error setting default styling:', error);
     }
   }
 

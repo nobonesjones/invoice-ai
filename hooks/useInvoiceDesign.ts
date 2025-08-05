@@ -24,7 +24,7 @@ interface UseInvoiceDesignReturn {
 export const useInvoiceDesign = (initialDesignId?: string, initialAccentColor?: string): UseInvoiceDesignReturn => {
   const { supabase, user } = useSupabase();
   const [currentDesign, setCurrentDesign] = useState<InvoiceDesign>(getDefaultDesign());
-  const [currentAccentColor, setCurrentAccentColor] = useState<string>(initialAccentColor || '#14B8A6');
+  const [currentAccentColor, setCurrentAccentColor] = useState<string>(initialAccentColor || '#1E40AF');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +62,7 @@ export const useInvoiceDesign = (initialDesignId?: string, initialAccentColor?: 
       // Use initial accent color if provided, otherwise use saved preference or default
       const accentColor = initialAccentColor || 
                          businessSettings?.default_accent_color || 
-                         '#14B8A6';
+                         '#1E40AF';
 
       const design = getDesignById(designId);
       if (design) {
@@ -189,7 +189,7 @@ export const useInvoiceDesignForInvoice = (
 ): UseInvoiceDesignForInvoiceReturn => {
   const { supabase, user } = useSupabase();
   const [currentDesign, setCurrentDesign] = useState<InvoiceDesign>(getDefaultDesign());
-  const [currentAccentColor, setCurrentAccentColor] = useState<string>(initialAccentColor || '#14B8A6');
+  const [currentAccentColor, setCurrentAccentColor] = useState<string>(initialAccentColor || '#1E40AF');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -217,7 +217,7 @@ export const useInvoiceDesignForInvoice = (
             // Fall back to business defaults
           } else if (invoiceData) {
             const designId = invoiceData.invoice_design || DEFAULT_DESIGN_ID;
-            const accentColor = invoiceData.accent_color || '#14B8A6';
+            const accentColor = invoiceData.accent_color || '#1E40AF';
             
             const design = getDesignById(designId);
             if (design) {
@@ -248,7 +248,7 @@ export const useInvoiceDesignForInvoice = (
 
         const accentColor = initialAccentColor || 
                            businessSettings?.default_accent_color || 
-                           '#14B8A6';
+                           '#1E40AF';
 
         const design = getDesignById(designId);
         if (design) {

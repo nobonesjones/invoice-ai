@@ -310,7 +310,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "update_business_settings",
-    description: "Update business profile settings including company name, address, tax rates, and contact information",
+    description: "Update business profile settings including company name, address, tax rates, and contact information. Use this for tax removal/disabling (set default_tax_rate: 0, auto_apply_tax: false) - tax is a business setting that affects all future invoices, just like business address.",
     parameters: {
       type: "object",
       properties: {
@@ -340,7 +340,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         },
         default_tax_rate: {
           type: "number",
-          description: "Default tax rate percentage (e.g., 8.5 for 8.5%)"
+          description: "Default tax rate percentage (e.g., 8.5 for 8.5%). Set to 0 to remove/disable tax completely when user says 'remove VAT', 'no tax', etc."
         },
         tax_name: {
           type: "string",
@@ -348,7 +348,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         },
         auto_apply_tax: {
           type: "boolean",
-          description: "Whether to automatically apply tax to new invoices"
+          description: "Whether to automatically apply tax to new invoices. Set to false when removing tax. Use false with default_tax_rate: 0 to fully disable tax."
         },
         region: {
           type: "string",
@@ -1053,13 +1053,13 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
   },
   {
     name: "update_tax_settings",
-    description: "Update tax-related settings including tax rate, tax name (VAT/GST/Sales Tax), tax number, and auto-apply tax toggle. Use this when user wants to change tax settings, remove tax, or disable tax on invoices.",
+    description: "Update tax-related settings including tax rate, tax name (VAT/GST/Sales Tax), tax number, and auto-apply tax toggle. Use this when user wants to change tax settings, remove tax, disable tax on invoices, turn off VAT, remove VAT, set tax to 0%, or stop applying tax automatically. Examples: 'remove VAT', 'disable tax', 'turn off tax', 'no tax on invoices', 'set tax to 0%'.",
     parameters: {
       type: "object",
       properties: {
         default_tax_rate: {
           type: "number",
-          description: "Default tax rate percentage (e.g., 20 for 20%). Set to 0 or null to remove tax."
+          description: "Default tax rate percentage (e.g., 20 for 20%). Set to 0 to completely remove/disable tax. Use 0 when user says 'remove VAT', 'disable tax', 'no tax', etc."
         },
         tax_name: {
           type: "string",
@@ -1071,7 +1071,7 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         },
         auto_apply_tax: {
           type: "boolean",
-          description: "Whether to automatically apply tax to new invoices. Set to false to disable tax by default."
+          description: "Whether to automatically apply tax to new invoices. Set to false when user wants to disable automatic tax application. Use false with default_tax_rate: 0 to fully remove tax."
         }
       }
     }
@@ -1610,8 +1610,8 @@ export class InvoiceFunctionService {
       let defaultTaxRate = 0;
       let businessCurrency = 'USD';
       let businessCurrencySymbol = '$';
-      let defaultDesign = 'classic';
-      let defaultAccentColor = '#14B8A6';
+      let defaultDesign = 'clean';
+      let defaultAccentColor = '#1E40AF';
       
       // Step 0.1: Get user's payment settings to determine which payment methods should be enabled
       let paypalEnabled = false;
@@ -1641,14 +1641,16 @@ export class InvoiceFunctionService {
         console.log('[AI Invoice Create] Error loading payment options (will disable all):', paymentError);
       }
       
+      let businessSettings = null;
       try {
-        const { data: businessSettings } = await supabase
+        const { data: businessSettingsData } = await supabase
           .from('business_settings')
-          .select('default_tax_rate, auto_apply_tax, currency_code, default_invoice_design, default_accent_color, show_business_logo, show_business_name, show_business_address, show_business_tax_number, show_notes_section')
+          .select('default_tax_rate, auto_apply_tax, tax_name, currency_code, default_invoice_design, default_accent_color, show_business_logo, show_business_name, show_business_address, show_business_tax_number, show_notes_section')
           .eq('user_id', userId)
           .single();
           
-        if (businessSettings) {
+        if (businessSettingsData) {
+          businessSettings = businessSettingsData;
           console.log('[AI Invoice Create] Loaded business settings:', businessSettings);
           if (businessSettings.auto_apply_tax && businessSettings.default_tax_rate) {
             defaultTaxRate = businessSettings.default_tax_rate;
@@ -1816,6 +1818,7 @@ export class InvoiceFunctionService {
           discount_type: params.discount_type || null,
           discount_value: params.discount_value || 0,
           tax_percentage: taxPercentage || 0,
+          invoice_tax_label: businessSettings?.tax_name || null,
           total_amount: totalAmount,
           notes: params.notes || null,
           invoice_design: defaultDesign,
@@ -1852,22 +1855,20 @@ export class InvoiceFunctionService {
         throw new Error(`Failed to create line items: ${lineItemsError.message}`);
       }
 
-      // Step 8: Check if this was user's first invoice and set default styling
+      // Step 8: Track first invoice completion for user context (styling is handled by edge function)
       try {
-        // Check how many invoices the user had BEFORE this one was created
         const { count: existingInvoicesCount } = await supabase
           .from('invoices')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId);
         
-        const isFirstInvoice = (existingInvoicesCount || 0) === 1; // They now have exactly 1 (this one)
+        const isFirstInvoice = (existingInvoicesCount || 0) === 1;
         if (isFirstInvoice) {
-          console.log('[Invoice Create] First invoice detected - setting default Clean + Navy styling');
+          console.log('[Invoice Create] First invoice completed for user:', userId);
           await UserContextService.markFirstInvoiceCompleted(userId);
         }
       } catch (contextError) {
-        console.error('[Invoice Create] Error handling first invoice styling:', contextError);
-        // Don't fail the invoice creation if styling fails
+        console.error('[Invoice Create] Error handling first invoice tracking:', contextError);
       }
 
       // Step 9: Return success with invoice details
@@ -4683,8 +4684,8 @@ The new client is ready to use for invoices!`
       let defaultTaxRate = 0;
       let businessCurrency = 'USD';
       let businessCurrencySymbol = '$';
-      let defaultDesign = 'classic';
-      let defaultAccentColor = '#14B8A6';
+      let defaultDesign = 'clean';
+      let defaultAccentColor = '#1E40AF';
       
       // Get user's payment settings to determine which payment methods should be enabled
       let paypalEnabled = false;
@@ -4714,14 +4715,16 @@ The new client is ready to use for invoices!`
         console.log('[AI Estimate Create] Error loading payment options (will disable all):', paymentError);
       }
       
+      let businessSettings = null;
       try {
-        const { data: businessSettings } = await supabase
+        const { data: businessSettingsData } = await supabase
           .from('business_settings')
-          .select('default_tax_rate, auto_apply_tax, currency_code, default_invoice_design, default_accent_color')
+          .select('default_tax_rate, auto_apply_tax, tax_name, currency_code, default_invoice_design, default_accent_color')
           .eq('user_id', userId)
           .single();
           
-        if (businessSettings) {
+        if (businessSettingsData) {
+          businessSettings = businessSettingsData;
           if (businessSettings.auto_apply_tax && businessSettings.default_tax_rate) {
             defaultTaxRate = businessSettings.default_tax_rate;
           }
@@ -4814,6 +4817,7 @@ The new client is ready to use for invoices!`
         valid_until_date: validUntilDate.toISOString().split('T')[0],
         subtotal_amount: subtotal,
         tax_percentage: taxPercentage,
+        estimate_tax_label: businessSettings?.tax_name || null,
         total_amount: total,
         discount_type: discountType,
         discount_value: discountValue,
@@ -5259,7 +5263,7 @@ The new client is ready to use for invoices!`
         status: 'unpaid',
         notes: estimate.notes,
         design_template: estimate.estimate_template || DEFAULT_DESIGN_ID,
-        accent_color: estimate.accent_color || '#14B8A6',
+        accent_color: estimate.accent_color || '#1E40AF',
         converted_from_estimate: estimate.id,
         paypal_active: estimate.paypal_active || false,
         stripe_active: estimate.stripe_active || false,
@@ -5412,7 +5416,7 @@ The new client is ready to use for invoices!`
         status: 'pending',
         notes: invoice.notes,
         estimate_template: invoice.design_template || DEFAULT_DESIGN_ID,
-        accent_color: invoice.accent_color || '#14B8A6',
+        accent_color: invoice.accent_color || '#1E40AF',
         converted_from_invoice: invoice.id,
         paypal_active: invoice.paypal_active || false,
         stripe_active: invoice.stripe_active || false,
@@ -6117,12 +6121,12 @@ The new client is ready to use for invoices!`
 
   private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
     try {
-      // Check if user is subscribed
+      // Check if user is subscribed (handle missing profiles gracefully)
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('subscription_tier')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to handle missing records
       
       if (profileError) {
         console.error('[AI Usage Check] Error fetching profile:', profileError);
@@ -6133,6 +6137,7 @@ The new client is ready to use for invoices!`
         };
       }
       
+      // If no profile exists, user is not subscribed (new users don't have profiles initially)
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
       
       if (isSubscribed) {

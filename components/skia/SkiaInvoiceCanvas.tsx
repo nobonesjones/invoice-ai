@@ -31,7 +31,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
     style,
     renderSinglePage,
     exportPageNumber,
-    accentColor = '#14B8A6', // Default turquoise
+    accentColor = '#1E40AF', // Default navy
     documentType = 'invoice', // Default to invoice for backward compatibility
     estimateTerminology = 'estimate', // Default to estimate
     displaySettings = {
@@ -769,7 +769,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 9, 
         fontStyle: { weight: 700 }
       })
-      .addText(`${business?.tax_name || 'Tax'} (${invoice?.tax_percentage || 20}%):`)
+      .addText(`${invoice?.invoice_tax_label || business?.tax_name || 'Tax'} (${invoice?.tax_percentage || business?.default_tax_rate || 0}%):`)
       .build();
 
       const taxValueParagraph = Skia.ParagraphBuilder.Make({
@@ -781,7 +781,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${currencySymbol}${(((invoice?.subtotal_amount || 400.00) - discountAmount) * ((invoice?.tax_percentage || 20) / 100)).toFixed(2)}`)
+      .addText(`${currencySymbol}${(((invoice?.subtotal_amount || 400.00) - discountAmount) * ((invoice?.tax_percentage || business?.default_tax_rate || 0) / 100)).toFixed(2)}`)
       .build();
 
       const totalLabelParagraph = Skia.ParagraphBuilder.Make({

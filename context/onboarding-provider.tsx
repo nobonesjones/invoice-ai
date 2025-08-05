@@ -205,6 +205,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
       const businessSettingsData: any = {
         user_id: userId,
         updated_at: new Date().toISOString(),
+        // Set clean + navy defaults for all new users
+        default_invoice_design: 'clean',
+        default_accent_color: '#1E40AF',
       };
 
       // Add business name if provided

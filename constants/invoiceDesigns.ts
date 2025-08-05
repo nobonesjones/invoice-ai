@@ -155,7 +155,7 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
 ];
 
 // Default design
-export const DEFAULT_DESIGN_ID = 'classic';
+export const DEFAULT_DESIGN_ID = 'clean';
 
 // Helper functions for design management
 export const getDesignById = (id: string): InvoiceDesign | undefined => {

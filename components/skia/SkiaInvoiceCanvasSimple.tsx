@@ -31,7 +31,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     style,
     renderSinglePage,
     exportPageNumber,
-    accentColor = '#14B8A6', // Default turquoise
+    accentColor = '#1E40AF', // Default navy
     documentType = 'invoice', // Default to invoice for backward compatibility
     estimateTerminology = 'estimate', // Default to estimate
     displaySettings = {
@@ -784,7 +784,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 700 }
       })
-      .addText(`${business?.tax_name || 'Tax'} (${invoice?.tax_percentage || 20}%):`)
+      .addText(`${invoice?.invoice_tax_label || business?.tax_name || 'Tax'} (${invoice?.tax_percentage || business?.default_tax_rate || 0}%):`)
       .build();
 
       const taxValueParagraph = Skia.ParagraphBuilder.Make({
@@ -796,7 +796,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${currencySymbol}${(((invoice?.subtotal_amount || 400.00) - discountAmount) * ((invoice?.tax_percentage || 20) / 100)).toFixed(2)}`)
+      .addText(`${currencySymbol}${(((invoice?.subtotal_amount || 400.00) - discountAmount) * ((invoice?.tax_percentage || business?.default_tax_rate || 0) / 100)).toFixed(2)}`)
       .build();
 
       const totalLabelParagraph = Skia.ParagraphBuilder.Make({
@@ -939,7 +939,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     shadow: '#f0f0f0',
     orange: accentColor, // Dynamic accent color for logo instead of orange
     headerBlock: accentColor, // Use accent color for header block
-    lightAccent: accentColor ? `${accentColor}15` : '#14B8A615' // Very light version of accent color (15% opacity in hex)
+    lightAccent: accentColor ? `${accentColor}15` : '#1E40AF15' // Very light version of accent color (15% opacity in hex)
   };
 
   if (!scaledFonts.body || !scaledFonts.title || !scaledFonts.small) {

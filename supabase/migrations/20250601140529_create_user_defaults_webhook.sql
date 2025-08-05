@@ -66,7 +66,9 @@ BEGIN
     currency_code,
     tax_name,
     default_tax_rate,
-    business_logo_url
+    business_logo_url,
+    default_invoice_design,
+    default_accent_color
   ) VALUES (
     NEW.id,
     null,
@@ -77,7 +79,9 @@ BEGIN
     'USD', -- Default currency
     'Tax',
     0, -- 0% default tax rate
-    null
+    null,
+    'clean', -- Set default template to clean
+    '#1E40AF' -- Set default color to navy
   );
 
   RETURN NEW;

@@ -90,8 +90,8 @@ export class EstimateConversionService {
           paypal_active: estimate.paypal_active,
           bank_account_active: estimate.bank_account_active,
           // Design settings - preserve from estimate
-          invoice_design: estimate.estimate_template || businessSettings?.default_invoice_design || 'modern',
-          accent_color: estimate.accent_color || businessSettings?.default_accent_color || '#3b82f6',
+          invoice_design: estimate.estimate_template || businessSettings?.default_invoice_design || 'clean',
+          accent_color: estimate.accent_color || businessSettings?.default_accent_color || '#1E40AF',
           // Tax label
           invoice_tax_label: estimate.estimate_tax_label || 'Tax',
           // Amounts
