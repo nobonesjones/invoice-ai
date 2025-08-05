@@ -52,7 +52,8 @@ class UsageTrackingService {
         userId,
         invoicesCreated,
         estimatesCreated,
-        totalItemsCreated
+        totalItemsCreated,
+        canCreateMore: totalItemsCreated < 3
       });
 
       return {

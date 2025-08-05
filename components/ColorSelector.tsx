@@ -73,6 +73,8 @@ export const ColorSelector: React.FC<ColorSelectorProps> = ({
   const isLightMode = colorScheme === 'light';
   const themeColors = colors[colorScheme || 'light'];
   
+  const styles = getStyles(themeColors);
+  
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customHue, setCustomHue] = useState(180);
   const [customSaturation, setCustomSaturation] = useState(0.8);
@@ -290,9 +292,9 @@ export const ColorSelector: React.FC<ColorSelectorProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
-    paddingTop: 31,
+    paddingTop: 5, // Reduced from 31 to 5 to match InvoiceDesignSelector and move colors higher
     paddingBottom: -2,
     paddingHorizontal: 20,
     backgroundColor: 'white',
@@ -339,7 +341,8 @@ const styles = StyleSheet.create({
   },
   colorRectangleContainer: {
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 2, // Keep same margin
+    marginTop: 5, // Positive margin to move palette lower down
   },
   colorRectangle: {
     width: 320, // Increased width
@@ -366,14 +369,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sliderContainer: {
-    marginBottom: 2,
-    marginTop: 0,
+    marginBottom: -5, // Less negative margin so palette can move down
+    marginTop: -22, // More negative margin to compensate for label moving down 7px
   },
   sliderLabel: {
     fontSize: 12,
     fontWeight: '500',
-    marginBottom: 1,
-    marginTop: 0,
+    marginBottom: -9, // More negative margin to pull slider back up
+    marginTop: 17, // Move opacity text down by 5 more pixels (was 12, now 17)
   },
   slider: {
     width: 320, // Match the color rectangle width

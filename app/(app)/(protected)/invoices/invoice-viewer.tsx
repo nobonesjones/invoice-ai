@@ -64,7 +64,8 @@ import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymen
 import { InvoiceShareService } from '@/services/invoiceShareService';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { usePaywall } from '@/context/paywall-provider';
-// import { usePlacement } from 'expo-superwall';
+import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
+import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // NEW SKIA IMPORTS
@@ -149,6 +150,16 @@ function InvoiceViewerScreen() {
   const { supabase, user } = useSupabase(); 
   const { logPaymentAdded, logStatusChanged, logInvoiceSent } = useInvoiceActivityLogger();
   const { isSubscribed } = usePaywall();
+  const { checkAndShowPaywall } = useItemCreationLimit();
+  
+  // Paywall for send block using the working pattern
+  const { registerPlacement } = usePlacement({
+    onError: (err) => console.error('[InvoiceViewer] Send paywall error:', err),
+    onPresent: (info) => console.log('[InvoiceViewer] Send paywall presented:', info),
+    onDismiss: (info, result) => {
+      console.log('[InvoiceViewer] Send paywall dismissed:', info, 'Result:', result);
+    },
+  });
   
   // Paywall for send block
   // const { registerPlacement } = usePlacement({
@@ -254,23 +265,22 @@ function InvoiceViewerScreen() {
   const handleSendByEmail = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendByEmail] Free user attempting to send - showing paywall');
-      // Superwall disabled for Expo Go
-      Alert.alert('Upgrade Required', 'Sending invoices requires a subscription. This feature requires a development build.');
-      return;
-      /* try {
+      console.log('[handleSendByEmail] Free user attempting to send - showing no_send paywall');
+      try {
         await registerPlacement({
-          placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
+          placement: 'create_item_limit', // Using existing working placement
           params: {
             source: 'invoice_send_email',
             invoiceId: invoice?.id,
-            userId: user?.id
+            userId: user?.id,
+            action: 'send_invoice'
           }
         });
       } catch (error) {
-        console.error('[handleSendByEmail] Failed to show paywall:', error);
-        Alert.alert('Premium Feature', 'Sending invoices requires a premium subscription.');
-      } */
+        console.error('[handleSendByEmail] Paywall failed, using fallback');
+        const { router } = await import('expo-router');
+        router.push('/subscription');
+      }
       return;
     }
 
@@ -392,23 +402,23 @@ function InvoiceViewerScreen() {
   const handleSendLink = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendLink] Free user attempting to send - showing paywall');
-      // Superwall disabled for Expo Go
-      Alert.alert('Upgrade Required', 'Sending invoices requires a subscription. This feature requires a development build.');
-      return;
-      /* try {
+      console.log('[handleSendLink] Free user attempting to send - showing no_send paywall');
+      try {
         await registerPlacement({
-          placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
+          placement: 'create_item_limit', // Using existing working placement
           params: {
             source: 'invoice_send_link',
             invoiceId: invoice?.id,
-            userId: user?.id
+            userId: user?.id,
+            action: 'send_invoice'
           }
         });
       } catch (error) {
-        console.error('[handleSendLink] Failed to show paywall:', error);
-        Alert.alert('Premium Feature', 'Sending invoices requires a premium subscription.');
-      } */
+        console.error('[handleSendLink] Paywall failed, using fallback');
+        const { router } = await import('expo-router');
+        router.push('/subscription');
+      }
+      return;
     }
 
     if (!invoice || !supabase || !user) {
@@ -499,23 +509,23 @@ function InvoiceViewerScreen() {
   const handleSendPDF = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendPDF] Free user attempting to send - showing paywall');
-      // Superwall disabled for Expo Go
-      Alert.alert('Upgrade Required', 'Sending invoices requires a subscription. This feature requires a development build.');
-      return;
-      /* try {
+      console.log('[handleSendPDF] Free user attempting to send - showing no_send paywall');
+      try {
         await registerPlacement({
-          placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
+          placement: 'create_item_limit', // Using existing working placement
           params: {
             source: 'invoice_send_pdf',
             invoiceId: invoice?.id,
-            userId: user?.id
+            userId: user?.id,
+            action: 'send_invoice'
           }
         });
       } catch (error) {
-        console.error('[handleSendPDF] Failed to show paywall:', error);
-        Alert.alert('Premium Feature', 'Sending invoices requires a premium subscription.');
-      } */
+        console.error('[handleSendPDF] Paywall failed, using fallback');
+        const { router } = await import('expo-router');
+        router.push('/subscription');
+      }
+      return;
     }
 
     if (!invoice || !businessSettings) {
@@ -1576,21 +1586,14 @@ function InvoiceViewerScreen() {
                 return;
               }
 
-              // Import InvoiceFunctionService locally to avoid circular dependencies
-              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
-
-              // Check usage limits first
-              const usageLimits = await InvoiceFunctionService.executeFunction(
-                'check_usage_limits',
-                {},
-                user.id
-              );
-
-              if (!usageLimits.success || !usageLimits.data?.canCreate) {
-                // Navigate directly to subscription screen
-                router.push('/subscription');
+              // Check usage limits and show paywall if needed
+              const canProceed = await checkAndShowPaywall();
+              if (!canProceed) {
                 return;
               }
+
+              // Import InvoiceFunctionService locally to avoid circular dependencies
+              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
 
               // Proceed with duplication if limits allow
               const result = await InvoiceFunctionService.executeFunction(

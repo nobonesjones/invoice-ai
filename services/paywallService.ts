@@ -69,10 +69,43 @@ class PaywallService {
   async presentPaywall(config: PaywallConfig): Promise<void> {
     try {
       console.log('[PaywallService] Presenting paywall for event:', config.event);
-      await SuperwallService.presentPaywall(config.event, config.params);
+      
+      // Map events to actual Superwall placements that exist
+      let placement: string;
+      switch (config.event) {
+        case 'no_send':
+          // Use existing working placement until no_send is configured
+          placement = 'create_item_limit';
+          break;
+        case 'create_item_limit':
+          placement = 'create_item_limit';
+          break;
+        case 'campaign_trigger':
+          placement = 'campaign_trigger';
+          break;
+        default:
+          placement = 'campaign_trigger'; // Default fallback
+      }
+      
+      console.log('[PaywallService] Using placement:', placement);
+      
+      // Use registerPlacement instead of presentPaywall
+      const { usePlacement } = await import('expo-superwall');
+      
+      // This is a workaround - we'll need to refactor to use the hook properly
+      // For now, let's use SuperwallService but with placement approach
+      await SuperwallService.presentPaywall(placement, config.params);
+      
     } catch (error) {
       console.error('[PaywallService] Failed to present paywall:', error);
-      throw error;
+      
+      // Fallback for development (Expo Go) - navigate to subscription page
+      console.log('[PaywallService] Using fallback navigation to subscription page');
+      const { router } = await import('expo-router');
+      router.push('/subscription');
+      
+      // Don't throw error for fallback
+      return;
     }
   }
 
@@ -132,7 +165,8 @@ class PaywallService {
   static readonly EVENTS = {
     SETTINGS_UPGRADE: 'campaign_trigger', // Use the placement that works
     ONBOARDING_COMPLETE: 'campaign_trigger', // Using same placement for now
-    SEND_BLOCK: 'send_block', // New send block campaign
+    SEND_BLOCK: 'send_block', // Old send block campaign
+    NO_SEND: 'no_send', // New no_send paywall for send items block campaign
     INVOICE_LIMIT_REACHED: 'invoice_limit_reached',
     PREMIUM_FEATURE_ACCESSED: 'premium_feature_accessed'
   } as const;

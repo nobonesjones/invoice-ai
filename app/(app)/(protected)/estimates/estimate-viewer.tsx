@@ -49,7 +49,8 @@ import { EstimateSenderService } from '@/services/estimateSenderService';
 import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { EstimateShareService } from '@/services/estimateShareService';
-// import { usePlacement } from 'expo-superwall';
+import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
+import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // SKIA IMPORTS for estimate rendering
@@ -118,6 +119,16 @@ function EstimateViewerScreen() {
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted, logStatusChanged } = useEstimateActivityLogger();
   const { isSubscribed } = usePaywall();
+  const { checkAndShowPaywall } = useItemCreationLimit();
+  
+  // Paywall for send block using the working pattern
+  const { registerPlacement } = usePlacement({
+    onError: (err) => console.error('[EstimateViewer] Send paywall error:', err),
+    onPresent: (info) => console.log('[EstimateViewer] Send paywall presented:', info),
+    onDismiss: (info, result) => {
+      console.log('[EstimateViewer] Send paywall dismissed:', info, 'Result:', result);
+    },
+  });
   
   // Paywall for send block
   // const { registerPlacement } = usePlacement({
@@ -475,23 +486,22 @@ function EstimateViewerScreen() {
   const handleSendPDF = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendPDF] Free user attempting to send - showing paywall');
-      // Superwall disabled for Expo Go
-      Alert.alert('Upgrade Required', 'Sending estimates requires a subscription. This feature requires a development build.');
-      return;
-      /* try {
+      console.log('[handleSendPDF] Free user attempting to send - showing no_send paywall');
+      try {
         await registerPlacement({
-          placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
+          placement: 'create_item_limit', // Using existing working placement
           params: {
             source: 'estimate_send_pdf',
             estimateId: estimate?.id,
-            userId: user?.id
+            userId: user?.id,
+            action: 'send_estimate'
           }
         });
       } catch (error) {
-        console.error('[handleSendPDF] Failed to show paywall:', error);
-        Alert.alert('Premium Feature', 'Sending estimates requires a premium subscription.');
-      } */
+        console.error('[handleSendPDF] Paywall failed, using fallback');
+        const { router } = await import('expo-router');
+        router.push('/subscription');
+      }
       return;
     }
 
@@ -562,23 +572,23 @@ function EstimateViewerScreen() {
   const handleSendByEmail = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendByEmail] Free user attempting to send - showing paywall');
-      // Superwall disabled for Expo Go
-      Alert.alert('Upgrade Required', 'Sending estimates requires a subscription. This feature requires a development build.');
-      return;
-      /* try {
+      console.log('[handleSendByEmail] Free user attempting to send - showing no_send paywall');
+      try {
         await registerPlacement({
-          placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
+          placement: 'create_item_limit', // Using existing working placement
           params: {
             source: 'estimate_send_email',
             estimateId: estimate?.id,
-            userId: user?.id
+            userId: user?.id,
+            action: 'send_estimate'
           }
         });
       } catch (error) {
-        console.error('[handleSendByEmail] Failed to show paywall:', error);
-        Alert.alert('Premium Feature', 'Sending estimates requires a premium subscription.');
-      } */
+        console.error('[handleSendByEmail] Paywall failed, using fallback');
+        const { router } = await import('expo-router');
+        router.push('/subscription');
+      }
+      return;
     }
 
     if (!estimate || !businessSettings || !user) {
@@ -614,23 +624,21 @@ function EstimateViewerScreen() {
   const handleSendByLink = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendByLink] Free user attempting to send - showing paywall');
-      // Superwall disabled for Expo Go
-      Alert.alert('Upgrade Required', 'Sending estimates requires a subscription. This feature requires a development build.');
-      return;
-      /* try {
+      console.log('[handleSendByLink] Free user attempting to send - showing no_send paywall');
+      try {
         await registerPlacement({
-          placement: PaywallServiceClass.EVENTS.SEND_BLOCK,
+          placement: 'create_item_limit', // Using existing working placement
           params: {
             source: 'estimate_send_link',
             estimateId: estimate?.id,
-            userId: user?.id
+            userId: user?.id,
+            action: 'send_estimate'
           }
         });
       } catch (error) {
-        console.error('[handleSendByLink] Failed to show paywall:', error);
-        Alert.alert('Premium Feature', 'Sending estimates requires a premium subscription.');
-      } */
+        console.error('[handleSendLink] Paywall failed, using fallback');
+        const { router } = await import('expo-router');
+      }
       return;
     }
 
@@ -743,21 +751,14 @@ function EstimateViewerScreen() {
                 return;
               }
 
-              // Check usage limits first
-              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
-              const usageLimits = await InvoiceFunctionService.executeFunction(
-                'check_usage_limits',
-                {},
-                user.id
-              );
-
-              if (!usageLimits.success || !usageLimits.data?.canCreate) {
-                // Navigate directly to subscription screen
-                router.push('/subscription');
+              // Check usage limits and show paywall if needed
+              const canProceed = await checkAndShowPaywall();
+              if (!canProceed) {
                 return;
               }
 
               // Proceed with duplication if limits allow
+              const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
               const result = await InvoiceFunctionService.executeFunction(
                 'duplicate_estimate',
                 { estimate_number: estimate.estimate_number },

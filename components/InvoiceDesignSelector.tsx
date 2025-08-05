@@ -137,10 +137,11 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
 
 const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
-    paddingTop: 31,
-    paddingBottom: -2,
-    paddingHorizontal: 20,
+    paddingTop: 5, // Reduced from 31 to 5 to minimize area above templates
+    paddingBottom: 20, // Increased bottom padding to extend area down
+    paddingHorizontal: 5, // Reduced from 20 to 5 to minimize space on sides
     backgroundColor: 'white',
+    minHeight: 220, // Ensure container has minimum height to fill space
   },
   title: {
     fontSize: 16,
@@ -151,7 +152,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   },
   scrollView: {
     flexGrow: 0,
-    height: 140, // Increased height to use available space
+    height: 200, // Increased from 140 to 200 to make templates area bigger
   },
   scrollContent: {
     paddingRight: 10,
@@ -162,7 +163,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     borderWidth: 2,
     borderRadius: 12,
     padding: 8,
-    backgroundColor: 'white',
+    backgroundColor: 'transparent', // Remove pink from individual template items
     ...Platform.select({
       ios: {
         shadowColor: '#000',

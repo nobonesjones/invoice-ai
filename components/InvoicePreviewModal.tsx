@@ -23,6 +23,7 @@ import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoice
 import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
 import { ColorSelector } from '@/components/ColorSelector';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 
 export interface InvoicePreviewModalRef {
   present: () => void;
@@ -53,13 +54,17 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const themeColors = colors[colorScheme || 'light'];
     const { supabase, user } = useSupabase();
     
+    const styles = getStyles(themeColors);
+    
     const [isVisible, setIsVisible] = useState(false);
+    const mainModalRef = useRef<BottomSheetModal>(null);
     
     // Tab state for design/color selection
     const [activeTab, setActiveTab] = useState<'design' | 'color'>('design');
+    const [showSendOptions, setShowSendOptions] = useState(false);
     
-    // Swipe gesture state
-    const [isMinimized, setIsMinimized] = useState(false);
+    // Swipe gesture state - now supports 3 positions
+    const [modalPosition, setModalPosition] = useState<'normal' | 'minimized' | 'expanded'>('normal');
     const translateY = useRef(new Animated.Value(0)).current;
     const gestureRef = useRef<PanGestureHandler>(null);
     
@@ -95,9 +100,10 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const updateDefaultForNewInvoices = hookResult.updateDefaultForNewInvoices;
     
     // Send modal refs and setup
-    const sendInvoiceModalRef = useRef<BottomSheetModal>(null);
     const skiaInvoiceRef = useCanvasRef();
-    const sendInvoiceSnapPoints = useMemo(() => ['35%', '50%'], []);
+    
+    // Paywall setup
+    const { checkAndShowPaywall } = useItemCreationLimit();
 
     // Gesture handler for swipe functionality
     const onGestureEvent = Animated.event(
@@ -109,39 +115,55 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
       if (event.nativeEvent.oldState === State.ACTIVE) {
         const { translationY, velocityY } = event.nativeEvent;
         
-        // Determine if should minimize or expand based on gesture
-        const shouldMinimize = translationY > 50 || velocityY > 500;
-        const shouldExpand = translationY < -50 || velocityY < -500;
+        // Define positions: expanded (-90), normal (0), minimized (120)
+        const expandedPos = -90; // 30% higher up (90px up from normal)
+        const normalPos = 0;
+        const minimizedPos = 120;
         
-        if (shouldMinimize && !isMinimized) {
-          // Minimize - slide down
-          setIsMinimized(true);
-          Animated.spring(translateY, {
-            toValue: 120, // Height to slide down
-            useNativeDriver: true,
-            tension: 100,
-            friction: 8,
-          }).start();
-        } else if (shouldExpand && isMinimized) {
-          // Expand - slide up
-          setIsMinimized(false);
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 8,
-          }).start();
-        } else {
-          // Return to current state
-          Animated.spring(translateY, {
-            toValue: isMinimized ? 120 : 0,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 8,
-          }).start();
+        // Determine target position based on gesture
+        let targetPosition: 'normal' | 'minimized' | 'expanded' = modalPosition;
+        let targetValue = normalPos;
+        
+        if (modalPosition === 'normal') {
+          if (translationY > 50 || velocityY > 500) {
+            // Swipe down from normal -> minimize
+            targetPosition = 'minimized';
+            targetValue = minimizedPos;
+          } else if (translationY < -50 || velocityY < -500) {
+            // Swipe up from normal -> expand
+            targetPosition = 'expanded';
+            targetValue = expandedPos;
+          }
+        } else if (modalPosition === 'minimized') {
+          if (translationY < -30 || velocityY < -300) {
+            // Swipe up from minimized -> normal
+            targetPosition = 'normal';
+            targetValue = normalPos;
+          }
+        } else if (modalPosition === 'expanded') {
+          if (translationY > 30 || velocityY > 300) {
+            // Swipe down from expanded -> normal
+            targetPosition = 'normal';
+            targetValue = normalPos;
+          }
         }
+        
+        // If no clear gesture, return to current position
+        if (targetPosition === modalPosition) {
+          targetValue = modalPosition === 'expanded' ? expandedPos : 
+                      modalPosition === 'minimized' ? minimizedPos : normalPos;
+        }
+        
+        // Update state and animate
+        setModalPosition(targetPosition);
+        Animated.spring(translateY, {
+          toValue: targetValue,
+          useNativeDriver: true,
+          tension: 100,
+          friction: 8,
+        }).start();
       }
-    }, [isMinimized, translateY]);
+    }, [modalPosition, translateY]);
 
     useImperativeHandle(ref, () => ({
       present: () => setIsVisible(true),
@@ -218,17 +240,15 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
       }
     }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase]);
 
-    // Send modal handlers
-    const handleOpenSendModal = useCallback(() => {
-      sendInvoiceModalRef.current?.present();
-    }, []);
-
-    const handleCloseSendModal = useCallback(() => {
-      sendInvoiceModalRef.current?.dismiss();
-    }, []);
 
     // Send handlers
     const handleSendByEmail = async () => {
+      // Check paywall first
+      const canProceed = await checkAndShowPaywall();
+      if (!canProceed) {
+        return;
+      }
+
       if (!invoiceData || !businessSettings) {
         Alert.alert('Error', 'Invoice or business data is not available.');
         return;
@@ -330,8 +350,6 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           mimeType: 'application/pdf', 
           dialogTitle: 'Send Invoice via Email' 
         });
-
-        handleCloseSendModal();
         
       } catch (error: any) {
         console.error('[Modal handleSendByEmail] Error:', error);
@@ -340,6 +358,12 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     };
 
     const handleSendLink = async () => {
+      // Check paywall first
+      const canProceed = await checkAndShowPaywall();
+      if (!canProceed) {
+        return;
+      }
+
       if (!invoiceData || !supabase) {
         Alert.alert('Error', 'Unable to send invoice at this time.');
         return;
@@ -376,7 +400,6 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         }
 
         Alert.alert('Link Shared', 'Invoice link has been shared.');
-        handleCloseSendModal();
       } catch (error: any) {
         console.error('[Modal handleSendLink] Error:', error);
         Alert.alert('Error', 'An unexpected error occurred while sharing the invoice link.');
@@ -384,6 +407,12 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     };
 
     const handleSendPDF = async () => {
+      // Check paywall first
+      const canProceed = await checkAndShowPaywall();
+      if (!canProceed) {
+        return;
+      }
+
       if (!invoiceData || !businessSettings) {
         Alert.alert('Error', 'Cannot export PDF - invoice data not loaded');
         return;
@@ -469,48 +498,21 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           dialogTitle: `Share Invoice ${invoiceData.invoice_number} PDF`
         });
         
-        handleCloseSendModal();
-        
       } catch (error: any) {
         console.error('[Modal handleSendPDF] Error:', error);
         Alert.alert('PDF Export Error', `Failed to export PDF: ${error.message}`);
       }
     };
 
-    const renderBackdrop = useCallback(
-      (props: any) => (
-        <BottomSheetBackdrop
-          {...props}
-          disappearsOnIndex={-1}
-          appearsOnIndex={0}
-          opacity={0.6}
-          enableTouchThrough={false}
-        />
-      ),
-      []
-    );
 
-    const renderSendBackdrop = useCallback(
-      (props: any) => (
-        <BottomSheetBackdrop
-          {...props}
-          disappearsOnIndex={-1}
-          appearsOnIndex={0}
-          opacity={0.5}
-        />
-      ),
-      []
-    );
-
-    const snapPoints = React.useMemo(() => ["99%"], []);
 
     return (
       <>
         <Modal
           visible={isVisible}
-          transparent={false}
           animationType="slide"
           presentationStyle="fullScreen"
+          onRequestClose={handleClose}
         >
           <SafeAreaView style={[styles.container, { backgroundColor: 'white' }]}>
             <View style={[styles.header, { borderBottomColor: themeColors.border }]}>
@@ -537,7 +539,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
             <ScrollView 
               contentContainerStyle={[
                 styles.scrollContent,
-                { backgroundColor: 'white' }
+                { backgroundColor: themeColors.border }
               ]}
               showsVerticalScrollIndicator={false}
             >
@@ -545,6 +547,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                 <View style={{
                   transform: [{ scale: 0.882 }],
                   marginLeft: -175,
+                  position: 'relative',
                 }}>
                   {React.createElement(currentDesign.component, {
                     ref: skiaInvoiceRef,
@@ -575,156 +578,186 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
                       show_notes_section: businessSettings?.show_notes_section ?? true,
                     }
                   })}
+                  
                 </View>
               </View>
+
+              {/* Design/Color Selector - Swipeable bottom panel */}
+              <PanGestureHandler
+                ref={gestureRef}
+                onGestureEvent={onGestureEvent}
+                onHandlerStateChange={onHandlerStateChange}
+                activeOffsetY={[-10, 10]}
+              >
+                <Animated.View 
+                  style={[
+                    styles.designSelectorContainer,
+                    {
+                      transform: [{ translateY: translateY }],
+                      position: 'relative', // Changed from absolute
+                      marginTop: 90, // 10 pixels higher
+                    }
+                  ]}
+                >
+                  {/* Swipe indicator */}
+                  <View style={styles.swipeIndicator}>
+                    <View style={styles.swipeHandle} />
+                  </View>
+                  
+                  {/* Tab Selector Header */}
+                  <View style={styles.selectorHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 }}>
+                      <View style={{ flex: 1 }} />
+                      <SegmentedControl
+                        options={['Choose Design', 'Choose Colour']}
+                        selectedIndex={activeTab === 'design' ? 0 : 1}
+                        onSelectionChange={(index) => {
+                          setActiveTab(index === 0 ? 'design' : 'color');
+                          setShowSendOptions(false); // Hide send options when switching tabs
+                        }}
+                        style={[styles.tabSelectorBottom, { opacity: showSendOptions ? 0.6 : 1 }]}
+                      />
+                      <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                        {/* Send Arrow - positioned to the right */}
+                        {invoiceData && businessSettings && mode !== 'settings' && (
+                          <TouchableOpacity
+                            onPress={() => setShowSendOptions(!showSendOptions)}
+                            style={{
+                              marginRight: -15, // Move 10 more pixels to the right (was -5, now -15)
+                              width: 36,
+                              height: 36,
+                              backgroundColor: showSendOptions ? '#22c55e' : '#f3f4f6',
+                              borderRadius: 18,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              shadowColor: '#000',
+                              shadowOffset: { width: 0, height: 1 },
+                              shadowOpacity: 0.2,
+                              shadowRadius: 2,
+                              elevation: 2,
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Send size={18} color={showSendOptions ? "#FFFFFF" : "#6b7280"} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                  
+                  {/* Content */}
+                  <View style={styles.selectorContent}>
+                    {showSendOptions ? (
+                      /* Send Options - compact to fit same space */
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 0, paddingTop: 8, paddingBottom: 20, backgroundColor: 'white' }}>
+                        {/* Send Options Buttons - more compact */}
+                        <TouchableOpacity 
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            backgroundColor: 'white',
+                            borderRadius: 12,
+                            marginBottom: 8,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.15,
+                            shadowRadius: 6,
+                            elevation: 4,
+                          }}
+                          onPress={() => {
+                            handleSendByEmail();
+                            setShowSendOptions(false);
+                          }}
+                        >
+                          <Mail size={20} color={themeColors.foreground} style={{ marginRight: 12 }} />
+                          <Text style={{ fontSize: 15, color: themeColors.foreground }}>Send by Email</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            backgroundColor: 'white',
+                            borderRadius: 12,
+                            marginBottom: 8,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.15,
+                            shadowRadius: 6,
+                            elevation: 4,
+                          }}
+                          onPress={() => {
+                            handleSendLink();
+                            setShowSendOptions(false);
+                          }}
+                        >
+                          <Link2 size={20} color={themeColors.foreground} style={{ marginRight: 12 }} />
+                          <Text style={{ fontSize: 15, color: themeColors.foreground }}>Send Link</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            backgroundColor: 'white',
+                            borderRadius: 12,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.15,
+                            shadowRadius: 6,
+                            elevation: 4,
+                          }}
+                          onPress={() => {
+                            handleSendPDF();
+                            setShowSendOptions(false);
+                          }}
+                        >
+                          <FileText size={20} color={themeColors.foreground} style={{ marginRight: 12 }} />
+                          <Text style={{ fontSize: 15, color: themeColors.foreground }}>Send PDF</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      /* Design/Color Selectors */
+                      <>
+                        {activeTab === 'design' ? (
+                          <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: 'white' }}>
+                            <InvoiceDesignSelector
+                              designs={availableDesigns}
+                              selectedDesignId={currentDesign.id}
+                              onDesignSelect={selectDesign}
+                              isLoading={isDesignLoading}
+                            />
+                          </View>
+                        ) : (
+                          <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: 'white' }}>
+                            <ColorSelector
+                              selectedColor={currentAccentColor}
+                              onColorSelect={selectAccentColor}
+                            />
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </View>
+                </Animated.View>
+              </PanGestureHandler>
             </ScrollView>
+
           </SafeAreaView>
-
-          {/* Quick Send Icon - positioned above design selector */}
-          {invoiceData && businessSettings && mode !== 'settings' && (
-            <TouchableOpacity
-              onPress={handleOpenSendModal}
-              style={styles.quickSendIcon}
-              activeOpacity={0.8}
-            >
-              <Send size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-
-          {/* Design/Color Selector - Swipeable bottom panel */}
-          <PanGestureHandler
-            ref={gestureRef}
-            onGestureEvent={onGestureEvent}
-            onHandlerStateChange={onHandlerStateChange}
-            activeOffsetY={[-10, 10]}
-          >
-            <Animated.View 
-              style={[
-                styles.designSelectorContainer,
-                {
-                  transform: [{ translateY: translateY }],
-                }
-              ]}
-            >
-              {/* Swipe indicator */}
-              <View style={styles.swipeIndicator}>
-                <View style={styles.swipeHandle} />
-              </View>
-              
-              {/* Tab Selector Header */}
-              <View style={styles.selectorHeader}>
-                <SegmentedControl
-                  options={['Choose Design', 'Choose Colour']}
-                  selectedIndex={activeTab === 'design' ? 0 : 1}
-                  onSelectionChange={(index) => setActiveTab(index === 0 ? 'design' : 'color')}
-                  style={styles.tabSelectorBottom}
-                />
-              </View>
-              
-              {/* Content */}
-              <View style={styles.selectorContent}>
-                {activeTab === 'design' ? (
-                  <InvoiceDesignSelector
-                    designs={availableDesigns}
-                    selectedDesignId={currentDesign.id}
-                    onDesignSelect={selectDesign}
-                    isLoading={isDesignLoading}
-                  />
-                ) : (
-                  <ColorSelector
-                                      selectedColor={currentAccentColor}
-                  onColorSelect={selectAccentColor}
-                  />
-                )}
-              </View>
-            </Animated.View>
-          </PanGestureHandler>
         </Modal>
 
-        {/* Quick Send Modal - moved outside main Modal to appear on top */}
-        <BottomSheetModal
-          ref={sendInvoiceModalRef}
-          index={0}
-          snapPoints={sendInvoiceSnapPoints}
-          backdropComponent={renderSendBackdrop}
-          handleIndicatorStyle={{ backgroundColor: themeColors.foreground + '40' }}
-          backgroundStyle={{ backgroundColor: 'white' }}
-          onDismiss={() => console.log('Modal Send Invoice Modal Dismissed')}
-        >
-          <BottomSheetView style={{ flex: 1 }}>
-            {/* Modal Header */}
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: themeColors.border,
-              backgroundColor: 'white',
-            }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: 'bold',
-                color: themeColors.foreground,
-                flex: 1,
-                textAlign: 'center'
-              }}>
-                Send {documentType === 'estimate' ? 'Estimate' : 'Invoice'}
-              </Text>
-              <TouchableOpacity onPress={handleCloseSendModal} style={{ padding: 4 }}>
-                <XIcon size={24} color={themeColors.foreground + '80'} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Modal Options */}
-            <TouchableOpacity 
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: 16,
-                paddingHorizontal: 16,
-              }}
-              onPress={handleSendByEmail}
-            >
-              <Mail size={22} color={themeColors.foreground} style={{ marginRight: 16 }} />
-              <Text style={{ fontSize: 16, color: themeColors.foreground }}>Send by Email</Text>
-            </TouchableOpacity>
-            <View style={{ height: 1, backgroundColor: themeColors.border, marginLeft: 16 }} />
-
-            <TouchableOpacity 
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: 16,
-                paddingHorizontal: 16,
-              }}
-              onPress={handleSendLink}
-            >
-              <Link2 size={22} color={themeColors.foreground} style={{ marginRight: 16 }} />
-              <Text style={{ fontSize: 16, color: themeColors.foreground }}>Send Link</Text>
-            </TouchableOpacity>
-            <View style={{ height: 1, backgroundColor: themeColors.border, marginLeft: 16 }} />
-
-            <TouchableOpacity 
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: 16,
-                paddingHorizontal: 16,
-              }}
-              onPress={handleSendPDF}
-            >
-              <FileText size={22} color={themeColors.foreground} style={{ marginRight: 16 }} />
-              <Text style={{ fontSize: 16, color: themeColors.foreground }}>Send PDF</Text>
-            </TouchableOpacity>
-          </BottomSheetView>
-        </BottomSheetModal>
       </>
     );
   }
 );
 
-const styles = StyleSheet.create({
+const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -749,7 +782,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
     paddingTop: -2,
-    paddingBottom: Platform.OS === 'ios' ? 120 : 100, // Extra space for design section
+    paddingBottom: 10, // Add 10px back for spacing
     paddingHorizontal: 0,
   },
   previewContainer: {
@@ -805,8 +838,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'white',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Safe area padding
-    paddingTop: 10,
+    paddingBottom: 0, // Remove bottom padding to eliminate white space
+    paddingTop: 0, // Removed all top padding (3px reduction)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
@@ -838,8 +871,8 @@ const styles = StyleSheet.create({
   },
   selectorHeader: {
     paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingTop: 0, // Reduced by 2 more pixels
+    paddingBottom: 0, // Reduced by 4 more pixels  
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
@@ -848,7 +881,8 @@ const styles = StyleSheet.create({
     width: 250,
   },
   selectorContent: {
-    flex: 1,
+    height: 150, // Fixed height instead of flex: 1
+    backgroundColor: 'white',
   },
   swipeIndicator: {
     alignItems: 'center',

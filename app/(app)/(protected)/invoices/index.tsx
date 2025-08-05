@@ -505,7 +505,9 @@ export default function InvoiceDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
+                  console.log('[InvoiceDashboard] Create button pressed');
                   const canProceed = await checkAndShowPaywall();
+                  console.log('[InvoiceDashboard] Can proceed:', canProceed);
                   if (canProceed) {
                     router.push("/invoices/create" as any);
                   }
