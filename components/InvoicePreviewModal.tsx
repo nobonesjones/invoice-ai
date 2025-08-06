@@ -82,6 +82,28 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         console.log('[InvoicePreviewModal] invoiceData is null - this might cause issues');
       }
     }, [invoiceData]);
+    
+    // Update estimate design and color when invoiceData changes (for estimates)
+    React.useEffect(() => {
+      if (documentType === 'estimate' && invoiceData) {
+        console.log('[InvoicePreviewModal] Updating estimate design from invoiceData');
+        console.log('[InvoicePreviewModal] estimate_template:', invoiceData.estimate_template);
+        console.log('[InvoicePreviewModal] accent_color:', invoiceData.accent_color);
+        
+        // Update design
+        const designId = mode === 'settings' ? initialDesign : invoiceData.estimate_template;
+        const design = getDesignById(designId);
+        if (design) {
+          setEstimateDesign(design);
+        }
+        
+        // Update accent color
+        const accentColor = mode === 'settings' ? initialAccentColor : invoiceData.accent_color;
+        if (accentColor) {
+          setEstimateAccentColor(accentColor);
+        }
+      }
+    }, [invoiceData, documentType, mode, initialDesign, initialAccentColor]);
     const mainModalRef = useRef<BottomSheetModal>(null);
     
     // Tab state for design/color selection
@@ -98,8 +120,8 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     const shouldUseHook = documentType !== 'estimate';
     const hookResult = useInvoiceDesignForInvoice(
       shouldUseHook ? invoiceId : undefined,
-      mode === 'settings' ? initialDesign : (documentType === 'estimate' ? invoiceData?.estimate_template : invoiceData?.invoice_design),
-      mode === 'settings' ? initialAccentColor : invoiceData?.accent_color
+      shouldUseHook ? (mode === 'settings' ? initialDesign : invoiceData?.invoice_design) : undefined,
+      shouldUseHook ? (mode === 'settings' ? initialAccentColor : invoiceData?.accent_color) : undefined
     );
 
     // For estimates, we'll manage state manually since the hook is invoice-specific

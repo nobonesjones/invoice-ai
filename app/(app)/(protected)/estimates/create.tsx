@@ -1379,7 +1379,7 @@ export default function CreateEstimateScreen() {
         paypal_active: formData.paypal_active || false,
         bank_account_active: formData.bank_account_active || false,
         // Apply current design settings
-        invoice_design: currentDesign,
+        estimate_template: currentDesign,
         accent_color: currentAccentColor,
         // Add estimate terminology for proper labeling
         estimate_terminology: estimateTerminology,

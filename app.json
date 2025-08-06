@@ -67,7 +67,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
-      "package": "com.indianabones.meetings",
+      "package": "com.indianabones.ExpoSupabaseStarter",
       "permissions": [
         "RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",

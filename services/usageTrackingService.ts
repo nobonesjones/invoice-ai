@@ -22,7 +22,7 @@ class UsageTrackingService {
    */
   async getUserUsageStats(userId: string): Promise<UsageStats> {
     try {
-      console.log('[UsageTracking] Checking lifetime usage for user:', userId);
+      // Checking lifetime usage for user
 
       // Count ALL invoices created by user
       const { count: invoicesCount, error: invoicesError } = await this.supabase
@@ -31,7 +31,7 @@ class UsageTrackingService {
         .eq('user_id', userId);
 
       if (invoicesError) {
-        console.error('[UsageTracking] Error counting invoices:', invoicesError);
+        // Error counting invoices
       }
 
       // Count ALL estimates created by user
@@ -41,20 +41,14 @@ class UsageTrackingService {
         .eq('user_id', userId);
 
       if (estimatesError) {
-        console.error('[UsageTracking] Error counting estimates:', estimatesError);
+        // Error counting estimates
       }
 
       const invoicesCreated = invoicesCount || 0;
       const estimatesCreated = estimatesCount || 0;
       const totalItemsCreated = invoicesCreated + estimatesCreated;
 
-      console.log('[UsageTracking] Usage stats for user:', {
-        userId,
-        invoicesCreated,
-        estimatesCreated,
-        totalItemsCreated,
-        canCreateMore: totalItemsCreated < 3
-      });
+      // Usage stats calculated for user
 
       return {
         invoicesCreated,
@@ -62,7 +56,7 @@ class UsageTrackingService {
         totalItemsCreated
       };
     } catch (error) {
-      console.error('[UsageTracking] Error getting usage stats:', error);
+      // Error getting usage stats
       return {
         invoicesCreated: 0,
         estimatesCreated: 0,
@@ -84,12 +78,7 @@ class UsageTrackingService {
     const stats = await this.getUserUsageStats(userId);
     const canCreate = stats.totalItemsCreated < 3;
 
-    console.log('[UsageTracking] Can user create item?', {
-      userId,
-      isSubscribed,
-      totalItems: stats.totalItemsCreated,
-      canCreate
-    });
+    // Can user create item check completed
 
     return canCreate;
   }
@@ -105,11 +94,7 @@ class UsageTrackingService {
     const stats = await this.getUserUsageStats(userId);
     const remaining = Math.max(0, 3 - stats.totalItemsCreated);
 
-    console.log('[UsageTracking] Remaining items for user:', {
-      userId,
-      totalItems: stats.totalItemsCreated,
-      remaining
-    });
+    // Remaining items calculated for user
 
     return remaining;
   }
@@ -119,11 +104,7 @@ class UsageTrackingService {
    * Note: This is just for logging/tracking purposes since we count from the database
    */
   async incrementUsageCount(userId: string, type: 'invoice' | 'estimate'): Promise<void> {
-    console.log('[UsageTracking] Usage incremented:', {
-      userId,
-      type,
-      timestamp: new Date().toISOString()
-    });
+    // Usage incremented for user
     
     // Force a refresh of the usage stats
     await this.getUserUsageStats(userId);

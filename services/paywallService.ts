@@ -19,19 +19,19 @@ class PaywallService {
 
   async initialize(userId?: string): Promise<void> {
     if (this.isInitialized) {
-      console.log('[PaywallService] Already initialized');
+      // Already initialized
       return;
     }
 
     try {
-      console.log('[PaywallService] Initializing RevenueCat and Superwall...');
+      // Initializing RevenueCat and Superwall
       
       // Initialize RevenueCat
       try {
         await RevenueCatService.initialize(userId);
-        console.log('[PaywallService] RevenueCat initialized successfully');
+        // RevenueCat initialized successfully
       } catch (error) {
-        console.error('[PaywallService] RevenueCat initialization failed:', error);
+        // RevenueCat initialization failed
         // Continue with Superwall only
       }
       
@@ -43,14 +43,14 @@ class PaywallService {
         try {
           await SuperwallService.setUserId(userId);
         } catch (error) {
-          console.error('[PaywallService] Failed to set user ID, continuing anyway:', error);
+          // Failed to set user ID, continuing anyway
         }
       }
 
       this.isInitialized = true;
-      console.log('[PaywallService] Successfully initialized Superwall');
+      // Successfully initialized Superwall
     } catch (error) {
-      console.error('[PaywallService] Failed to initialize:', error);
+      // Failed to initialize
       throw error;
     }
   }
@@ -59,16 +59,16 @@ class PaywallService {
     try {
       // Only set for Superwall until RevenueCat is fixed
       await SuperwallService.setUserId(userId);
-      console.log('[PaywallService] User ID set for Superwall:', userId);
+      // User ID set for Superwall
     } catch (error) {
-      console.error('[PaywallService] Failed to set user ID:', error);
+      // Failed to set user ID
       throw error;
     }
   }
 
   async presentPaywall(config: PaywallConfig): Promise<void> {
     try {
-      console.log('[PaywallService] Presenting paywall for event:', config.event);
+      // Presenting paywall for event
       
       // Map events to actual Superwall placements that exist
       let placement: string;
@@ -87,7 +87,7 @@ class PaywallService {
           placement = 'campaign_trigger'; // Default fallback
       }
       
-      console.log('[PaywallService] Using placement:', placement);
+      // Using placement
       
       // Use registerPlacement instead of presentPaywall
       const { usePlacement } = await import('expo-superwall');
@@ -97,10 +97,10 @@ class PaywallService {
       await SuperwallService.presentPaywall(placement, config.params);
       
     } catch (error) {
-      console.error('[PaywallService] Failed to present paywall:', error);
+      // Failed to present paywall
       
       // Fallback for development (Expo Go) - navigate to subscription page
-      console.log('[PaywallService] Using fallback navigation to subscription page');
+      // Using fallback navigation to subscription page
       const { router } = await import('expo-router');
       router.push('/subscription');
       
@@ -116,7 +116,7 @@ class PaywallService {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.log('[PaywallService] No authenticated user found');
+        // No authenticated user found
         return false;
       }
 
@@ -127,21 +127,21 @@ class PaywallService {
         .maybeSingle();
 
       if (error) {
-        console.error('[PaywallService] Failed to fetch user profile:', error);
+        // Failed to fetch user profile
         return false;
       }
 
       // If no profile exists, user is not subscribed
       if (!profile) {
-        console.log('[PaywallService] No user profile found - treating as free user');
+        // No user profile found - treating as free user
         return false;
       }
 
       const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
-      console.log('[PaywallService] Database subscription check:', profile?.subscription_tier, 'isSubscribed:', isSubscribed);
+      // Database subscription check completed
       return isSubscribed;
     } catch (error) {
-      console.error('[PaywallService] Failed to check subscription status:', error);
+      // Failed to check subscription status
       return false;
     }
   }
@@ -149,9 +149,9 @@ class PaywallService {
   async restorePurchases(): Promise<void> {
     try {
       await RevenueCatService.restorePurchases();
-      console.log('[PaywallService] Purchases restored successfully');
+      // Purchases restored successfully
     } catch (error) {
-      console.error('[PaywallService] Failed to restore purchases:', error);
+      // Failed to restore purchases
       throw error;
     }
   }
@@ -160,9 +160,9 @@ class PaywallService {
     try {
       // Only reset Superwall until RevenueCat is fixed
       await SuperwallService.reset();
-      console.log('[PaywallService] Reset successful');
+      // Reset successful
     } catch (error) {
-      console.error('[PaywallService] Failed to reset:', error);
+      // Failed to reset
       throw error;
     }
   }

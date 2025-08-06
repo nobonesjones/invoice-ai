@@ -154,22 +154,22 @@ function InvoiceViewerScreen() {
   
   // Paywall for send block using the working pattern
   const { registerPlacement } = usePlacement({
-    onError: (err) => console.error('[InvoiceViewer] Send paywall error:', err),
-    onPresent: (info) => console.log('[InvoiceViewer] Send paywall presented:', info),
+    onError: (err) => {},
+    onPresent: (info) => {},
     onDismiss: (info, result) => {
-      console.log('[InvoiceViewer] Send paywall dismissed:', info, 'Result:', result);
+      // Send paywall dismissed
     },
   });
   
   // Paywall for send block
   // const { registerPlacement } = usePlacement({
-  //   onError: (err) => console.error('[InvoiceViewer] Send block error:', err),
-  //   onPresent: (info) => console.log('[InvoiceViewer] Send block presented:', info),
+  //   onError: (err) => {},
+  //   onPresent: (info) => {},
   //   onDismiss: (info, result) => {
-  //     console.log('[InvoiceViewer] Send block dismissed:', info, 'Result:', result);
+  //     // Send block dismissed
   //     // If user subscribed, we can continue with the send action
   //     if (result?.type === 'purchased') {
-  //       console.log('[InvoiceViewer] User subscribed, continuing send...');
+  //       // User subscribed, continuing send...
   //       // The send action will be retried automatically by checking isSubscribed
   //     }
   //   },
@@ -239,23 +239,23 @@ function InvoiceViewerScreen() {
   
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
-      console.log('[InvoiceViewerScreen] Focus event: Hiding tab bar');
+      // Focus event: Hiding tab bar
       setIsTabBarVisible(false);
     });
 
     const unsubscribeBlur = navigation.addListener('blur', () => {
-      console.log('[InvoiceViewerScreen] Blur event: Showing tab bar');
+      // Blur event: Showing tab bar
       setIsTabBarVisible(true);
     });
 
     // Initial hide if screen is focused on mount
     if (navigation.isFocused()) {
-      console.log('[InvoiceViewerScreen] Initial focus: Hiding tab bar');
+      // Initial focus: Hiding tab bar
       setIsTabBarVisible(false);
     }
 
     return () => {
-      console.log('[InvoiceViewerScreen] Unmounting: Ensuring tab bar is visible');
+      // Unmounting: Ensuring tab bar is visible
       unsubscribeFocus();
       unsubscribeBlur();
       setIsTabBarVisible(true);
@@ -265,7 +265,7 @@ function InvoiceViewerScreen() {
   const handleSendByEmail = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendByEmail] Free user attempting to send - showing no_send paywall');
+      // Free user attempting to send - showing no_send paywall
       try {
         await registerPlacement({
           placement: 'create_item_limit', // Using existing working placement
@@ -277,7 +277,7 @@ function InvoiceViewerScreen() {
           }
         });
       } catch (error) {
-        console.error('[handleSendByEmail] Paywall failed, using fallback');
+        // Paywall failed, using fallback
         const { router } = await import('expo-router');
         router.push('/subscription');
       }
@@ -295,7 +295,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log('[handleSendByEmail] Generating Skia PDF for email sharing:', invoice.id);
+      // Generating Skia PDF for email sharing
       
       // Use Skia canvas to generate PDF (same as handleSendPDF)
       const image = skiaInvoiceRef.current?.makeImageSnapshot();
@@ -304,7 +304,7 @@ function InvoiceViewerScreen() {
         throw new Error('Failed to create image snapshot from invoice canvas');
       }
       
-      console.log('[handleSendByEmail] Skia canvas captured successfully');
+      // Skia canvas captured successfully
       
       // Encode to bytes and convert to base64
       const bytes = image.encodeToBytes();
@@ -351,12 +351,12 @@ function InvoiceViewerScreen() {
          </html>
        `;
       
-      console.log('[handleSendByEmail] Generating PDF with Skia image');
+      // Generating PDF with Skia image
       const { uri } = await Print.printToFileAsync({
         html: htmlContent,
         base64: false,
       });
-      console.log('[handleSendByEmail] PDF generated successfully at:', uri);
+      // PDF generated successfully
 
       // Update invoice status to sent
       const { error: updateError } = await supabase
@@ -365,7 +365,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleSendByEmail] Error updating status:', updateError);
+        // Error updating status
         Alert.alert('Error', 'Failed to update invoice status.');
         return;
       }
@@ -394,7 +394,7 @@ function InvoiceViewerScreen() {
       }
       
     } catch (error: any) {
-      console.error('[handleSendByEmail] Error generating PDF or sharing:', error);
+      // Error generating PDF or sharing
       Alert.alert('Error', `Failed to prepare invoice for email: ${error.message}`);
     }
   };
@@ -402,7 +402,7 @@ function InvoiceViewerScreen() {
   const handleSendLink = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendLink] Free user attempting to send - showing no_send paywall');
+      // Free user attempting to send - showing no_send paywall
       try {
         await registerPlacement({
           placement: 'create_item_limit', // Using existing working placement
@@ -414,7 +414,7 @@ function InvoiceViewerScreen() {
           }
         });
       } catch (error) {
-        console.error('[handleSendLink] Paywall failed, using fallback');
+        // Paywall failed, using fallback
         const { router } = await import('expo-router');
         router.push('/subscription');
       }
@@ -427,7 +427,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log('[handleSendLink] Generating shareable PDF link for invoice:', invoice.id);
+      // Generating shareable PDF link for invoice
       
       // Generate shareable PDF link using the Skia canvas
       const result = await InvoiceShareService.generateShareLinkFromCanvas(
@@ -442,7 +442,7 @@ function InvoiceViewerScreen() {
         return;
       }
 
-      console.log('[handleSendLink] Share link generated:', result.shareUrl);
+      // Share link generated
 
       // Update invoice status to sent
       const { error: updateError } = await supabase
@@ -451,7 +451,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleSendLink] Error updating status:', updateError);
+        // Error updating status
         Alert.alert('Error', 'Failed to update invoice status.');
         return;
       }
@@ -501,7 +501,7 @@ function InvoiceViewerScreen() {
         }
       }
     } catch (error: any) {
-      console.error('[handleSendLink] Unexpected error:', error);
+      // Unexpected error
       Alert.alert('Error', 'An unexpected error occurred while creating the shareable link.');
     }
   };
@@ -509,7 +509,7 @@ function InvoiceViewerScreen() {
   const handleSendPDF = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendPDF] Free user attempting to send - showing no_send paywall');
+      // Free user attempting to send - showing no_send paywall
       try {
         await registerPlacement({
           placement: 'create_item_limit', // Using existing working placement
@@ -521,7 +521,7 @@ function InvoiceViewerScreen() {
           }
         });
       } catch (error) {
-        console.error('[handleSendPDF] Paywall failed, using fallback');
+        // Paywall failed, using fallback
         const { router } = await import('expo-router');
         router.push('/subscription');
       }
@@ -534,7 +534,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log('[PDF_MULTIPAGE_EXPORT] Starting multi-page export for invoice:', invoice.invoice_number);
+      // Starting multi-page export for invoice
       
       // First, check if this invoice needs pagination using same logic as canvas
       const lineItems = invoice?.invoice_line_items || [];
@@ -544,7 +544,7 @@ function InvoiceViewerScreen() {
       const needsPagination = totalItems > adjustedMaxItemsFirstPage;
       
       if (!needsPagination) {
-        console.log('[PDF_MULTIPAGE_EXPORT] Single page invoice - using standard export');
+        // Single page invoice - using standard export
         // Single page - use existing logic
         const image = skiaInvoiceRef.current?.makeImageSnapshot();
         
@@ -594,7 +594,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleSendPDF] Error updating status:', updateError);
+        // Error updating status
         Alert.alert('Error', 'Failed to update invoice status.');
         return;
       }
@@ -623,21 +623,21 @@ function InvoiceViewerScreen() {
       }
       
       // Multi-page invoice - calculate pages
-      console.log('[PDF_MULTIPAGE_EXPORT] Multi-page invoice detected, total items:', totalItems);
+      // Multi-page invoice detected
       
       const remainingItems = totalItems - adjustedMaxItemsFirstPage;
       const itemsPerSubsequentPage = Math.floor((295 - 50) / 20); // Use actual display canvas height
       const totalPages = remainingItems > 0 ? 
         1 + Math.ceil(remainingItems / itemsPerSubsequentPage) : 1;
       
-      console.log('[PDF_MULTIPAGE_EXPORT] Calculated pages:', totalPages);
+      // Calculated pages for export
       
       const pdfDoc = await PDFDocument.create();
       const pageImages: any[] = [];
       
       // For now, we'll capture the full canvas and split it manually
       // This is a temporary solution until we implement proper page-by-page rendering
-      console.log('[PDF_MULTIPAGE_EXPORT] Capturing full canvas for splitting');
+      // Capturing full canvas for splitting
       const fullImage = skiaInvoiceRef.current?.makeImageSnapshot();
       
       if (!fullImage) {
@@ -652,23 +652,23 @@ function InvoiceViewerScreen() {
       // The captured canvas is scaled up (device pixel ratio = 3x in this case)
       const actualSinglePageHeight = Math.round(fullCanvasHeight / totalPages); // Calculate from actual captured dimensions
       
-      console.log('[PDF_MULTIPAGE_EXPORT] === CANVAS ANALYSIS ===');
-      console.log('[PDF_MULTIPAGE_EXPORT] Full canvas dimensions:', canvasWidth, 'x', fullCanvasHeight);
-      console.log('[PDF_MULTIPAGE_EXPORT] ACTUAL single page height (calculated):', actualSinglePageHeight);
-      console.log('[PDF_MULTIPAGE_EXPORT] Scale factor detected:', fullCanvasHeight / (totalPages * 590)); // 590 is logical canvas height per page
-      console.log('[PDF_MULTIPAGE_EXPORT] Expected Page 1 Y-range: 0 to', actualSinglePageHeight);
-      console.log('[PDF_MULTIPAGE_EXPORT] Expected Page 2 Y-range:', (actualSinglePageHeight), 'to', (2 * actualSinglePageHeight));
-      console.log('[PDF_MULTIPAGE_EXPORT] Total pages to generate:', totalPages);
-      console.log('[PDF_MULTIPAGE_EXPORT] === PAGE NUMBER POSITIONING ANALYSIS ===');
-      console.log('[PDF_MULTIPAGE_EXPORT] Page 1 number should be at Y:', '(canvasHeight - 30) = (560 - 30) = 530');
-      console.log('[PDF_MULTIPAGE_EXPORT] Page 2 number should be at Y:', '(pageYOffset + canvasHeight - 30) = (590 + 560 - 30) = 1120');
-      console.log('[PDF_MULTIPAGE_EXPORT] Page 1 crop range: 0 to', actualSinglePageHeight, '(includes 530? =', 530 < actualSinglePageHeight, ')');
-      console.log('[PDF_MULTIPAGE_EXPORT] Page 2 crop range:', actualSinglePageHeight, 'to', (2 * actualSinglePageHeight), '(includes 1120? =', 1120 >= actualSinglePageHeight && 1120 < (2 * actualSinglePageHeight), ')');
-      console.log('[PDF_MULTIPAGE_EXPORT] === END ANALYSIS ===');
+      // === CANVAS ANALYSIS ===
+      // Full canvas dimensions analysis
+      // Single page height calculated
+      // Scale factor detected // 590 is logical canvas height per page
+      // Expected Page 1 Y-range analysis
+      // Expected Page 2 Y-range analysis
+      // Total pages to generate
+      // === PAGE NUMBER POSITIONING ANALYSIS ===
+      // Page 1 number positioning analysis
+      // Page 2 number positioning analysis
+      // Page 1 crop range analysis
+      // Page 2 crop range analysis
+      // === END ANALYSIS ===
       
       // For each page, we'll create a standard-sized PDF page
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        console.log(`[PDF_MULTIPAGE_EXPORT] Creating PDF page ${pageNum} of ${totalPages}`);
+        // Creating PDF page
         
         // Create a page with increased height (60px longer for multi-page invoices)
         const page = pdfDoc.addPage([612, 852]);
@@ -688,7 +688,7 @@ function InvoiceViewerScreen() {
         const scaledPageHeight = actualSinglePageHeight * scaleToFitWidth;
         const yPosition = 852 - scaledPageHeight - scaledPageYOffset; // Position to show section top at PDF top
         
-        console.log(`[PDF_MULTIPAGE_EXPORT] Page ${pageNum} positioning (FIXED): pageYOffset=${pageYOffset}, scaledPageYOffset=${scaledPageYOffset}, scaledPageHeight=${scaledPageHeight}, yPosition=${yPosition}`);
+        // Page positioning calculations
         
         page.drawImage(pdfImage, {
           x: 0,
@@ -697,10 +697,10 @@ function InvoiceViewerScreen() {
           height: scaledHeight, // Use full height for all pages
         });
         
-        console.log(`[PDF_MULTIPAGE_EXPORT] Added page ${pageNum} to PDF`);
+        // Added page to PDF
       }
       
-      console.log('[PDF_MULTIPAGE_EXPORT] Finalizing PDF with', totalPages, 'pages');
+      // Finalizing PDF with pages
       const pdfBytes = await pdfDoc.save();
       const fileName = `invoice-${invoice.invoice_number}.pdf`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
@@ -728,7 +728,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleSendPDF] Error updating status:', updateError);
+        // Error updating status
         Alert.alert('Error', 'Failed to update invoice status.');
         return;
       }
@@ -754,10 +754,10 @@ function InvoiceViewerScreen() {
         }
       }
       
-      console.log(`[PDF_MULTIPAGE_EXPORT] Export completed for ${invoice.invoice_number} with ${totalPages} pages`);
+      // Export completed successfully
       
     } catch (error: any) { 
-      console.error('[PDF_MULTIPAGE_EXPORT] Error:', error);
+      // PDF export error
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -776,11 +776,11 @@ function InvoiceViewerScreen() {
   );
 
   const handleCustomBack = () => {
-    console.log('[handleCustomBack] Called');
+    // Handle custom back called
     
     // Simple back navigation - invoice-viewer is now only for final saved invoices
     // Preview functionality has been moved to dedicated preview screen
-    console.log('[handleCustomBack] Navigating back to dashboard');
+    // Navigating back to dashboard
     // Use router.back() for proper left-to-right transition direction
     // DO NOT CHANGE TO router.replace() - this breaks transition direction
     // Only change if explicitly requested by user
@@ -788,9 +788,9 @@ function InvoiceViewerScreen() {
   };
 
   const fetchBusinessSettings = async (userId: string) => {
-    console.log('[fetchBusinessSettings] Function called with userId:', userId); 
+    // Fetching business settings for user 
     if (!userId) {
-      console.error('[fetchBusinessSettings] No userId provided.');
+      // No userId provided
       return;
     }
 
@@ -802,11 +802,11 @@ function InvoiceViewerScreen() {
         .single(); 
 
       if (settingsError && settingsError.code !== 'PGRST116') {
-        console.error('[fetchBusinessSettings] Error fetching base business settings:', settingsError);
+        // Error fetching base business settings
         setError('Failed to load business settings.');
         setBusinessSettings(null); 
       } else {
-        console.log('[fetchBusinessSettings] Raw data from business_settings table:', data);
+        // Raw data from business_settings table
         // 'data' here is the result from business_settings query
         if (data) {
           // Now fetch payment_options for the same user
@@ -816,26 +816,26 @@ function InvoiceViewerScreen() {
             .eq('user_id', userId) 
             .single();
 
-          console.log('[fetchBusinessSettings] Raw data from payment_options table:', paymentOpts);
+          // Raw data from payment_options table
 
           if (paymentOptsError && paymentOptsError.code !== 'PGRST116') {
-            console.error('[fetchBusinessSettings] Error fetching payment options:', paymentOptsError);
+            // Error fetching payment options
             // Continue with base settings even if payment options fail, or handle error as preferred
           }
 
           // Merge paymentOpts into the base business settings data.
           // If paymentOpts is null (not found or error), it won't add/overwrite properties from 'data'.
           const combinedSettings = { ...data, ...(paymentOpts || {}) };
-          console.log('[fetchBusinessSettings] Combined settings before setBusinessSettings:', combinedSettings);
+          // Combined settings data
           setBusinessSettings(combinedSettings as BusinessSettingsRow); 
         } else {
           // No base business_settings found (PGRST116 or data was null from first query)
-          console.log('[fetchBusinessSettings] No base business settings found for this user. Setting to null.');
+          // No base business settings found
           setBusinessSettings(null);
         }
       }
     } catch (e: any) {
-      console.error('[fetchBusinessSettings] Exception fetching business settings:', e.message);
+      // Exception fetching business settings
       setError('An unexpected error occurred while fetching business settings.');
       setBusinessSettings(null);
     }
@@ -855,7 +855,7 @@ function InvoiceViewerScreen() {
         .single();
 
       if (invoiceError) {
-        console.error('[fetchInvoiceData] Supabase invoiceError:', invoiceError);
+        // Supabase invoice error
         setError('Failed to load invoice data.');
         setInvoice(null);
         return null;
@@ -867,9 +867,9 @@ function InvoiceViewerScreen() {
         return null;
       }
       
-      console.log('[fetchInvoiceData] Raw invoiceData from Supabase:', invoiceData);
-      console.log('[fetchInvoiceData] invoiceData.clients:', invoiceData.clients);
-      console.log('[fetchInvoiceData] invoiceData.invoice_line_items from Supabase:', invoiceData.invoice_line_items);
+      // Raw invoice data from Supabase
+      // Invoice client data
+      // Invoice line items from Supabase
 
       // Fetch business_settings specifically for currency information for this invoice instance
       // This does NOT set the main businessSettings state used for payment methods display.
@@ -880,7 +880,7 @@ function InvoiceViewerScreen() {
         .single();
 
       if (businessError && businessError.code !== 'PGRST116') { // PGRST116: no rows found, which is okay if settings don't exist yet
-        console.error('[fetchInvoiceData] Error fetching business_settings for currency:', businessError);
+        // Error fetching business settings for currency
       }
 
       // Explicitly type as InvoiceForTemplate
@@ -902,19 +902,19 @@ function InvoiceViewerScreen() {
         custom_headline: invoiceData.custom_headline ?? null,
       };
       
-      console.log('[fetchInvoiceData] Constructed fetchedInvoiceForTemplate:', JSON.stringify(fetchedInvoiceForTemplate, null, 2));
+      // Constructed fetchedInvoiceForTemplate
       setInvoice(fetchedInvoiceForTemplate);
       if (invoiceData.clients) {
-        console.log('[fetchInvoiceData] Setting client data:', invoiceData.clients);
+        // Setting client data
         setClient(invoiceData.clients as ClientRow);
       } else {
-        console.warn('[fetchInvoiceData] No client data found in invoice! This may cause fallback to appear.');
+        // No client data found in invoice
         setClient(null);
       }
       setError(null);
       return fetchedInvoiceForTemplate as any; // Use type assertion to bypass type conflicts
     } catch (e: any) {
-      console.error('[fetchInvoiceData] Exception:', e.message);
+      // Exception in fetchInvoiceData
       setError('An unexpected error occurred while fetching invoice data.');
       setInvoice(null);
       return null;
@@ -922,14 +922,14 @@ function InvoiceViewerScreen() {
   };
 
   useEffect(() => {
-    console.log(`[EFFECT START] InvoiceViewerScreen useEffect triggered.`);
-    console.log(`[EFFECT PARAMS] id: ${invoiceId}`);
+    // InvoiceViewerScreen useEffect triggered
+    // Effect params: invoice ID
     setIsLoading(true); // Start loading
     setIsInvoiceReady(false); // Reset invoice ready state
 
     const processData = async () => {
       if (invoiceId) {
-        console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchInvoiceData with invoiceId:', invoiceId); 
+        // Attempting to fetch invoice data 
         try {
           // Start timing for minimum loading duration
           const startTime = Date.now();
@@ -938,25 +938,25 @@ function InvoiceViewerScreen() {
           const fetchedInvoice = await fetchInvoiceData(invoiceId);
           if (fetchedInvoice && fetchedInvoice.user_id) {
             const targetUserId = fetchedInvoice.user_id;
-            console.log('[InvoiceViewerScreen useEffect] Attempting to call fetchBusinessSettings with targetUserId (from fetched invoiceData):', targetUserId); 
+            // Attempting to fetch business settings 
             if (targetUserId) await fetchBusinessSettings(targetUserId); // Await this operation too
           }
           
           // Ensure minimum loading time has passed
           const elapsedTime = Date.now() - startTime;
           if (elapsedTime < minLoadingTime) {
-            console.log(`[InvoiceViewerScreen] Waiting additional ${minLoadingTime - elapsedTime}ms for minimum loading time`);
+            // Waiting for minimum loading time
             await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
           }
           
         } catch (error) {
-          console.error('[processData] Error:', error);
+          // Error processing data
           setError('Failed to load invoice data.');
         } finally {
           setIsLoading(false); // End loading after all async operations complete
         }
       } else {
-        console.warn("[EFFECT] No invoice ID. Cannot load invoice.");
+        // No invoice ID provided
         setError('No invoice specified.');
         setIsLoading(false);
       }
@@ -968,20 +968,16 @@ function InvoiceViewerScreen() {
   // Track when invoice is ready to render
   useEffect(() => {
     if (invoice && businessSettings && !isLoading) {
-      console.log('[InvoiceViewerScreen] Invoice and business settings loaded, preparing to render...');
+      // Invoice and business settings loaded
       // Add a small delay to ensure Skia canvas has time to render
       const timer = setTimeout(() => {
-        console.log('[InvoiceViewerScreen] Setting invoice ready to true');
+        // Setting invoice ready to true
         setIsInvoiceReady(true);
       }, 300); // 300ms delay for Skia rendering
       
       return () => clearTimeout(timer);
     } else {
-      console.log('[InvoiceViewerScreen] Invoice not ready:', { 
-        hasInvoice: !!invoice, 
-        hasBusinessSettings: !!businessSettings, 
-        isLoading 
-      });
+      // Invoice not ready
       setIsInvoiceReady(false);
     }
   }, [invoice, businessSettings, isLoading]);
@@ -991,7 +987,7 @@ function InvoiceViewerScreen() {
     useCallback(() => {
       const refreshData = async () => {
         if (invoiceId && supabase) {
-          console.log('[useFocusEffect] Refreshing invoice data on focus');
+          // Refreshing invoice data on focus
           try {
             const fetchedInvoice = await fetchInvoiceData(invoiceId);
             if (fetchedInvoice && fetchedInvoice.user_id) {
@@ -999,7 +995,7 @@ function InvoiceViewerScreen() {
               if (targetUserId) await fetchBusinessSettings(targetUserId);
             }
           } catch (error) {
-            console.error('[useFocusEffect] Error refreshing data:', error);
+            // Error refreshing data
           }
           // Note: Don't set loading state here as this is a background refresh
         }
@@ -1035,21 +1031,21 @@ function InvoiceViewerScreen() {
   // Get the correct design component based on invoice-specific settings
   const getInvoiceDesignComponent = () => {
     const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-    console.log('[InvoiceViewer] Selected design type for invoice:', designType);
+    // Selected design type for invoice
     
     switch (designType.toLowerCase()) {
       case 'modern':
-        console.log('[InvoiceViewer] Using SkiaInvoiceCanvasModern');
+        // Using SkiaInvoiceCanvasModern
         return SkiaInvoiceCanvasModern;
       case 'clean':
-        console.log('[InvoiceViewer] Using SkiaInvoiceCanvasClean');
+        // Using SkiaInvoiceCanvasClean
         return SkiaInvoiceCanvasClean;
       case 'simple':
-        console.log('[InvoiceViewer] Using SkiaInvoiceCanvasSimple');
+        // Using SkiaInvoiceCanvasSimple
         return SkiaInvoiceCanvasSimple;
       case 'classic':
       default:
-        console.log('[InvoiceViewer] Using SkiaInvoiceCanvas (classic)');
+        // Using SkiaInvoiceCanvas (classic)
         return SkiaInvoiceCanvas;
     }
   };
@@ -1059,13 +1055,13 @@ function InvoiceViewerScreen() {
   // Get the accent color from invoice-specific settings
   const getAccentColor = () => {
     const savedColor = invoice?.accent_color || '#14B8A6';
-    console.log('[InvoiceViewer] Using accent color for invoice:', savedColor);
+    // Using accent color for invoice
     return savedColor;
   };
 
   const addAlpha = (color: string, opacity: number): string => {
     if (typeof color !== 'string' || !color.startsWith('#') || (color.length !== 7 && color.length !== 4)) {
-      console.warn(`addAlpha: Color "${color}" is not a valid hex string. Opacity may not apply correctly.`);
+      // Invalid hex color warning
       return color; 
     }
     const _opacity = Math.round(Math.min(Math.max(opacity || 1, 0), 1) * 255);
@@ -1154,7 +1150,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log(`[handlePaymentUpdate] Updating invoice ${invoice.id} payment: ${newPaidAmount}`);
+      // Updating invoice payment
       
       // Calculate status based on payment amount
       const newStatus = calculatePaymentStatus(newPaidAmount, invoice.total_amount);
@@ -1172,7 +1168,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handlePaymentUpdate] Error updating payment:', updateError);
+        // Error updating payment
         Alert.alert('Error', `Failed to update payment: ${updateError.message}`);
         return;
       }
@@ -1201,7 +1197,7 @@ function InvoiceViewerScreen() {
       );
       
     } catch (error: any) {
-      console.error('[handlePaymentUpdate] Unexpected error:', error);
+      // Unexpected payment update error
       Alert.alert('Error', 'An unexpected error occurred while updating payment.');
     }
   };
@@ -1213,7 +1209,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log(`[handleTogglePaid] Updating invoice ${invoice.id} payment status to: ${isPaid}`);
+      // Updating invoice payment status
       
       let updateData: any = {};
       
@@ -1241,7 +1237,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleTogglePaid] Error updating payment status:', updateError);
+        // Error updating payment status
         Alert.alert('Error', `Failed to update payment status: ${updateError.message}`);
         return;
       }
@@ -1273,7 +1269,7 @@ function InvoiceViewerScreen() {
       );
       
     } catch (error: any) {
-      console.error('[handleTogglePaid] Unexpected error:', error);
+      // Unexpected toggle paid error
       Alert.alert('Error', 'An unexpected error occurred while updating payment status.');
     }
   };
@@ -1285,7 +1281,7 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      console.log(`[handleStatusChange] Updating invoice ${invoice.id} status from ${invoice.status} to ${newStatus}`);
+      // Updating invoice status
       
       const oldStatus = invoice.status;
       
@@ -1295,7 +1291,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleStatusChange] Error updating status:', updateError);
+        // Error updating status
         Alert.alert('Error', `Failed to update invoice status: ${updateError.message}`);
         return;
       }
@@ -1315,7 +1311,7 @@ function InvoiceViewerScreen() {
       Alert.alert('Status Updated', `Invoice has been marked as ${config.label}.`);
       
     } catch (error: any) {
-      console.error('[handleStatusChange] Unexpected error:', error);
+      // Unexpected status change error
       Alert.alert('Error', 'An unexpected error occurred while updating the status.');
     }
   };
@@ -1326,7 +1322,7 @@ function InvoiceViewerScreen() {
   const handlePrimaryAction = () => {
     if (isPreviewingFromCreate) return; 
     if (!invoice) return;
-    console.log('Primary action pressed for invoice:', invoice.id);
+    // Primary action pressed for invoice
   };
 
   const handleEdit = () => {
@@ -1362,7 +1358,7 @@ function InvoiceViewerScreen() {
       setIsTabBarVisible(false);
       router.push(`/invoices/create?id=${invoice.id}` as any);
     } else {
-      console.warn('Edit pressed but no invoice ID found');
+      // Edit pressed but no invoice ID found
       Alert.alert('Error', 'Cannot edit invoice without a valid ID.');
     }
   };
@@ -1389,7 +1385,7 @@ function InvoiceViewerScreen() {
             }
 
             try {
-              console.log('[handleDeleteInvoice] Deleting invoice:', invoice.id);
+              // Deleting invoice
               
               // Delete invoice line items first (foreign key constraint)
               const { error: lineItemsError } = await supabase
@@ -1398,7 +1394,7 @@ function InvoiceViewerScreen() {
                 .eq('invoice_id', invoice.id);
 
               if (lineItemsError) {
-                console.error('[handleDeleteInvoice] Error deleting line items:', lineItemsError);
+                // Error deleting line items
                 Alert.alert('Error', 'Failed to delete invoice line items.');
                 return;
               }
@@ -1410,7 +1406,7 @@ function InvoiceViewerScreen() {
                 .eq('invoice_id', invoice.id);
 
               if (activitiesError) {
-                console.error('[handleDeleteInvoice] Error deleting activities:', activitiesError);
+                // Error deleting activities
                 // Don't stop deletion for activities, just log the error
               }
 
@@ -1421,12 +1417,12 @@ function InvoiceViewerScreen() {
                 .eq('id', invoice.id);
 
               if (invoiceError) {
-                console.error('[handleDeleteInvoice] Error deleting invoice:', invoiceError);
+                // Error deleting invoice
                 Alert.alert('Error', `Failed to delete invoice: ${invoiceError.message}`);
                 return;
               }
 
-              console.log('[handleDeleteInvoice] Successfully deleted invoice:', invoice.id);
+              // Successfully deleted invoice
               Alert.alert('Invoice Deleted', 'The invoice has been permanently deleted.', [
                 {
                   text: 'OK',
@@ -1439,7 +1435,7 @@ function InvoiceViewerScreen() {
               ]);
 
             } catch (error: any) {
-              console.error('[handleDeleteInvoice] Unexpected error:', error);
+              // Unexpected error deleting invoice
               Alert.alert('Error', 'An unexpected error occurred while deleting the invoice.');
             }
           }
@@ -1459,12 +1455,7 @@ function InvoiceViewerScreen() {
     const paidAmount = invoice.paid_amount || 0;
     const remainingBalance = totalAmount - paidAmount;
     
-    console.log('[handlePartialPayment] Payment validation:', {
-      totalAmount,
-      paidAmount,
-      remainingBalance,
-      invoiceId: invoice.id
-    });
+    // Payment validation complete
     
     // Check if invoice is already fully paid
     if (remainingBalance <= 0) {
@@ -1484,7 +1475,7 @@ function InvoiceViewerScreen() {
       return;
     }
     
-    console.log('[handlePartialPayment] Opening payment sheet - remaining balance:', remainingBalance);
+    // Opening payment sheet - remaining balance
     makePaymentSheetRef.current?.present(invoice.total_amount, invoice.paid_amount || 0);
   };
 
@@ -1499,12 +1490,7 @@ function InvoiceViewerScreen() {
       const paymentAmount = parseFloat(paymentData.paymentAmount);
       const newTotalPaid = (invoice.paid_amount || 0) + paymentAmount;
       
-      console.log('[handleMakePaymentSheetSave] Recording payment:', {
-        invoiceId: invoice.id,
-        paymentAmount: paymentAmount,
-        newTotalPaid: newTotalPaid,
-        paymentMethod: paymentData.paymentMethod
-      });
+      // Recording payment for invoice
 
       // Calculate status based on payment amount
       const newStatus = calculatePaymentStatus(newTotalPaid, invoice.total_amount);
@@ -1522,7 +1508,7 @@ function InvoiceViewerScreen() {
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('[handleMakePaymentSheetSave] Error updating payment:', updateError);
+        // Error updating payment
         Alert.alert('Error', `Failed to record payment: ${updateError.message}`);
         return;
       }
@@ -1551,7 +1537,7 @@ function InvoiceViewerScreen() {
       );
       
     } catch (error: any) {
-      console.error('[handleMakePaymentSheetSave] Unexpected error:', error);
+      // Unexpected payment error
       Alert.alert('Error', 'An unexpected error occurred while recording the payment.');
     }
   };
@@ -1564,7 +1550,7 @@ function InvoiceViewerScreen() {
       return;
     }
     
-    console.log('Navigating to client profile:', invoice.client_id);
+    // Navigating to client profile
     // Navigate to the client profile page
     router.push(`/customers/${invoice.client_id}`);
   };
@@ -1620,7 +1606,7 @@ function InvoiceViewerScreen() {
                 Alert.alert('Error', result.message || 'Failed to duplicate invoice.');
               }
             } catch (error: any) {
-              console.error('Error duplicating invoice:', error);
+              // Error duplicating invoice
               Alert.alert('Error', 'An unexpected error occurred while duplicating the invoice.');
             }
           }
@@ -1647,7 +1633,7 @@ function InvoiceViewerScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('Voiding invoice:', invoice.id);
+              // Voiding invoice
               
               // Update invoice status to cancelled
               const { error } = await supabase
@@ -1660,7 +1646,7 @@ function InvoiceViewerScreen() {
                 .eq('user_id', user.id); // Security: ensure user owns the invoice
 
               if (error) {
-                console.error('Error voiding invoice:', error);
+                // Error voiding invoice
                 Alert.alert('Error', 'Failed to void invoice. Please try again.');
                 return;
               }
@@ -1674,7 +1660,7 @@ function InvoiceViewerScreen() {
               Alert.alert('Success', 'Invoice has been voided successfully.');
 
             } catch (error) {
-              console.error('Unexpected error voiding invoice:', error);
+              // Unexpected error voiding invoice
               Alert.alert('Error', 'An unexpected error occurred while voiding the invoice.');
             }
           }
@@ -1685,7 +1671,7 @@ function InvoiceViewerScreen() {
 
   const handlePaymentLink = () => {
     moreOptionsSheetRef.current?.dismiss();
-    console.log('Payment link pressed');
+    // Payment link pressed
     // TODO: Implement payment link functionality
     Alert.alert('Coming Soon', 'Payment link functionality will be implemented soon.');
   };
@@ -1708,7 +1694,7 @@ function InvoiceViewerScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('Creating credit note for invoice:', invoice.id);
+              // Creating credit note for invoice
               
               // Generate credit note number (similar to invoice number but with CN prefix)
               const timestamp = Date.now().toString().slice(-6);
@@ -1740,7 +1726,7 @@ function InvoiceViewerScreen() {
                 .single();
 
               if (creditNoteError) {
-                console.error('Error creating credit note:', creditNoteError);
+                // Error creating credit note
                 Alert.alert('Error', 'Failed to create credit note. Please try again.');
                 return;
               }
@@ -1766,7 +1752,7 @@ function InvoiceViewerScreen() {
                   .insert(creditNoteLineItems);
 
                 if (lineItemsError) {
-                  console.error('Error creating credit note line items:', lineItemsError);
+                  // Error creating credit note line items
                   // Continue anyway, the credit note was created
                 }
               }
@@ -1782,7 +1768,7 @@ function InvoiceViewerScreen() {
                 .eq('user_id', user.id);
 
               if (updateError) {
-                console.error('Error updating original invoice status:', updateError);
+                // Error updating original invoice status
                 // Continue anyway, the credit note was created
               }
 
@@ -1805,7 +1791,7 @@ function InvoiceViewerScreen() {
               );
 
             } catch (error) {
-              console.error('Unexpected error creating credit note:', error);
+              // Unexpected error creating credit note
               Alert.alert('Error', 'An unexpected error occurred while creating the credit note.');
             }
           }
@@ -1816,7 +1802,7 @@ function InvoiceViewerScreen() {
 
   const handleAutoReminders = () => {
     moreOptionsSheetRef.current?.dismiss();
-    console.log('Auto reminders pressed');
+    // Auto reminders pressed
     // TODO: Implement auto reminders functionality
     Alert.alert('Coming Soon', 'Auto reminders functionality will be implemented soon.');
   };
@@ -1856,7 +1842,7 @@ function InvoiceViewerScreen() {
       );
 
     } catch (error) {
-      console.error('Error sharing invoice:', error);
+      // Error sharing invoice
       Alert.alert('Error', 'Failed to generate shareable link. Please try again.');
     }
   };
@@ -1878,13 +1864,13 @@ function InvoiceViewerScreen() {
         mimeType: 'text/plain',
       });
     } catch (error) {
-      console.error('Error sharing link:', error);
+      // Error sharing link
     }
   };
 
 
   const handleChangeDesign = () => {
-    console.log('Customize pressed');
+    // Customize pressed
     // Open the invoice preview modal for design selection directly from action button
     if (invoice && businessSettings && client) {
       previewModalRef.current?.present();
@@ -1894,18 +1880,18 @@ function InvoiceViewerScreen() {
   };
 
   const handleDesignModalClose = useCallback(async () => {
-    console.log('Invoice Preview Modal Dismissed');
+    // Invoice Preview Modal Dismissed
     // Refresh the invoice data to reflect any design changes
     if (invoiceId && supabase) {
       try {
-        console.log('[handleDesignModalClose] Refreshing invoice data after design change');
+        // Refreshing invoice data after design change
         const fetchedInvoice = await fetchInvoiceData(invoiceId);
         if (fetchedInvoice && fetchedInvoice.user_id) {
           const targetUserId = fetchedInvoice.user_id;
           if (targetUserId) await fetchBusinessSettings(targetUserId);
         }
       } catch (error) {
-        console.error('[handleDesignModalClose] Error refreshing data:', error);
+        // Error refreshing data
       }
     }
   }, [invoiceId, supabase]);
@@ -1952,7 +1938,7 @@ function InvoiceViewerScreen() {
 
   const handleViewHistory = () => {
     if (!invoice) return;
-    console.log('[handleViewHistory] Opening history for invoice:', invoice.id);
+    // Opening history for invoice
     historyModalRef.current?.present(invoice.id, invoice.invoice_number || undefined);
   };
   
@@ -2417,7 +2403,7 @@ function InvoiceViewerScreen() {
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }} // Style grabber
         backgroundStyle={{ backgroundColor: themeColors.card }} // Modal background
-        onDismiss={() => console.log('Send Invoice Modal Dismissed')}
+        onDismiss={() => {}}
       >
         <BottomSheetView style={styles.modalContentContainer}> 
           {/* Modal Header */}
@@ -2456,7 +2442,7 @@ function InvoiceViewerScreen() {
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
         backgroundStyle={{ backgroundColor: themeColors.card }}
-        onDismiss={() => console.log('Status Selector Modal Dismissed')}
+        onDismiss={() => {}}
       >
         <StatusSelectorSheet
           currentStatus={(invoice?.status || 'draft') as InvoiceStatus}
@@ -2474,7 +2460,7 @@ function InvoiceViewerScreen() {
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
         backgroundStyle={{ backgroundColor: themeColors.card }}
-        onDismiss={() => console.log('Payment Amount Modal Dismissed')}
+        onDismiss={() => {}}
       >
         {invoice && (
           <PaymentAmountSheet
@@ -2604,14 +2590,14 @@ function InvoiceViewerScreen() {
       {/* Invoice History Modal */}
       <InvoiceHistorySheet
         ref={historyModalRef}
-        onClose={() => console.log('Invoice History Modal Dismissed')}
+        onClose={() => {}}
       />
 
       {/* Make Payment Sheet */}
       <MakePaymentSheet
         ref={makePaymentSheetRef}
         onSave={handleMakePaymentSheetSave}
-        onClose={() => console.log('Make Payment Sheet Dismissed')}
+        onClose={() => {}}
         invoiceTotal={invoice?.total_amount || 0}
         previouslyPaidAmount={invoice?.paid_amount || 0}
       />

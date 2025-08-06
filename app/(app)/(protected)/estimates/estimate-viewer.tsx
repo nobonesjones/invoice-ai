@@ -123,21 +123,21 @@ function EstimateViewerScreen() {
   
   // Paywall for send block using the working pattern
   const { registerPlacement } = usePlacement({
-    onError: (err) => console.error('[EstimateViewer] Send paywall error:', err),
-    onPresent: (info) => console.log('[EstimateViewer] Send paywall presented:', info),
+    onError: (err) => {},
+    onPresent: (info) => {},
     onDismiss: (info, result) => {
-      console.log('[EstimateViewer] Send paywall dismissed:', info, 'Result:', result);
+      // Paywall dismissed
     },
   });
   
   // Paywall for send block
   // const { registerPlacement } = usePlacement({
-  //   onError: (err) => console.error('[EstimateViewer] Send block error:', err),
-  //   onPresent: (info) => console.log('[EstimateViewer] Send block presented:', info),
+  //   onError: (err) => {},
+  //   onPresent: (info) => {},
   //   onDismiss: (info, result) => {
-  //     console.log('[EstimateViewer] Send block dismissed:', info, 'Result:', result);
+  //     // Send block dismissed
   //     if (result?.type === 'purchased') {
-  //       console.log('[EstimateViewer] User subscribed, continuing send...');
+  //       // User subscribed, continuing send...
   //     }
   //   },
   // });
@@ -169,23 +169,23 @@ function EstimateViewerScreen() {
   // Tab bar visibility management (following pagetransitions.md Approach 2)
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
-      console.log('[EstimateViewerScreen] Focus event: Hiding tab bar');
+      // Focus event: Hiding tab bar
       setIsTabBarVisible(false);
     });
 
     const unsubscribeBlur = navigation.addListener('blur', () => {
-      console.log('[EstimateViewerScreen] Blur event: Showing tab bar');
+      // Blur event: Showing tab bar
       setIsTabBarVisible(true);
     });
 
     // Initial hide if screen is focused on mount
     if (navigation.isFocused()) {
-      console.log('[EstimateViewerScreen] Initial focus: Hiding tab bar');
+      // Initial focus: Hiding tab bar
       setIsTabBarVisible(false);
     }
 
     return () => {
-      console.log('[EstimateViewerScreen] Unmounting: Ensuring tab bar is visible');
+      // Unmounting: Ensuring tab bar is visible
       unsubscribeFocus();
       unsubscribeBlur();
       setIsTabBarVisible(true);
@@ -205,7 +205,7 @@ function EstimateViewerScreen() {
         .single(); 
 
       if (settingsError && settingsError.code !== 'PGRST116') {
-        console.error('[fetchBusinessSettings] Error:', settingsError);
+        // Error fetching business settings
         setBusinessSettings(null); 
       } else {
         if (data) {
@@ -216,7 +216,7 @@ function EstimateViewerScreen() {
             .single();
 
           if (paymentOptsError && paymentOptsError.code !== 'PGRST116') {
-            console.error('[fetchBusinessSettings] Payment options error:', paymentOptsError);
+            // Error fetching payment options
           }
 
           const combinedSettings = { ...data, ...(paymentOpts || {}) };
@@ -226,7 +226,7 @@ function EstimateViewerScreen() {
         }
       }
     } catch (e: any) {
-      console.error('[fetchBusinessSettings] Exception:', e.message);
+      // Exception in fetchBusinessSettings
       setBusinessSettings(null);
     }
   };
@@ -244,7 +244,7 @@ function EstimateViewerScreen() {
         .single();
 
       if (estimateError) {
-        console.error('[fetchEstimateData] Error:', estimateError);
+        // Error fetching estimate data
         setError('Failed to load estimate data.');
         return null;
       }
@@ -261,7 +261,7 @@ function EstimateViewerScreen() {
         .single();
 
       if (businessError && businessError.code !== 'PGRST116') {
-        console.error('[fetchEstimateData] Currency error:', businessError);
+        // Error fetching currency data
       }
 
       const fetchedEstimate: EstimateForTemplate = {
@@ -283,7 +283,7 @@ function EstimateViewerScreen() {
       setError(null);
       return fetchedEstimate;
     } catch (e: any) {
-      console.error('[fetchEstimateData] Exception:', e.message);
+      // Exception in fetchEstimateData
       setError('An unexpected error occurred.');
       return null;
     }
@@ -308,7 +308,7 @@ function EstimateViewerScreen() {
           }
           
         } catch (error) {
-          console.error('[processData] Error:', error);
+          // Error processing data
           setError('Failed to load estimate data.');
         } finally {
           setIsLoading(false);
@@ -416,12 +416,12 @@ function EstimateViewerScreen() {
 
   const handleViewHistory = () => {
     if (!estimate) return;
-    console.log('[handleViewHistory] Opening history for estimate:', estimate.id);
+    // Opening history for estimate
     historyModalRef.current?.present(estimate.id, estimate.estimate_number || undefined);
   };
 
   const handleChangeDesign = () => {
-    console.log('Design pressed');
+    // Design pressed
     // Open the invoice preview modal for design selection
     if (estimate && businessSettings && client) {
       previewModalRef.current?.present();
@@ -431,21 +431,21 @@ function EstimateViewerScreen() {
   };
 
   const handleDesignModalClose = useCallback(async () => {
-    console.log('Design Preview Modal Dismissed');
+    // Design Preview Modal Dismissed
     // Refresh the estimate data to reflect any design changes
     if (estimateId && supabase) {
       try {
-        console.log('[handleDesignModalClose] Refreshing estimate data...');
+        // Refreshing estimate data...
         const updatedEstimate = await fetchEstimateData(estimateId);
         if (updatedEstimate) {
-          console.log('[handleDesignModalClose] Updated estimate design:', updatedEstimate.estimate_template);
+          // Updated estimate design
           setEstimate(updatedEstimate);
           // Force a re-render by updating the ready state
           setIsEstimateReady(false);
           setTimeout(() => setIsEstimateReady(true), 100);
         }
       } catch (error) {
-        console.error('[handleDesignModalClose] Error refreshing estimate:', error);
+        // Error refreshing estimate
       }
     }
   }, [estimateId, supabase, fetchEstimateData]);
@@ -486,7 +486,7 @@ function EstimateViewerScreen() {
   const handleSendPDF = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendPDF] Free user attempting to send - showing no_send paywall');
+      // Free user attempting to send - showing no_send paywall
       try {
         await registerPlacement({
           placement: 'create_item_limit', // Using existing working placement
@@ -498,7 +498,7 @@ function EstimateViewerScreen() {
           }
         });
       } catch (error) {
-        console.error('[handleSendPDF] Paywall failed, using fallback');
+        // Paywall failed, using fallback
         const { router } = await import('expo-router');
         router.push('/subscription');
       }
@@ -552,7 +552,7 @@ function EstimateViewerScreen() {
           // Update local state
           setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
         } else {
-          console.warn('[handleSendPDF] Failed to update status:', sendResult.error);
+          // Failed to update status
         }
       }
 
@@ -564,7 +564,7 @@ function EstimateViewerScreen() {
       sendEstimateModalRef.current?.dismiss();
       
     } catch (error: any) {
-      console.error('[handleSendPDF] Error:', error);
+      // Error in handleSendPDF
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error.message}`);
     }
   };
@@ -572,7 +572,7 @@ function EstimateViewerScreen() {
   const handleSendByEmail = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendByEmail] Free user attempting to send - showing no_send paywall');
+      // Free user attempting to send - showing no_send paywall
       try {
         await registerPlacement({
           placement: 'create_item_limit', // Using existing working placement
@@ -584,7 +584,7 @@ function EstimateViewerScreen() {
           }
         });
       } catch (error) {
-        console.error('[handleSendByEmail] Paywall failed, using fallback');
+        // Paywall failed, using fallback
         const { router } = await import('expo-router');
         router.push('/subscription');
       }
@@ -616,7 +616,7 @@ function EstimateViewerScreen() {
       sendEstimateModalRef.current?.dismiss();
       
     } catch (error: any) {
-      console.error('[handleSendByEmail] Error:', error);
+      // Error in handleSendByEmail
       Alert.alert('Error', `Failed to send estimate: ${error.message}`);
     }
   };
@@ -624,7 +624,7 @@ function EstimateViewerScreen() {
   const handleSendByLink = async () => {
     // Check if user is subscribed - sending is premium only
     if (!isSubscribed) {
-      console.log('[handleSendByLink] Free user attempting to send - showing no_send paywall');
+      // Free user attempting to send - showing no_send paywall
       try {
         await registerPlacement({
           placement: 'create_item_limit', // Using existing working placement
@@ -636,7 +636,7 @@ function EstimateViewerScreen() {
           }
         });
       } catch (error) {
-        console.error('[handleSendLink] Paywall failed, using fallback');
+        // Paywall failed, using fallback
         const { router } = await import('expo-router');
       }
       return;
@@ -667,7 +667,7 @@ function EstimateViewerScreen() {
       sendEstimateModalRef.current?.dismiss();
       
     } catch (error: any) {
-      console.error('[handleSendByLink] Error:', error);
+      // Error in handleSendByLink
     }
   };
 
@@ -711,7 +711,7 @@ function EstimateViewerScreen() {
         Alert.alert('Error', result.error || 'Failed to generate share link.');
       }
     } catch (error) {
-      console.error('[handleShareEstimate] Error:', error);
+      // Error in handleShareEstimate
       Alert.alert('Error', 'Failed to generate share link.');
     }
   };
@@ -724,7 +724,7 @@ function EstimateViewerScreen() {
       return;
     }
     
-    console.log('Navigating to client profile:', estimate.client_id);
+    // Navigating to client profile
     router.push(`/customers/${estimate.client_id}`);
   };
 
@@ -784,7 +784,7 @@ function EstimateViewerScreen() {
                 Alert.alert('Error', result.message || 'Failed to duplicate estimate.');
               }
             } catch (error) {
-              console.error('[handleDuplicateEstimate] Error:', error);
+              // Error duplicating estimate
               Alert.alert('Error', 'Failed to duplicate estimate. Please try again.');
             }
           }
@@ -827,7 +827,7 @@ function EstimateViewerScreen() {
                 .eq('user_id', user.id);
 
               if (error) {
-                console.error('[handleVoidEstimate] Error:', error);
+                // Error voiding estimate
                 Alert.alert('Error', 'Failed to void estimate. Please try again.');
                 return;
               }
@@ -845,7 +845,7 @@ function EstimateViewerScreen() {
 
               Alert.alert('Success', 'Estimate has been voided successfully.');
             } catch (error) {
-              console.error('[handleVoidEstimate] Unexpected error:', error);
+              // Unexpected error voiding estimate
               Alert.alert('Error', 'An unexpected error occurred while voiding the estimate.');
             }
           }
@@ -914,7 +914,7 @@ function EstimateViewerScreen() {
                 Alert.alert('Error', result.message || 'Failed to convert estimate to invoice.');
               }
             } catch (error) {
-              console.error('[handleConvertToInvoiceNew] Error:', error);
+              // Error converting to invoice
               Alert.alert('Error', 'Failed to convert estimate. Please try again.');
             }
           }
@@ -995,7 +995,7 @@ function EstimateViewerScreen() {
           .eq('user_id', user.id);
 
         if (statusError) {
-          console.error('Error updating estimate status to accepted:', statusError);
+          // Error updating estimate status to accepted
           Alert.alert('Error', 'Failed to update estimate status');
           return;
         }
@@ -1003,7 +1003,7 @@ function EstimateViewerScreen() {
         // Update local state
         setEstimate(prev => prev ? { ...prev, status: 'accepted' } : null);
       } catch (error) {
-        console.error('Error accepting estimate:', error);
+        // Error accepting estimate
         Alert.alert('Error', 'Failed to accept estimate');
         return;
       }
@@ -1070,7 +1070,7 @@ function EstimateViewerScreen() {
                 Alert.alert('Conversion Failed', result.message || 'Failed to convert estimate to invoice.');
               }
             } catch (error) {
-              console.error('Error converting estimate:', error);
+              // Error converting estimate
               Alert.alert('Error', 'An unexpected error occurred while converting the estimate.');
             } finally {
               setIsConverting(false);
@@ -1178,7 +1178,7 @@ function EstimateViewerScreen() {
                                   .eq('user_id', user?.id);
 
                                 if (error) {
-                                  console.error('Error reverting estimate status:', error);
+                                  // Error reverting estimate status
                                   Alert.alert('Error', 'Failed to revert estimate status');
                                   return;
                                 }
@@ -1189,7 +1189,7 @@ function EstimateViewerScreen() {
                                   status: 'accepted'
                                 } : null);
                               } catch (error) {
-                                console.error('Error reverting estimate:', error);
+                                // Error reverting estimate
                                 Alert.alert('Error', 'An unexpected error occurred');
                               }
                             }
@@ -1402,7 +1402,7 @@ function EstimateViewerScreen() {
                                   .eq('user_id', user?.id);
 
                                 if (error) {
-                                  console.error('Error reverting estimate status:', error);
+                                  // Error reverting estimate status
                                   Alert.alert('Error', 'Failed to revert estimate status');
                                   return;
                                 }
@@ -1414,7 +1414,7 @@ function EstimateViewerScreen() {
                                   is_accepted: true
                                 } : null);
                               } catch (error) {
-                                console.error('Error reverting estimate:', error);
+                                // Error reverting estimate
                                 Alert.alert('Error', 'An unexpected error occurred');
                               }
                             }
@@ -1447,7 +1447,7 @@ function EstimateViewerScreen() {
                                   .eq('user_id', user?.id);
 
                                 if (error) {
-                                  console.error('Error reverting estimate status:', error);
+                                  // Error reverting estimate status
                                   Alert.alert('Error', 'Failed to revert estimate status');
                                   return;
                                 }
@@ -1462,7 +1462,7 @@ function EstimateViewerScreen() {
                                   is_accepted: false
                                 } : null);
                               } catch (error) {
-                                console.error('Error reverting estimate:', error);
+                                // Error reverting estimate
                                 Alert.alert('Error', 'An unexpected error occurred');
                               }
                             }
@@ -1600,7 +1600,7 @@ function EstimateViewerScreen() {
         {/* Estimate History Modal */}
         <EstimateHistorySheet
           ref={historyModalRef}
-          onClose={() => console.log('Estimate History Modal Dismissed')}
+          onClose={() => {}}
         />
 
         {/* Invoice Preview Modal for Design Selection */}
