@@ -258,7 +258,7 @@ export default function InvoiceDashboardScreen() {
 
   // Updated handler to receive type and label, and set state
   const handleApplyInvoiceFilters = (filterType: string, displayLabel: string) => {
-    console.log(`Selected Filter Type: ${filterType}, Label: ${displayLabel}`);
+    // Selected filter type and label
     setCurrentDateFilterType(filterType);
     setCurrentFilterLabel(displayLabel); // Update label from modal
     // fetchInvoices will be called by useEffect due to currentDateFilterType change
@@ -357,7 +357,7 @@ export default function InvoiceDashboardScreen() {
       setTotalPaid(paid);
       setTotalOverdue(overdue);
     } catch (e: any) {
-      console.error("Error fetching invoices:", e);
+      // Error fetching invoices
       setError(e.message || "Failed to fetch invoices");
     } finally {
       setLoading(false);
@@ -372,12 +372,12 @@ export default function InvoiceDashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[InvoiceDashboardScreen] Screen focused, reloading data.');
+      // Screen focused, reloading data
       setIsTabBarVisible(true); // Show tab bar when returning to dashboard
       fetchBusinessSettings();
       loadInvoicesAndSummary(); // Call the consolidated function
       return () => {
-        console.log('[InvoiceDashboardScreen] Screen unfocused.');
+        // Screen unfocused
         // Tab bar visibility will be managed by the destination screen
       };
     }, [fetchBusinessSettings, loadInvoicesAndSummary, setIsTabBarVisible])
@@ -505,9 +505,9 @@ export default function InvoiceDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
-                  console.log('[InvoiceDashboard] Create button pressed');
+                  // Create button pressed
                   const canProceed = await checkAndShowPaywall();
-                  console.log('[InvoiceDashboard] Can proceed:', canProceed);
+                  // Can proceed with creation
                   if (canProceed) {
                     router.push("/invoices/create" as any);
                   }
@@ -628,7 +628,7 @@ export default function InvoiceDashboardScreen() {
           ref={filterModalRef}
           currentFilterType={currentDateFilterType} // Pass current filter type
           onApplyFilter={handleApplyInvoiceFilters} // Pass updated handler
-          onClose={() => console.log('Filter modal closed')}
+          onClose={() => {}}
         />
       </SafeAreaView>
 	);

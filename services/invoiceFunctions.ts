@@ -1348,8 +1348,8 @@ export class InvoiceFunctionService {
     userId: string
   ): Promise<FunctionResult> {
     try {
-      console.log(`[AI FUNCTION CALL] ${functionName} called with params:`, parameters);
-      console.log(`[AI FUNCTION CALL] User ID: ${userId}`);
+      // AI function called with params
+      // AI function called for user
       
       switch (functionName) {
         case 'search_invoices':
@@ -1427,10 +1427,10 @@ export class InvoiceFunctionService {
         case 'convert_invoice_to_estimate':
           return await this.convertInvoiceToEstimate(parameters, userId);
         case 'edit_recent_invoice':
-          console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_INVOICE function called!');
+          // Edit recent invoice function called
           return await this.editRecentInvoice(parameters, userId);
         case 'edit_recent_estimate':
-          console.log('[AI FUNCTION CALL] ✅ EDIT_RECENT_ESTIMATE function called!');
+          // Edit recent estimate function called
           return await this.editRecentEstimate(parameters, userId);
         case 'check_usage_limits':
           return await this.checkUsageLimits(userId);
@@ -1456,7 +1456,7 @@ export class InvoiceFunctionService {
           };
       }
     } catch (error) {
-      console.error(`Error executing function ${functionName}:`, error);
+      // Error executing function
       return {
         success: false,
         message: 'An error occurred while executing the function',
@@ -1693,14 +1693,14 @@ export class InvoiceFunctionService {
     const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
     
     if (ongoingUserCreations.length > 0) {
-      console.log(`[AI Invoice Create] Found ${ongoingUserCreations.length} ongoing creation(s) for user ${userId}`);
+      // Found ongoing creations for user
       
       // Wait a short time and check if the creation is still ongoing
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
       if (stillOngoing.length > 0) {
-        console.log(`[AI Invoice Create] Blocking duplicate creation attempt for user ${userId}`);
+        // Blocking duplicate creation attempt
         return {
           success: false,
           message: "I'm already creating an invoice for you. Please wait a moment for it to complete.",
@@ -1718,7 +1718,7 @@ export class InvoiceFunctionService {
     // Set up cleanup after timeout
     const timeoutHandle = setTimeout(() => {
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Invoice Create] Cleaned up timed-out creation: ${deduplicationKey}`);
+      // Cleaned up timed-out creation
     }, this.CREATION_TIMEOUT);
     
     try {
@@ -1728,14 +1728,14 @@ export class InvoiceFunctionService {
       // Clean up immediately on completion
       clearTimeout(timeoutHandle);
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Invoice Create] Cleaned up completed creation: ${deduplicationKey}`);
+      // Cleaned up completed creation
       
       return result;
     } catch (error) {
       // Clean up on error
       clearTimeout(timeoutHandle);
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Invoice Create] Cleaned up failed creation: ${deduplicationKey}`);
+      // Cleaned up failed creation
       throw error;
     }
   }
@@ -1744,11 +1744,11 @@ export class InvoiceFunctionService {
     try {
       // CRITICAL SECURITY: Enforce usage limits directly in this function
       // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
-      console.log('[AI Invoice Create] Enforcing usage limits for user:', userId);
+      // Enforcing usage limits for user
       
       const usageLimitCheck = await this.checkUsageLimits(userId);
       if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        console.log('[AI Invoice Create] BLOCKED: User has exceeded free plan limit');
+        // BLOCKED: User has exceeded free plan limit
         return {
           success: false,
           message: usageLimitCheck.data?.canCreate === false 
@@ -1759,7 +1759,7 @@ export class InvoiceFunctionService {
         };
       }
       
-      console.log('[AI Invoice Create] Usage limits check passed, proceeding with invoice creation');
+      // Usage limits check passed, proceeding with invoice creation
 
       // Step 0: Get user's business settings for default tax rate, design, and color
       let defaultTaxRate = 0;
@@ -1784,16 +1784,12 @@ export class InvoiceFunctionService {
           paypalEnabled = paymentOptions.paypal_enabled || false;
           stripeEnabled = paymentOptions.stripe_enabled || false;
           bankTransferEnabled = paymentOptions.bank_transfer_enabled || false;
-          console.log('[AI Invoice Create] Payment settings:', {
-            paypal: paypalEnabled,
-            stripe: stripeEnabled,
-            bankTransfer: bankTransferEnabled
-          });
+          // Payment settings loaded
         } else {
-          console.log('[AI Invoice Create] No payment options configured - all payment methods disabled');
+          // No payment options configured - all payment methods disabled
         }
       } catch (paymentError) {
-        console.log('[AI Invoice Create] Error loading payment options (will disable all):', paymentError);
+        // Error loading payment options (will disable all)
       }
       
       let businessSettings = null;
@@ -1806,36 +1802,30 @@ export class InvoiceFunctionService {
           
         if (businessSettingsData) {
           businessSettings = businessSettingsData;
-          console.log('[AI Invoice Create] Loaded business settings:', businessSettings);
+          // Loaded business settings
           if (businessSettings.auto_apply_tax && businessSettings.default_tax_rate) {
             defaultTaxRate = businessSettings.default_tax_rate;
-            console.log('[AI Invoice Create] Applying default tax rate:', defaultTaxRate, '%');
+            // Applying default tax rate
           }
           if (businessSettings.currency_code) {
             businessCurrency = businessSettings.currency_code;
             businessCurrencySymbol = this.getCurrencySymbol(businessSettings.currency_code);
-            console.log('[AI Invoice Create] Using business currency:', businessCurrency, businessCurrencySymbol);
+            // Using business currency
           }
           if (businessSettings.default_invoice_design) {
             defaultDesign = businessSettings.default_invoice_design;
-            console.log('[AI Invoice Create] Using default design:', defaultDesign);
+            // Using default design
           }
           if (businessSettings.default_accent_color) {
             defaultAccentColor = businessSettings.default_accent_color;
-            console.log('[AI Invoice Create] Using default accent color:', defaultAccentColor);
+            // Using default accent color
           }
           
           // Log display settings for reference
-          console.log('[AI Invoice Create] Display settings:', {
-            show_business_logo: businessSettings.show_business_logo,
-            show_business_name: businessSettings.show_business_name,
-            show_business_address: businessSettings.show_business_address,
-            show_business_tax_number: businessSettings.show_business_tax_number,
-            show_notes_section: businessSettings.show_notes_section
-          });
+          // Display settings configured
         }
       } catch (settingsError) {
-        console.log('[AI Invoice Create] No business settings found, using defaults');
+        // No business settings found, using defaults
       }
 
       // Use default tax rate if no tax percentage specified
@@ -1891,7 +1881,7 @@ export class InvoiceFunctionService {
             
             if (bestMatch) {
               existingClient = bestMatch;
-              console.log(`[Invoice Create] Found partial match: "${params.client_name}" matched with "${bestMatch.name}"`);
+              // Found partial match for client name
             }
           }
         }
@@ -1899,7 +1889,7 @@ export class InvoiceFunctionService {
 
       if (existingClient) {
         clientId = existingClient.id;
-        console.log(`[Invoice Create] Using existing client: ${existingClient.name} (${existingClient.email})`);
+        // Using existing client
       } else {
         // Create new client
         const { data: newClient, error: clientError } = await supabase
@@ -1919,7 +1909,7 @@ export class InvoiceFunctionService {
         }
 
         clientId = newClient.id;
-        console.log(`[Invoice Create] Created new client: ${newClient.name} (${newClient.email})`);
+        // Created new client
       }
 
       // Step 2: Generate unique invoice number
@@ -2019,11 +2009,11 @@ export class InvoiceFunctionService {
         
         const isFirstInvoice = (existingInvoicesCount || 0) === 1;
         if (isFirstInvoice) {
-          console.log('[Invoice Create] First invoice completed for user:', userId);
+          // First invoice completed for user
           await UserContextService.markFirstInvoiceCompleted(userId);
         }
       } catch (contextError) {
-        console.error('[Invoice Create] Error handling first invoice tracking:', contextError);
+        // Error handling first invoice tracking
       }
 
       // Step 9: Return success with invoice details
@@ -2063,7 +2053,7 @@ Would you like me to help you send this invoice or make any changes?`;
       };
 
     } catch (error) {
-      console.error('[Invoice Create] Error:', error);
+      // Error in invoice creation
       return {
         success: false,
         message: `Failed to create invoice: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -2161,14 +2151,14 @@ Would you like me to help you send this invoice or make any changes?`;
             
             if (bestMatch) {
               existingClient = bestMatch;
-              console.log(`[Find/Create Client] Found partial match: "${params.name}" matched with "${bestMatch.name}"`);
+              // Found partial match for client name
             }
           }
         }
       }
 
       if (existingClient) {
-        console.log(`[Find/Create Client] Using existing client: ${existingClient.name} (${existingClient.email})`);
+        // Using existing client
         return { success: true, data: existingClient };
       } else {
         // Create new client
@@ -2188,11 +2178,11 @@ Would you like me to help you send this invoice or make any changes?`;
           throw new Error(`Failed to create client: ${clientError.message}`);
         }
 
-        console.log(`[Find/Create Client] Created new client: ${newClient.name} (${newClient.email})`);
+        // Created new client
         return { success: true, data: newClient };
       }
     } catch (error) {
-      console.error('[Find/Create Client] Error:', error);
+      // Error in find/create client
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -2232,7 +2222,7 @@ Would you like me to help you send this invoice or make any changes?`;
     const clientEmail = (params.email || '').toLowerCase().trim();
     const deduplicationKey = `${userId}-client-${clientName}-${clientEmail}-${Date.now().toString().slice(-6)}`;
     
-    console.log(`[AI Client Create] Deduplication key: ${deduplicationKey}`);
+    // AI Client Create deduplication key set
     
     // Check if there's already an ongoing client creation for this user
     const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => 
@@ -2240,7 +2230,7 @@ Would you like me to help you send this invoice or make any changes?`;
     );
     
     if (ongoingUserCreations.length > 0) {
-      console.log(`[AI Client Create] Found ${ongoingUserCreations.length} ongoing client creation(s) for user ${userId}`);
+      // Found ongoing client creations for user
       
       // Wait a short time and check if the creation is still ongoing
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -2249,7 +2239,7 @@ Would you like me to help you send this invoice or make any changes?`;
         key.startsWith(userId) && key.includes('-client-')
       );
       if (stillOngoing.length > 0) {
-        console.log(`[AI Client Create] Blocking duplicate client creation attempt for user ${userId}`);
+        // Blocking duplicate client creation attempt
         return {
           success: false,
           message: "I'm already creating a client for you. Please wait a moment for it to complete.",
@@ -2267,7 +2257,7 @@ Would you like me to help you send this invoice or make any changes?`;
     // Set up cleanup after timeout
     const timeoutHandle = setTimeout(() => {
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Client Create] Cleaned up timed-out creation: ${deduplicationKey}`);
+      // Cleaned up timed-out client creation
     }, this.CREATION_TIMEOUT);
     
     try {
@@ -2277,14 +2267,14 @@ Would you like me to help you send this invoice or make any changes?`;
       // Clean up immediately on completion
       clearTimeout(timeoutHandle);
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Client Create] Cleaned up completed creation: ${deduplicationKey}`);
+      // Cleaned up completed client creation
       
       return result;
     } catch (error) {
       // Clean up on error
       clearTimeout(timeoutHandle);
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Client Create] Cleaned up failed creation: ${deduplicationKey}`);
+      // Cleaned up failed client creation
       throw error;
     }
   }
@@ -2363,7 +2353,7 @@ Would you like me to help you send this invoice or make any changes?`;
       };
 
     } catch (error) {
-      console.error('Error creating client:', error);
+      // Error creating client
       return {
         success: false,
         message: 'Failed to create client. Please try again.',
@@ -2480,7 +2470,7 @@ Just let me know what sounds good to you!`
       };
 
     } catch (error) {
-      console.error('Error getting business settings:', error);
+      // Error getting business settings
       return {
         success: false,
         message: 'Failed to retrieve business settings. Please try again.',
@@ -2598,7 +2588,7 @@ Your invoice settings are now configured and will be applied to all new invoices
       };
 
     } catch (error) {
-      console.error('Error updating business settings:', error);
+      // Error updating business settings
       return {
         success: false,
         message: 'Failed to update business settings. Please try again.',
@@ -2624,7 +2614,7 @@ Your invoice settings are now configured and will be applied to all new invoices
         throw new Error(result.error || 'Failed to update terminology');
       }
     } catch (error) {
-      console.error('Error switching to quote terminology:', error);
+      // Error switching to quote terminology
       return {
         success: false,
         message: 'Failed to switch to quote terminology. Please try again.',
@@ -2650,7 +2640,7 @@ Your invoice settings are now configured and will be applied to all new invoices
         throw new Error(result.error || 'Failed to update terminology');
       }
     } catch (error) {
-      console.error('Error switching to estimate terminology:', error);
+      // Error switching to estimate terminology
       return {
         success: false,
         message: 'Failed to switch to estimate terminology. Please try again.',
@@ -2667,7 +2657,7 @@ Your invoice settings are now configured and will be applied to all new invoices
       }, userId);
 
       if (!terminologyResult.success) {
-        console.warn('Failed to update terminology to quote, proceeding with estimate creation');
+        // Failed to update terminology to quote, proceeding with estimate creation
       }
 
       // Create an estimate (quotes are estimates with different terminology)
@@ -2707,7 +2697,7 @@ Your invoice settings are now configured and will be applied to all new invoices
         return estimateResult;
       }
     } catch (error) {
-      console.error('Error creating quote:', error);
+      // Error creating quote
       return {
         success: false,
         message: 'Failed to create quote. Please try again.',
@@ -2769,7 +2759,7 @@ Your invoice settings are now configured and will be applied to all new invoices
         message: suggestion
       };
     } catch (error) {
-      console.error('Error suggesting terminology switch:', error);
+      // Error suggesting terminology switch
       return {
         success: false,
         message: 'Failed to analyze terminology preferences. Please try again.',
@@ -2864,7 +2854,7 @@ Your invoice settings are now configured and will be applied to all new invoices
       };
 
     } catch (error) {
-      console.error('Error getting setup progress:', error);
+      // Error getting setup progress
       return {
         success: false,
         message: 'Failed to retrieve setup progress. Please try again.',
@@ -2933,7 +2923,7 @@ All your new invoices will now use this currency. Is there anything else you'd l
       };
 
     } catch (error) {
-      console.error('Error setting currency:', error);
+      // Error setting currency
       return {
         success: false,
         message: 'Failed to set currency. Please try again.',
@@ -3003,7 +2993,7 @@ This will help with tax and compliance suggestions for your invoices. Is there a
       };
 
     } catch (error) {
-      console.error('Error setting region:', error);
+      // Error setting region
       return {
         success: false,
         message: 'Failed to set region. Please try again.',
@@ -3047,7 +3037,7 @@ Just tell me which currency you'd like to use (like "set my currency to USD" or 
       };
 
     } catch (error) {
-      console.error('Error getting currency options:', error);
+      // Error getting currency options
       return {
         success: false,
         message: 'Failed to retrieve currency options. Please try again.',
@@ -3109,7 +3099,7 @@ Just tell me which currency you'd like to use (like "set my currency to USD" or 
               .single();
 
             if (addError) {
-              console.error('Error adding line item:', addError);
+              // Error adding line item
               continue;
             }
             updatedLineItems.push(addedItem);
@@ -3135,7 +3125,7 @@ Just tell me which currency you'd like to use (like "set my currency to USD" or 
               .eq('user_id', userId);
 
             if (updateError) {
-              console.error('Error updating line item:', updateError);
+              // Error updating line item
             }
           }
           actionDescription = `Updated ${line_items.length} item(s)`;
@@ -3153,7 +3143,7 @@ Just tell me which currency you'd like to use (like "set my currency to USD" or 
               .eq('user_id', userId);
 
             if (removeError) {
-              console.error('Error removing line item:', removeError);
+              // Error removing line item
             }
           }
           actionDescription = `Removed ${line_items.length} item(s)`;
@@ -3223,7 +3213,7 @@ Would you like to view the updated invoice or make more changes?`;
       };
 
     } catch (error) {
-      console.error('Error updating invoice line items:', error);
+      // Error updating invoice line items
       return {
         success: false,
         message: 'Failed to update invoice line items. Please try again.',
@@ -3293,7 +3283,7 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
       };
 
     } catch (error) {
-      console.error('Error getting invoice details:', error);
+      // Error getting invoice details
       return {
         success: false,
         message: 'Failed to get invoice details. Please try again.',
@@ -3340,7 +3330,7 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
         updateData.invoice_number = new_invoice_number;
       }
       if (client_name) {
-        console.warn('[updateInvoiceDetails] ⚠️ CHANGING CLIENT NAME from', currentInvoice.client_name, 'to', client_name);
+        // Warning: Changing client name
         updateData.client_name = client_name;
         
         // Try to find matching client to preserve client_id relationship
@@ -3354,13 +3344,13 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
           
         if (matchingClient) {
           updateData.client_id = matchingClient.id;
-          console.log('[updateInvoiceDetails] Preserving client_id relationship:', matchingClient.id);
+          // Preserving client_id relationship
         } else {
-          console.warn('[updateInvoiceDetails] No matching client found for name:', client_name);
+          // Warning: No matching client found for name
         }
       }
       if (client_email) {
-        console.warn('[updateInvoiceDetails] ⚠️ CHANGING CLIENT EMAIL from', currentInvoice.client_email, 'to', client_email);
+        // Warning: Changing client email
         updateData.client_email = client_email;
       }
       if (invoice_date) {
@@ -3455,7 +3445,7 @@ Would you like to view the updated invoice or make more changes?`;
       };
 
     } catch (error) {
-      console.error('Error updating invoice details:', error);
+      // Error updating invoice details
       return {
         success: false,
         message: 'Failed to update invoice details. Please try again.',
@@ -3476,7 +3466,7 @@ Would you like to view the updated invoice or make more changes?`;
         };
       }
 
-      console.log('[Update Client] Starting search for client:', { client_name, client_id, userId });
+      // Starting search for client
 
       let existingClient = null;
 
@@ -3499,7 +3489,7 @@ Would you like to view the updated invoice or make more changes?`;
         existingClient = clientById;
       } else if (client_name) {
         // Search by name with very aggressive matching
-        console.log('[Update Client] Searching for client by name:', client_name);
+        // Searching for client by name
         
         // Get ALL clients for this user to debug
         const { data: allUserClients } = await supabase
@@ -3509,7 +3499,7 @@ Would you like to view the updated invoice or make more changes?`;
           .order('created_at', { ascending: false })
           .limit(20);
 
-        console.log('[Update Client] All user clients:', allUserClients?.map(c => ({ name: c.name, id: c.id, created: c.created_at })));
+        // Retrieved all user clients
 
         if (allUserClients && allUserClients.length > 0) {
           const searchName = client_name.toLowerCase().trim();
@@ -3528,13 +3518,13 @@ Would you like to view the updated invoice or make more changes?`;
           existingClient = exactMatch || startsWithMatch || containsMatch || wordsMatch;
           
           if (exactMatch) {
-            console.log('[Update Client] Found exact match:', existingClient?.name);
+            // Found exact match
           } else if (startsWithMatch) {
-            console.log('[Update Client] Found starts-with match:', existingClient?.name);
+            // Found starts-with match
           } else if (containsMatch) {
-            console.log('[Update Client] Found contains match:', existingClient?.name);
+            // Found contains match
           } else if (wordsMatch) {
-            console.log('[Update Client] Found words match:', existingClient?.name);
+            // Found words match
           }
 
           // If we still don't have a match, try the most recently created client
@@ -3543,7 +3533,7 @@ Would you like to view the updated invoice or make more changes?`;
             const recentClientAge = (Date.now() - new Date(recentClient.created_at).getTime()) / 1000; // seconds
             
             if (recentClientAge < 300) { // Created within last 5 minutes
-              console.log('[Update Client] Using recently created client (age:', recentClientAge, 'seconds):', recentClient.name);
+              // Using recently created client
               existingClient = recentClient;
             }
           }
@@ -3571,7 +3561,7 @@ If you just created an invoice for this client, please try again in a moment, or
         };
       }
 
-      console.log('[Update Client] Found client to update:', existingClient.name, existingClient.id);
+      // Found client to update
 
       // Check if there are multiple clients with the same name that might be causing issues
       const { data: duplicateCheck } = await supabase
@@ -3581,8 +3571,8 @@ If you just created an invoice for this client, please try again in a moment, or
         .eq('name', existingClient.name);
       
       if (duplicateCheck && duplicateCheck.length > 1) {
-        console.warn('[Update Client] Found', duplicateCheck.length, 'clients with name:', existingClient.name);
-        console.warn('[Update Client] Duplicate clients:', duplicateCheck);
+        // Warning: Found duplicate clients with name
+        // Warning: Duplicate clients found
       }
 
       const updateData: any = {
@@ -3618,11 +3608,11 @@ If you just created an invoice for this client, please try again in a moment, or
         .single();
 
       if (updateError) {
-        console.error('[Update Client] Update error details:', updateError);
+        // Update error details
         
         // If it's a multiple rows error, try a more specific update
         if (updateError.message.includes('multiple') || updateError.message.includes('no rows')) {
-          console.log('[Update Client] Attempting more specific update...');
+          // Attempting more specific update
           
           // Try updating by exact ID match only
           const { data: specificUpdate, error: specificError } = await supabase
@@ -3636,7 +3626,7 @@ If you just created an invoice for this client, please try again in a moment, or
           }
 
           if (specificUpdate && specificUpdate.length > 0) {
-            console.log('[Update Client] Successfully updated client with specific query');
+            // Successfully updated client with specific query
             const updatedClientData = specificUpdate[0];
             
             // Build updated fields list for specific update case
@@ -3668,7 +3658,7 @@ If you just created an invoice for this client, please try again in a moment, or
         throw new Error(`Failed to update client: ${updateError.message}`);
       }
 
-      console.log('[Update Client] Successfully updated client:', updatedClient.name);
+      // Successfully updated client
 
       // Build a better success message
       const updatedFields = [];
@@ -3696,7 +3686,7 @@ If you just created an invoice for this client, please try again in a moment, or
       };
 
     } catch (error) {
-      console.error('Error updating client:', error);
+      // Error updating client
       return {
         success: false,
         message: 'Failed to update client. Please try again.',
@@ -3717,7 +3707,7 @@ If you just created an invoice for this client, please try again in a moment, or
         };
       }
 
-      console.log('[Get Outstanding] Searching for invoices for client:', client_name);
+      // Searching for invoices for client
 
       // Use ilike for case-insensitive partial matching
       const { data: invoices, error } = await supabase
@@ -3745,7 +3735,7 @@ If you just created an invoice for this client, please try again in a moment, or
         };
       }
 
-      console.log('[Get Outstanding] Found', invoices.length, 'invoices for', client_name);
+      // Found invoices for client
 
       // Filter for unpaid invoices (sent or overdue)
       const unpaidInvoices = invoices.filter(invoice => 
@@ -3785,7 +3775,7 @@ If you just created an invoice for this client, please try again in a moment, or
       };
 
     } catch (error) {
-      console.error('Error getting client outstanding amount:', error);
+      // Error getting client outstanding amount
       return {
         success: false,
         message: 'Failed to get client outstanding amount. Please try again.',
@@ -3935,7 +3925,7 @@ If you just created an invoice for this client, please try again in a moment, or
       };
 
     } catch (error) {
-      console.error('Error updating invoice payment methods:', error);
+      // Error updating invoice payment methods
       return {
         success: false,
         message: 'Failed to update invoice payment methods. Please try again.',
@@ -4043,7 +4033,7 @@ If you just created an invoice for this client, please try again in a moment, or
       };
 
     } catch (error) {
-      console.error('Error setting up PayPal payments:', error);
+      // Error setting up PayPal payments
       return {
         success: false,
         message: 'Failed to set up PayPal payments. Please try again.',
@@ -4150,7 +4140,7 @@ If you just created an invoice for this client, please try again in a moment, or
       };
 
     } catch (error) {
-      console.error('Error setting up bank transfer payments:', error);
+      // Error setting up bank transfer payments
       return {
         success: false,
         message: 'Failed to set up bank transfer payments. Please try again.',
@@ -4262,7 +4252,7 @@ Note: Stripe requires manual connection through your Payment Options settings.`
       };
 
     } catch (error) {
-      console.error('Error getting payment options:', error);
+      // Error getting payment options
       return {
         success: false,
         message: 'Failed to retrieve payment options. Please try again.',
@@ -4317,7 +4307,7 @@ Note: Stripe requires manual connection through your Payment Options settings.`
 
       // Don't fail if activities table doesn't exist or has no records
       if (activitiesError && !activitiesError.message.includes('does not exist')) {
-        console.warn('Warning: Could not delete invoice activities:', activitiesError.message);
+        // Warning: Could not delete invoice activities
       }
 
       // Delete the main invoice record
@@ -4343,7 +4333,7 @@ Deleted invoice details:
       };
 
     } catch (error) {
-      console.error('Error deleting invoice:', error);
+      // Error deleting invoice
       return {
         success: false,
         message: 'Failed to delete invoice. Please try again.',
@@ -4436,7 +4426,7 @@ ${clients.map(c => `• ${c.name}${c.email ? ` (${c.email})` : ''}`).join('\n')}
 
         // Don't fail if activities table doesn't exist
         if (activitiesError && !activitiesError.message.includes('does not exist')) {
-          console.warn('Warning: Could not delete invoice activities:', activitiesError.message);
+          // Warning: Could not delete invoice activities
         }
 
         // Delete all invoices
@@ -4473,7 +4463,7 @@ Deleted:
       };
 
     } catch (error) {
-      console.error('Error deleting client:', error);
+      // Error deleting client
       return {
         success: false,
         message: 'Failed to delete client. Please try again.',
@@ -4649,7 +4639,7 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
       };
 
     } catch (error) {
-      console.error('Error duplicating invoice:', error);
+      // Error duplicating invoice
       return {
         success: false,
         message: 'Failed to duplicate invoice. Please try again.',
@@ -4824,7 +4814,7 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
       };
 
     } catch (error) {
-      console.error('Error duplicating estimate:', error);
+      // Error duplicating estimate
       return {
         success: false,
         message: 'Failed to duplicate estimate. Please try again.',
@@ -4927,7 +4917,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error) {
-      console.error('Error duplicating client:', error);
+      // Error duplicating client
       return {
         success: false,
         message: 'Failed to duplicate client. Please try again.',
@@ -4943,7 +4933,7 @@ The new client is ready to use for invoices!`
     const itemsHash = JSON.stringify(params.line_items || []).slice(0, 50);
     const deduplicationKey = `${userId}-estimate-${clientName}-${itemsHash}-${Date.now().toString().slice(-6)}`;
     
-    console.log(`[AI Estimate Create] Deduplication key: ${deduplicationKey}`);
+    // AI Estimate Create deduplication key set
     
     // Check if there's already an ongoing estimate creation for this user
     const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => 
@@ -4951,7 +4941,7 @@ The new client is ready to use for invoices!`
     );
     
     if (ongoingUserCreations.length > 0) {
-      console.log(`[AI Estimate Create] Found ${ongoingUserCreations.length} ongoing estimate creation(s) for user ${userId}`);
+      // Found ongoing estimate creations for user
       
       // Wait a short time and check if the creation is still ongoing
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -4960,7 +4950,7 @@ The new client is ready to use for invoices!`
         key.startsWith(userId) && key.includes('-estimate-')
       );
       if (stillOngoing.length > 0) {
-        console.log(`[AI Estimate Create] Blocking duplicate estimate creation attempt for user ${userId}`);
+        // Blocking duplicate estimate creation attempt
         return {
           success: false,
           message: "I'm already creating an estimate for you. Please wait a moment for it to complete.",
@@ -4978,7 +4968,7 @@ The new client is ready to use for invoices!`
     // Set up cleanup after timeout
     const timeoutHandle = setTimeout(() => {
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Estimate Create] Cleaned up timed-out creation: ${deduplicationKey}`);
+      // Cleaned up timed-out estimate creation
     }, this.CREATION_TIMEOUT);
     
     try {
@@ -4988,14 +4978,14 @@ The new client is ready to use for invoices!`
       // Clean up immediately on completion
       clearTimeout(timeoutHandle);
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Estimate Create] Cleaned up completed creation: ${deduplicationKey}`);
+      // Cleaned up completed estimate creation
       
       return result;
     } catch (error) {
       // Clean up on error
       clearTimeout(timeoutHandle);
       this.ongoingCreations.delete(deduplicationKey);
-      console.log(`[AI Estimate Create] Cleaned up failed creation: ${deduplicationKey}`);
+      // Cleaned up failed estimate creation
       throw error;
     }
   }
@@ -5003,15 +4993,15 @@ The new client is ready to use for invoices!`
   // Estimate-specific methods
   private static async createEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Estimate Create] Creating estimate for user:', userId);
+      // Creating estimate for user
       
       // CRITICAL SECURITY: Enforce usage limits directly in this function
       // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
-      console.log('[AI Estimate Create] Enforcing usage limits for user:', userId);
+      // Enforcing usage limits for user
       
       const usageLimitCheck = await this.checkUsageLimits(userId);
       if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        console.log('[AI Estimate Create] BLOCKED: User has exceeded free plan limit');
+        // BLOCKED: User has exceeded free plan limit
         return {
           success: false,
           message: usageLimitCheck.data?.canCreate === false 
@@ -5022,8 +5012,8 @@ The new client is ready to use for invoices!`
         };
       }
       
-      console.log('[AI Estimate Create] Usage limits check passed, proceeding with estimate creation');
-      console.log('[AI Estimate Create] Creating estimate with params:', params);
+      // Usage limits check passed, proceeding with estimate creation
+      // Creating estimate with params
       
       // Get user's business settings for defaults
       let defaultTaxRate = 0;
@@ -5048,16 +5038,12 @@ The new client is ready to use for invoices!`
           paypalEnabled = paymentOptions.paypal_enabled || false;
           stripeEnabled = paymentOptions.stripe_enabled || false;
           bankTransferEnabled = paymentOptions.bank_transfer_enabled || false;
-          console.log('[AI Estimate Create] Payment settings:', {
-            paypal: paypalEnabled,
-            stripe: stripeEnabled,
-            bankTransfer: bankTransferEnabled
-          });
+          // Payment settings configured
         } else {
-          console.log('[AI Estimate Create] No payment options configured - all payment methods disabled');
+          // No payment options configured - all payment methods disabled
         }
       } catch (paymentError) {
-        console.log('[AI Estimate Create] Error loading payment options (will disable all):', paymentError);
+        // Error loading payment options (will disable all)
       }
       
       let businessSettings = null;
@@ -5085,7 +5071,7 @@ The new client is ready to use for invoices!`
           }
         }
       } catch (settingsError) {
-        console.log('[AI Estimate Create] Using default settings');
+        // Using default settings
       }
 
       // Generate estimate number using unified reference service
@@ -5224,9 +5210,9 @@ The new client is ready to use for invoices!`
       };
 
       // DEBUG LOGGING
-      console.log('=== CREATE ESTIMATE RETURN DEBUG ===');
-      console.log('Estimate data:', estimate);
-      console.log('Line items data:', lineItemsData);
+      // Create estimate return debug
+      // Estimate data logged
+      // Line items data logged
 
       // Return the same structure as createInvoice for consistency
       return {
@@ -5245,7 +5231,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error) {
-      console.error('Error creating estimate:', error);
+      // Error creating estimate
       return {
         success: false,
         message: 'Failed to create estimate. Please try again.',
@@ -5327,7 +5313,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error) {
-      console.error('Error searching estimates:', error);
+      // Error searching estimates
       return {
         success: false,
         message: 'Failed to search estimates. Please try again.',
@@ -5442,7 +5428,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error) {
-      console.error('Error getting estimate:', error);
+      // Error getting estimate
       return {
         success: false,
         message: 'Failed to get estimate details. Please try again.',
@@ -5507,7 +5493,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error) {
-      console.error('Error getting recent estimates:', error);
+      // Error getting recent estimates
       return {
         success: false,
         message: 'Failed to get recent estimates. Please try again.',
@@ -5518,15 +5504,15 @@ The new client is ready to use for invoices!`
 
   private static async convertEstimateToInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Estimate Convert] Converting estimate to invoice for user:', userId);
+      // Converting estimate to invoice for user
       
       // CRITICAL SECURITY: Enforce usage limits directly in this function
       // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
-      console.log('[AI Estimate Convert] Enforcing usage limits for user:', userId);
+      // Enforcing usage limits for user
       
       const usageLimitCheck = await this.checkUsageLimits(userId);
       if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        console.log('[AI Estimate Convert] BLOCKED: User has exceeded free plan limit');
+        // BLOCKED: User has exceeded free plan limit
         return {
           success: false,
           message: usageLimitCheck.data?.canCreate === false 
@@ -5537,7 +5523,7 @@ The new client is ready to use for invoices!`
         };
       }
       
-      console.log('[AI Estimate Convert] Usage limits check passed, proceeding with conversion');
+      // Usage limits check passed, proceeding with conversion
       
       const { estimate_number, payment_terms_days } = params;
 
@@ -5670,7 +5656,7 @@ The new client is ready to use for invoices!`
         .eq('id', estimate.id);
 
       if (updateError) {
-        console.error('Warning: Failed to update estimate status:', updateError);
+        // Warning: Failed to update estimate status
       }
 
       const businessCurrencySymbol = this.getCurrencySymbol('USD'); // TODO: Get from user settings
@@ -5696,7 +5682,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error) {
-      console.error('Error converting estimate to invoice:', error);
+      // Error converting estimate to invoice
       return {
         success: false,
         message: 'Failed to convert estimate to invoice. Please try again.',
@@ -5707,15 +5693,15 @@ The new client is ready to use for invoices!`
 
   private static async convertInvoiceToEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Invoice Convert] Converting invoice to estimate for user:', userId);
+      // Converting invoice to estimate for user
       
       // CRITICAL SECURITY: Enforce usage limits directly in this function
       // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
-      console.log('[AI Invoice Convert] Enforcing usage limits for user:', userId);
+      // Enforcing usage limits for user
       
       const usageLimitCheck = await this.checkUsageLimits(userId);
       if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        console.log('[AI Invoice Convert] BLOCKED: User has exceeded free plan limit');
+        // BLOCKED: User has exceeded free plan limit
         return {
           success: false,
           message: usageLimitCheck.data?.canCreate === false 
@@ -5726,7 +5712,7 @@ The new client is ready to use for invoices!`
         };
       }
       
-      console.log('[AI Invoice Convert] Usage limits check passed, proceeding with conversion');
+      // Usage limits check passed, proceeding with conversion
       
       const { invoice_number } = params;
 
@@ -5840,10 +5826,10 @@ The new client is ready to use for invoices!`
         .eq('id', invoice.id);
 
       if (updateError) {
-        console.error('Warning: Failed to update invoice conversion tracking:', updateError);
+        // Warning: Failed to update invoice conversion tracking
       }
 
-      console.log(`[AI Invoice Convert] Successfully converted invoice ${invoice_number} to estimate ${estimateNumber}`);
+      // Successfully converted invoice to estimate
 
       return {
         success: true,
@@ -5858,7 +5844,7 @@ The new client is ready to use for invoices!`
       };
 
     } catch (error: any) {
-      console.error('[AI Invoice Convert] Error converting invoice to estimate:', error);
+      // Error converting invoice to estimate
       return {
         success: false,
         message: 'Failed to convert invoice to estimate. Please try again.',
@@ -5924,7 +5910,7 @@ The new client is ready to use for invoices!`
   // Edit recent invoice function
   private static async editRecentInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Edit Invoice] Starting edit with params:', params);
+      // Starting invoice edit with params
       
       // SIMPLE APPROACH: Just get the most recent invoices
       const { data: invoices, error } = await supabase
@@ -5939,7 +5925,7 @@ The new client is ready to use for invoices!`
         .limit(5); // Get last 5 to have options
         
       if (error || !invoices || invoices.length === 0) {
-        console.error('[AI Edit Invoice] Query error:', error);
+        // Invoice edit query error
         return {
           success: false,
           message: 'No invoices found to edit. Please create an invoice first.',
@@ -5948,11 +5934,7 @@ The new client is ready to use for invoices!`
       }
       
       // Log what we found for debugging
-      console.log('[AI Edit Invoice] Found invoices:', invoices.map(i => ({
-        number: i.invoice_number,
-        created: i.created_at,
-        id: i.id
-      })));
+      // Found invoices for editing
       
       // Default to most recent
       let invoiceToEdit = invoices[0];
@@ -5963,7 +5945,7 @@ The new client is ready to use for invoices!`
         const exactMatch = invoices.find(i => i.invoice_number === params.invoice_number);
         
         if (exactMatch) {
-          console.log('[AI Edit Invoice] Found exact match for:', params.invoice_number);
+          // Found exact match for invoice
           invoiceToEdit = exactMatch;
         } else {
           // Check if this might be an estimate
@@ -5982,7 +5964,7 @@ The new client is ready to use for invoices!`
             };
           }
           
-          console.log('[AI Edit Invoice] No match found for:', params.invoice_number, '- using most recent:', invoiceToEdit.invoice_number);
+          // No match found - using most recent invoice
         }
       }
       
@@ -5990,7 +5972,7 @@ The new client is ready to use for invoices!`
       return await this.performInvoiceEdit(invoiceToEdit, params, userId);
       
     } catch (error) {
-      console.error('Error editing invoice:', error);
+      // Error editing invoice
       return {
         success: false,
         message: 'Failed to edit invoice. Please try again.',
@@ -6002,7 +5984,7 @@ The new client is ready to use for invoices!`
   // Edit recent estimate function
   private static async editRecentEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Edit Estimate] Starting edit with params:', params);
+      // Starting estimate edit with params
       
       // SIMPLE APPROACH: Just get the most recent estimate, period.
       // Don't overcomplicate with number matching - the AI just created it!
@@ -6021,7 +6003,7 @@ The new client is ready to use for invoices!`
         .limit(5); // Get last 5 to have options
         
       if (error || !estimates || estimates.length === 0) {
-        console.error('[AI Edit Estimate] Query error:', error);
+        // Estimate edit query error
         return {
           success: false,
           message: 'No estimates found to edit. Please create an estimate first.',
@@ -6030,11 +6012,7 @@ The new client is ready to use for invoices!`
       }
       
       // Log what we found for debugging
-      console.log('[AI Edit Estimate] Found estimates:', estimates.map(e => ({
-        number: e.estimate_number,
-        created: e.created_at,
-        id: e.id
-      })));
+      // Found estimates for editing
       
       // Default to most recent
       let estimateToEdit = estimates[0];
@@ -6045,7 +6023,7 @@ The new client is ready to use for invoices!`
         const exactMatch = estimates.find(e => e.estimate_number === params.estimate_number);
         
         if (exactMatch) {
-          console.log('[AI Edit Estimate] Found exact match for:', params.estimate_number);
+          // Found exact match for estimate
           estimateToEdit = exactMatch;
         } else {
           // Try partial match (handles EST- vs INV- confusion)
@@ -6056,10 +6034,10 @@ The new client is ready to use for invoices!`
           });
           
           if (partialMatch) {
-            console.log('[AI Edit Estimate] Found partial match:', partialMatch.estimate_number, 'for requested:', params.estimate_number);
+            // Found partial match for estimate
             estimateToEdit = partialMatch;
           } else {
-            console.log('[AI Edit Estimate] No match found for:', params.estimate_number, '- using most recent:', estimateToEdit.estimate_number);
+            // No match found - using most recent estimate
           }
         }
       }
@@ -6068,7 +6046,7 @@ The new client is ready to use for invoices!`
       return await this.performEstimateEdit(estimateToEdit, params, userId);
       
     } catch (error) {
-      console.error('Error editing estimate:', error);
+      // Error editing estimate
       return {
         success: false,
         message: 'Failed to edit estimate. Please try again.',
@@ -6283,7 +6261,7 @@ The new client is ready to use for invoices!`
       };
       
     } catch (error) {
-      console.error('Error performing invoice edit:', error);
+      // Error performing invoice edit
       throw error;
     }
   }
@@ -6494,7 +6472,7 @@ The new client is ready to use for invoices!`
       };
       
     } catch (error) {
-      console.error('Error performing estimate edit:', error);
+      // Error performing estimate edit
       throw error;
     }
   }
@@ -6509,7 +6487,7 @@ The new client is ready to use for invoices!`
         .maybeSingle(); // Use maybeSingle() instead of single() to handle missing records
       
       if (profileError) {
-        console.error('[AI Usage Check] Error fetching profile:', profileError);
+        // Error fetching profile
         return {
           success: false,
           message: 'Unable to check subscription status. Please try again.',
@@ -6539,7 +6517,7 @@ The new client is ready to use for invoices!`
       const remaining = Math.max(0, 3 - totalItems);
       
       if (totalItems >= 3) {
-        console.log('[AI Usage Check] User has reached free plan limit');
+        // User has reached free plan limit
         return {
           success: true,
           data: {
@@ -6553,7 +6531,7 @@ The new client is ready to use for invoices!`
         };
       }
       
-      console.log('[AI Usage Check] User can still create items:', remaining, 'remaining');
+      // User can still create items
       return {
         success: true,
         data: {
@@ -6567,7 +6545,7 @@ The new client is ready to use for invoices!`
       };
       
     } catch (error) {
-      console.error('Error checking usage limits:', error);
+      // Error checking usage limits
       return {
         success: false,
         message: 'Failed to check usage limits. Please try again.',
@@ -6578,7 +6556,7 @@ The new client is ready to use for invoices!`
 
   private static async updateTaxSettings(params: any, userId: string): Promise<FunctionResult> {
     try {
-      console.log('[AI Tax Settings Update] Updating tax settings with params:', params);
+      // Updating tax settings with params
       
       // Check if business settings exist, create if not
       const { data: existingSettings } = await supabase
@@ -6674,7 +6652,7 @@ The new client is ready to use for invoices!`
         message: message + additionalInfo
       };
     } catch (error) {
-      console.error('Error updating tax settings:', error);
+      // Error updating tax settings
       return {
         success: false,
         message: 'Failed to update tax settings. Please try again.',
@@ -6716,7 +6694,7 @@ The new client is ready to use for invoices!`
         message: navigationMessage
       };
     } catch (error) {
-      console.error('Error getting tax settings navigation:', error);
+      // Error getting tax settings navigation
       return {
         success: false,
         message: 'Failed to get navigation instructions.',
@@ -6798,7 +6776,7 @@ The new client is ready to use for invoices!`
         message: 'Available invoice design templates with detailed descriptions and recommendations.'
       };
     } catch (error) {
-      console.error('Error getting design options:', error);
+      // Error getting design options
       return {
         success: false,
         message: 'Failed to get design options.',
@@ -6910,7 +6888,7 @@ The new client is ready to use for invoices!`
         message: 'Available accent colors with psychology, industry associations, and personality traits.'
       };
     } catch (error) {
-      console.error('Error getting color options:', error);
+      // Error getting color options
       return {
         success: false,
         message: 'Failed to get color options.',
@@ -6972,7 +6950,7 @@ The new client is ready to use for invoices!`
           .single();
 
         if (settingsError) {
-          console.error('Error updating business defaults:', settingsError);
+          // Error updating business defaults
         } else {
           updatedDefaults = settings;
         }
@@ -7005,7 +6983,7 @@ The new client is ready to use for invoices!`
         message
       };
     } catch (error) {
-      console.error('Error updating invoice design:', error);
+      // Error updating invoice design
       return {
         success: false,
         message: 'Failed to update invoice design.',
@@ -7067,7 +7045,7 @@ The new client is ready to use for invoices!`
           .single();
 
         if (settingsError) {
-          console.error('Error updating business defaults:', settingsError);
+          // Error updating business defaults
         } else {
           updatedDefaults = settings;
         }
@@ -7099,7 +7077,7 @@ The new client is ready to use for invoices!`
         message
       };
     } catch (error) {
-      console.error('Error updating invoice color:', error);
+      // Error updating invoice color
       return {
         success: false,
         message: 'Failed to update invoice color.',
@@ -7182,7 +7160,7 @@ The new client is ready to use for invoices!`
           .single();
 
         if (settingsError) {
-          console.error('Error updating business defaults:', settingsError);
+          // Error updating business defaults
         } else {
           updatedDefaults = settings;
         }
@@ -7221,7 +7199,7 @@ The new client is ready to use for invoices!`
         message
       };
     } catch (error) {
-      console.error('Error updating invoice appearance:', error);
+      // Error updating invoice appearance
       return {
         success: false,
         message: 'Failed to update invoice appearance.',

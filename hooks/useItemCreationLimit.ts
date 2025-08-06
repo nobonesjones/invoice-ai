@@ -22,13 +22,13 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
   // Superwall placement for creation limit
   const { registerPlacement } = usePlacement({
     onError: (err) => {
-      console.error('[ItemCreationLimit] Paywall error:', err);
+      // Paywall error
     },
     onPresent: (info) => {
-      console.log('[ItemCreationLimit] Paywall presented:', info);
+      // Paywall presented
     },
     onDismiss: (info, result) => {
-      console.log('[ItemCreationLimit] Paywall dismissed:', result);
+      // Paywall dismissed
     },
   });
 
@@ -42,7 +42,7 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
         const stats = await UsageTrackingService.getUserUsageStats(user.id);
         setTotalItems(stats.totalItemsCreated);
       } catch (error) {
-        console.error('[ItemCreationLimit] Error loading usage:', error);
+        // Error loading usage
       } finally {
         setIsLoading(false);
       }
@@ -56,7 +56,7 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
 
   const showLimitPaywall = useCallback(async () => {
     if (!registerPlacement) {
-      console.error('[ItemCreationLimit] registerPlacement not available - using fallback');
+      // registerPlacement not available - using fallback
       // Fallback for Expo Go - navigate to subscription page
       const { router } = await import('expo-router');
       router.push('/subscription');
@@ -73,7 +73,7 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
         }
       });
     } catch (error) {
-      console.error('[ItemCreationLimit] Failed to show paywall:', error);
+      // Failed to show paywall
       // Fallback on error
       const { router } = await import('expo-router');
       router.push('/subscription');
@@ -87,11 +87,7 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
     try {
       const stats = await UsageTrackingService.getUserUsageStats(user.id);
       const currentTotalItems = stats.totalItemsCreated;
-      console.log('[ItemCreationLimit] checkAndShowPaywall - Current stats:', {
-        totalItems: currentTotalItems,
-        isSubscribed,
-        canCreate: isSubscribed || currentTotalItems < 3
-      });
+      // checkAndShowPaywall - Current stats checked
       
       // Update local state with fresh data
       setTotalItems(currentTotalItems);
@@ -107,7 +103,7 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
       await showLimitPaywall();
       return false; // Cannot proceed
     } catch (error) {
-      console.error('[ItemCreationLimit] Error checking paywall:', error);
+      // Error checking paywall
       return false;
     }
   }, [user?.id, isSubscribed, showLimitPaywall]);

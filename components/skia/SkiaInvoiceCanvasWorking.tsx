@@ -19,7 +19,6 @@ const SkiaInvoiceCanvasWorking = forwardRef((props: SkiaInvoiceCanvasWorkingProp
     style
   } = props;
 
-  console.log('[SkiaInvoiceCanvasWorking] Rendering beautiful working invoice...');
 
   // Use proven working font creation
   const fonts = useMemo(() => {
@@ -57,7 +56,6 @@ const SkiaInvoiceCanvasWorking = forwardRef((props: SkiaInvoiceCanvasWorkingProp
         }),
       };
     } catch (e) {
-      console.log('[SkiaInvoiceCanvasWorking] Font creation failed:', e);
       return { small: null, body: null, bodyBold: null, title: null };
     }
   }, []);
@@ -107,7 +105,6 @@ const SkiaInvoiceCanvasWorking = forwardRef((props: SkiaInvoiceCanvasWorkingProp
 
       return { invoiceParagraph, refParagraph, dateParagraph };
     } catch (e) {
-      console.log('[SkiaInvoiceCanvasWorking] Header paragraph creation failed:', e);
       return null;
     }
   }, [invoice?.invoice_number, invoice?.invoice_date]);

@@ -53,16 +53,16 @@ export class AssistantService {
     if (this.isInitialized) return;
 
     try {
-      console.log('[AssistantService] Initializing assistant...');
+      // Initializing assistant
       const startTime = Date.now();
       
       // Try to get existing assistant or create new one
       this.assistantId = await this.getOrCreateAssistant();
       this.isInitialized = true;
       
-      console.log(`[AssistantService] Assistant initialized in ${Date.now() - startTime}ms:`, this.assistantId);
+      // Assistant initialized successfully
     } catch (error) {
-      console.error('[AssistantService] Failed to initialize:', error);
+      // Failed to initialize
       throw error;
     }
   }
@@ -71,7 +71,7 @@ export class AssistantService {
   private static async getOrCreateAssistant(): Promise<string> {
     // Force recreation for debugging
     if (this.FORCE_RECREATE) {
-      console.log('🔄 FORCING ASSISTANT RECREATION FOR DEBUGGING');
+      // Forcing assistant recreation for debugging
       this.assistantPromise = null;
       this.FORCE_RECREATE = false; // Reset after first use
     }
@@ -87,7 +87,7 @@ export class AssistantService {
 
   // Create new assistant (separated for caching)
   private static async createAssistant(): Promise<string> {
-    console.log('[AssistantService] Creating new assistant...');
+    // Creating new assistant
     
     const assistant = await openai.beta.assistants.create({
       name: "Invoice AI Assistant",
@@ -97,9 +97,9 @@ export class AssistantService {
       // Note: We explicitly only provide our custom tools - no code_interpreter or file_search
     });
     
-    console.log('🔧 ASSISTANT TOOLS DEBUG:', assistant.tools?.map(t => ({ type: t.type, name: t.function?.name })));
+    // Assistant tools configured
 
-    console.log('[AssistantService] Assistant created successfully');
+    // Assistant created successfully
     return assistant.id;
   }
 
@@ -854,7 +854,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         const enhancedInstructions = await MemoryService.generateEnhancedPrompt(userId, baseInstructions);
         return enhancedInstructions;
       } catch (error) {
-        console.error('[AssistantService] Error loading user patterns:', error);
+        // Error loading user patterns
         return baseInstructions;
       }
     }
@@ -876,7 +876,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         .single();
 
       if (existingThread && !error) {
-        console.log('[AssistantService] Using existing thread:', existingThread.openai_thread_id);
+        // Using existing thread
         return existingThread.openai_thread_id;
       }
 
@@ -899,14 +899,14 @@ Use tools to take action. Reference previous conversation naturally.`;
         .single();
 
       if (saveError) {
-        console.error('[AssistantService] Failed to save thread:', saveError);
+        // Failed to save thread
         throw saveError;
       }
 
-      console.log('[AssistantService] Created new thread:', thread.id);
+      // Created new thread
       return thread.id;
     } catch (error) {
-      console.error('[AssistantService] Error in getOrCreateThread:', error);
+      // Error in getOrCreateThread
       throw error;
     }
   }
@@ -920,7 +920,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       await this.initialize();
 
       if (!this.assistantId) {
-        console.error('[AssistantService] Assistant not initialized');
+        // Assistant not initialized
         return {
           content: 'I apologize, but there was an issue initializing the AI assistant. Please try again.',
           attachments: [],
@@ -943,10 +943,10 @@ Use tools to take action. Reference previous conversation naturally.`;
         );
 
         if (activeRun) {
-          console.log(`[AssistantService] Found active run ${activeRun.id}, attempting to cancel...`);
+          // Found active run, attempting to cancel
           try {
             await openai.beta.threads.runs.cancel(threadId, activeRun.id);
-            console.log(`[AssistantService] Successfully cancelled run ${activeRun.id}`);
+            // Successfully cancelled run
             
             // Wait longer for the cancellation to process
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -954,21 +954,21 @@ Use tools to take action. Reference previous conversation naturally.`;
             // Double-check that it's actually cancelled
             const checkRun = await openai.beta.threads.runs.retrieve(threadId, activeRun.id);
             if (checkRun.status === 'in_progress' || checkRun.status === 'queued' || checkRun.status === 'requires_action') {
-              console.log(`[AssistantService] Run ${activeRun.id} still active after cancel, creating new thread...`);
+              // Run still active after cancel, creating new thread
               threadId = await this.createNewThread(userId);
             }
           } catch (cancelError) {
-            console.error(`[AssistantService] Failed to cancel run ${activeRun.id}:`, cancelError);
+            // Failed to cancel run
             
             // If we can't cancel, create a new thread
-            console.log('[AssistantService] Creating new thread due to stuck run...');
+            // Creating new thread due to stuck run
             threadId = await this.createNewThread(userId);
           }
         }
       } catch (checkError) {
-        console.error('[AssistantService] Error checking for active runs:', checkError);
+        // Error checking for active runs
         // If we can't check, try creating a new thread to be safe
-        console.log('[AssistantService] Creating new thread due to check error...');
+        // Creating new thread due to check error
         threadId = await this.createNewThread(userId);
       }
 
@@ -1024,24 +1024,24 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Temporarily disabled to prevent recursion issues
       try {
         // TODO: Re-enable memory extraction after fixing recursion issues in MemoryService
-        console.log('[AssistantService] Memory extraction temporarily disabled for stability');
+        // Memory extraction temporarily disabled for stability
         // const messages = await this.getThreadMessages(userId);
         // if (messages.length >= 2) { // At least user message + assistant response
         //   const recentMessages = messages.slice(-2); // Get last 2 messages
         //   await MemoryService.extractFactsFromConversation(userId, threadId, recentMessages);
         // }
       } catch (memoryError) {
-        console.error('[AssistantService] Error extracting memory facts:', memoryError);
+        // Error extracting memory facts
         // Don't fail the conversation if memory extraction fails
       }
 
       return result;
     } catch (error) {
-      console.error('[AssistantService] Error in sendMessage:', error);
+      // Error in sendMessage
       
       // If it's the "active run" error, try creating a new thread
       if (error instanceof Error && error.message.includes('while a run') && error.message.includes('is active')) {
-        console.log('[AssistantService] Attempting recovery with new thread...');
+        // Attempting recovery with new thread
         try {
           const newThreadId = await this.createNewThread(userId);
           
@@ -1086,7 +1086,7 @@ Use tools to take action. Reference previous conversation naturally.`;
 
           return result;
         } catch (recoveryError) {
-          console.error('[AssistantService] Recovery attempt failed:', recoveryError);
+          // Recovery attempt failed
         }
       }
       
@@ -1105,7 +1105,7 @@ Use tools to take action. Reference previous conversation naturally.`;
     // Prevent infinite recursion
     const MAX_RECURSION_DEPTH = 5; // Increased from 3 to 5 for complex operations
     if (recursionDepth > MAX_RECURSION_DEPTH) {
-      console.error(`[AssistantService] Maximum recursion depth (${MAX_RECURSION_DEPTH}) exceeded at depth ${recursionDepth}`);
+      // Maximum recursion depth exceeded
       
       // Return a graceful error response instead of throwing
       return {
@@ -1115,12 +1115,12 @@ Use tools to take action. Reference previous conversation naturally.`;
       };
     }
     
-    console.log(`[AssistantService] waitForRunCompletion called with depth: ${recursionDepth}/${MAX_RECURSION_DEPTH}`);
+    // waitForRunCompletion called
     let run = await openai.beta.threads.runs.retrieve(threadId, runId);
     let collectedAttachments: any[] = [];
     
     // Log run status for debugging
-    console.log(`[AssistantService] Initial run status: ${run.status}`);
+    // Initial run status logged
     
     // Faster polling with timeout
     const maxWaitTime = 45000; // 45 seconds max (increased for complex operations)
@@ -1130,7 +1130,7 @@ Use tools to take action. Reference previous conversation naturally.`;
     while (run.status === 'in_progress' || run.status === 'queued') {
       // Check for timeout
       if (Date.now() - startTime > maxWaitTime) {
-        console.error(`[AssistantService] Assistant response timeout after ${maxWaitTime}ms`);
+        // Assistant response timeout
         return {
           content: 'I apologize, but my response took too long to process. Please try again with a simpler request.',
           attachments: collectedAttachments,
@@ -1142,7 +1142,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       run = await openai.beta.threads.runs.retrieve(threadId, runId);
       
       // Log progress for debugging
-      console.log(`[AssistantService] Run status: ${run.status}`);
+      // Run status updated
     }
 
     if (run.status === 'requires_action' && run.required_action?.type === 'submit_tool_outputs') {
@@ -1176,9 +1176,9 @@ Use tools to take action. Reference previous conversation naturally.`;
         // Collect attachments from tool calls
         collectedAttachments = attachments;
         
-        console.log(`[AssistantService] Tool calls handled successfully at depth ${recursionDepth}, ${toolOutputs.length} outputs`);
+        // Tool calls handled successfully
       } catch (toolError) {
-        console.error(`[AssistantService] Error handling tool calls at depth ${recursionDepth}:`, toolError);
+        // Error handling tool calls
         
         // For critical functions like invoice/client/estimate creation, provide better error handling
         const hasCriticalCreation = toolCalls.some(call => 
@@ -1198,7 +1198,7 @@ Use tools to take action. Reference previous conversation naturally.`;
           else if (criticalCall?.function.name.includes('client')) functionType = 'client';
           else if (criticalCall?.function.name.includes('estimate')) functionType = 'estimate';
           
-          console.error(`[AssistantService] Critical ${functionType} creation failed:`, toolError);
+          // Critical creation failed
           
           // Provide error outputs to let assistant handle gracefully
           toolOutputs = toolCalls.map(call => ({
@@ -1240,7 +1240,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         result.attachments = [...collectedAttachments, ...result.attachments];
         return result;
       } catch (submitError) {
-        console.error(`[AssistantService] Error submitting tool outputs at depth ${recursionDepth}:`, submitError);
+        // Error submitting tool outputs
         
         // Return graceful error instead of throwing
         return {
@@ -1279,7 +1279,7 @@ Use tools to take action. Reference previous conversation naturally.`;
     }
 
     if (run.status === 'failed') {
-      console.error(`[AssistantService] Assistant run failed:`, run.last_error);
+      // Assistant run failed
       return {
         content: `I apologize, but I encountered an error processing your request. ${run.last_error?.message ? 'Error: ' + run.last_error.message : 'Please try again or rephrase your request.'}`,
         attachments: collectedAttachments,
@@ -1330,7 +1330,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       
       return cleaned;
     } catch (error) {
-      console.error('[AssistantService] Error in sanitizeJsonString:', error);
+      // Error in sanitizeJsonString
       return '{}';
     }
   }
@@ -1339,7 +1339,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   private static async handleToolCalls(toolCalls: any[], userId: string): Promise<{ toolOutputs: any[], attachments: any[] }> {
     const { InvoiceFunctionService } = await import('@/services/invoiceFunctions');
     
-    console.log(`[AssistantService] Processing ${toolCalls.length} tool calls...`);
+    // Processing tool calls
     const startTime = Date.now();
     const attachments: any[] = [];
     
@@ -1352,45 +1352,41 @@ Use tools to take action. Reference previous conversation naturally.`;
         // Safely parse function arguments with comprehensive error handling
         try {
           const rawArgs = toolCall.function.arguments;
-          console.log(`[AssistantService] Raw arguments for ${functionName}:`, rawArgs);
+          // Raw arguments logged
           
           // First try parsing as-is
           try {
             functionArgs = JSON.parse(rawArgs);
-            console.log(`[AssistantService] Successfully parsed JSON on first try`);
+            // Successfully parsed JSON on first try
           } catch (firstError) {
-            console.log(`[AssistantService] First parse failed, trying sanitization...`);
+            // First parse failed, trying sanitization
             
             // Try with sanitization
             const sanitizedArgs = this.sanitizeJsonString(rawArgs);
-            console.log(`[AssistantService] Sanitized arguments:`, sanitizedArgs);
+            // Sanitized arguments logged
             
             try {
               functionArgs = JSON.parse(sanitizedArgs);
-              console.log(`[AssistantService] Successfully parsed sanitized JSON`);
+              // Successfully parsed sanitized JSON
             } catch (secondError) {
-              console.error(`[AssistantService] Both parsing attempts failed for ${functionName}`);
-              console.error(`[AssistantService] Original error:`, (firstError as Error).message);
-              console.error(`[AssistantService] Sanitized error:`, (secondError as Error).message);
-              console.error(`[AssistantService] Raw args:`, rawArgs);
-              console.error(`[AssistantService] Sanitized args:`, sanitizedArgs);
+              // Both parsing attempts failed
+              // Original error logged
+              // Sanitized error logged
+              // Raw args logged
+              // Sanitized args logged
               
               // Last resort: try to extract basic parameters manually
               functionArgs = this.extractBasicParams(rawArgs, functionName);
-              console.log(`[AssistantService] Using extracted params:`, functionArgs);
+              // Using extracted params
             }
           }
         } catch (outerError) {
-          console.error(`[AssistantService] Outer parsing error for ${functionName}:`, outerError);
+          // Outer parsing error
           functionArgs = {};
         }
 
-        console.log(`[AssistantService] Executing tool: ${functionName} with args:`, functionArgs);
-        console.log('🔧 TOOL CALL DEBUG:', {
-          toolName: functionName,
-          isEstimateFunction: functionName.includes('estimate'),
-          availableFunctions: ['create_estimate', 'search_estimates', 'get_estimate_by_number', 'get_recent_estimates', 'convert_estimate_to_invoice', 'convert_invoice_to_estimate', 'edit_recent_estimate', 'edit_recent_invoice']
-        });
+        // Executing tool with args
+        // Tool call debug information logged
         const toolStartTime = Date.now();
 
         // Execute the function
@@ -1400,7 +1396,7 @@ Use tools to take action. Reference previous conversation naturally.`;
           userId
         );
 
-        console.log(`[AssistantService] Tool ${functionName} completed in ${Date.now() - toolStartTime}ms`);
+        // Tool completed successfully
 
         // Extract attachments from successful function results
         if (result.success && result.attachments && result.attachments.length > 0) {
@@ -1415,7 +1411,7 @@ Use tools to take action. Reference previous conversation naturally.`;
           output: JSON.stringify(result)
         };
       } catch (error) {
-        console.error('[AssistantService] Tool call error:', error);
+        // Tool call error
         return {
           tool_call_id: toolCall.id,
           output: JSON.stringify({ 
@@ -1427,13 +1423,13 @@ Use tools to take action. Reference previous conversation naturally.`;
       }
     }));
 
-    console.log(`[AssistantService] All tools completed in ${Date.now() - startTime}ms`);
+    // All tools completed
     return { toolOutputs: outputs, attachments };
   }
 
   // Last resort parameter extraction for common functions
   private static extractBasicParams(rawArgs: string, functionName: string): any {
-    console.log(`[AssistantService] Attempting manual parameter extraction for ${functionName}`);
+    // Attempting manual parameter extraction
     
     try {
       // For create_invoice, try to extract basic parameters
@@ -1482,7 +1478,7 @@ Use tools to take action. Reference previous conversation naturally.`;
               params.line_items = items;
             }
           } catch (parseError) {
-            console.log('[AssistantService] Error parsing multiple line items, trying single item fallback');
+            // Error parsing multiple line items, trying single item fallback
             // Original single-item fallback
             const itemNameMatch = lineItemsMatch[1].match(/"item_name"\s*:\s*"([^"]+)"/);
             const unitPriceMatch = lineItemsMatch[1].match(/"unit_price"\s*:\s*(\d+(?:\.\d+)?)/);
@@ -1515,7 +1511,7 @@ Use tools to take action. Reference previous conversation naturally.`;
       
       return {};
     } catch (error) {
-      console.error('[AssistantService] Manual extraction failed:', error);
+      // Manual extraction failed
       return {};
     }
   }
@@ -1538,7 +1534,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         .single();
 
       if (!thread) {
-        console.error('[AssistantService] Thread not found for saving message');
+        // Thread not found for saving message
         return;
       }
 
@@ -1558,7 +1554,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         .update({ updated_at: new Date().toISOString() })
         .eq('id', thread.id);
     } catch (error) {
-      console.error('[AssistantService] Error saving message to database:', error);
+      // Error saving message to database
     }
   }
 
@@ -1582,7 +1578,7 @@ Use tools to take action. Reference previous conversation naturally.`;
 
       return messages || [];
     } catch (error) {
-      console.error('[AssistantService] Error getting thread messages:', error);
+      // Error getting thread messages
       return [];
     }
   }
@@ -1606,11 +1602,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   // Check if service is configured
   static isConfigured(): boolean {
     const hasApiKey = !!process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-    console.log('[AssistantService] Configuration check:', {
-      hasApiKey,
-      apiKeyLength: process.env.EXPO_PUBLIC_OPENAI_API_KEY?.length || 0,
-      apiKeyPrefix: process.env.EXPO_PUBLIC_OPENAI_API_KEY?.substring(0, 7) || 'undefined'
-    });
+    // Configuration check completed
     return hasApiKey;
   }
 
@@ -1642,14 +1634,14 @@ Use tools to take action. Reference previous conversation naturally.`;
         .single();
 
       if (saveError) {
-        console.error('[AssistantService] Failed to save new thread:', saveError);
+        // Failed to save new thread
         throw saveError;
       }
 
-      console.log('[AssistantService] Created new thread after recovery:', thread.id);
+      // Created new thread after recovery
       return thread.id;
     } catch (error) {
-      console.error('[AssistantService] Error creating new thread:', error);
+      // Error creating new thread
       throw error;
     }
   }
@@ -1657,7 +1649,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   // Clear current thread (for chat clearing functionality)
   static async clearCurrentThread(userId: string): Promise<void> {
     try {
-      console.log('[AssistantService] Clearing current thread for user:', userId);
+      // Clearing current thread for user
       
       // Get current active thread
       const { data: currentThread } = await supabase
@@ -1680,10 +1672,10 @@ Use tools to take action. Reference previous conversation naturally.`;
           .delete()
           .eq('thread_id', currentThread.id);
 
-        console.log('[AssistantService] Successfully cleared thread:', currentThread.openai_thread_id);
+        // Successfully cleared thread
       }
     } catch (error) {
-      console.error('[AssistantService] Error clearing current thread:', error);
+      // Error clearing current thread
       throw error;
     }
   }
