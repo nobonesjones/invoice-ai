@@ -353,6 +353,136 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         region: {
           type: "string",
           description: "Business region/location"
+        },
+        estimate_terminology: {
+          type: "string",
+          enum: ["estimate", "quote"],
+          description: "Document terminology preference - whether to call estimate documents 'Estimates' or 'Quotes'"
+        }
+      }
+    }
+  },
+  {
+    name: "switch_to_quote_terminology",
+    description: "Switch the user's estimate documents to use 'Quote' terminology instead of 'Estimate'. This affects all estimate documents in the app, changing labels from 'ESTIMATE' to 'QUOTE' in templates, buttons, and UI text.",
+    parameters: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "switch_to_estimate_terminology", 
+    description: "Switch the user's estimate documents to use 'Estimate' terminology instead of 'Quote'. This affects all estimate documents in the app, changing labels from 'QUOTE' to 'ESTIMATE' in templates, buttons, and UI text.",
+    parameters: {
+      type: "object", 
+      properties: {}
+    }
+  },
+  {
+    name: "create_quote",
+    description: "Create a new quote (estimate with quote terminology) for a client. This function creates an estimate document but presents it as a 'Quote' to the user. If client doesn't exist, they will be created automatically.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: {
+          type: "string",
+          description: "Name of the client for this quote"
+        },
+        client_email: {
+          type: "string", 
+          description: "Email address of the client (optional)"
+        },
+        client_phone: {
+          type: "string",
+          description: "Phone number of the client (optional)"
+        },
+        client_address: {
+          type: "string",
+          description: "Address of the client (optional)"
+        },
+        quote_date: {
+          type: "string",
+          format: "date",
+          description: "Quote date (YYYY-MM-DD). If not provided, uses today's date"
+        },
+        valid_until_date: {
+          type: "string",
+          format: "date", 
+          description: "Date until when the quote is valid (YYYY-MM-DD). If not provided, calculates based on validity period"
+        },
+        validity_days: {
+          type: "number",
+          default: 30,
+          description: "Number of days from quote date until quote expires (used if valid_until_date not provided)"
+        },
+        line_items: {
+          type: "array",
+          description: "Array of items/services being quoted",
+          items: {
+            type: "object",
+            properties: {
+              item_name: {
+                type: "string",
+                description: "Name of the item/service"
+              },
+              item_description: {
+                type: "string",
+                description: "Description of the item/service (optional)"
+              },
+              quantity: {
+                type: "number",
+                default: 1,
+                description: "Quantity of the item"
+              },
+              unit_price: {
+                type: "number",
+                description: "Price per unit"
+              }
+            },
+            required: ["item_name", "unit_price"]
+          },
+          minItems: 1
+        },
+        tax_percentage: {
+          type: "number",
+          default: 0,
+          description: "Tax percentage to apply (e.g., 8.5 for 8.5%)"
+        },
+        discount_type: {
+          type: "string",
+          enum: ["percentage", "fixed"],
+          description: "Type of discount to apply"
+        },
+        discount_value: {
+          type: "number",
+          default: 0,
+          description: "Discount value (percentage or fixed amount)"
+        },
+        notes: {
+          type: "string",
+          description: "Additional notes for the quote (optional)"
+        },
+        custom_headline: {
+          type: "string",
+          description: "Custom headline/title for the quote (optional)"
+        },
+        acceptance_terms: {
+          type: "string",
+          description: "Terms and conditions for quote acceptance (optional)"
+        }
+      },
+      required: ["client_name", "line_items"]
+    }
+  },
+  {
+    name: "suggest_terminology_switch",
+    description: "Analyze the user's business context and suggest whether they should switch from 'Estimate' to 'Quote' terminology or vice versa. Provides business rationale for the switch.",
+    parameters: {
+      type: "object",
+      properties: {
+        business_type: {
+          type: "string",
+          description: "Optional business type/industry context to provide more targeted suggestions"
         }
       }
     }
@@ -1240,6 +1370,14 @@ export class InvoiceFunctionService {
           return await this.getBusinessSettings(parameters, userId);
         case 'update_business_settings':
           return await this.updateBusinessSettings(parameters, userId);
+        case 'switch_to_quote_terminology':
+          return await this.switchToQuoteTerminology(parameters, userId);
+        case 'switch_to_estimate_terminology':
+          return await this.switchToEstimateTerminology(parameters, userId);
+        case 'create_quote':
+          return await this.createQuote(parameters, userId);
+        case 'suggest_terminology_switch':
+          return await this.suggestTerminologySwitch(parameters, userId);
         case 'get_setup_progress':
           return await this.getSetupProgress(parameters, userId);
         case 'set_currency':
@@ -2404,6 +2542,7 @@ Just let me know what sounds good to you!`
       if (params.tax_name !== undefined) updateData.tax_name = params.tax_name;
       if (params.auto_apply_tax !== undefined) updateData.auto_apply_tax = params.auto_apply_tax;
       if (params.region !== undefined) updateData.region = params.region;
+      if (params.estimate_terminology !== undefined) updateData.estimate_terminology = params.estimate_terminology;
 
       let result;
       if (existingSettings) {
@@ -2441,6 +2580,7 @@ Just let me know what sounds good to you!`
           case 'tax_name': return 'Tax label';
           case 'auto_apply_tax': return 'Auto apply tax';
           case 'region': return 'Region';
+          case 'estimate_terminology': return 'Document terminology (Estimate/Quote)';
           default: return key;
         }
       });
@@ -2462,6 +2602,177 @@ Your invoice settings are now configured and will be applied to all new invoices
       return {
         success: false,
         message: 'Failed to update business settings. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async switchToQuoteTerminology(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      // Update the business settings to use quote terminology
+      const result = await this.updateBusinessSettings({
+        estimate_terminology: 'quote'
+      }, userId);
+
+      if (result.success) {
+        return {
+          success: true,
+          data: result.data,
+          message: "Perfect! I've switched your terminology to 'Quotes'. All your estimate documents will now display as 'QUOTE' instead of 'ESTIMATE' in templates, buttons, and throughout the app.\n\nThis change affects:\n✓ Document headers and labels\n✓ Button text (Send Quote, Create Quote)\n✓ Navigation and menu items\n✓ Email templates\n\nYour existing estimates are now called quotes, and any new ones will automatically use quote terminology."
+        };
+      } else {
+        throw new Error(result.error || 'Failed to update terminology');
+      }
+    } catch (error) {
+      console.error('Error switching to quote terminology:', error);
+      return {
+        success: false,
+        message: 'Failed to switch to quote terminology. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async switchToEstimateTerminology(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      // Update the business settings to use estimate terminology
+      const result = await this.updateBusinessSettings({
+        estimate_terminology: 'estimate'
+      }, userId);
+
+      if (result.success) {
+        return {
+          success: true,
+          data: result.data,
+          message: "Perfect! I've switched your terminology to 'Estimates'. All your quote documents will now display as 'ESTIMATE' instead of 'QUOTE' in templates, buttons, and throughout the app.\n\nThis change affects:\n✓ Document headers and labels\n✓ Button text (Send Estimate, Create Estimate)\n✓ Navigation and menu items\n✓ Email templates\n\nYour existing quotes are now called estimates, and any new ones will automatically use estimate terminology."
+        };
+      } else {
+        throw new Error(result.error || 'Failed to update terminology');
+      }
+    } catch (error) {
+      console.error('Error switching to estimate terminology:', error);
+      return {
+        success: false,
+        message: 'Failed to switch to estimate terminology. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async createQuote(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      // First, ensure the user's terminology is set to 'quote'
+      const terminologyResult = await this.updateBusinessSettings({
+        estimate_terminology: 'quote'
+      }, userId);
+
+      if (!terminologyResult.success) {
+        console.warn('Failed to update terminology to quote, proceeding with estimate creation');
+      }
+
+      // Create an estimate (quotes are estimates with different terminology)
+      // Map quote parameters to estimate parameters
+      const estimateParams = {
+        client_name: params.client_name,
+        client_email: params.client_email,
+        client_phone: params.client_phone,
+        client_address: params.client_address,
+        estimate_date: params.quote_date,
+        valid_until_date: params.valid_until_date,
+        validity_days: params.validity_days,
+        line_items: params.line_items,
+        tax_percentage: params.tax_percentage,
+        discount_type: params.discount_type,
+        discount_value: params.discount_value,
+        notes: params.notes,
+        custom_headline: params.custom_headline,
+        acceptance_terms: params.acceptance_terms
+      };
+
+      // Use the existing estimate creation function
+      const estimateResult = await this.createEstimateWithDeduplication(estimateParams, userId);
+
+      if (estimateResult.success) {
+        // Customize the success message to use quote terminology
+        let message = estimateResult.message || '';
+        message = message.replace(/estimate/gi, 'quote');
+        message = message.replace(/Estimate/gi, 'Quote');
+        message = message.replace(/ESTIMATE/gi, 'QUOTE');
+
+        return {
+          ...estimateResult,
+          message: `Great! I've created your quote successfully!\n\n${message.includes('quote') ? message : 'Your quote is ready to send to your client.'}`
+        };
+      } else {
+        return estimateResult;
+      }
+    } catch (error) {
+      console.error('Error creating quote:', error);
+      return {
+        success: false,
+        message: 'Failed to create quote. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async suggestTerminologySwitch(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      // Get current business settings to see what terminology they're using
+      const businessResult = await this.getBusinessSettings({}, userId);
+      let currentTerminology = 'estimate'; // default
+      
+      if (businessResult.success && businessResult.data) {
+        currentTerminology = businessResult.data.estimate_terminology || 'estimate';
+      }
+
+      // Provide business rationale for terminology choice
+      const businessType = params.business_type || '';
+      
+      let suggestion = '';
+      let recommendSwitch = false;
+      
+      if (currentTerminology === 'estimate') {
+        suggestion = `You're currently using "Estimate" terminology. Here's when you might consider switching to "Quote":\n\n**Consider "Quote" if:**\n• Your industry typically uses quotes (consulting, creative services, contractors)\n• You want to sound more committed/firm about pricing\n• Your clients expect "quotes" rather than "estimates"\n• You're in a competitive market where quotes sound more professional\n• You provide fixed-price services\n\n**"Quote" Psychology:** Quotes often feel more definitive and professional, suggesting a firm commitment to pricing.\n\n`;
+        
+        // Check if their business type suggests quotes
+        const quoteBusinessTypes = ['consulting', 'creative', 'design', 'marketing', 'contractor', 'construction', 'freelance', 'agency'];
+        if (businessType && quoteBusinessTypes.some(type => businessType.toLowerCase().includes(type))) {
+          recommendSwitch = true;
+          suggestion += `**Recommendation for ${businessType}:** Based on your business type, I'd recommend switching to "Quote" terminology. It's more commonly expected in your industry and can help build client confidence.\n\n`;
+        }
+      } else {
+        suggestion = `You're currently using "Quote" terminology. Here's when you might consider switching to "Estimate":\n\n**Consider "Estimate" if:**\n• You're in an industry where pricing can vary (construction, repairs, custom work)\n• You want to leave room for price adjustments\n• Your work involves variable costs or unknowns\n• You're in a service industry where "estimates" are the norm\n• You do time-based or hourly billing\n\n**"Estimate" Psychology:** Estimates feel more flexible and set proper expectations that final pricing might vary.\n\n`;
+        
+        // Check if their business type suggests estimates
+        const estimateBusinessTypes = ['repair', 'construction', 'maintenance', 'automotive', 'plumbing', 'electrical', 'landscaping'];
+        if (businessType && estimateBusinessTypes.some(type => businessType.toLowerCase().includes(type))) {
+          recommendSwitch = true;
+          suggestion += `**Recommendation for ${businessType}:** Based on your business type, I'd recommend switching to "Estimate" terminology. It's more appropriate for work where final costs might vary.\n\n`;
+        }
+      }
+      
+      if (recommendSwitch) {
+        const switchTo = currentTerminology === 'estimate' ? 'quote' : 'estimate';
+        suggestion += `Would you like me to switch your terminology to "${switchTo.charAt(0).toUpperCase() + switchTo.slice(1)}" right now?`;
+      } else {
+        suggestion += `Your current "${currentTerminology.charAt(0).toUpperCase() + currentTerminology.slice(1)}" terminology looks good for your business. You can always change it later if needed!`;
+      }
+
+      return {
+        success: true,
+        data: {
+          current_terminology: currentTerminology,
+          business_type: businessType,
+          recommend_switch: recommendSwitch
+        },
+        message: suggestion
+      };
+    } catch (error) {
+      console.error('Error suggesting terminology switch:', error);
+      return {
+        success: false,
+        message: 'Failed to analyze terminology preferences. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
