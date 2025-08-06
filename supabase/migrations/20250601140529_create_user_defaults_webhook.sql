@@ -52,7 +52,7 @@ BEGIN
     false,
     false,
     null,
-    'Payment is due within 30 days of invoice date. Late payments may incur additional fees.'
+       null
   );
 
   -- Create default business_settings row

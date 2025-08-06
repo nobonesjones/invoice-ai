@@ -1618,34 +1618,36 @@ export default function CreateInvoiceScreen() {
     marginLeft: 2, // Reduced margin for the Mastercard icon to bring it closer to Visa
   };
 
-  const [defaultNotesFetched, setDefaultNotesFetched] = useState(false); // New state
-
-  useEffect(() => {
-    if (!editInvoiceId && !defaultNotesFetched && !getValues('notes') && user && supabase) {
-      const fetchDefaultNotes = async () => {
-        try {
-          console.log('[CreateInvoiceScreen] Fetching default notes for user:', user.id);
-          const { data: paymentOptionsData, error: paymentOptionsError } = await supabase
-            .from('payment_options')
-            .select('invoice_terms_notes')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (paymentOptionsError && paymentOptionsError.code !== 'PGRST116') {
-            console.error('Error fetching default notes:', paymentOptionsError.message);
-          } else if (paymentOptionsData && paymentOptionsData.invoice_terms_notes) {
-            console.log('[CreateInvoiceScreen] Default notes fetched:', paymentOptionsData.invoice_terms_notes);
-            setValue('notes', paymentOptionsData.invoice_terms_notes || '');
-          }
-        } catch (e: any) {
-          console.error('Exception fetching default notes:', e.message);
-        } finally {
-          setDefaultNotesFetched(true);
-        }
-      };
-      fetchDefaultNotes();
-    }
-  }, [user, supabase, editInvoiceId, defaultNotesFetched, setValue, getValues]); // Fixed dependency array
+  // REMOVED: Auto-population of default notes from payment options
+  // This was causing the AI to automatically add payment terms even when users didn't ask for them
+  // Users should only get notes/terms when they specifically request them
+  
+  // const [defaultNotesFetched, setDefaultNotesFetched] = useState(false); 
+  // useEffect(() => {
+  //   if (!editInvoiceId && !defaultNotesFetched && !getValues('notes') && user && supabase) {
+  //     const fetchDefaultNotes = async () => {
+  //       try {
+  //         console.log('[CreateInvoiceScreen] Fetching default notes for user:', user.id);
+  //         const { data: paymentOptionsData, error: paymentOptionsError } = await supabase
+  //           .from('payment_options')
+  //           .select('invoice_terms_notes')
+  //           .eq('user_id', user.id)
+  //           .maybeSingle();
+  //         if (paymentOptionsError && paymentOptionsError.code !== 'PGRST116') {
+  //           console.error('Error fetching default notes:', paymentOptionsError.message);
+  //         } else if (paymentOptionsData && paymentOptionsData.invoice_terms_notes) {
+  //           console.log('[CreateInvoiceScreen] Default notes fetched:', paymentOptionsData.invoice_terms_notes);
+  //           setValue('notes', paymentOptionsData.invoice_terms_notes || '');
+  //         }
+  //       } catch (e: any) {
+  //         console.error('Exception fetching default notes:', e.message);
+  //       } finally {
+  //         setDefaultNotesFetched(true);
+  //       }
+  //     };
+  //     fetchDefaultNotes();
+  //   }
+  // }, [user, supabase, editInvoiceId, defaultNotesFetched, setValue, getValues]);
 
   // Function to populate form with loaded invoice data
   const populateFormWithInvoiceData = async (invoiceData: any) => {
