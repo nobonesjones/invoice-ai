@@ -1,6 +1,11 @@
+import securityService from '../config/security';
+
 // OpenAI API Configuration
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o-mini'; // Temporary downgrade to cheaper model due to quota
+
+// 🚨 SECURITY WARNING: This service accesses AI API keys in client code
+// For production, these API calls should be moved to a backend server
 
 export interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'function';
@@ -47,14 +52,23 @@ export interface OpenAIResponse {
 }
 
 export class OpenAIService {
-  private static apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY as string;
+  private static getApiKey(): string {
+    try {
+      const aiKeys = securityService.getDevelopmentAIKeys();
+      return aiKeys.openai;
+    } catch (error) {
+      // In production, this should redirect to backend API
+      throw new Error('OpenAI API key access denied. Use backend API in production.');
+    }
+  }
 
   static async createChatCompletion(
     messages: OpenAIMessage[],
     functions?: OpenAIFunction[],
     temperature: number = 0.7
   ): Promise<OpenAIResponse> {
-    if (!this.apiKey) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       throw new Error('OpenAI API key not found. Please check your environment variables.');
     }
 
@@ -76,7 +90,7 @@ export class OpenAIService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify(body),
       });

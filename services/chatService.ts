@@ -1,5 +1,6 @@
 import { supabase } from '@/config/supabase';
-import { OpenAIService, OpenAIMessage } from '@/services/openaiService';
+// TEST: Using secure Edge Function version
+import { OpenAIServiceSecure as OpenAIService, OpenAIMessage } from '@/services/openaiServiceSecure';
 import { AssistantService, AssistantRunResult } from '@/services/assistantService';
 import { InvoiceFunctionService, INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
 

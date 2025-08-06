@@ -5,7 +5,7 @@
     "scheme": "superinvoice",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/superinvoiceicon.png",
+    "icon": "./assets/superinvoice-1024.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
@@ -52,11 +52,11 @@
         ]
       },
       "splash": {
-        "image": "./assets/superinvoiceicon.png",
+        "image": "./assets/superinvoice-1024.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
-          "image": "./assets/superinvoiceicon.png",
+          "image": "./assets/superinvoice-1024.png",
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
@@ -65,6 +65,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.indianabones.ExpoSupabaseStarter",
@@ -77,11 +78,11 @@
         "android.permission.READ_CONTACTS"
       ],
       "splash": {
-        "image": "./assets/superinvoiceicon.png",
+        "image": "./assets/superinvoice-1024.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
         "dark": {
-          "image": "./assets/superinvoiceicon.png",
+          "image": "./assets/superinvoice-1024.png",
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }

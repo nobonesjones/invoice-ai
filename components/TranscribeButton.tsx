@@ -8,6 +8,7 @@ import {
 import { Mic, MicOff, Loader2 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { useTheme } from '@/context/theme-provider';
+import { useSupabase } from '@/context/supabase-provider';
 
 interface TranscribeButtonProps {
   onTranscript?: (transcript: string) => void;
@@ -33,6 +34,7 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
   onAudioLevel
 }, ref) => {
   const { theme } = useTheme();
+  const { supabase } = useSupabase();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
@@ -96,40 +98,35 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
       } as any);
       formData.append('model', 'whisper-1');
 
-      const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error('OpenAI API key not configured');
-      }
+      console.log('[TranscribeButton] Sending transcription request through Edge Function...');
 
-      console.log('[TranscribeButton] Sending transcription request to OpenAI...');
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
-
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-        },
+      // Use Supabase Edge Function instead of direct OpenAI call
+      // Note: Don't set Content-Type for multipart/form-data - let the browser set it with boundary
+      const { data, error } = await supabase.functions.invoke('ai-transcribe', {
         body: formData,
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      console.log('[TranscribeButton] Edge Function response:', { data, error });
 
-      console.log('[TranscribeButton] Received response from OpenAI, status:', response.status);
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`[TranscribeButton] OpenAI API Error (${response.status}):`, errorBody);
-        throw new Error(`OpenAI API Error: ${response.status} ${response.statusText}`);
+      if (error) {
+        console.error('[TranscribeButton] Supabase functions invoke error:', error);
+        throw new Error(`Edge Function error: ${error.message || JSON.stringify(error)}`);
       }
 
-      const data = await response.json();
-      console.log('[TranscribeButton] Transcription successful:', data.text);
+      // Check if the response data contains an error (from the edge function itself)
+      if (data && data.error) {
+        console.error('[TranscribeButton] Edge Function returned error:', data);
+        throw new Error(`Edge Function Error: ${data.error}${data.message ? ' - ' + data.message : ''}`);
+      }
 
-      if (data.text && onTranscript) {
-        onTranscript(data.text);
+      console.log('[TranscribeButton] Received successful response from Edge Function');
+
+      // Data is already parsed from Edge Function
+      const transcriptionData = data;
+      console.log('[TranscribeButton] Transcription successful:', transcriptionData.text);
+
+      if (transcriptionData.text && onTranscript) {
+        onTranscript(transcriptionData.text);
       } else {
         console.log('[TranscribeButton] No transcript or empty transcript received');
         Alert.alert('No Speech Detected', 'Please try speaking more clearly.');

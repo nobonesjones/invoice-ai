@@ -317,6 +317,16 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         }
         
         console.log('[InvoicePreviewModal] Save completed, saveSuccess:', saveSuccess);
+        
+        // If save was successful, call the onSaveComplete callback to refresh chat preview
+        if (saveSuccess && onSaveComplete) {
+          console.log('[InvoicePreviewModal] Calling onSaveComplete callback to refresh preview');
+          // Add small delay to ensure database write is committed before refresh
+          setTimeout(() => {
+            onSaveComplete();
+          }, 100);
+        }
+        
         console.log('[InvoicePreviewModal] About to close modal - NOT calling onClose for saves');
         
         // Close modal WITHOUT calling onClose callback for saves (prevents state conflicts)

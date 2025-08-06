@@ -14,7 +14,8 @@ import { H1 } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
 import { useTheme } from "@/context/theme-provider";
 import { ChatService } from "@/services/chatService";
-import { OpenAIService } from "@/services/openaiService";
+// Using secure Edge Function version
+import { OpenAIServiceSecure as OpenAIService } from "@/services/openaiServiceSecure";
 import { useAIChat } from "@/hooks/useAIChat";
 import { ChatMessage } from "@/services/chatService";
 import UserContextService from "@/services/userContextService";
@@ -438,6 +439,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 								marginLeft: -120,
 							}}>
 								<EstimateDesignComponent
+									key={`${estimate?.estimate_template || 'default'}-${estimate?.accent_color || '#14B8A6'}`}
 									renderSinglePage={0}
 									style={{
 										width: 200,
@@ -954,6 +956,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 								marginLeft: -120, // Center the invoice by shifting left
 							}}>
 																	<InvoiceDesignComponent
+										key={`${invoice?.invoice_design || 'default'}-${invoice?.accent_color || '#14B8A6'}`}
 										renderSinglePage={0}
 										style={{
 											width: 200,
