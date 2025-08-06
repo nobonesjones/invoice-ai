@@ -1604,7 +1604,24 @@ export class InvoiceFunctionService {
 
   private static async createInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
+      // CRITICAL SECURITY: Enforce usage limits directly in this function
+      // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
+      console.log('[AI Invoice Create] Enforcing usage limits for user:', userId);
+      
+      const usageLimitCheck = await this.checkUsageLimits(userId);
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
+        console.log('[AI Invoice Create] BLOCKED: User has exceeded free plan limit');
+        return {
+          success: false,
+          message: usageLimitCheck.data?.canCreate === false 
+            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
+            : 'Unable to verify usage limits. Please try again.',
+          error: 'Usage limit exceeded',
+          showPaywall: true
+        };
+      }
+      
+      console.log('[AI Invoice Create] Usage limits check passed, proceeding with invoice creation');
 
       // Step 0: Get user's business settings for default tax rate, design, and color
       let defaultTaxRate = 0;
@@ -4676,8 +4693,25 @@ The new client is ready to use for invoices!`
   private static async createEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
       console.log('[AI Estimate Create] Creating estimate for user:', userId);
-      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
       
+      // CRITICAL SECURITY: Enforce usage limits directly in this function
+      // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
+      console.log('[AI Estimate Create] Enforcing usage limits for user:', userId);
+      
+      const usageLimitCheck = await this.checkUsageLimits(userId);
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
+        console.log('[AI Estimate Create] BLOCKED: User has exceeded free plan limit');
+        return {
+          success: false,
+          message: usageLimitCheck.data?.canCreate === false 
+            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
+            : 'Unable to verify usage limits. Please try again.',
+          error: 'Usage limit exceeded',
+          showPaywall: true
+        };
+      }
+      
+      console.log('[AI Estimate Create] Usage limits check passed, proceeding with estimate creation');
       console.log('[AI Estimate Create] Creating estimate with params:', params);
       
       // Get user's business settings for defaults
@@ -4817,7 +4851,6 @@ The new client is ready to use for invoices!`
         valid_until_date: validUntilDate.toISOString().split('T')[0],
         subtotal_amount: subtotal,
         tax_percentage: taxPercentage,
-        estimate_tax_label: businessSettings?.tax_name || null,
         total_amount: total,
         discount_type: discountType,
         discount_value: discountValue,
@@ -5175,7 +5208,25 @@ The new client is ready to use for invoices!`
   private static async convertEstimateToInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
       console.log('[AI Estimate Convert] Converting estimate to invoice for user:', userId);
-      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
+      
+      // CRITICAL SECURITY: Enforce usage limits directly in this function
+      // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
+      console.log('[AI Estimate Convert] Enforcing usage limits for user:', userId);
+      
+      const usageLimitCheck = await this.checkUsageLimits(userId);
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
+        console.log('[AI Estimate Convert] BLOCKED: User has exceeded free plan limit');
+        return {
+          success: false,
+          message: usageLimitCheck.data?.canCreate === false 
+            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
+            : 'Unable to verify usage limits. Please try again.',
+          error: 'Usage limit exceeded',
+          showPaywall: true
+        };
+      }
+      
+      console.log('[AI Estimate Convert] Usage limits check passed, proceeding with conversion');
       
       const { estimate_number, payment_terms_days } = params;
 
@@ -5346,7 +5397,25 @@ The new client is ready to use for invoices!`
   private static async convertInvoiceToEstimate(params: any, userId: string): Promise<FunctionResult> {
     try {
       console.log('[AI Invoice Convert] Converting invoice to estimate for user:', userId);
-      // NOTE: Usage limits are checked by checkUsageLimits() function before this is called
+      
+      // CRITICAL SECURITY: Enforce usage limits directly in this function
+      // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
+      console.log('[AI Invoice Convert] Enforcing usage limits for user:', userId);
+      
+      const usageLimitCheck = await this.checkUsageLimits(userId);
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
+        console.log('[AI Invoice Convert] BLOCKED: User has exceeded free plan limit');
+        return {
+          success: false,
+          message: usageLimitCheck.data?.canCreate === false 
+            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
+            : 'Unable to verify usage limits. Please try again.',
+          error: 'Usage limit exceeded',
+          showPaywall: true
+        };
+      }
+      
+      console.log('[AI Invoice Convert] Usage limits check passed, proceeding with conversion');
       
       const { invoice_number } = params;
 
