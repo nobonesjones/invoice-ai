@@ -34,7 +34,7 @@ export const usePaymentOptions = (): UsePaymentOptionsReturn => {
         .from('payment_options')
         .select('*')
         .eq('user_id', user.id)
-        .single(); // Assuming one row per user
+        .maybeSingle(); // Use maybeSingle for new users without payment options
 
       if (fetchError) {
         throw fetchError;

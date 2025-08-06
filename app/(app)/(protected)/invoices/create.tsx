@@ -1066,6 +1066,7 @@ export default function CreateInvoiceScreen() {
         businessSettings: businessSettingsForPreview,
         clientData: clientData,
       });
+      console.log('[handlePreviewInvoice] Calling present() on modal ref');
       invoicePreviewModalRef.current?.present();
     } catch (error: any) {
       console.error('[handlePreviewInvoice] Error preparing preview:', error);
@@ -1535,37 +1536,68 @@ export default function CreateInvoiceScreen() {
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
   const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
-    const currentPaymentSettings = paymentOptionsData;
-
-    if (newValue === true && currentPaymentSettings) { // Check only when toggling ON and paymentOptionsData are loaded
+    console.log(`[handlePaymentMethodToggle] ${methodKey} toggle attempt:`, newValue);
+    console.log(`[handlePaymentMethodToggle] Loading state:`, paymentOptionsLoading);
+    console.log(`[handlePaymentMethodToggle] Payment options data:`, paymentOptionsData);
+    
+    // Block all toggles if payment options are still loading
+    if (paymentOptionsLoading) {
+      Alert.alert(
+        'Please Wait',
+        'Payment options are still loading. Please try again in a moment.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    // Block all toggles if payment options data is not available
+    if (!paymentOptionsData) {
+      Alert.alert(
+        'Error',
+        'Unable to load your payment settings. Please refresh the page and try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    // Only validate when toggling ON (allowing OFF always)
+    if (newValue === true) {
       let isEnabledInSettings = false;
       let settingName = '';
-
+      
       if (methodKey === 'stripe') {
-        isEnabledInSettings = currentPaymentSettings.stripe_enabled === true;
+        isEnabledInSettings = paymentOptionsData.stripe_enabled === true;
         settingName = 'Pay With Card (Stripe)';
       } else if (methodKey === 'paypal') {
-        isEnabledInSettings = currentPaymentSettings.paypal_enabled === true;
+        isEnabledInSettings = paymentOptionsData.paypal_enabled === true;
         settingName = 'PayPal';
       } else if (methodKey === 'bank_account') {
-        isEnabledInSettings = currentPaymentSettings.bank_transfer_enabled === true;
-        // Assuming 'bank_transfer_enabled' is the correct field in payment_options table
+        isEnabledInSettings = paymentOptionsData.bank_transfer_enabled === true;
         settingName = 'Bank Transfer';
       }
-
+      
+      console.log(`[handlePaymentMethodToggle] ${methodKey} enabled in settings:`, isEnabledInSettings);
+      
       if (!isEnabledInSettings) {
         Alert.alert(
-          'Payment Method Disabled',
-          `${settingName} is not enabled in your Payment Options. Please update your settings to use this method.`,
-          [{ text: 'OK' }]
+          'Payment Method Not Configured',
+          `${settingName} is not enabled in your Payment Options. Please configure it first in Settings > Payment Options.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Go to Settings', 
+              onPress: () => router.push('/(app)/payment-options')
+            }
+          ]
         );
         return; // Prevent toggling ON
       }
     }
-
-    // Update react-hook-form state directly
+    
+    // Update react-hook-form state directly - validation passed or toggling OFF
     const formKey = `${methodKey}_active_on_invoice` as keyof InvoiceFormData;
     setValue(formKey, newValue, { shouldValidate: true, shouldDirty: true });
+    console.log(`[handlePaymentMethodToggle] ${methodKey} successfully set to:`, newValue);
 
     // // Original code that updated local state, now replaced by setValue above
     // setInvoiceDetails((prev: InvoiceFormData) => ({
@@ -1597,7 +1629,7 @@ export default function CreateInvoiceScreen() {
             .from('payment_options')
             .select('invoice_terms_notes')
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
 
           if (paymentOptionsError && paymentOptionsError.code !== 'PGRST116') {
             console.error('Error fetching default notes:', paymentOptionsError.message);
@@ -1988,9 +2020,11 @@ export default function CreateInvoiceScreen() {
             <ActionRow
               label={
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ color: themeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
-                  <Image source={require('../../../../assets/visaicon.png')} style={iconStyle} />
-                  <Image source={require('../../../../assets/mastercardicon.png')} style={mastercardSpecificStyle} />
+                  <Text style={{ color: paymentOptionsLoading ? themeColors.mutedForeground : themeColors.foreground, fontSize: 16 }}>
+                    Pay With Card {paymentOptionsLoading ? '(Loading...)' : ''}
+                  </Text>
+                  <Image source={require('../../../../assets/visaicon.png')} style={[iconStyle, paymentOptionsLoading && {opacity: 0.5}]} />
+                  <Image source={require('../../../../assets/mastercardicon.png')} style={[mastercardSpecificStyle, paymentOptionsLoading && {opacity: 0.5}]} />
                 </View>
               }
               icon={CreditCard}
@@ -1999,12 +2033,15 @@ export default function CreateInvoiceScreen() {
               switchValue={getValues('stripe_active_on_invoice')}
               onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
               onPress={() => handlePaymentMethodToggle('stripe', !getValues('stripe_active_on_invoice'))}
+              disabled={paymentOptionsLoading}
             />
             <ActionRow
               label={
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ color: themeColors.foreground, fontSize: 16 }}>PayPal</Text>
-                  <Image source={require('../../../../assets/paypalicon.png')} style={iconStyle} />
+                  <Text style={{ color: paymentOptionsLoading ? themeColors.mutedForeground : themeColors.foreground, fontSize: 16 }}>
+                    PayPal {paymentOptionsLoading ? '(Loading...)' : ''}
+                  </Text>
+                  <Image source={require('../../../../assets/paypalicon.png')} style={[iconStyle, paymentOptionsLoading && {opacity: 0.5}]} />
                 </View>
               }
               icon={Banknote} 
@@ -2013,15 +2050,17 @@ export default function CreateInvoiceScreen() {
               switchValue={getValues('paypal_active_on_invoice')}
               onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
               onPress={() => handlePaymentMethodToggle('paypal', !getValues('paypal_active_on_invoice'))}
+              disabled={paymentOptionsLoading}
             />
             <ActionRow
-              label="Bank Transfer"
+              label={paymentOptionsLoading ? "Bank Transfer (Loading...)" : "Bank Transfer"}
               icon={Landmark} 
               themeColors={themeColors} 
               showSwitch={true}
               switchValue={getValues('bank_account_active_on_invoice')}
               onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
               onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active_on_invoice'))}
+              disabled={paymentOptionsLoading}
             />
           </FormSection>
 
@@ -2126,7 +2165,10 @@ export default function CreateInvoiceScreen() {
           businessSettings={previewData?.businessSettings}
           clientData={previewData?.clientData}
           invoiceId={currentInvoiceId || undefined}
-          onClose={() => setPreviewData(null)}
+          onClose={() => {
+            console.log('[CreateInvoice] Manual close - setting previewData to null');
+            setPreviewData(null);
+          }}
         />
       </KeyboardAvoidingView>
       </SafeAreaView>

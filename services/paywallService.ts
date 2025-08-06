@@ -124,10 +124,16 @@ class PaywallService {
         .from('user_profiles')
         .select('subscription_tier')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('[PaywallService] Failed to fetch user profile:', error);
+        return false;
+      }
+
+      // If no profile exists, user is not subscribed
+      if (!profile) {
+        console.log('[PaywallService] No user profile found - treating as free user');
         return false;
       }
 

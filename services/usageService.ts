@@ -44,23 +44,24 @@ export class UsageService {
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching user profile:', error);
-        // If profile doesn't exist, create it
-        if (error.code === 'PGRST116') {
-          await this.createUserProfile(userId);
-          return {
-            canCreate: true,
-            canSend: true,
-            remaining: 3,
-            total: 0,
-            subscriptionTier: 'free',
-            requiresUpgrade: false
-          };
-        }
         throw error;
+      }
+
+      // If profile doesn't exist, create it
+      if (!profile) {
+        await this.createUserProfile(userId);
+        return {
+          canCreate: true,
+          canSend: true,
+          remaining: 3,
+          total: 0,
+          subscriptionTier: 'free',
+          requiresUpgrade: false
+        };
       }
 
       const isUnlimited = ['premium', 'grandfathered'].includes(profile.subscription_tier);
@@ -108,11 +109,16 @@ export class UsageService {
         .from('user_profiles')
         .select('invoice_count')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) {
         console.error('Error fetching current invoice count:', fetchError);
         throw fetchError;
+      }
+
+      // If profile doesn't exist, create it first
+      if (!profile) {
+        await this.createUserProfile(userId);
       }
 
       // Then increment it
@@ -150,11 +156,16 @@ export class UsageService {
         .from('user_profiles')
         .select('sent_invoice_count')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) {
         console.error('Error fetching current sent invoice count:', fetchError);
         throw fetchError;
+      }
+
+      // If profile doesn't exist, create it first
+      if (!profile) {
+        await this.createUserProfile(userId);
       }
 
       // Then increment it
@@ -189,11 +200,25 @@ export class UsageService {
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching usage stats:', error);
         throw error;
+      }
+
+      // If profile doesn't exist, create default stats
+      if (!profile) {
+        return {
+          invoiceCount: 0,
+          sentInvoiceCount: 0,
+          freeLimit: 3,
+          subscriptionTier: 'free' as any,
+          canCreateInvoice: true,
+          canSendInvoice: true,
+          remainingInvoices: 3,
+          isTrial: false
+        };
       }
 
       const isUnlimited = ['premium', 'grandfathered'].includes(profile.subscription_tier);
@@ -266,7 +291,7 @@ export class UsageService {
           free_limit: 3
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error creating user profile:', error);
@@ -290,12 +315,9 @@ export class UsageService {
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          return null; // Profile doesn't exist
-        }
         console.error('Error fetching user profile:', error);
         throw error;
       }

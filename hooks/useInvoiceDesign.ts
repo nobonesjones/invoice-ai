@@ -46,7 +46,7 @@ export const useInvoiceDesign = (initialDesignId?: string, initialAccentColor?: 
         .from('business_settings')
         .select('default_invoice_design, default_accent_color')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('Error fetching design preference:', fetchError);
@@ -235,7 +235,7 @@ export const useInvoiceDesignForInvoice = (
           .from('business_settings')
           .select('default_invoice_design, default_accent_color')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (fetchError) {
           console.error('Error loading business settings:', fetchError);

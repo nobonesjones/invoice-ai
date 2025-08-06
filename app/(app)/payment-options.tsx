@@ -469,7 +469,7 @@ export default function PaymentOptionsScreen() {
         .from('payment_options')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching PayPal settings:', error);
@@ -553,7 +553,7 @@ export default function PaymentOptionsScreen() {
       setInitialPayPalEmail(paypalEmail);
       setIsPayPalActiveOnScreen(isPayPalEnabled);
       if (!paymentOptionsId && !error) {
-        const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).single();
+        const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).maybeSingle();
         if (newData) setPaymentOptionsId(newData.id);
       }
     } catch (error: any) {
@@ -575,7 +575,7 @@ export default function PaymentOptionsScreen() {
         .from('payment_options')
         .select('stripe_enabled, id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching Stripe settings:', error);
@@ -637,7 +637,7 @@ export default function PaymentOptionsScreen() {
       setInitialStripeEnabled(isStripeEnabled);
       setIsStripeActiveOnScreen(isStripeEnabled);
       if (!paymentOptionsId && !error) {
-        const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).single();
+        const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).maybeSingle();
         if (newData) setPaymentOptionsId(newData.id);
       }
     } catch (error: any) {
@@ -659,7 +659,7 @@ export default function PaymentOptionsScreen() {
         .from('payment_options')
         .select('bank_transfer_enabled, bank_details, id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching Bank Transfer settings:', error);
@@ -733,7 +733,7 @@ export default function PaymentOptionsScreen() {
       setInitialBankDetails(bankDetails);
       setIsBankTransferActiveOnScreen(isBankTransferEnabled);
       if (!paymentOptionsId && !error) {
-        const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).single();
+        const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).maybeSingle();
         if (newData) setPaymentOptionsId(newData.id);
       }
     } catch (error: any) {
@@ -770,7 +770,7 @@ export default function PaymentOptionsScreen() {
         .from('payment_options')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (fetchExistingError && fetchExistingError.code !== 'PGRST116') {
         throw fetchExistingError;
@@ -788,7 +788,7 @@ export default function PaymentOptionsScreen() {
         .from('payment_options')
         .upsert(upsertData)
         .select('id, invoice_terms_notes')
-        .single();
+        .maybeSingle();
 
       if (updateError) throw updateError;
 
@@ -822,7 +822,7 @@ export default function PaymentOptionsScreen() {
             .from('payment_options')
             .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, invoice_terms_notes, id')
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
 
           if (error && error.code !== 'PGRST116') {
             console.error('Error fetching screen payment status:', error);

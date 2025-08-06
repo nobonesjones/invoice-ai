@@ -1623,7 +1623,7 @@ export class InvoiceFunctionService {
           .from('payment_options')
           .select('paypal_enabled, stripe_enabled, bank_transfer_enabled')
           .eq('user_id', userId)
-          .single();
+          .maybeSingle(); // Use maybeSingle() to handle missing records
           
         if (paymentOptions) {
           paypalEnabled = paymentOptions.paypal_enabled || false;
@@ -1647,7 +1647,7 @@ export class InvoiceFunctionService {
           .from('business_settings')
           .select('default_tax_rate, auto_apply_tax, tax_name, currency_code, default_invoice_design, default_accent_color, show_business_logo, show_business_name, show_business_address, show_business_tax_number, show_notes_section')
           .eq('user_id', userId)
-          .single();
+          .maybeSingle(); // Use maybeSingle() to handle missing records
           
         if (businessSettingsData) {
           businessSettings = businessSettingsData;
