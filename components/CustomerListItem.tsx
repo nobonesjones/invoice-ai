@@ -30,6 +30,9 @@ const CustomerListItem: React.FC<CustomerListItemProps> = ({
 	const theme = colors.light; // Or your theme context
 
 	const getInitials = (name: string) => {
+		if (!name || typeof name !== 'string') {
+			return '??';
+		}
 		return name
 			.split(" ")
 			.map((n) => n[0])

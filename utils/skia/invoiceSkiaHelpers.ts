@@ -147,6 +147,9 @@ export const calculateTextHeight = (
   maxWidth: number, 
   lineHeight: number = 1.2
 ): number => {
+  if (!text || typeof text !== 'string') {
+    return font.getSize() * lineHeight;
+  }
   const words = text.split(' ');
   let currentLine = '';
   let lines = 1;
@@ -175,6 +178,9 @@ export const wrapText = (
   font: SkFont, 
   maxWidth: number
 ): string[] => {
+  if (!text || typeof text !== 'string') {
+    return [''];
+  }
   const words = text.split(' ');
   const lines: string[] = [];
   let currentLine = '';

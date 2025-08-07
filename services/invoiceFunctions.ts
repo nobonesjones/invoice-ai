@@ -3509,6 +3509,7 @@ Would you like to view the updated invoice or make more changes?`;
           const startsWithMatch = allUserClients.find(c => c.name.toLowerCase().trim().startsWith(searchName));
           const containsMatch = allUserClients.find(c => c.name.toLowerCase().trim().includes(searchName));
           const wordsMatch = allUserClients.find(c => {
+            if (!c.name || typeof c.name !== 'string') return false;
             const clientWords = c.name.toLowerCase().split(/\s+/);
             const searchWords = searchName.split(/\s+/);
             return searchWords.every((word: string) => clientWords.some((cWord: string) => cWord.includes(word)));

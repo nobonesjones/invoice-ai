@@ -2,18 +2,18 @@ import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_API_KEY;
+const supabaseUrl = process.env.EXPO_PUBLIC_API_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_API_KEY || '';
 
-if (!supabaseUrl) {
+if (!supabaseUrl || supabaseUrl.length === 0) {
 	throw new Error(
-		"Supabase URL is not defined. Please set EXPO_PUBLIC_API_URL in your .env file.",
+		"Supabase URL is not defined. Please set EXPO_PUBLIC_API_URL in your environment variables.",
 	);
 }
 
-if (!supabaseAnonKey) {
+if (!supabaseAnonKey || supabaseAnonKey.length === 0) {
 	throw new Error(
-		"Supabase anon key is not defined. Please set EXPO_PUBLIC_API_KEY in your .env file.",
+		"Supabase anon key is not defined. Please set EXPO_PUBLIC_API_KEY in your environment variables.",
 	);
 }
 

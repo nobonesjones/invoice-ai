@@ -611,7 +611,7 @@ export class InvoiceShareService {
    */
   private static groupEventsByDay(events: InvoiceShareAnalytics[]): Array<{ date: string; count: number }> {
     const grouped = events.reduce((acc, event) => {
-      const date = event.created_at.split('T')[0]; // Get just the date part
+      const date = event.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]; // Get just the date part
       acc[date] = (acc[date] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
