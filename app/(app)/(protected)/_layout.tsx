@@ -95,17 +95,18 @@ export default function ProtectedLayout() {
                 .filter((route) =>
                   [
                     "invoices",
-                    "estimates",
+                    "estimates", 
                     "ai",
                     "customers/index",
-                    "newsettings", // Added to filter
+                    "newsettings",
                   ].includes(route.name),
                 )
                 .map((route, index) => {
                   const { options } = descriptors[route.key];
                   const label =
                     options.title !== undefined ? options.title : route.name;
-                  const isFocused = state.index === index;
+                  const routeIndex = state.routes.findIndex(r => r.key === route.key);
+                  const isFocused = state.index === routeIndex;
                   const IconComponent = iconMap[route.name] || CircleUserRound; // Fallback icon
 
                   const onPress = () => {

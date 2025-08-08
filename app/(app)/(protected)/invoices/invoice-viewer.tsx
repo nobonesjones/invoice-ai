@@ -1020,7 +1020,7 @@ function InvoiceViewerScreen() {
     // Try direct match
     if (mapping[currencyCode]) return mapping[currencyCode];
     // Try extracting code from start of string
-    const code = currencyCode.split(' ')[0];
+    const code = currencyCode ? currencyCode.split(' ')[0] : '';
     if (mapping[code]) return mapping[code];
     return '$'; // Default fallback
   };

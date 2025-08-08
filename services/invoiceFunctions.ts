@@ -5,6 +5,7 @@ import { UsageService } from '@/services/usageService';
 import { UsageTrackingService } from '@/services/usageTrackingService';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import UserContextService from '@/services/userContextService';
+import { safeString } from '@/utils/safeString';
 
 // Function definitions for OpenAI
 export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
@@ -1690,7 +1691,7 @@ export class InvoiceFunctionService {
     const deduplicationKey = `${userId}-${clientName}-${itemsHash}-${Date.now().toString().slice(-6)}`;
     
     // Check if there's already an ongoing creation for this user
-    const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
+    const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => safeString.startsWith(key, userId));
     
     if (ongoingUserCreations.length > 0) {
       // Found ongoing creations for user
@@ -1698,7 +1699,7 @@ export class InvoiceFunctionService {
       // Wait a short time and check if the creation is still ongoing
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => key.startsWith(userId));
+      const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => safeString.startsWith(key, userId));
       if (stillOngoing.length > 0) {
         // Blocking duplicate creation attempt
         return {
@@ -1848,7 +1849,7 @@ export class InvoiceFunctionService {
       
       // If not found by email, try multiple name matching strategies
       if (!existingClient) {
-        const clientName = params.client_name.toLowerCase().trim();
+        const clientName = (params.client_name || 'unknown_client').toLowerCase().trim();
         
         // Strategy 1: Exact match (case insensitive)
         const { data: exactMatch } = await supabase
@@ -1874,8 +1875,8 @@ export class InvoiceFunctionService {
               const searchName = clientName;
               
               // Check if either name contains the other (ignoring common suffixes/prefixes)
-              return dbName.includes(searchName) || 
-                     searchName.includes(dbName) ||
+              return safeString.includes(dbName, searchName) || 
+                     safeString.includes(searchName, dbName) ||
                      this.normalizeClientName(dbName) === this.normalizeClientName(searchName);
             });
             
@@ -2088,12 +2089,18 @@ Would you like me to help you send this invoice or make any changes?`;
 
   private static normalizeClientName(name: string): string {
     // Remove common business suffixes and normalize for better matching
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/\s+(corp|corporation|inc|incorporated|llc|ltd|limited|co|company|sales|group|enterprises|solutions|services|consulting)\.?$/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    if (!name || typeof name !== 'string') return '';
+    return safeString.trim(
+      safeString.replace(
+        safeString.replace(
+          safeString.trim(safeString.toLowerCase(name)),
+          /\s+(corp|corporation|inc|incorporated|llc|ltd|limited|co|company|sales|group|enterprises|solutions|services|consulting)\.?$/g,
+          ''
+        ),
+        /\s+/g,
+        ' '
+      )
+    );
   }
 
   private static async findOrCreateClient(params: {
@@ -2118,7 +2125,7 @@ Would you like me to help you send this invoice or make any changes?`;
       
       // If not found by email, try multiple name matching strategies
       if (!existingClient) {
-        const clientName = params.name.toLowerCase().trim();
+        const clientName = (params.name || 'unknown_client').toLowerCase().trim();
         
         // Strategy 1: Exact match (case insensitive)
         const { data: exactMatch } = await supabase
@@ -2144,8 +2151,8 @@ Would you like me to help you send this invoice or make any changes?`;
               const searchName = clientName;
               
               // Check if either name contains the other (ignoring common suffixes/prefixes)
-              return dbName.includes(searchName) || 
-                     searchName.includes(dbName) ||
+              return safeString.includes(dbName, searchName) || 
+                     safeString.includes(searchName, dbName) ||
                      this.normalizeClientName(dbName) === this.normalizeClientName(searchName);
             });
             
@@ -2211,7 +2218,7 @@ Would you like me to help you send this invoice or make any changes?`;
       AED: 'د.إ'
     };
     if (!code) return '$';
-    const normalized = code.split(' ')[0]; // Handle "GBP - British Pound" format
+    const normalized = code ? safeString.split(code, ' ')[0] || '' : ''; // Handle "GBP - British Pound" format
     return mapping[normalized] || '$';
   }
 
@@ -2226,7 +2233,7 @@ Would you like me to help you send this invoice or make any changes?`;
     
     // Check if there's already an ongoing client creation for this user
     const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => 
-      key.startsWith(userId) && key.includes('-client-')
+      safeString.startsWith(key, userId) && safeString.includes(key, '-client-')
     );
     
     if (ongoingUserCreations.length > 0) {
@@ -2236,7 +2243,7 @@ Would you like me to help you send this invoice or make any changes?`;
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => 
-        key.startsWith(userId) && key.includes('-client-')
+        safeString.startsWith(key, userId) && safeString.includes(key, '-client-')
       );
       if (stillOngoing.length > 0) {
         // Blocking duplicate client creation attempt
@@ -2691,7 +2698,7 @@ Your invoice settings are now configured and will be applied to all new invoices
 
         return {
           ...estimateResult,
-          message: `Great! I've created your quote successfully!\n\n${message.includes('quote') ? message : 'Your quote is ready to send to your client.'}`
+          message: `Great! I've created your quote successfully!\n\n${safeString.includes(message, 'quote') ? message : 'Your quote is ready to send to your client.'}`
         };
       } else {
         return estimateResult;
@@ -2727,7 +2734,7 @@ Your invoice settings are now configured and will be applied to all new invoices
         
         // Check if their business type suggests quotes
         const quoteBusinessTypes = ['consulting', 'creative', 'design', 'marketing', 'contractor', 'construction', 'freelance', 'agency'];
-        if (businessType && quoteBusinessTypes.some(type => businessType.toLowerCase().includes(type))) {
+        if (businessType && quoteBusinessTypes.some(type => safeString.includes(safeString.toLowerCase(businessType), type))) {
           recommendSwitch = true;
           suggestion += `**Recommendation for ${businessType}:** Based on your business type, I'd recommend switching to "Quote" terminology. It's more commonly expected in your industry and can help build client confidence.\n\n`;
         }
@@ -2736,7 +2743,7 @@ Your invoice settings are now configured and will be applied to all new invoices
         
         // Check if their business type suggests estimates
         const estimateBusinessTypes = ['repair', 'construction', 'maintenance', 'automotive', 'plumbing', 'electrical', 'landscaping'];
-        if (businessType && estimateBusinessTypes.some(type => businessType.toLowerCase().includes(type))) {
+        if (businessType && estimateBusinessTypes.some(type => safeString.includes(safeString.toLowerCase(businessType), type))) {
           recommendSwitch = true;
           suggestion += `**Recommendation for ${businessType}:** Based on your business type, I'd recommend switching to "Estimate" terminology. It's more appropriate for work where final costs might vary.\n\n`;
         }
@@ -2866,7 +2873,7 @@ Your invoice settings are now configured and will be applied to all new invoices
   private static async setCurrency(params: { currency_code: string }, userId: string): Promise<FunctionResult> {
     try {
       // Validate currency code
-      const currencyCode = params.currency_code.toUpperCase();
+      const currencyCode = (params.currency_code || '').toUpperCase();
       if (!currencyCode || currencyCode.length !== 3) {
         return {
           success: false,
@@ -3502,17 +3509,17 @@ Would you like to view the updated invoice or make more changes?`;
         // Retrieved all user clients
 
         if (allUserClients && allUserClients.length > 0) {
-          const searchName = client_name.toLowerCase().trim();
+          const searchName = (client_name || 'unknown_client').toLowerCase().trim();
           
           // Try multiple matching strategies
           const exactMatch = allUserClients.find(c => c.name.toLowerCase().trim() === searchName);
-          const startsWithMatch = allUserClients.find(c => c.name.toLowerCase().trim().startsWith(searchName));
-          const containsMatch = allUserClients.find(c => c.name.toLowerCase().trim().includes(searchName));
+          const startsWithMatch = allUserClients.find(c => safeString.startsWith(safeString.trim(safeString.toLowerCase(c.name)), searchName));
+          const containsMatch = allUserClients.find(c => safeString.includes(safeString.trim(safeString.toLowerCase(c.name)), searchName));
           const wordsMatch = allUserClients.find(c => {
             if (!c.name || typeof c.name !== 'string') return false;
-            const clientWords = c.name.toLowerCase().split(/\s+/);
-            const searchWords = searchName.split(/\s+/);
-            return searchWords.every((word: string) => clientWords.some((cWord: string) => cWord.includes(word)));
+            const clientWords = safeString.split(safeString.toLowerCase(c.name), /\s+/);
+            const searchWords = safeString.split(searchName, /\s+/);
+            return searchWords.every((word: string) => clientWords.some((cWord: string) => safeString.includes(cWord, word)));
           });
 
           // Use the best match we can find
@@ -3612,7 +3619,7 @@ If you just created an invoice for this client, please try again in a moment, or
         // Update error details
         
         // If it's a multiple rows error, try a more specific update
-        if (updateError.message.includes('multiple') || updateError.message.includes('no rows')) {
+        if (safeString.includes(updateError.message, 'multiple') || safeString.includes(updateError.message, 'no rows')) {
           // Attempting more specific update
           
           // Try updating by exact ID match only
@@ -4938,7 +4945,7 @@ The new client is ready to use for invoices!`
     
     // Check if there's already an ongoing estimate creation for this user
     const ongoingUserCreations = Array.from(this.ongoingCreations.keys()).filter(key => 
-      key.startsWith(userId) && key.includes('-estimate-')
+      safeString.startsWith(key, userId) && safeString.includes(key, '-estimate-')
     );
     
     if (ongoingUserCreations.length > 0) {
@@ -4948,7 +4955,7 @@ The new client is ready to use for invoices!`
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const stillOngoing = Array.from(this.ongoingCreations.keys()).filter(key => 
-        key.startsWith(userId) && key.includes('-estimate-')
+        safeString.startsWith(key, userId) && safeString.includes(key, '-estimate-')
       );
       if (stillOngoing.length > 0) {
         // Blocking duplicate estimate creation attempt

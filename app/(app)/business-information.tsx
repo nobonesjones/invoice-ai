@@ -244,7 +244,7 @@ export default function BusinessInformationScreen() {
             if (logoUri && logoUri.startsWith('file://')) { 
         console.log('handleSaveChanges: New logo picked, uploading directly to storage. URI:', logoUri);
         const localUri = logoUri;
-        const filename = localUri.split('/').pop() || `logo-${Date.now()}`;
+        const filename = (localUri || '').split('/').pop() || `logo-${Date.now()}`;
         let fileType = 'image/jpeg';
         if (filename.endsWith('.png')) {
           fileType = 'image/png';

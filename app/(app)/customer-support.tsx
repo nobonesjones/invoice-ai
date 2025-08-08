@@ -56,7 +56,7 @@ export default function CustomerSupportScreen() {
       Alert.alert('Error', 'Please enter your email address.');
       return false;
     }
-    if (!formData.email.includes('@')) {
+    if (!formData.email || !formData.email.includes('@')) {
       Alert.alert('Error', 'Please enter a valid email address.');
       return false;
     }

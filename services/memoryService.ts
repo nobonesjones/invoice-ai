@@ -1,4 +1,5 @@
 import { supabase } from '@/config/supabase';
+import { safeString } from '@/utils/safeString';
 
 export interface MemoryFact {
   id?: string;
@@ -127,8 +128,8 @@ export class MemoryService {
     for (const pattern of servicePricePatterns) {
       const match = content.match(pattern);
       if (match) {
-        const service = pattern.source.includes('for') ? match[2] : match[1];
-        const price = pattern.source.includes('for') ? match[1] : match[2];
+        const service = safeString.includes(pattern.source, 'for') ? (match[2] || '') : (match[1] || '');
+        const price = safeString.includes(pattern.source, 'for') ? (match[1] || '') : (match[2] || '');
         
         facts.push({
           user_id: userId,
@@ -217,8 +218,8 @@ export class MemoryService {
       if (context && facts) {
         const contextLower = context.toLowerCase();
         return facts.filter(fact => 
-          contextLower.includes(fact.key.toLowerCase()) ||
-          fact.value.toLowerCase().includes(contextLower) ||
+          safeString.includes(contextLower, safeString.toLowerCase(fact.key)) ||
+          safeString.includes(safeString.toLowerCase(fact.value), contextLower) ||
           fact.confidence_score > 0.8
         );
       }

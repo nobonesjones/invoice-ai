@@ -123,7 +123,7 @@ export default function AppLayout() {
 				<Host>
 					<SupabaseProvider>
 						<ThemeProvider>
-							<SuperwallProvider apiKeys={{ ios: process.env.EXPO_PUBLIC_SUPERWALL_API_KEY! }}>
+							<SuperwallProvider apiKeys={{ ios: process.env.EXPO_PUBLIC_SUPERWALL_API_KEY || '' }}>
 								<PaywallProvider>
 									<UsageProvider>
 										<OnboardingProvider>

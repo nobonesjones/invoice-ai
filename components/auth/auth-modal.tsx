@@ -96,7 +96,7 @@ export function AuthModal({
           console.log("Got auth tokens from redirect URL:", result.url);
           
           // Extract tokens from the URL (could be after # or ?)
-          const urlParts = result.url.includes('#') ? result.url.split("#") : result.url.split("?");
+          const urlParts = result.url && result.url.includes('#') ? result.url.split("#") : (result.url || '').split("?");
           const tokenString = urlParts[1] || urlParts[0];
           const params = new URLSearchParams(tokenString);
           

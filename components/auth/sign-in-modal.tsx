@@ -161,7 +161,7 @@ export function SignInModal({
           explicitRedirectTo,
         );
         if (result.type === "success" && result.url) {
-          const params = new URLSearchParams(result.url.split("#")[1]);
+          const params = new URLSearchParams((result.url || '').split("#")[1] || '');
           const access_token = params.get("access_token");
           const refresh_token = params.get("refresh_token");
           if (access_token && refresh_token) {

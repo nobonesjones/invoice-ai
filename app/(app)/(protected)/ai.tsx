@@ -3,6 +3,7 @@ import { View, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingV
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from "expo-haptics";
 import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone, MapPin, Activity, X, Check } from "lucide-react-native";
+import { safeString } from '@/utils/safeString';
 import TranscribeButton, { TranscribeButtonRef } from "@/components/TranscribeButton";
 import VoiceChatButton from "@/components/VoiceChatButton";
 import { VoiceModal } from "@/components/VoiceModal";
@@ -335,7 +336,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 			HKD: 'HK$'
 		};
 		if (!code) return '$';
-		const normalized = code.split(' ')[0];
+		const normalized = code ? code.split(' ')[0] : '';
 		return mapping[normalized] || '$';
 	};
 
@@ -820,7 +821,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			HKD: 'HK$'
 		};
 		if (!code) return '$';
-		const normalized = code.split(' ')[0]; // Handle "GBP - British Pound" format
+		const normalized = code ? safeString.split(code, ' ')[0] || '' : ''; // Handle "GBP - British Pound" format
 		return mapping[normalized] || '$';
 	};
 
@@ -1329,12 +1330,13 @@ export default function AiScreen() {
 		const displayName = user.user_metadata?.display_name;
 		if (displayName && typeof displayName === 'string') {
 			// Extract first name (everything before the first space)
-			const firstName = displayName.trim().split(' ')[0];
+			const trimmedName = displayName.trim();
+			const firstName = trimmedName ? safeString.split(trimmedName, ' ')[0] || '' : '';
 			return firstName;
 		}
 		
 		// Fallback to email username if no display name
-		const emailName = user.email?.split('@')[0];
+		const emailName = user.email ? safeString.split(user.email, '@')[0] : '';
 		if (emailName) {
 			// Capitalize first letter
 			return emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -1514,29 +1516,29 @@ or '${example2}'`,
 		const message = statusMessage.toLowerCase();
 		
 		// Map different status messages to appropriate emojis
-		if (message.includes('initializing')) {
+		if (safeString.includes(message, 'initializing')) {
 			return `🚀 ${statusMessage}`;
-		} else if (message.includes('connecting')) {
+		} else if (safeString.includes(message, 'connecting')) {
 			return `🔗 ${statusMessage}`;
-		} else if (message.includes('thinking') || message.includes('analyzing')) {
+		} else if (safeString.includes(message, 'thinking') || safeString.includes(message, 'analyzing')) {
 			return `🤔 ${statusMessage}`;
-		} else if (message.includes('processing') || message.includes('working')) {
+		} else if (safeString.includes(message, 'processing') || safeString.includes(message, 'working')) {
 			return `⚡ ${statusMessage}`;
-		} else if (message.includes('creating') || message.includes('generating')) {
+		} else if (safeString.includes(message, 'creating') || safeString.includes(message, 'generating')) {
 			return `✨ ${statusMessage}`;
-		} else if (message.includes('searching') || message.includes('finding')) {
+		} else if (safeString.includes(message, 'searching') || safeString.includes(message, 'finding')) {
 			return `🔍 ${statusMessage}`;
-		} else if (message.includes('updating') || message.includes('modifying')) {
+		} else if (safeString.includes(message, 'updating') || safeString.includes(message, 'modifying')) {
 			return `🔄 ${statusMessage}`;
-		} else if (message.includes('executing') || message.includes('action')) {
+		} else if (safeString.includes(message, 'executing') || safeString.includes(message, 'action')) {
 			return `⚙️ ${statusMessage}`;
-		} else if (message.includes('completing') || message.includes('finishing')) {
+		} else if (safeString.includes(message, 'completing') || safeString.includes(message, 'finishing')) {
 			return `🎯 ${statusMessage}`;
-		} else if (message.includes('client')) {
+		} else if (safeString.includes(message, 'client')) {
 			return `👤 ${statusMessage}`;
-		} else if (message.includes('invoice')) {
+		} else if (safeString.includes(message, 'invoice')) {
 			return `📄 ${statusMessage}`;
-		} else if (message.includes('estimate')) {
+		} else if (safeString.includes(message, 'estimate')) {
 			return `📋 ${statusMessage}`;
 		} else {
 			// Default emoji for any other status
@@ -1557,7 +1559,7 @@ or '${example2}'`,
 				}}
 			>
 				{parts.map((part, index) => {
-					if (part.startsWith('**') && part.endsWith('**')) {
+					if (safeString.startsWith(part, '**') && safeString.endsWith(part, '**')) {
 						// Remove the ** and make bold
 						const boldText = part.slice(2, -2);
 						return (
