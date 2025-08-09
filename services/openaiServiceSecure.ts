@@ -81,6 +81,52 @@ export class OpenAIServiceSecure {
     return !!process.env.EXPO_PUBLIC_API_URL && !!process.env.EXPO_PUBLIC_API_KEY;
   }
 
+  // Generate AI response using secure edge function
+  static async generateResponse(
+    userMessage: string,
+    conversationHistory: OpenAIMessage[],
+    userName?: string,
+    functions?: OpenAIFunction[],
+    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }
+  ): Promise<{
+    response: string;
+    functionCall?: { name: string; arguments: any };
+    tokensUsed?: number;
+  }> {
+    try {
+      // Build messages array with system prompt and conversation history
+      const messages: OpenAIMessage[] = [
+        {
+          role: 'system',
+          content: this.getSystemPrompt(userName, userContext)
+        },
+        ...conversationHistory,
+        {
+          role: 'user',
+          content: userMessage
+        }
+      ];
+
+      // Call edge function for chat completions
+      const response = await this.createChatCompletion(messages, functions);
+
+      const choice = response.choices[0];
+      const message = choice.message;
+
+      return {
+        response: message.content || 'No response generated',
+        functionCall: message.function_call ? {
+          name: message.function_call.name,
+          arguments: JSON.parse(message.function_call.arguments)
+        } : undefined,
+        tokensUsed: response.usage?.total_tokens
+      };
+    } catch (error) {
+      console.error('OpenAI generateResponse error:', error);
+      throw error;
+    }
+  }
+
   // Keep all your existing methods unchanged
   static getSystemPrompt(userName?: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }): string {
     return `You are a friendly AI assistant for an invoice and estimate management application. You help users create, manage, and track invoices and estimates for their business in a conversational, helpful way.

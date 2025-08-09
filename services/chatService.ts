@@ -1,7 +1,7 @@
 import { supabase } from '@/config/supabase';
-// TEST: Using secure Edge Function version
+// Using secure Edge Function versions for all AI operations
 import { OpenAIServiceSecure as OpenAIService, OpenAIMessage } from '@/services/openaiServiceSecure';
-import { AssistantService, AssistantRunResult } from '@/services/assistantService';
+import { AssistantServiceSecure as AssistantService, AssistantRunResult } from '@/services/assistantServiceSecure';
 import { InvoiceFunctionService, INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
 
 export interface ChatMessage {
@@ -29,16 +29,15 @@ export interface ChatConversation {
 }
 
 export class ChatService {
-  // Feature flag for Assistants API
+  // Feature flag for Assistants API - now always uses secure edge functions
   private static async shouldUseAssistants(userId: string): Promise<boolean> {
-    // For now, enable for all users. Later you can add user-specific logic
-    // or environment variables for gradual rollout
-    const shouldUse = true;
-    return shouldUse;
+    // Always use Assistants API through secure edge functions
+    // This ensures API keys stay on the server, not in the client app
+    return true;
     
-    // Example for gradual rollout:
+    // Example for gradual rollout if needed in the future:
     // const userConfig = await this.getUserConfig(userId);
-    // return userConfig.use_assistants_api || false;
+    // return userConfig.use_assistants_api !== false;
   }
 
   // Main entry point - routes to appropriate service

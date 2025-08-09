@@ -167,6 +167,10 @@ export class VoiceService {
   // Connect to OpenAI Realtime API
   static async connectRealtime(onMessage: (message: any) => void): Promise<boolean> {
     try {
+      if (!this.apiKey || this.apiKey.trim() === '') {
+        console.warn('[VoiceService] OpenAI key not configured; voice is disabled in this build');
+        return false;
+      }
       if (this.websocket) {
         this.websocket.close();
       }

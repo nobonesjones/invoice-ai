@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 
 import { ChatService, ChatMessage, ChatConversation } from '@/services/chatService';
-import { AssistantService, AssistantThread } from '@/services/assistantService';
+import { AssistantServiceSecure as AssistantService, AssistantThread } from '@/services/assistantServiceSecure';
 import { useSupabase } from '@/context/supabase-provider';
 
 interface UseAIChatReturn {
