@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_API_KEY;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_ANON_KEY;
 
 if (!supabaseUrl) {
 	throw new Error(
@@ -13,7 +13,7 @@ if (!supabaseUrl) {
 
 if (!supabaseAnonKey) {
 	throw new Error(
-		"Supabase anon key is not defined. Please set EXPO_PUBLIC_API_KEY in your .env file.",
+		"Supabase anon key is not defined. Please set EXPO_PUBLIC_ANON_KEY in your .env file.",
 	);
 }
 

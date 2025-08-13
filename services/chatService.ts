@@ -1,7 +1,11 @@
 import { supabase } from '@/config/supabase';
-import { OpenAIService, OpenAIMessage } from '@/services/openaiService';
 import { AssistantService, AssistantRunResult } from '@/services/assistantService';
 import { InvoiceFunctionService, INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
+
+export interface OpenAIMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
 
 export interface ChatMessage {
   id: string;
@@ -40,6 +44,40 @@ export class ChatService {
     // return userConfig.use_assistants_api || false;
   }
 
+  // Edge function helper for AI requests
+  private static async callAIChatEdgeFunction(payload: {
+    type: 'chat_completion' | 'assistant';
+    messages?: OpenAIMessage[];
+    message?: string;
+    threadId?: string;
+    userName?: string;
+    functions?: any[];
+    userContext?: any;
+  }): Promise<any> {
+    try {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/functions/v1/ai-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_ANON_KEY}`,
+          'apikey': process.env.EXPO_PUBLIC_ANON_KEY!,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('[ChatService] Edge function error:', errorData);
+        throw new Error(`AI request failed: ${response.status} ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[ChatService] Edge function request failed:', error);
+      throw error;
+    }
+  }
+
   // Main entry point - routes to appropriate service
   static async processUserMessage(
     userId: string,
@@ -48,19 +86,9 @@ export class ChatService {
     statusCallback?: (status: string) => void
   ): Promise<{ conversation?: ChatConversation; thread?: any; messages: any[] }> {
     try {
-      const useAssistants = await this.shouldUseAssistants(userId);
-      
-      if (useAssistants) {
-        try {
-          return await this.processWithAssistants(userId, userMessage, userContext, statusCallback);
-        } catch (assistantError) {
-          console.error('[ChatService] Assistants API failed, falling back to Chat Completions:', assistantError);
-          // Fall back to Chat Completions if Assistants fails
-          return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
-        }
-      } else {
-        return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
-      }
+      // For now, always use Chat Completions via edge function
+      // AssistantService needs to be updated to use edge functions
+      return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
     } catch (error) {
       console.error('[ChatService] Error processing message:', error);
       throw error;
@@ -126,9 +154,9 @@ export class ChatService {
     statusCallback?: (status: string) => void
   ): Promise<{ conversation: ChatConversation; messages: ChatMessage[] }> {
     try {
-      // Check if OpenAI is configured
-      if (!OpenAIService.isConfigured()) {
-        throw new Error('AI service is not configured. Please check your API key settings.');
+      // Check if edge function is configured
+      if (!process.env.EXPO_PUBLIC_API_URL || !process.env.EXPO_PUBLIC_ANON_KEY) {
+        throw new Error('AI service is not configured. Please check your edge function settings.');
       }
 
       // Get or create conversation
@@ -144,35 +172,57 @@ export class ChatService {
 
       // Get conversation history for context
       const allPreviousMessages = await this.getConversationMessages(conversation.id);
-      const conversationHistory = this.convertChatMessagesToOpenAI(
-        allPreviousMessages.slice(0, -1) // Exclude the just-saved user message
-      );
-
+      
+      // Limit conversation history to last 10 messages to avoid token limits
+      const recentMessages = allPreviousMessages.slice(-10);
+      
+      // Include all messages - the user message is already saved
+      const messages = this.convertChatMessagesToOpenAI(recentMessages);
 
       // Get user name for personalization
       const userName = await this.getUserName(userId);
 
-      // Generate AI response
-      const aiResult = await OpenAIService.generateResponse(
-        userMessage,
-        conversationHistory,
-        userName,
-        INVOICE_FUNCTIONS,
-        userContext
-      );
+      console.log('[ChatService] Sending messages to edge function:', messages);
 
-      let aiResponseMessage = aiResult.response;
+      // Generate AI response via edge function
+      const aiResult = await this.callAIChatEdgeFunction({
+        type: 'chat_completion',
+        messages,
+        functions: INVOICE_FUNCTIONS,
+        userName,
+        userContext
+      });
+
+      console.log('[ChatService] Edge function raw response:', JSON.stringify(aiResult, null, 2));
+      
+      // Check for OpenAI format response
+      const choice = aiResult.choices?.[0];
+      const message = choice?.message;
+      
+      let aiResponseMessage = message?.content || aiResult.content || aiResult.response || aiResult.message;
+      let functionCall = message?.function_call || aiResult.functionCall || aiResult.function_call;
+      
       let functionResult = null;
 
       // Handle function calls
-      if (aiResult.functionCall) {
+      if (functionCall) {
+        console.log('[ChatService] Function call detected:', functionCall);
         try {
+          // Parse arguments if they're a string
+          const functionArgs = typeof functionCall.arguments === 'string' 
+            ? JSON.parse(functionCall.arguments) 
+            : functionCall.arguments;
+            
+          console.log('[ChatService] Executing function:', functionCall.name, 'with args:', functionArgs);
+            
           // Execute the function
           functionResult = await InvoiceFunctionService.executeFunction(
-            aiResult.functionCall.name,
-            aiResult.functionCall.arguments,
+            functionCall.name,
+            functionArgs,
             userId
           );
+          
+          console.log('[ChatService] Function execution result:', JSON.stringify(functionResult, null, 2));
 
 
           // Save function call and result messages
@@ -182,8 +232,8 @@ export class ChatService {
             JSON.stringify(functionResult),
             'function_result',
             {
-              function_name: aiResult.functionCall.name,
-              function_parameters: aiResult.functionCall.arguments,
+              function_name: functionCall.name,
+              function_parameters: functionArgs,
               function_result: functionResult
             }
           );
@@ -191,14 +241,23 @@ export class ChatService {
           // If function provided UI content, integrate it into response
           if (functionResult?.uiContent) {
             aiResponseMessage = functionResult.uiContent;
+          } else if (!aiResponseMessage && functionResult?.message) {
+            // Use function result message if no AI response
+            aiResponseMessage = functionResult.message;
+          } else if (!aiResponseMessage) {
+            // Generate a default message based on the function called
+            aiResponseMessage = `I've executed the ${functionCall.name} function for you.`;
           }
 
         } catch (functionError) {
           console.error('[ChatService] Function execution error:', functionError);
-          aiResponseMessage = `I encountered an error while trying to ${aiResult.functionCall.name}: ${functionError.message}`;
+          aiResponseMessage = `I encountered an error while trying to ${functionCall.name}: ${functionError.message}`;
         }
       }
 
+      console.log('[ChatService] Final AI response message:', aiResponseMessage);
+      console.log('[ChatService] Function result attachments:', functionResult?.attachments);
+      
       // Save AI response message
       const savedAIMessage = await this.saveMessage(
         conversation.id,
@@ -206,10 +265,12 @@ export class ChatService {
         aiResponseMessage,
         'text',
         {
-          tokens_used: aiResult.tokensUsed,
+          tokens_used: aiResult.tokensUsed || aiResult.usage?.total_tokens || aiResult.tokens_used,
           attachments: functionResult?.attachments || []
         }
       );
+      
+      console.log('[ChatService] Saved AI message with attachments:', savedAIMessage.attachments);
 
       // Update conversation title if it's the first exchange
       if (!conversation.title || conversation.title === 'New Chat') {
@@ -319,9 +380,10 @@ export class ChatService {
   private static convertChatMessagesToOpenAI(messages: ChatMessage[]): OpenAIMessage[] {
     const converted = messages
       .filter(msg => ['user', 'assistant', 'system'].includes(msg.role))
+      .filter(msg => msg.content && msg.content.trim().length > 0) // Filter out null/empty content
       .map(msg => ({
         role: msg.role as 'user' | 'assistant' | 'system',
-        content: msg.content
+        content: msg.content.trim()
       }));
 
     

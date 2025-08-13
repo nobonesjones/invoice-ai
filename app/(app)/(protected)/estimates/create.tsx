@@ -1039,36 +1039,64 @@ export default function CreateEstimateScreen() {
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
   const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
-    const currentPaymentSettings = paymentOptionsData;
-
-    if (newValue === true && currentPaymentSettings) { // Check only when toggling ON and paymentOptionsData are loaded
+    console.log(`[handlePaymentMethodToggle] ${methodKey} toggle attempt:`, newValue);
+    console.log(`[handlePaymentMethodToggle] Loading state:`, paymentOptionsLoading);
+    console.log(`[handlePaymentMethodToggle] Payment options data:`, paymentOptionsData);
+    
+    // Block all toggles if payment options are still loading
+    if (paymentOptionsLoading) {
+      Alert.alert(
+        'Please Wait',
+        'Payment options are still loading. Please try again in a moment.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    // If payment options data is not available, only block when enabling (allow disabling)
+    if (!paymentOptionsData && newValue === true) {
+      // User hasn't set up payment options yet, allow them to continue but warn them
+      console.log(`[handlePaymentMethodToggle] No payment options configured yet, will validate individual method`);
+    }
+    
+    // Only validate when toggling ON
+    if (newValue === true) {
       let isEnabledInSettings = false;
       let settingName = '';
-
+      
       if (methodKey === 'stripe') {
-        isEnabledInSettings = currentPaymentSettings.stripe_enabled === true;
+        isEnabledInSettings = paymentOptionsData?.stripe_enabled === true;
         settingName = 'Pay With Card (Stripe)';
       } else if (methodKey === 'paypal') {
-        isEnabledInSettings = currentPaymentSettings.paypal_enabled === true;
+        isEnabledInSettings = paymentOptionsData?.paypal_enabled === true;
         settingName = 'PayPal';
       } else if (methodKey === 'bank_account') {
-        isEnabledInSettings = currentPaymentSettings.bank_transfer_enabled === true;
+        isEnabledInSettings = paymentOptionsData?.bank_transfer_enabled === true;
         settingName = 'Bank Transfer';
       }
-
+      
+      console.log(`[handlePaymentMethodToggle] ${methodKey} enabled in settings:`, isEnabledInSettings);
+      
       if (!isEnabledInSettings) {
         Alert.alert(
-          'Payment Method Disabled',
-          `${settingName} is not enabled in your Payment Options. Please update your settings to use this method.`,
-          [{ text: 'OK' }]
+          'Payment Method Not Configured',
+          `${settingName} is not enabled in your Payment Options. Please configure it first in Settings > Payment Options.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Go to Settings', 
+              onPress: () => router.push('/(app)/payment-options')
+            }
+          ]
         );
         return; // Prevent toggling ON
       }
     }
 
-    // Update react-hook-form state directly
+    // Update react-hook-form state directly - validation passed or toggling OFF
     const formKey = `${methodKey}_active` as keyof EstimateFormData;
     setValue(formKey, newValue, { shouldValidate: true, shouldDirty: true });
+    console.log(`[handlePaymentMethodToggle] ${methodKey} successfully set to:`, newValue);
   };
 
   // Modal callback handlers
@@ -1674,39 +1702,49 @@ export default function CreateEstimateScreen() {
               <ActionRow
                 label={
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: safeThemeColors.foreground, fontSize: 16 }}>Pay With Card</Text>
-                    <Image source={require('../../../../assets/visaicon.png')} style={iconStyle} />
-                    <Image source={require('../../../../assets/mastercardicon.png')} style={mastercardSpecificStyle} />
+                    <Text style={{ color: paymentOptionsLoading ? safeThemeColors.mutedForeground : safeThemeColors.foreground, fontSize: 16 }}>
+                      Pay With Card {paymentOptionsLoading ? '(Loading...)' : ''}
+                    </Text>
+                    <Image source={require('../../../../assets/visaicon.png')} style={[iconStyle, paymentOptionsLoading && {opacity: 0.5}]} />
+                    <Image source={require('../../../../assets/mastercardicon.png')} style={[mastercardSpecificStyle, paymentOptionsLoading && {opacity: 0.5}]} />
                   </View>
                 }
                 icon={CreditCard}
                 themeColors={safeThemeColors}
                 showSwitch={true}
-                switchValue={watchedStripeActive}
+                switchValue={getValues('stripe_active')}
                 onSwitchChange={(newValue) => handlePaymentMethodToggle('stripe', newValue)}
+                onPress={() => handlePaymentMethodToggle('stripe', !getValues('stripe_active'))}
+                disabled={paymentOptionsLoading}
               />
               
               <ActionRow
                 label={
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: safeThemeColors.foreground, fontSize: 16 }}>PayPal</Text>
-                    <Image source={require('../../../../assets/paypalicon.png')} style={iconStyle} />
+                    <Text style={{ color: paymentOptionsLoading ? safeThemeColors.mutedForeground : safeThemeColors.foreground, fontSize: 16 }}>
+                      PayPal {paymentOptionsLoading ? '(Loading...)' : ''}
+                    </Text>
+                    <Image source={require('../../../../assets/paypalicon.png')} style={[iconStyle, paymentOptionsLoading && {opacity: 0.5}]} />
                   </View>
                 }
                 icon={Banknote}
                 themeColors={safeThemeColors}
                 showSwitch={true}
-                switchValue={watchedPaypalActive}
+                switchValue={getValues('paypal_active')}
                 onSwitchChange={(newValue) => handlePaymentMethodToggle('paypal', newValue)}
+                onPress={() => handlePaymentMethodToggle('paypal', !getValues('paypal_active'))}
+                disabled={paymentOptionsLoading}
               />
               
               <ActionRow
-                label="Bank Transfer"
+                label={paymentOptionsLoading ? "Bank Transfer (Loading...)" : "Bank Transfer"}
                 icon={Landmark}
                 themeColors={safeThemeColors}
                 showSwitch={true}
-                switchValue={watchedBankAccountActive}
+                switchValue={getValues('bank_account_active')}
                 onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
+                onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active'))}
+                disabled={paymentOptionsLoading}
               />
             </FormSection>
 

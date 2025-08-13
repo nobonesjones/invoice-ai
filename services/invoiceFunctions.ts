@@ -1,13 +1,23 @@
 import { supabase } from '@/config/supabase';
 import { ReferenceNumberService } from './referenceNumberService';
-import { OpenAIFunction } from '@/services/openaiService';
 import { UsageService } from '@/services/usageService';
 import { UsageTrackingService } from '@/services/usageTrackingService';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import UserContextService from '@/services/userContextService';
 
-// Function definitions for OpenAI
-export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
+// Function interface for AI edge functions
+export interface AIFunction {
+  name: string;
+  description: string;
+  parameters: {
+    type: string;
+    properties: Record<string, any>;
+    required?: string[];
+  };
+}
+
+// Function definitions for AI edge functions
+export const INVOICE_FUNCTIONS: AIFunction[] = [
   {
     name: "create_invoice",
     description: "Create a new invoice with client details and line items. If client doesn't exist, they will be created automatically.",
@@ -1167,6 +1177,14 @@ export const INVOICE_FUNCTIONS: OpenAIFunction[] = [
         acceptance_terms: {
           type: "string",
           description: "Updated acceptance terms for the estimate (for update_details operation)"
+        },
+        tax_percentage: {
+          type: "number",
+          description: "Updated tax percentage for the estimate (for update_details operation)"
+        },
+        estimate_tax_label: {
+          type: "string",
+          description: "Updated tax label/name for the estimate (e.g., VAT, GST). Typically follows business settings."
         }
       },
       required: ["operation"]
@@ -1834,6 +1852,7 @@ export class InvoiceFunctionService {
       // Step 1: Find or create client with improved search
       let clientId: string;
       let existingClient = null;
+      let createdNewClient = false;
 
       // First, try to find by email if provided
       if (params.client_email) {
@@ -1909,6 +1928,7 @@ export class InvoiceFunctionService {
         }
 
         clientId = newClient.id;
+        createdNewClient = true;
         // Created new client
       }
 
@@ -2017,18 +2037,21 @@ export class InvoiceFunctionService {
       }
 
       // Step 9: Return success with invoice details
+      const anyZeroPrices = lineItems.some((item: any) => Number(item.unit_price) === 0);
+      const clientNote = createdNewClient
+        ? `I've also added ${params.client_name} as a new client in your contacts.\n\n`
+        : '';
+      const priceNote = anyZeroPrices
+        ? `One or more items are using a placeholder price of $0. Tell me the correct price and I'll update it right away.\n\n`
+        : '';
       const successMessage = `Great! I've successfully created invoice #${invoiceNumber} for ${params.client_name}.
-
+${clientNote}${priceNote}
 The invoice includes:
 ${lineItems.map((item: any, index: number) => 
   `• ${item.item_name}${item.item_description ? ` (${item.item_description})` : ''} - $${item.unit_price}${item.quantity > 1 ? ` x ${item.quantity} = $${item.total_price}` : ''}`
 ).join('\n')}
 
 Total: $${totalAmount.toFixed(2)}${invoice.due_date ? ` • Due: ${new Date(invoice.due_date).toLocaleDateString()}` : ''}
-
-I've applied your default design settings:
-• Design: ${defaultDesign}
-• Accent Color: ${defaultAccentColor}
 
 Would you like me to help you send this invoice or make any changes?`;
 
@@ -2049,7 +2072,15 @@ Would you like me to help you send this invoice or make any changes?`;
             total: totalAmount
           }
         },
-        message: successMessage
+        message: successMessage,
+        attachments: [{
+          type: 'invoice',
+          invoice_id: invoice.id,
+          invoice_number: invoiceNumber,
+          invoice: invoice,
+          line_items: lineItems,
+          client_id: clientId
+        }]
       };
 
     } catch (error) {
@@ -3294,7 +3325,7 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
 
   private static async updateInvoiceDetails(params: any, userId: string): Promise<FunctionResult> {
     try {
-      const { invoice_number, new_invoice_number, client_name, client_email, invoice_date, due_date, tax_percentage, discount_type, discount_value, notes, custom_headline } = params;
+      const { invoice_number, new_invoice_number, client_name, client_email, invoice_date, due_date, tax_percentage, discount_type, discount_value, notes, custom_headline, invoice_tax_label } = params;
 
       if (!invoice_number) {
         return {
@@ -3373,6 +3404,9 @@ ${invoice.notes ? `**Notes:** ${invoice.notes}` : ''}`;
       }
       if (custom_headline) {
         updateData.custom_headline = custom_headline;
+      }
+      if (invoice_tax_label !== undefined) {
+        updateData.invoice_tax_label = invoice_tax_label || null;
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -3593,7 +3627,8 @@ If you just created an invoice for this client, please try again in a moment, or
         updateData.address_client = address;
       }
       if (tax_number !== undefined) {
-        updateData.tax_number = tax_number;
+        // Treat empty string as a request to clear the value
+        updateData.tax_number = tax_number || null;
       }
       if (notes !== undefined) {
         updateData.notes = notes;
@@ -5156,6 +5191,8 @@ The new client is ready to use for invoices!`
         acceptance_terms: params.acceptance_terms || '',
         estimate_template: defaultDesign,
         accent_color: defaultAccentColor,
+        // align estimate display label with business tax name
+        estimate_tax_label: (typeof businessSettings?.tax_name === 'string' && businessSettings.tax_name) ? businessSettings.tax_name : null,
         paypal_active: paypalEnabled,
         stripe_active: stripeEnabled,
         bank_account_active: bankTransferEnabled
@@ -5227,7 +5264,15 @@ The new client is ready to use for invoices!`
           line_items: lineItemsData,
           calculations: calculations
         },
-        message: message
+        message: message,
+        attachments: [{
+          type: 'estimate',
+          estimate_id: estimate.id,
+          estimate_number: estimate.estimate_number,
+          estimate: estimate,
+          line_items: lineItemsData,
+          client_id: clientId
+        }]
       };
 
     } catch (error) {
@@ -6379,6 +6424,14 @@ The new client is ready to use for invoices!`
           }
           if (params.acceptance_terms !== undefined) {
             updateData.acceptance_terms = params.acceptance_terms;
+          }
+          if (params.tax_percentage !== undefined) {
+            updateData.tax_percentage = params.tax_percentage;
+            // trigger totals recalculation
+            lineItemChanges = true;
+          }
+          if (params.estimate_tax_label !== undefined) {
+            updateData.estimate_tax_label = params.estimate_tax_label || null;
           }
           operationDescription = 'Updated estimate details';
           break;

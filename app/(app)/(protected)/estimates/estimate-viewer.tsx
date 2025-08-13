@@ -1620,6 +1620,7 @@ function EstimateViewerScreen() {
             documentType="estimate"
             mode="preview"
             onClose={handleDesignModalClose}
+            onSaveComplete={handleDesignModalClose}
           />
         )}
       </SafeAreaView>

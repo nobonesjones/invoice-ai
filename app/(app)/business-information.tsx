@@ -264,7 +264,7 @@ export default function BusinessInformationScreen() {
 
           console.log('handleSaveChanges: Calling optimized Edge Function upload-logo');
           const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
-          const apiKey = process.env.EXPO_PUBLIC_API_KEY;
+          const apiKey = process.env.EXPO_PUBLIC_ANON_KEY;
           
           if (!supabaseUrl || !apiKey) {
             throw new Error('Missing Supabase configuration. Please check your environment variables.');

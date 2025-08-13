@@ -13,7 +13,6 @@ export class VoiceService {
   private static recording: Audio.Recording | null = null;
   private static isRecording = false;
   private static websocket: WebSocket | null = null;
-  private static apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY as string;
 
   // Initialize audio permissions
   static async initialize(): Promise<boolean> {
@@ -171,12 +170,14 @@ export class VoiceService {
         this.websocket.close();
       }
 
-      const wsUrl = `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01`;
+      // Note: Realtime API requires direct WebSocket connection to OpenAI
+      // For production, consider implementing WebSocket proxy via edge function
+      const wsUrl = `${process.env.EXPO_PUBLIC_API_URL?.replace('https://', 'wss://').replace('http://', 'ws://')}/functions/v1/ai-realtime`;
       
       this.websocket = new WebSocket(wsUrl, undefined, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'OpenAI-Beta': 'realtime=v1',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_ANON_KEY}`,
+          'apikey': process.env.EXPO_PUBLIC_ANON_KEY!,
         },
       });
       

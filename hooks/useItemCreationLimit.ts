@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSupabase } from '@/context/supabase-provider';
 import { usePaywall } from '@/context/paywall-provider';
 import { usePlacement } from 'expo-superwall';
+import { router } from 'expo-router';
 import UsageTrackingService from '@/services/usageTrackingService';
 
 interface UseItemCreationLimitReturn {
@@ -58,7 +59,6 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
     if (!registerPlacement) {
       // registerPlacement not available - using fallback
       // Fallback for Expo Go - navigate to subscription page
-      const { router } = await import('expo-router');
       router.push('/subscription');
       return;
     }
@@ -75,7 +75,6 @@ export function useItemCreationLimit(): UseItemCreationLimitReturn {
     } catch (error) {
       // Failed to show paywall
       // Fallback on error
-      const { router } = await import('expo-router');
       router.push('/subscription');
     }
   }, [registerPlacement, user?.id, totalItems]);

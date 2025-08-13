@@ -14,7 +14,7 @@ import { H1 } from "@/components/ui/typography";
 import { useSupabase } from "@/context/supabase-provider";
 import { useTheme } from "@/context/theme-provider";
 import { ChatService } from "@/services/chatService";
-import { OpenAIService } from "@/services/openaiService";
+// OpenAI service removed - now using secure edge functions
 import { useAIChat } from "@/hooks/useAIChat";
 import { ChatMessage } from "@/services/chatService";
 import UserContextService from "@/services/userContextService";
@@ -1259,12 +1259,15 @@ export default function AiScreen() {
 			// Load business settings for currency context
 			await loadBusinessSettings();
 			
-			// Test OpenAI configuration
-			// console.log('[AI Screen] Testing OpenAI configuration...');
-			const isConfigured = OpenAIService.isConfigured();
-			// console.log('[AI Screen] OpenAI configured:', isConfigured);
+			// Test edge function configuration
+			// console.log('[AI Screen] Testing edge function configuration...');
+			const isConfigured = !!process.env.EXPO_PUBLIC_API_URL && !!process.env.EXPO_PUBLIC_ANON_KEY;
+			// console.log('[AI Screen] Edge functions configured:', isConfigured);
 			
+			// Edge functions should always be configured for this app
+			// Only show setup message if there's a real configuration issue
 			if (!isConfigured) {
+				console.error('[AI Screen] Edge function configuration missing');
 				setShowSetupMessage(true);
 			}
 		};
@@ -1347,7 +1350,7 @@ export default function AiScreen() {
 				id: 'setup',
 				conversation_id: '',
 				role: 'assistant' as const,
-				content: `Welcome to your AI assistant! To get started, you'll need to configure your OpenAI API key in your environment variables (EXPO_PUBLIC_OPENAI_API_KEY). Once configured, restart the app and I'll be ready to help you manage your invoices!`,
+				content: `Welcome to your AI assistant! I'm powered by secure edge functions and ready to help you manage your invoices. Ask me anything about creating invoices, managing clients, or generating estimates!`,
 				message_type: 'text' as const,
 				created_at: new Date().toISOString()
 			};
@@ -1543,6 +1546,7 @@ or '${example2}'`,
 
 	// Function to render text with bold formatting
 	const renderFormattedText = (text: string, textColor: string) => {
+		if (!text) return null;
 		const parts = text.split(/(\*\*.*?\*\*)/g);
 		
 		return (

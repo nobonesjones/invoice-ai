@@ -1,5 +1,6 @@
 import RevenueCatService from './revenueCatService';
 import SuperwallService from './superwallService';
+import { router } from 'expo-router';
 
 export interface PaywallConfig {
   event: string;
@@ -100,8 +101,6 @@ class PaywallService {
       // Failed to present paywall
       
       // Fallback for development (Expo Go) - navigate to subscription page
-      // Using fallback navigation to subscription page
-      const { router } = await import('expo-router');
       router.push('/subscription');
       
       // Don't throw error for fallback

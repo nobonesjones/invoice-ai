@@ -668,11 +668,31 @@ export default function CreateInvoiceScreen() {
       }
 
       // 1. Prepare main invoice data
+      // Calculate payment status based on recorded payments
+      const currentTotalPaid = recordedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+      const invoiceTotal = formData.totalAmount || 0;
+      
+      // Determine invoice status based on payment
+      let invoiceStatus = INVOICE_STATUSES.DRAFT; // Default
+      if (currentTotalPaid >= invoiceTotal && invoiceTotal > 0) {
+        invoiceStatus = INVOICE_STATUSES.PAID;
+      } else if (currentTotalPaid > 0 && currentTotalPaid < invoiceTotal) {
+        invoiceStatus = INVOICE_STATUSES.PARTIAL;
+      } else if (isMarkedAsPaid) {
+        invoiceStatus = INVOICE_STATUSES.PAID;
+      }
+      
+      console.log('[handleSaveInvoice] Payment calculation:');
+      console.log('[handleSaveInvoice] - Total paid:', currentTotalPaid);
+      console.log('[handleSaveInvoice] - Invoice total:', invoiceTotal);
+      console.log('[handleSaveInvoice] - Is marked as paid:', isMarkedAsPaid);
+      console.log('[handleSaveInvoice] - Calculated status:', invoiceStatus);
+      
       const invoiceData = {
         user_id: user.id,
         client_id: formData.client_id,
         invoice_number: formData.invoice_number || `INV-${Date.now().toString().slice(-6)}`,
-        status: INVOICE_STATUSES.DRAFT, // Always save as draft from the form
+        status: invoiceStatus, // Use calculated status based on payments
         invoice_date: formData.invoice_date instanceof Date ? formData.invoice_date.toISOString() : new Date(formData.invoice_date).toISOString(),
         due_date: formData.due_date ? (formData.due_date instanceof Date ? formData.due_date.toISOString() : new Date(formData.due_date).toISOString()) : null,
         due_date_option: formData.due_date_option,
@@ -688,6 +708,10 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
+        // Add payment information
+        paid_amount: currentTotalPaid,
+        payment_date: currentTotalPaid > 0 ? new Date().toISOString() : null,
+        payment_notes: recordedPayments.length > 0 ? recordedPayments.map(p => `${p.method}: $${p.amount.toFixed(2)}`).join(', ') : null,
         // Add design and color fields for new invoices
         ...(isEditMode ? {} : {
           invoice_design: defaultDesign,
@@ -1446,7 +1470,27 @@ export default function CreateInvoiceScreen() {
       method: data.paymentMethod,
       date: new Date(),
     };
-    setRecordedPayments(prevPayments => [...prevPayments, newPayment]);
+    
+    // Update recorded payments
+    const updatedPayments = [...recordedPayments, newPayment];
+    setRecordedPayments(updatedPayments);
+    
+    // Check if total payments equal or exceed invoice total
+    const newTotalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const invoiceTotal = getValues('totalAmount') || 0;
+    
+    console.log('[handleMakePaymentSheetSave] Payment added:', newPayment.amount);
+    console.log('[handleMakePaymentSheetSave] New total paid:', newTotalPaid);
+    console.log('[handleMakePaymentSheetSave] Invoice total:', invoiceTotal);
+    
+    // Update paid status if fully paid
+    if (newTotalPaid >= invoiceTotal && invoiceTotal > 0) {
+      console.log('[handleMakePaymentSheetSave] Invoice is now fully paid - updating status');
+      setIsMarkedAsPaid(true);
+    } else if (newTotalPaid > 0 && newTotalPaid < invoiceTotal) {
+      console.log('[handleMakePaymentSheetSave] Invoice is partially paid');
+      setIsMarkedAsPaid(false);
+    }
     
     // Log the payment activity if we have an invoice ID
     if (currentInvoiceId || editInvoiceId) {
@@ -1550,14 +1594,10 @@ export default function CreateInvoiceScreen() {
       return;
     }
     
-    // Block all toggles if payment options data is not available
-    if (!paymentOptionsData) {
-      Alert.alert(
-        'Error',
-        'Unable to load your payment settings. Please refresh the page and try again.',
-        [{ text: 'OK' }]
-      );
-      return;
+    // If payment options data is not available, only block when enabling (allow disabling)
+    if (!paymentOptionsData && newValue === true) {
+      // User hasn't set up payment options yet, allow them to continue but warn them
+      console.log(`[handlePaymentMethodToggle] No payment options configured yet, will validate individual method`);
     }
     
     // Only validate when toggling ON (allowing OFF always)
@@ -1566,13 +1606,13 @@ export default function CreateInvoiceScreen() {
       let settingName = '';
       
       if (methodKey === 'stripe') {
-        isEnabledInSettings = paymentOptionsData.stripe_enabled === true;
+        isEnabledInSettings = paymentOptionsData?.stripe_enabled === true;
         settingName = 'Pay With Card (Stripe)';
       } else if (methodKey === 'paypal') {
-        isEnabledInSettings = paymentOptionsData.paypal_enabled === true;
+        isEnabledInSettings = paymentOptionsData?.paypal_enabled === true;
         settingName = 'PayPal';
       } else if (methodKey === 'bank_account') {
-        isEnabledInSettings = paymentOptionsData.bank_transfer_enabled === true;
+        isEnabledInSettings = paymentOptionsData?.bank_transfer_enabled === true;
         settingName = 'Bank Transfer';
       }
       

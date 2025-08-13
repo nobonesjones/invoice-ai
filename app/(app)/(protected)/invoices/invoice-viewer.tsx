@@ -278,7 +278,6 @@ function InvoiceViewerScreen() {
         });
       } catch (error) {
         // Paywall failed, using fallback
-        const { router } = await import('expo-router');
         router.push('/subscription');
       }
       return;
@@ -415,7 +414,6 @@ function InvoiceViewerScreen() {
         });
       } catch (error) {
         // Paywall failed, using fallback
-        const { router } = await import('expo-router');
         router.push('/subscription');
       }
       return;
@@ -522,7 +520,6 @@ function InvoiceViewerScreen() {
         });
       } catch (error) {
         // Paywall failed, using fallback
-        const { router } = await import('expo-router');
         router.push('/subscription');
       }
       return;
@@ -2610,6 +2607,7 @@ function InvoiceViewerScreen() {
         clientData={client}
         invoiceId={invoiceId}
         onClose={handleDesignModalClose}
+        onSaveComplete={handleDesignModalClose}
       />
     </SafeAreaView>
   );

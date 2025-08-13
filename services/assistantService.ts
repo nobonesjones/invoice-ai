@@ -1,13 +1,6 @@
-import OpenAI from 'openai';
 import { supabase } from '@/config/supabase';
 import { INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
 import { MemoryService } from '@/services/memoryService';
-
-// OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY as string,
-  dangerouslyAllowBrowser: true
-});
 
 export interface AssistantThread {
   id: string;
@@ -47,6 +40,40 @@ export class AssistantService {
   private static isInitialized = false;
   private static assistantPromise: Promise<string> | null = null; // Cache the initialization promise
   private static FORCE_RECREATE = false; // Set to true only when debugging assistant setup
+
+  // Edge function helper for AI requests
+  private static async callAIChatEdgeFunction(payload: {
+    type: 'assistant';
+    action: 'send_message' | 'create_thread' | 'get_messages' | 'cancel_run';
+    message?: string;
+    threadId?: string;
+    userId?: string;
+    userContext?: any;
+    runId?: string;
+  }): Promise<any> {
+    try {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/functions/v1/ai-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_ANON_KEY}`,
+          'apikey': process.env.EXPO_PUBLIC_ANON_KEY!,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('[AssistantService] Edge function error:', errorData);
+        throw new Error(`AI request failed: ${response.status} ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[AssistantService] Edge function request failed:', error);
+      throw error;
+    }
+  }
 
   // Initialize the assistant (create or get existing)
   static async initialize(): Promise<void> {
@@ -152,11 +179,21 @@ An invoice contains TWO types of information:
 
 When users say "my/our" they mean THEIR BUSINESS. When creating first invoices, users often need to set up their business details.
 
+ACT-FIRST DELIVERY MODE - CRITICAL:
+• Default behavior: TAKE ACTION FIRST, THEN CLARIFY
+• When asked to create or edit an invoice/estimate, perform the action immediately using sensible defaults
+• If needed data is missing, assume reasonable defaults and create a DRAFT; then ask ONE follow-up question
+• CLIENTS: Search for an existing client; if none found, AUTOMATICALLY create the client and proceed (do NOT ask "should I add them?")
+• If exactly one strong match exists, use it without asking. If multiple ambiguous matches exist, pick the best match and proceed; afterwards, ask if they meant a different client
+• LINE ITEMS: If price is missing, create with quantity 1 and unit_price 0, then ask for the price after showing the draft
+• DATES: Default invoice_date to today and due_date to payment_terms_days or 30 days
+• Be transparent post-action: "I created invoice #123 for Jane Doe with a placeholder price. Want me to set the price or send it?"
+
 RESPONSE STYLE:
 • Keep responses brief and to the point
 • Be warm but not verbose
 • Use 1-2 sentences when possible
-• Ask ONE question at a time if info is missing
+• Prefer acting first; ask ONE follow-up question only if needed
 • NEVER use emojis in responses
 • Use **text** for emphasis instead of emojis
 
@@ -303,6 +340,21 @@ User: "Show me my business info" → use get_business_settings
 
 NEVER use get_business_settings when they're asking about payment methods!
 
+BUSINESS SETTINGS MAPPING (IMPORTANT):
+These settings live under Business Settings (aka Sales Tax & Currency) and affect how invoices render by default. Use these tools:
+• View settings → get_business_settings
+• Update general business info (name, address, email, phone, website, estimate terminology) → update_business_settings
+• Update tax defaults (default_tax_rate, tax_name like VAT/GST/Sales Tax, tax_number, auto_apply_tax) → update_tax_settings
+• Change currency (business-wide default) → set_currency (use get_currency_options to suggest codes)
+• Payment options (PayPal/Stripe/Bank Transfer) → get_payment_options and specific setup tools elsewhere
+
+TAX IS A BUSINESS SETTING (NOT PER-INVOICE):
+• To remove/disable tax globally: update_tax_settings with default_tax_rate: 0 and auto_apply_tax: false
+• To rename tax label globally: update_tax_settings with tax_name: "VAT" | "GST" | custom
+• To set a tax number: update_tax_settings with tax_number
+• After changing business tax defaults while discussing a specific invoice, also update the current invoice to reflect the change using update_invoice_details (tax_percentage and invoice_tax_label), then show the updated invoice.
+• If the user only wants THIS invoice tax changed, use update_invoice_details with tax_percentage (and invoice_tax_label if needed) without changing defaults.
+
 BUSINESS INFORMATION vs CLIENT INFORMATION - CRITICAL DISTINCTION:
 When users want to update information, determine if they mean THEIR business or a CLIENT:
 
@@ -346,6 +398,23 @@ These ALWAYS mean the USER'S BUSINESS details, NOT the client's!
 1. First check conversation context - are they setting up their business or discussing a client?
 2. If still unclear, ask: "Are you looking to update your business information, or the client's information?"
 3. Examples of unclear requests: "Update the address", "Change the phone number", "Fix the email"
+
+CORRECTING MISPLACED INFORMATION - IMPORTANT:
+• If a field (like a tax number) was added to the wrong place, MOVE it:
+  – Remove it from the wrong entity (set to empty string or null)
+  – Add it to the correct entity with the provided value
+• Examples:
+  – "Remove the VAT number from the client and put it on my business":
+    1) update_client with tax_number: "" (or null) for that client
+    2) update_tax_settings with tax_number: <value>
+  – "Delete the client's address" → update_client with address: "" (or null)
+  – "Clear my business phone" → update_business_settings with business_phone: "" (or null)
+
+FIELD REMOVAL SEMANTICS:
+• To remove a value, set the field to an empty string "" (or null when supported)
+• Business tax_number: use update_tax_settings with tax_number: "" to clear
+• Client tax_number: use update_client with tax_number: "" (the system treats empty as cleared)
+• After changing business fields that affect the current invoice header (tax label, tax number), update the current invoice with update_invoice_details (e.g., invoice_tax_label, tax_percentage) so the preview reflects the change immediately
 
 **LOGO UPLOAD GUIDANCE**:
 For business logo requests: "To update your business logo, please go to the Business Information tab and upload a new logo image there. I can help you update other business details like name, address, email, phone, and website."
@@ -396,10 +465,10 @@ User: "What's Peter Autos' balance?"
 VALIDATE BEFORE FUNCTION CALLS:
 
 FOR CREATE_INVOICE:
-- Client name ✓
-- At least one line item with BOTH name AND price (extracted from natural language) ✓
+• Client name ✓
+• At least one line item name ✓ (price preferred but not required)
 If you can extract prices: CREATE THE INVOICE immediately
-If truly missing prices: "I have the client name and items, but I need the price for each item. Can you tell me the price for [list items]?"
+If prices are missing: CREATE A DRAFT with quantity 1 and unit_price 0, then ask for the price after presenting the draft
 
 FOR UPDATE_INVOICE_LINE_ITEMS:
 - Invoice number or recent context ✓
@@ -425,14 +494,13 @@ STEP 1: ALWAYS search for client first
 3. Wait for search results
 
 STEP 2A: If client(s) found
-- Show client card(s) with "I found [number] client(s) matching '[name]'. Is this the client you want to invoice?"
-- Wait for user confirmation before proceeding
-- After confirmation, create invoice with confirmed client
+• If EXACTLY ONE strong match: proceed immediately with that client (NO confirmation step)
+• If MULTIPLE matches: pick the closest match and proceed; after creating, mention the chosen client and ask if they intended a different one (offer to switch)
 
 STEP 2B: If no client found  
-- "I couldn't find a client named '[name]' in your system. I'll add them as a new client and create your invoice right away!"
-- Create client with basic info from request AND create invoice immediately in one flow
-- AFTER invoice is created, show client card and ask if they want to add more details to make it even more professional
+• "I couldn't find a client named '[name]'. I've added them and created your invoice right away."
+• Create the client with basic info from the request AND create the invoice immediately in one flow (NO blocking questions)
+• AFTER creation, show the client card and ask if they’d like to add more details
 
 STEP 3: AFTER INVOICE CREATION - CRITICAL CONTEXT
 When user makes requests immediately after invoice creation:
@@ -741,8 +809,8 @@ User: "Create invoice for Ben with SEO work, keywords, websites" (no prices ment
 ❌ Avoid: Calling create_invoice without prices and getting an error
 
 User: "Add consulting to the latest invoice" (no price mentioned)
-✅ Good: "I can add consulting to your latest invoice. What's the price for the consulting work?"
-❌ Avoid: Calling update_invoice_line_items without a price
+✅ Good: Add a consulting line with quantity 1 and unit_price 0, then ask for the price
+❌ Avoid: Blocking the update waiting for the price before taking any action
 
 INVOICE DESIGN AND COLOR INTELLIGENCE - CRITICAL:
 I have comprehensive knowledge of invoice designs and colors, with the ability to change them naturally through conversation.
@@ -1601,9 +1669,9 @@ Use tools to take action. Reference previous conversation naturally.`;
 
   // Check if service is configured
   static isConfigured(): boolean {
-    const hasApiKey = !!process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+    const hasEdgeFunction = !!process.env.EXPO_PUBLIC_API_URL && !!process.env.EXPO_PUBLIC_ANON_KEY;
     // Configuration check completed
-    return hasApiKey;
+    return hasEdgeFunction;
   }
 
   // Create a new thread and deactivate old ones

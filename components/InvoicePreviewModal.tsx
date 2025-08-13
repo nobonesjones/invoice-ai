@@ -28,6 +28,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 import { usePaywall } from '@/context/paywall-provider';
 import { usePlacement } from 'expo-superwall';
+import { router } from 'expo-router';
 
 export interface InvoicePreviewModalRef {
   present: () => void;
@@ -319,6 +320,12 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
         console.log('[InvoicePreviewModal] Save completed, saveSuccess:', saveSuccess);
         console.log('[InvoicePreviewModal] About to close modal - NOT calling onClose for saves');
         
+        // Call onSaveComplete callback if save was successful
+        if (saveSuccess && onSaveComplete) {
+          console.log('[InvoicePreviewModal] Calling onSaveComplete callback');
+          onSaveComplete();
+        }
+        
         // Close modal WITHOUT calling onClose callback for saves (prevents state conflicts)
         console.log('[InvoicePreviewModal] Setting isVisible to false');
         setIsVisible(false);
@@ -351,7 +358,6 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           });
         } catch (error) {
           console.error('[Modal handleSendByEmail] Paywall failed, using fallback');
-          const { router } = await import('expo-router');
           router.push('/subscription');
         }
         return;
@@ -481,7 +487,6 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           });
         } catch (error) {
           console.error('[Modal handleSendLink] Paywall failed, using fallback');
-          const { router } = await import('expo-router');
           router.push('/subscription');
         }
         return;
@@ -615,7 +620,6 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           });
         } catch (error) {
           console.error('[Modal handleSendPDF] Paywall failed, using fallback');
-          const { router } = await import('expo-router');
           router.push('/subscription');
         }
         return;

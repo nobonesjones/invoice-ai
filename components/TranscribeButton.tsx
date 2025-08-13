@@ -94,22 +94,17 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
         type: 'audio/m4a',
         name: 'recording.m4a',
       } as any);
-      formData.append('model', 'whisper-1');
 
-      const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error('OpenAI API key not configured');
-      }
-
-      console.log('[TranscribeButton] Sending transcription request to OpenAI...');
+      console.log('[TranscribeButton] Sending transcription request to edge function...');
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
 
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/functions/v1/ai-transcribe`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_ANON_KEY}`,
+          'apikey': process.env.EXPO_PUBLIC_ANON_KEY!,
         },
         body: formData,
         signal: controller.signal,
@@ -117,12 +112,12 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
 
       clearTimeout(timeoutId);
 
-      console.log('[TranscribeButton] Received response from OpenAI, status:', response.status);
+      console.log('[TranscribeButton] Received response from edge function, status:', response.status);
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error(`[TranscribeButton] OpenAI API Error (${response.status}):`, errorBody);
-        throw new Error(`OpenAI API Error: ${response.status} ${response.statusText}`);
+        console.error(`[TranscribeButton] Edge Function Error (${response.status}):`, errorBody);
+        throw new Error(`Transcription Error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
