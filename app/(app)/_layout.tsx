@@ -1,4 +1,3 @@
-import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"; // Import BottomSheetModalProvider
 import * as Haptics from "expo-haptics"; // Import Haptics
 import { Stack } from "expo-router";
 
@@ -19,8 +18,7 @@ export default function AppLayout() {
 	const colorScheme = "light";
 
 	return (
-		<BottomSheetModalProvider>
-			<Stack screenOptions={{ headerShown: false, gestureEnabled: true }}>
+		<Stack screenOptions={{ headerShown: false, gestureEnabled: true }}>
 				<Stack.Screen
 					name="(protected)"
 					options={{
@@ -57,7 +55,6 @@ export default function AppLayout() {
 					}}
 				/>
 				<Stack.Screen name="+not-found" />
-			</Stack>
-		</BottomSheetModalProvider>
+		</Stack>
 	);
 }

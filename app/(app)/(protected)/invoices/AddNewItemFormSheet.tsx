@@ -407,7 +407,6 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                 { flex: 1 },
                 discountType ? { color: themeColors.primary, fontWeight: '500' } : { color: themeColors.mutedForeground }
               ]}
-              onPress={promptForDiscountType}
             >
               {discountDisplayText}
             </Text>
@@ -417,6 +416,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
               </TouchableOpacity>
             )}
           </TouchableOpacity>
+
 
           {discountType && (
             <View style={styles.inputRow}>
@@ -435,7 +435,9 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
               </View>
             </View>
           )}
+        </View>
 
+        <View style={styles.inputGroupContainer}>
           <TouchableOpacity style={styles.inputRow} onPress={handleAttachImage}>
             <ImageIcon size={20} color={selectedImageUri ? themeColors.primary : themeColors.mutedForeground} style={{ marginRight: 12 }} />
             <Text

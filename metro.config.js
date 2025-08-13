@@ -4,6 +4,12 @@ const { withNativeWind } = require("nativewind/metro");
 // eslint-disable-next-line no-undef
 const config = getDefaultConfig(__dirname);
 
+// Ensure modules run before the main module (works across Metro versions)
+config.serializer = {
+  ...config.serializer,
+  getModulesRunBeforeMainModule: () => [require.resolve('./polyfills/promise.js')],
+};
+
 // Add resolver configuration
 config.resolver = {
 	...config.resolver,

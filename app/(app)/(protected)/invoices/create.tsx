@@ -64,7 +64,7 @@ import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoi
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
 import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
-import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import new sheet
+import SelectDiscountTypeSheetNew, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheetNew'; // Import new working sheet
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData } from './EditInvoiceTaxSheet'; // Changed TaxData to InvoiceTaxData to avoid naming conflict if TaxData is used elsewhere
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
@@ -1402,9 +1402,15 @@ export default function CreateInvoiceScreen() {
     // Pass current discount values to pre-fill the modal if needed
     const currentDiscountType = getValues('discountType');
     const currentDiscountValue = getValues('discountValue');
+    console.log('[handlePresentSelectDiscountTypeSheet] Values:', { currentDiscountType, currentDiscountValue });
+    
+    // Ensure safe values before passing to modal
+    const safeDiscountType = currentDiscountType || null;
+    const safeDiscountValue = (currentDiscountValue !== null && currentDiscountValue !== undefined) ? currentDiscountValue : null;
+    
     selectDiscountTypeSheetRef.current?.present(
-      currentDiscountType,
-      currentDiscountValue
+      safeDiscountType,
+      safeDiscountValue
     );
   };
 
@@ -2140,7 +2146,7 @@ export default function CreateInvoiceScreen() {
           onSave={handleSaveDetailsFromModal} // Handle save action
         />
 
-        <SelectDiscountTypeSheet
+        <SelectDiscountTypeSheetNew
           ref={selectDiscountTypeSheetRef}
           onApply={handleApplyDiscountFromSheet}
           onClose={handleSelectDiscountTypeSheetClose}

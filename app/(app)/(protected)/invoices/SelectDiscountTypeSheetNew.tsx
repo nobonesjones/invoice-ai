@@ -8,16 +8,16 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { X as XIcon, Percent, DollarSign } from 'lucide-react-native'; // Changed MinusCircle to DollarSign
+import { X as XIcon, Percent, DollarSign } from 'lucide-react-native';
 
 export interface DiscountData {
   discountType: 'percentage' | 'fixed' | null;
-  discountValue: string; // Keep as string for input, convert on apply
+  discountValue: string;
 }
 
 export interface SelectDiscountTypeSheetProps {
   onApply: (data: DiscountData) => void;
-  onClose?: () => void; // Optional: called when sheet is dismissed without applying
+  onClose?: () => void;
   initialDiscountType?: 'percentage' | 'fixed' | null;
   initialDiscountValue?: number | string | null;
 }
@@ -30,7 +30,7 @@ export interface SelectDiscountTypeSheetRef {
   dismiss: () => void;
 }
 
-const SelectDiscountTypeSheet = forwardRef<
+const SelectDiscountTypeSheetNew = forwardRef<
   SelectDiscountTypeSheetRef,
   SelectDiscountTypeSheetProps
 >((props, ref) => {
@@ -39,11 +39,8 @@ const SelectDiscountTypeSheet = forwardRef<
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
   const isOpenRef = useRef<boolean>(false);
   const inputRef = useRef<TextInput>(null);
-  const hasExpandedRef = useRef<boolean>(false);
 
-  const [selectedType, setSelectedType] = useState<'percentage' | 'fixed' | null>(
-    null
-  );
+  const [selectedType, setSelectedType] = useState<'percentage' | 'fixed' | null>(null);
   const [inputValue, setInputValue] = useState<string>('');
 
   React.useImperativeHandle(ref, () => ({
@@ -84,12 +81,9 @@ const SelectDiscountTypeSheet = forwardRef<
     if (props.onClose) {
       props.onClose();
     }
-    // Reset state if needed when dismissed without saving, or rely on present to re-init
-    // setSelectedType(null);
-    // setInputValue('');
   };
 
-  const handleInternalApply = () => {
+  const handleApply = () => {
     if (!selectedType) {
       Alert.alert('Select Type', 'Please select a discount type (Percentage or Fixed).');
       return;
@@ -101,13 +95,13 @@ const SelectDiscountTypeSheet = forwardRef<
       return;
     }
     if (selectedType === 'percentage' && numericValue > 100) {
-        Alert.alert('Invalid Percentage', 'Percentage discount cannot exceed 100%.');
-        return;
+      Alert.alert('Invalid Percentage', 'Percentage discount cannot exceed 100%.');
+      return;
     }
 
     const applyData: DiscountData = {
       discountType: selectedType,
-      discountValue: String(numericValue), // Return as string, consistent with state
+      discountValue: String(numericValue),
     };
 
     props.onApply(applyData);
@@ -176,11 +170,11 @@ const SelectDiscountTypeSheet = forwardRef<
       fontSize: 15,
       marginLeft: 8,
       color: themeColors.foreground,
-      fontWeight: 'bold', // Added bold font weight
+      fontWeight: 'bold',
     },
     typeButtonTextSelected: {
       color: themeColors.primary,
-      fontWeight: 'bold', // Ensure selected text is also bold
+      fontWeight: 'bold',
     },
     inputRow: {
       flexDirection: 'row',
@@ -200,7 +194,7 @@ const SelectDiscountTypeSheet = forwardRef<
       color: themeColors.foreground,
       textAlign: 'right',
       flex: 1,
-      paddingVertical: 0, 
+      paddingVertical: 0,
     },
     separator: {
       height: StyleSheet.hairlineWidth,
@@ -228,8 +222,8 @@ const SelectDiscountTypeSheet = forwardRef<
       fontWeight: 'bold',
     },
     disabledApplyButton: {
-        backgroundColor: themeColors.muted,
-    }
+      backgroundColor: themeColors.muted,
+    },
   });
 
   // Open low at ~30%, expand higher on selection
@@ -237,11 +231,12 @@ const SelectDiscountTypeSheet = forwardRef<
 
   // When a type is selected, expand the sheet and focus the input
   useEffect(() => {
-    if (selectedType && !hasExpandedRef.current) {
-      hasExpandedRef.current = true;
+    if (selectedType) {
       requestAnimationFrame(() => {
         bottomSheetModalRef.current?.snapToIndex(1);
-        setTimeout(() => inputRef.current?.focus(), 150);
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 50);
       });
     }
   }, [selectedType]);
@@ -252,17 +247,17 @@ const SelectDiscountTypeSheet = forwardRef<
       index={0}
       snapPoints={snapPoints}
       stackBehavior="replace"
-      keyboardBehavior="extend"
-      keyboardBlurBehavior="restore"
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       enablePanDownToClose={true}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>
-          <View style={{ width: 24 + 10 }} />{/* Spacer for alignment */}
+          <View style={{ width: 24 + 10 }} />
           <Text style={styles.title}>Add Discount</Text>
           <TouchableOpacity
             onPress={() => bottomSheetModalRef.current?.dismiss()}
@@ -276,7 +271,7 @@ const SelectDiscountTypeSheet = forwardRef<
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
         >
-          <View> {/* Wrapper for content above button */}
+          <View>
             <View style={styles.card}>
               <View style={styles.typeSelectionContainer}>
                 <TouchableOpacity
@@ -297,8 +292,7 @@ const SelectDiscountTypeSheet = forwardRef<
                   <Text
                     style={[
                       styles.typeButtonText,
-                      selectedType === 'percentage' &&
-                        styles.typeButtonTextSelected,
+                      selectedType === 'percentage' && styles.typeButtonTextSelected,
                     ]}
                   >
                     Percentage
@@ -312,7 +306,7 @@ const SelectDiscountTypeSheet = forwardRef<
                   ]}
                   onPress={() => setSelectedType('fixed')}
                 >
-                  <DollarSign // Changed icon to DollarSign
+                  <DollarSign
                     size={18}
                     color={
                       selectedType === 'fixed'
@@ -351,6 +345,7 @@ const SelectDiscountTypeSheet = forwardRef<
                       placeholderTextColor={themeColors.mutedForeground}
                       keyboardType="number-pad"
                       returnKeyType="none"
+                      autoFocus={true}
                     />
                   </View>
                 </>
@@ -360,10 +355,10 @@ const SelectDiscountTypeSheet = forwardRef<
 
           <TouchableOpacity
             style={[
-                styles.applyButton,
-                !selectedType || !inputValue ? styles.disabledApplyButton : {}
+              styles.applyButton,
+              (!selectedType || !inputValue) && styles.disabledApplyButton,
             ]}
-            onPress={handleInternalApply}
+            onPress={handleApply}
             disabled={!selectedType || !inputValue}
           >
             <Text style={styles.applyButtonText}>Apply Discount</Text>
@@ -374,4 +369,4 @@ const SelectDiscountTypeSheet = forwardRef<
   );
 });
 
-export default SelectDiscountTypeSheet;
+export default SelectDiscountTypeSheetNew;

@@ -27,7 +27,6 @@ import SkiaInvoiceCanvasClean from "@/components/skia/SkiaInvoiceCanvasClean";
 import SkiaInvoiceCanvasSimple from "@/components/skia/SkiaInvoiceCanvasSimple";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // Simple Invoice Modal using our new InvoicePreviewModal component
@@ -1641,7 +1640,7 @@ or '${example2}'`,
 	};
 
 	return (
-		<BottomSheetModalProvider>
+		<>
 		<SafeAreaView style={{ backgroundColor: theme.background, flex: 1 }} edges={['top', 'left', 'right']}>
 			<KeyboardAvoidingView 
 				style={{ flex: 1 }}
@@ -2021,6 +2020,6 @@ or '${example2}'`,
 				businessSettings={businessSettings}
 			/>
 		</SafeAreaView>
-		</BottomSheetModalProvider>
+		</>
 	);
 }

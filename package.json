@@ -1,12 +1,18 @@
 {
   "name": "expo-supabase-starter",
   "version": "1.0.0",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "start:hermes": "EXPO_JS_ENGINE=hermes expo start",
+    "start:jsc": "EXPO_JS_ENGINE=jsc expo start",
     "web": "expo start --web",
     "android": "expo run:android",
+    "android:hermes": "EXPO_JS_ENGINE=hermes expo run:android",
+    "android:jsc": "EXPO_JS_ENGINE=jsc expo run:android",
     "ios": "expo run:ios",
+    "ios:hermes": "EXPO_JS_ENGINE=hermes expo run:ios",
+    "ios:jsc": "EXPO_JS_ENGINE=jsc expo run:ios",
     "lint": "eslint . --fix"
   },
   "dependencies": {
@@ -29,11 +35,13 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "es6-promise": "^4.2.8",
     "expo": "53.0.20",
     "expo-auth-session": "~6.2.1",
     "expo-av": "~15.1.7",
     "expo-clipboard": "~7.1.5",
     "expo-constants": "~17.1.4",
+    "expo-contacts": "~14.2.5",
     "expo-dev-client": "~5.2.4",
     "expo-file-system": "~18.1.10",
     "expo-haptics": "~14.1.4",
@@ -50,6 +58,7 @@
     "expo-store-review": "^8.1.5",
     "expo-superwall": "^0.2.0",
     "expo-system-ui": "~5.0.10",
+    "expo-video": "~2.2.2",
     "expo-web-browser": "~14.2.0",
     "lucide-react-native": "^0.511.0",
     "moti": "^0.30.0",
@@ -85,9 +94,7 @@
     "tailwind-merge": "^2.5.4",
     "tailwindcss": "^3.4.14",
     "wonka": "^6.3.5",
-    "zod": "^3.23.8",
-    "expo-contacts": "~14.2.5",
-    "expo-video": "~2.2.2"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

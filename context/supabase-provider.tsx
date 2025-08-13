@@ -12,7 +12,7 @@ type SupabaseContextProps = {
 	user: User | null;
 	session: Session | null;
 	initialized?: boolean;
-	signUp: (email: string, password: string) => Promise<void>;
+	signUp: (email: string, password: string) => Promise<any>;
 	signInWithPassword: (email: string, password: string) => Promise<void>;
 	signOut: () => Promise<void>;
 };
@@ -22,16 +22,19 @@ type SupabaseProviderProps = {
 };
 
 export const SupabaseContext = createContext<SupabaseContextProps>({
-	supabase: supabase,
+	supabase,
 	user: null,
 	session: null,
 	initialized: false,
-	signUp: async () => {},
+	signUp: async () => ({}),
 	signInWithPassword: async () => {},
 	signOut: async () => {},
 });
 
-export const useSupabase = () => useContext(SupabaseContext);
+export const useSupabase = () => {
+	const context = useContext(SupabaseContext);
+	return context;
+};
 
 export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 	const [user, setUser] = useState<User | null>(null);
