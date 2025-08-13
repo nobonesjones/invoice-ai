@@ -26,6 +26,11 @@ export const colors = {
     statusDraft: "#F39C12",
     gold: "#FFC107", // Added for Upgrade button
     goldContrastText: "#FFFFFF", // Changed to white for Upgrade button text/icon
+    // Toggle-specific colors for light mode (maintaining current behavior)
+    toggleThumbOff: "hsl(0, 0%, 100%)", // White thumb when toggle is OFF
+    toggleThumbOn: "#25D366", // Green thumb when toggle is ON
+    toggleTrackOff: "hsl(240, 4.8%, 95.9%)", // Light gray track when OFF
+    toggleTrackOn: "#25D36633", // Green transparent track when ON
   },
   dark: {
     background: "#000000", // True black background
@@ -34,12 +39,12 @@ export const colors = {
     cardForeground: "hsl(0, 0%, 98%)",
     popover: "#1C1C1E", // Dark gray for popovers
     popoverForeground: "hsl(0, 0%, 98%)",
-    primary: "hsl(0, 0%, 98%)", // Keeping dark mode primary as is (light button on dark bg)
-    primaryForeground: "hsl(240, 5.9%, 10%)", // Dark text on light button
-    primaryTransparent: "hsl(0, 0%, 98%)33", // Added
+    primary: "#25D366", // Changed to green for toggles ON state
+    primaryForeground: "#FFFFFF", // White text on green
+    primaryTransparent: "#25D36633", // Green transparent for toggle tracks ON
     secondary: "#1C1C1E", // Dark gray for secondary elements (tab bar, buttons)
     secondaryForeground: "hsl(0, 0%, 98%)",
-    muted: "#1C1C1E", // Dark gray for muted elements
+    muted: "#FFFFFF33", // White transparent for toggle tracks OFF
     mutedForeground: "hsl(240, 5%, 64.9%)",
     accent: "#1C1C1E", // Dark gray for accent elements
     accentForeground: "hsl(0, 0%, 98%)",
@@ -54,5 +59,10 @@ export const colors = {
     statusDraft: "#F39C12",
     gold: "#FFC107", // Added for Upgrade button
     goldContrastText: "#FFFFFF", // Changed to white for Upgrade button text/icon
+    // Toggle-specific colors for dark mode
+    toggleThumbOff: "#FFFFFF", // White thumb when toggle is OFF
+    toggleThumbOn: "#25D366", // Green thumb when toggle is ON
+    toggleTrackOff: "#FFFFFF33", // White transparent track when OFF
+    toggleTrackOn: "#25D36633", // Green transparent track when ON
   },
 };

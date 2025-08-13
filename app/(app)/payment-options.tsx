@@ -210,7 +210,7 @@ const getStyles = (theme: any) =>
     label: {
       fontSize: 16,
       fontWeight: 'bold',
-      color: '#000',
+      color: theme.foreground,
       marginRight: 8,
     },
     infoTextContainer: {

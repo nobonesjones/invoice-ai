@@ -3,6 +3,7 @@ import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 
 import { colors } from "@/constants/colors";
+import { useTheme } from "@/context/theme-provider";
 
 export interface Customer {
 	id: string;
@@ -27,7 +28,7 @@ const CustomerListItem: React.FC<CustomerListItemProps> = ({
 	customer,
 	onPress,
 }) => {
-	const theme = colors.light; // Or your theme context
+	const { theme } = useTheme();
 
 	const getInitials = (name: string) => {
 		return name
@@ -37,6 +38,8 @@ const CustomerListItem: React.FC<CustomerListItemProps> = ({
 			.substring(0, 2)
 			.toUpperCase();
 	};
+
+	const styles = getStyles(theme);
 
 	return (
 		<Pressable onPress={onPress} style={styles.pressableContainer}>
@@ -92,9 +95,9 @@ const CustomerListItem: React.FC<CustomerListItemProps> = ({
 	);
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
 	pressableContainer: {
-		// backgroundColor: colors.light.card, // If each item is a card itself
+		// backgroundColor: theme.card, // If each item is a card itself
 	},
 	container: {
 		flexDirection: "row",
@@ -126,12 +129,12 @@ const styles = StyleSheet.create({
 	customerName: {
 		fontSize: 18,
 		fontWeight: "bold",
-		color: colors.light.foreground,
+		color: theme.foreground,
 		marginBottom: 2, // Small space between name and activity
 	},
 	lastActivityText: {
 		fontSize: 14, // 14-16pt range
-		color: colors.light.mutedForeground,
+		color: theme.mutedForeground,
 	},
 	rightColumn: {
 		flexDirection: "row",
@@ -140,7 +143,7 @@ const styles = StyleSheet.create({
 	},
 	timeIndicator: {
 		fontSize: 12, // Smaller gray text
-		color: colors.light.mutedForeground,
+		color: theme.mutedForeground,
 		marginRight: 4,
 	},
 });

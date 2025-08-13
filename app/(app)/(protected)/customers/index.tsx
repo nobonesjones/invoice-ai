@@ -24,6 +24,7 @@ import CustomerListItem, { Customer } from "@/components/CustomerListItem";
 import { colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
+import { useTheme } from "@/context/theme-provider";
 
 export default function CustomersScreen() {
 	console.log("--- CustomersScreen Component Render ---");
@@ -32,7 +33,7 @@ export default function CustomersScreen() {
 		new Date().toISOString(),
 	);
 
-	const theme = colors.light;
+	const { theme } = useTheme();
 	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [searchTerm, setSearchTerm] = useState('');
 	const [loading, setLoading] = useState(true);
@@ -174,6 +175,8 @@ export default function CustomersScreen() {
 
 	const ItemSeparator = () => <View style={styles.divider} />;
 
+	const styles = getStyles(theme);
+
 	return (
 		<SafeAreaView style={styles.safeArea}>
 			<View style={styles.container}>
@@ -268,10 +271,10 @@ export default function CustomersScreen() {
 	);
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
 	safeArea: {
 		flex: 1,
-		backgroundColor: colors.light.background,
+		backgroundColor: theme.background,
 	},
 	container: {
 		flex: 1,
@@ -292,12 +295,12 @@ const styles = StyleSheet.create({
 	title: {
 		fontSize: 30,
 		fontWeight: "bold",
-		color: colors.light.foreground,
+		color: theme.foreground,
 	},
 	searchBarContainer: {
 		flexDirection: "row",
 		alignItems: "center",
-		backgroundColor: colors.light.input,
+		backgroundColor: theme.input,
 		borderRadius: 12,
 		paddingHorizontal: 12,
 		paddingVertical: Platform.OS === "ios" ? 12 : 10,
@@ -310,11 +313,11 @@ const styles = StyleSheet.create({
 	searchInput: {
 		flex: 1,
 		fontSize: 16,
-		color: colors.light.foreground,
+		color: theme.foreground,
 		height: Platform.OS === "ios" ? undefined : 24,
 	},
 	addClientButton: {
-		backgroundColor: colors.light.primary,
+		backgroundColor: theme.primary,
 		paddingHorizontal: 16,
 		paddingVertical: 8,
 		borderRadius: 20,
@@ -330,20 +333,20 @@ const styles = StyleSheet.create({
 	},
 	divider: {
 		height: 1,
-		backgroundColor: colors.light.border,
+		backgroundColor: theme.border,
 		marginHorizontal: 16,
 	},
 	emptyListText: {
 		textAlign: "center",
 		marginTop: 50,
 		fontSize: 16,
-		color: colors.light.mutedForeground,
+		color: theme.mutedForeground,
 	},
 	emptyListTextError: {
 		textAlign: "center",
 		marginTop: 50,
 		fontSize: 16,
-		color: colors.light.destructive,
+		color: theme.destructive,
 	},
   shineOverlay: { 
     ...StyleSheet.absoluteFillObject,
