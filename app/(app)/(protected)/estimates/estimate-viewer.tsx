@@ -499,7 +499,6 @@ function EstimateViewerScreen() {
         });
       } catch (error) {
         // Paywall failed, using fallback
-        const { router } = await import('expo-router');
         router.push('/subscription');
       }
       return;
@@ -585,7 +584,6 @@ function EstimateViewerScreen() {
         });
       } catch (error) {
         // Paywall failed, using fallback
-        const { router } = await import('expo-router');
         router.push('/subscription');
       }
       return;
@@ -637,7 +635,7 @@ function EstimateViewerScreen() {
         });
       } catch (error) {
         // Paywall failed, using fallback
-        const { router } = await import('expo-router');
+        router.push('/subscription');
       }
       return;
     }
