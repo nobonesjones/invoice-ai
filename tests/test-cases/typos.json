@@ -1,0 +1,10 @@
+{
+  "id": "typos",
+  "name": "Handle typos",
+  "input": "Crate an invioce for $100 for Jon Smith",
+  "expected": {
+    "client_name": "Jon Smith",
+    "amount": 100,
+    "function_called": "createInvoice"
+  }
+}

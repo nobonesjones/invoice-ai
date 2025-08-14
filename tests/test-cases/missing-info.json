@@ -1,0 +1,8 @@
+{
+  "id": "missing-info",
+  "name": "Handle missing information",
+  "input": "Create an invoice",
+  "expected": {
+    "asks_for_clarification": true
+  }
+}

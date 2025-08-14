@@ -1065,7 +1065,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
           {scaledFonts.bodyBold && (
             <>
           <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color="white" />
-          <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
+          <Text x={descX + 15} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
           <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color="white" />
           <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
             </>
@@ -1160,7 +1160,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
                 {/* Description - left aligned using Paragraph */}
                 <Paragraph 
                   paragraph={nameParagraph} 
-                  x={descX + 30} 
+                  x={descX + 15} 
                   y={rowY + textOffsetY - 2} 
                   width={160} 
                 />
@@ -1168,7 +1168,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
                 {/* Item description subtitle - smaller gray text */}
                 {item.item_description && (
                   <Text 
-                    x={descX + 30 + (item.item_name.length * 6)} 
+                    x={descX + 15 + (item.item_name.length * 6) + 2} 
                     y={rowY + textOffsetY + 5} 
                     text={` (${item.item_description})`} 
                     font={scaledFonts.tiny} 
@@ -1232,7 +1232,7 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
                   {/* Table header for this page */}
                   <Rect x={tableX + 15} y={pageHeaderY} width={tableWidth - 35} height={18} color={colors.greenAccent} />
                   <Text x={qtyX + 20} y={pageHeaderY + 13} text="QTY" font={scaledFonts.bodyBold} color="white" />
-                  <Text x={descX + 30} y={pageHeaderY + 13} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
+                  <Text x={descX + 15} y={pageHeaderY + 13} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
                   <Text x={priceX + 65} y={pageHeaderY + 13} text="PRICE" font={scaledFonts.bodyBold} color="white" />
                   <Text x={totalX + 62} y={pageHeaderY + 13} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
                   
@@ -1304,10 +1304,10 @@ const SkiaInvoiceCanvasClean = forwardRef((props: SkiaInvoiceCanvasProps, ref: a
                         )}
                         
                         <Paragraph paragraph={qtyParagraph} x={qtyX + 10} y={rowY + textOffsetY - 2} width={30} />
-                        <Paragraph paragraph={nameParagraph} x={descX + 30} y={rowY + textOffsetY - 2} width={160} />
+                        <Paragraph paragraph={nameParagraph} x={descX + 15} y={rowY + textOffsetY - 2} width={160} />
                         {item.item_description && (
                           <Text 
-                            x={descX + 30 + (item.item_name.length * 6)} 
+                            x={descX + 15 + (item.item_name.length * 6) + 2} 
                             y={rowY + textOffsetY + 5} 
                             text={` (${item.item_description})`} 
                             font={scaledFonts.tiny} 

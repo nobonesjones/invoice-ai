@@ -190,7 +190,7 @@ const SkiaInvoiceCanvasWorking = forwardRef((props: SkiaInvoiceCanvasWorkingProp
         {fonts.bodyBold && (
           <>
             <Text x={30} y={195} text="QTY" font={fonts.bodyBold} color="black" />
-            <Text x={70} y={195} text="DESCRIPTION" font={fonts.bodyBold} color="black" />
+            <Text x={55} y={195} text="DESCRIPTION" font={fonts.bodyBold} color="black" />
             <Text x={250} y={195} text="PRICE" font={fonts.bodyBold} color="black" />
             <Text x={300} y={195} text="TOTAL" font={fonts.bodyBold} color="black" />
           </>
@@ -210,7 +210,7 @@ const SkiaInvoiceCanvasWorking = forwardRef((props: SkiaInvoiceCanvasWorkingProp
                 color="black" 
               />
               <Text 
-                x={70} 
+                x={55} 
                 y={rowY} 
                 text={item.item_name || 'Service'} 
                 font={fonts.body} 

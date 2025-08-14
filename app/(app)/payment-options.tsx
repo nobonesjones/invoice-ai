@@ -1116,9 +1116,9 @@ export default function PaymentOptionsScreen() {
 
                 <View style={styles.importantStepsContainer}>
                   <Text style={styles.importantStepsTitle}>Important Steps</Text>
-                  <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: '#000000' }}>15 minutes</Text></Text>
-                  <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: '#000000' }}>daily or weekly</Text>, first one takes seven days.</Text>
-                  <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: '#000000' }}>most competitive</Text> in the world.</Text>
+                  <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: theme.foreground }}>15 minutes</Text></Text>
+                  <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: theme.foreground }}>daily or weekly</Text>, first one takes seven days.</Text>
+                  <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: theme.foreground }}>most competitive</Text> in the world.</Text>
                 </View>
 
                 {!isStripeEnabled && (

@@ -1,0 +1,11 @@
+{
+  "id": "create-invoice-basic",
+  "name": "Create basic invoice",
+  "input": "Create invoice for John Smith for $500 web design",
+  "expected": {
+    "client_name": "John Smith",
+    "amount": 500,
+    "service": "web design",
+    "function_called": "createInvoice"
+  }
+}

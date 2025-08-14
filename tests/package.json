@@ -1,0 +1,16 @@
+{
+  "name": "invoice-ai-tests",
+  "version": "1.0.0",
+  "description": "AI test suite for invoice assistant",
+  "main": "run-tests.js",
+  "scripts": {
+    "test": "node run-tests.js",
+    "test:single": "node run-single-test.js",
+    "get:jwt": "node get-jwt.js --email \"$TEST_EMAIL\" --password \"$TEST_PASSWORD\""
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5"
+  }
+}

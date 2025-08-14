@@ -1,0 +1,10 @@
+{
+  "id": "create-estimate",
+  "name": "Create estimate",
+  "input": "Create an estimate for kitchen renovation for $15000",
+  "expected": {
+    "service": "kitchen renovation",
+    "amount": 15000,
+    "function_called": "createEstimate"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "create-invoice-tax",
+  "name": "Create invoice with tax",
+  "input": "Make an invoice for ABC Company for $1000 consulting services with 10% tax",
+  "expected": {
+    "client_name": "ABC Company",
+    "amount": 1000,
+    "service": "consulting services",
+    "tax_percent": 10,
+    "total": 1100,
+    "function_called": "createInvoice"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "currency",
+  "name": "Handle different currencies",
+  "input": "Invoice Global Tech for £1500 for IT support",
+  "expected": {
+    "client_name": "Global Tech",
+    "amount": 1500,
+    "currency": "GBP",
+    "service": "IT support",
+    "function_called": "createInvoice"
+  }
+}

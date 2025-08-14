@@ -431,8 +431,11 @@
             error.style.display = 'none';
             viewer.style.display = 'block';
 
-            // Load PDF in iframe with zoom parameters for better mobile viewing
-            viewer.src = url + '#zoom=page-fit&view=FitV';
+            // Load via PDF.js viewer for consistent zooming across browsers
+            // Use page-width so the first page fits nicely on mobile and desktop
+            const pdfjsViewer = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/web/viewer.html';
+            const encoded = encodeURIComponent(url);
+            viewer.src = `${pdfjsViewer}?file=${encoded}#zoom=page-width`;
             
             // Store URL for download
             window.currentPDFUrl = url;

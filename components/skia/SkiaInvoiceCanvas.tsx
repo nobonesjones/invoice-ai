@@ -1155,7 +1155,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                 {/* Item description subtitle - smaller gray text */}
                 {item.item_description && (
                   <Text 
-                    x={descX + 30 + (item.item_name.length * 6)} 
+                    x={descX + 30 + (item.item_name.length * 6) + 2} 
                     y={rowY + textOffsetY + 3} 
                     text={` (${item.item_description})`} 
                     font={scaledFonts.tiny} 
@@ -1282,7 +1282,7 @@ const SkiaInvoiceCanvas = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) =
                         <Paragraph paragraph={nameParagraph} x={descX + 30} y={rowY + textOffsetY - 4} width={160} />
                         {item.item_description && (
                           <Text 
-                            x={descX + 30 + (item.item_name.length * 6)} 
+                            x={descX + 30 + (item.item_name.length * 6) + 2} 
                             y={rowY + textOffsetY + 3} 
                             text={` (${item.item_description})`} 
                             font={scaledFonts.tiny} 

@@ -1,0 +1,10 @@
+{
+  "id": "create-client",
+  "name": "Create new client",
+  "input": "Create a new client Sarah Johnson with email sarah@example.com",
+  "expected": {
+    "client_name": "Sarah Johnson",
+    "email": "sarah@example.com",
+    "function_called": "createClient"
+  }
+}

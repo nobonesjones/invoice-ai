@@ -111,7 +111,7 @@ class PaywallService {
   async isUserSubscribed(): Promise<boolean> {
     try {
       // Check database subscription status since RevenueCat is disabled
-      const { supabase } = await import('@/lib/supabase');
+      const { supabase } = await import('@/config/supabase');
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -136,7 +136,7 @@ class PaywallService {
         return false;
       }
 
-      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
+      const isSubscribed = ['premium', 'grandfathered'].includes(profile?.subscription_tier || '');
       // Database subscription check completed
       return isSubscribed;
     } catch (error) {

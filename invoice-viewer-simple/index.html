@@ -167,11 +167,23 @@
             margin-bottom: 1rem;
         }
 
-        #pdf-viewer {
+        /* PDF.js rendering container */
+        #pdf-renderer {
             width: 100%;
             height: 100%;
-            border: none;
             overflow: auto;
+            background: #fff;
+        }
+        .pdf-page {
+            display: flex;
+            justify-content: center;
+            background: #fff;
+            padding: 8px 0;
+        }
+        .pdf-page canvas {
+            width: 100%;
+            height: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
         /* Footer */
@@ -205,18 +217,23 @@
             }
 
             .action-bar {
-                justify-content: stretch;
-                flex-direction: column;
+                position: sticky;
+                top: 56px; /* below sticky header */
+                z-index: 50;
+                flex-direction: row;
+                justify-content: space-between;
                 gap: 0.5rem;
-                padding: 1rem;
+                padding: 0.4rem 0.5rem;
+                border-bottom: 1px solid #E5E7EB;
             }
 
             .action-button {
-                flex: 1;
+                flex: 0 0 auto;
                 justify-content: center;
-                width: 100%;
-                padding: 1rem;
-                font-size: 1.1rem;
+                width: auto;
+                min-width: 0;
+                padding: 0.4rem 0.6rem;
+                font-size: 0.9rem;
             }
 
             .main-container {
@@ -321,7 +338,7 @@
                 <p>The invoice could not be loaded. Please check the link and try again.</p>
                 <button class="action-button btn-primary" onclick="location.reload()">Retry</button>
             </div>
-            <iframe id="pdf-viewer" style="display: none;"></iframe>
+            <div id="pdf-renderer" style="display: none;"></div>
         </div>
     </main>
 
@@ -432,22 +449,73 @@
             }
         }
 
-        // Load PDF into viewer
-        function loadPDF(url) {
-            const viewer = document.getElementById('pdf-viewer');
+        // Load and render PDF using PDF.js (no external viewer.html)
+        async function loadPDF(url) {
+            const container = document.getElementById('pdf-renderer');
             const loading = document.getElementById('pdf-loading');
             const error = document.getElementById('pdf-error');
 
-            // Hide loading, show viewer
-            loading.style.display = 'none';
-            error.style.display = 'none';
-            viewer.style.display = 'block';
+            try {
+                // Configure worker
+                if (window['pdfjsLib']) {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                }
 
-            // Load PDF in iframe with zoom parameters for better mobile viewing
-            viewer.src = url + '#zoom=page-fit&view=FitV';
-            
-            // Store URL for download
-            window.currentPDFUrl = url;
+                // Fetch and render
+                const task = pdfjsLib.getDocument({ url });
+                const pdf = await task.promise;
+
+                // Clear old content
+                container.innerHTML = '';
+
+                // Compute target width from container
+                const containerWidth = container.clientWidth || container.offsetWidth || document.body.clientWidth;
+
+                const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const viewport = page.getViewport({ scale: 1 });
+                    const scale = Math.max(0.1, (containerWidth - 16) / viewport.width); // fit width, leave small padding
+                    const scaledViewport = page.getViewport({ scale });
+
+                    const pageWrapper = document.createElement('div');
+                    pageWrapper.className = 'pdf-page';
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    // Render at device pixel ratio for crisp output
+                    canvas.width = Math.floor(scaledViewport.width * dpr);
+                    canvas.height = Math.floor(scaledViewport.height * dpr);
+                    canvas.style.width = Math.floor(scaledViewport.width) + 'px';
+                    canvas.style.height = Math.floor(scaledViewport.height) + 'px';
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    pageWrapper.appendChild(canvas);
+                    container.appendChild(pageWrapper);
+
+                    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+                }
+
+                // Hide loading, show renderer
+                loading.style.display = 'none';
+                error.style.display = 'none';
+                container.style.display = 'block';
+
+                // Store URL for download/print
+                window.currentPDFUrl = url;
+
+                // Re-render on resize for better fit
+                let resizeTimeout;
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(() => loadPDF(url), 200);
+                }, { once: true });
+
+            } catch (e) {
+                console.error('PDF render failed:', e);
+                loading.style.display = 'none';
+                error.style.display = 'flex';
+            }
         }
 
         // Show error message

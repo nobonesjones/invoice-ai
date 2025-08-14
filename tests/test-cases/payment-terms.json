@@ -1,0 +1,12 @@
+{
+  "id": "payment-terms",
+  "name": "Invoice with payment terms",
+  "input": "Invoice Tech Corp for $2500 software development due in 30 days",
+  "expected": {
+    "client_name": "Tech Corp",
+    "amount": 2500,
+    "service": "software development",
+    "payment_terms": "Net 30",
+    "function_called": "createInvoice"
+  }
+}

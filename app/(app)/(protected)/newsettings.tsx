@@ -17,6 +17,8 @@ import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation'; // Import the hook
 import { usePaywall } from '@/context/paywall-provider';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
+import RevenueCatService from '@/services/revenueCatService';
+import { UsageService } from '@/services/usageService';
 import { usePlacement, useSuperwall } from 'expo-superwall';
 import UsageTrackingService, { UsageStats } from '@/services/usageTrackingService';
 
@@ -25,7 +27,7 @@ export default function NewSettingsScreen() {
   const { user, signOut } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { presentPaywall, isSubscribed, isLoading: paywallLoading } = usePaywall();
+  const { presentPaywall, isSubscribed, isLoading: paywallLoading, checkSubscriptionStatus } = usePaywall();
   const [searchTerm, setSearchTerm] = useState('');
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [isLoadingUsage, setIsLoadingUsage] = useState(true);
@@ -43,8 +45,19 @@ export default function NewSettingsScreen() {
         console.warn('Products failed to load in paywall');
       }
     },
-    onDismiss: (info, result) => {
-      // Paywall dismissed - no action needed
+    onDismiss: async (info, result) => {
+      try {
+        // After paywall closes, verify entitlement via RevenueCat (client-side)
+        // If subscribed, persist to DB so the rest of the app unlocks immediately
+        const subscribed = await RevenueCatService.isUserSubscribed();
+        if (subscribed && user?.id) {
+          await UsageService.updateSubscriptionTier(user.id, 'premium');
+          // Also refresh local paywall status
+          await checkSubscriptionStatus();
+        }
+      } catch (e) {
+        console.warn('[Settings] Post-paywall subscription check failed:', e);
+      }
     },
   });
   
@@ -62,9 +75,11 @@ export default function NewSettingsScreen() {
       setIsTabBarVisible(true);
       // Refresh usage stats when screen comes into focus
       loadUsageStats();
+      // Also re-check subscription status on focus to reflect upgrades instantly
+      checkSubscriptionStatus().catch(() => {});
       // Optional: Return a cleanup function if needed when the screen is unfocused
       // return () => setIsTabBarVisible(false); // Example: if this screen should hide it on unfocus
-    }, [setIsTabBarVisible, loadUsageStats])
+    }, [setIsTabBarVisible, loadUsageStats, checkSubscriptionStatus])
   );
 
   // Load usage stats function

@@ -1,0 +1,12 @@
+{
+  "id": "hourly-rate",
+  "name": "Invoice with hourly rate",
+  "input": "Bill 10 hours at $150 per hour for consulting",
+  "expected": {
+    "service": "consulting",
+    "quantity": 10,
+    "rate": 150,
+    "amount": 1500,
+    "function_called": "createInvoice"
+  }
+}

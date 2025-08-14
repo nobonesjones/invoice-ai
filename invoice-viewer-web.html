@@ -405,8 +405,10 @@
             error.style.display = 'none';
             viewer.style.display = 'block';
 
-            // Load PDF in iframe
-            viewer.src = url;
+            // Load via PDF.js viewer for consistent zooming across browsers
+            const pdfjsViewer = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/web/viewer.html';
+            const encoded = encodeURIComponent(url);
+            viewer.src = `${pdfjsViewer}?file=${encoded}#zoom=page-width`;
             
             // Store URL for download
             window.currentPDFUrl = url;

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useSupabase } from '@/context/supabase-provider';
 import PaywallService, { PaywallConfig } from '@/services/paywallService';
+import { supabase } from '@/config/supabase';
 
 interface PaywallContextType {
   isInitialized: boolean;
@@ -108,6 +109,29 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
       setIsLoading(false);
     }
   }, [user]);
+
+  // Realtime subscription to reflect upgrades immediately
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('user_profile_subscription_tier')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` },
+        (payload) => {
+          const row = (payload.new || payload.record) as any;
+          if (!row) return;
+          const subscribed = ['premium', 'grandfathered'].includes(row.subscription_tier || '');
+          setIsSubscribed(subscribed);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, [user?.id]);
 
   const value: PaywallContextType = {
     isInitialized,
