@@ -3,6 +3,7 @@ import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
 import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
 import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
+import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
 
 // Define the structure for invoice design templates
 export interface InvoiceDesign {
@@ -64,6 +65,14 @@ export const COLOR_SCHEMES = {
   creative: {
     primary: '#7C3AED', // Purple
     accent: '#8B5CF6',
+    text: '#1F2937',
+    mutedText: '#6B7280',
+    background: '#FFFFFF',
+    border: '#E5E7EB',
+  },
+  wave: {
+    primary: '#8B5CF6', // Purple gradient start
+    accent: '#7C3AED', // Purple gradient end
     text: '#1F2937',
     mutedText: '#6B7280',
     background: '#FFFFFF',
@@ -134,6 +143,20 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
     layoutConfig: {
       headerPosition: 'split',
       sectionsLayout: 'side-by-side',
+      spacing: 'normal',
+    },
+  },
+  {
+    id: 'wave',
+    name: 'wave',
+    displayName: 'Wave',
+    description: 'Modern curved wave header with purple gradient and rounded corners',
+    thumbnail: '/assets/invoice-designs/wave-thumb.png',
+    component: SkiaInvoiceCanvasWave,
+    colorScheme: COLOR_SCHEMES.wave,
+    layoutConfig: {
+      headerPosition: 'top',
+      sectionsLayout: 'standard',
       spacing: 'normal',
     },
   },

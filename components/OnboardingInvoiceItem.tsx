@@ -72,7 +72,6 @@ export const OnboardingInvoiceItem: React.FC<InvoiceItemProps> = ({
         {
           width: itemWidth,
           height: itemHeight,
-          borderRadius: 20,
           overflow: 'hidden',
           // Beautiful drop shadow
           ...Platform.select({
@@ -95,7 +94,7 @@ export const OnboardingInvoiceItem: React.FC<InvoiceItemProps> = ({
       <Image
         source={item.imageSource}
         style={styles.image}
-        resizeMode="cover"
+        resizeMode="contain"
       />
     </Animated.View>
   );

@@ -73,6 +73,7 @@ import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
 import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
 import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
 import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
+import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
 import { useCanvasRef } from '@shopify/react-native-skia';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
@@ -1040,6 +1041,9 @@ function InvoiceViewerScreen() {
       case 'simple':
         // Using SkiaInvoiceCanvasSimple
         return SkiaInvoiceCanvasSimple;
+      case 'wave':
+        // Using SkiaInvoiceCanvasWave
+        return SkiaInvoiceCanvasWave;
       case 'classic':
       default:
         // Using SkiaInvoiceCanvas (classic)

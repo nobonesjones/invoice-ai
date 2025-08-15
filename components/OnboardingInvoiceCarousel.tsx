@@ -225,6 +225,28 @@ export const OnboardingInvoiceCarousel = () => {
           resizeMode="cover"
         />
       </View>
+      
+      {/* Enhanced accent color hue overlay */}
+      <View style={[StyleSheet.absoluteFillObject, { opacity: 0.15 }]}>
+        <Animated.View
+          entering={FadeIn.duration(1000)}
+          exiting={FadeOut.duration(1000)}
+          key={`accent-${sampleInvoices[activeImage].id}`}
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: sampleInvoices[activeImage].accentColor }
+          ]}
+        />
+      </View>
+      
+      {/* Gradient blend overlay to soften carousel boundaries */}
+      <LinearGradient
+        colors={['rgba(254, 253, 251, 0.7)', 'rgba(254, 253, 251, 0.2)', 'rgba(254, 253, 251, 0.05)', 'rgba(254, 253, 251, 0.4)', 'rgba(254, 253, 251, 0.9)']}
+        locations={[0, 0.25, 0.5, 0.75, 1]}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      />
 
       {/* Marquee carousel */}
       <View style={styles.marqueeContainer}>
@@ -270,7 +292,7 @@ const styles = StyleSheet.create({
     height: ITEM_HEIGHT + 100, // Extra space for rotation
     justifyContent: 'center',
     alignItems: 'center',
-    transform: [{ translateY: 60 }], // Move carousel down by 60 pixels
+    transform: [{ translateY: 80 }], // Move carousel down from top
   },
   scrollContent: {
     paddingHorizontal: (screenWidth - ITEM_WIDTH) / 2,

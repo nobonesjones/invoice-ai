@@ -23,6 +23,7 @@ import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWor
 import SkiaInvoiceCanvasModern from "@/components/skia/SkiaInvoiceCanvasModern";
 import SkiaInvoiceCanvasClean from "@/components/skia/SkiaInvoiceCanvasClean";
 import SkiaInvoiceCanvasSimple from "@/components/skia/SkiaInvoiceCanvasSimple";
+import SkiaInvoiceCanvasWave from "@/components/skia/SkiaInvoiceCanvasWave";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -62,6 +63,9 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 			case 'simple':
 				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasSimple');
 				return SkiaInvoiceCanvasSimple;
+			case 'wave':
+				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvasWave');
+				return SkiaInvoiceCanvasWave;
 			case 'classic':
 			default:
 				// console.log('[AI EstimatePreview] Using SkiaInvoiceCanvas (classic)');
@@ -539,6 +543,9 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			case 'simple':
 				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasSimple');
 				return SkiaInvoiceCanvasSimple;
+			case 'wave':
+				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvasWave');
+				return SkiaInvoiceCanvasWave;
 			case 'classic':
 			default:
 				// console.log('[AI InvoicePreview] Using SkiaInvoiceCanvas (classic)');

@@ -11,7 +11,8 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#f0f9ff',
     accentColor: '#0ea5e9',
-    imageSource: require('../assets/onboarding/largeversiononinv1.png'),
+    imageSource: require('../assets/onboarding/final/invoice_1.png'),
+    template: 'clean'
   },
   {
     id: '2',
@@ -25,7 +26,8 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#fef3c7',
     accentColor: '#f59e0b',
-    imageSource: require('../assets/onboarding/Untitled design (17).png'),
+    imageSource: require('../assets/onboarding/final/Invoice_2.png'),
+    template: 'modern'
   },
   {
     id: '3',
@@ -39,7 +41,8 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#fef2f2',
     accentColor: '#ef4444',
-    imageSource: require('../assets/onboarding/Untitled design (18).png'),
+    imageSource: require('../assets/onboarding/final/invoice_3.png'),
+    template: 'simple'
   },
   {
     id: '4',
@@ -53,7 +56,8 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#f0fdf4',
     accentColor: '#22c55e',
-    imageSource: require('../assets/onboarding/Untitled design (19).png'),
+    imageSource: require('../assets/onboarding/final/Invoice_4.png'),
+    template: 'classic'
   },
   {
     id: '5',
@@ -66,7 +70,40 @@ export const sampleInvoices = [
       { name: 'Training Sessions', quantity: 1, price: '$1,250.00' },
     ],
     backgroundColor: '#faf5ff',
-    accentColor: '#a855f7',
-    imageSource: require('../assets/onboarding/Untitled design (20).png'),
+    accentColor: '#8B5CF6',
+    imageSource: require('../assets/onboarding/final/Invoice_5.png'),
+    template: 'wave'
+  },
+  {
+    id: '6',
+    clientName: 'Global Enterprises',
+    amount: '$6,600.00',
+    dueDate: '2024-03-10',
+    status: 'paid' as const,
+    items: [
+      { name: 'Event Catering', quantity: 1, price: '$1,000.00' },
+      { name: 'Full Event Bar', quantity: 1, price: '$2,500.00' },
+      { name: 'Staff', quantity: 2, price: '$1,000.00' },
+    ],
+    backgroundColor: '#eff6ff',
+    accentColor: '#3b82f6',
+    imageSource: require('../assets/onboarding/final/Invoice_6.png'),
+    template: 'wave'
+  },
+  {
+    id: '7',
+    clientName: 'Design Studio',
+    amount: '$3,890.00',
+    dueDate: '2024-03-15',
+    status: 'pending' as const,
+    items: [
+      { name: 'UI/UX Design', quantity: 1, price: '$2,500.00' },
+      { name: 'Prototyping', quantity: 1, price: '$890.00' },
+      { name: 'User Research', quantity: 1, price: '$500.00' },
+    ],
+    backgroundColor: '#f0fdf4',
+    accentColor: '#059669',
+    imageSource: require('../assets/onboarding/final/Invoice_7.png'),
+    template: 'clean'
   },
 ]; 
