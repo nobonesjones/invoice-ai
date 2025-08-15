@@ -86,11 +86,27 @@ export class ChatService {
     statusCallback?: (status: string) => void
   ): Promise<{ conversation?: ChatConversation; thread?: any; messages: any[] }> {
     try {
-      // For now, always use Chat Completions via edge function
-      // AssistantService needs to be updated to use edge functions
-      return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
+      // Check if user should use the new Assistants API (optimized system)
+      console.log('[ChatService] 🔍 Checking which AI system to use...');
+      const useAssistants = await this.shouldUseAssistants(userId);
+      console.log('[ChatService] 🎯 shouldUseAssistants result:', useAssistants);
+      
+      if (useAssistants) {
+        console.log('[ChatService] ✅ Using optimized Assistants API system');
+        try {
+          const result = await this.processWithAssistants(userId, userMessage, userContext, statusCallback);
+          console.log('[ChatService] ✅ Assistants API completed successfully');
+          return result;
+        } catch (assistantError) {
+          console.error('[ChatService] ❌ Assistants API failed, falling back to Chat Completions:', assistantError);
+          return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
+        }
+      } else {
+        console.log('[ChatService] ⚠️ Using legacy Chat Completions system');
+        return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
+      }
     } catch (error) {
-      console.error('[ChatService] Error processing message:', error);
+      console.error('[ChatService] ❌ Error processing message:', error);
       throw error;
     }
   }
@@ -117,9 +133,25 @@ export class ChatService {
 
       statusCallback?.('SuperAI is finalizing response...');
 
-      // Get updated messages for UI
-      const messages = await AssistantService.getThreadMessages(userId);
-      const thread = await AssistantService.getCurrentThread(userId);
+      // Use messages directly from optimized response, and persist for history
+      console.log('[ChatService] 🔍 Using optimized response messages directly');
+      let messages = result.messages || [];
+      let thread = result.thread || { id: `thread-${Date.now()}`, user_id: userId };
+
+      try {
+        const savedThread = await AssistantService.persistOptimizedResult(userId, thread, messages);
+        if (savedThread) thread = savedThread;
+      } catch (e) {
+        console.warn('[ChatService] Persist optimized result failed:', e);
+      }
+      
+      console.log('[ChatService] 🔍 Direct messages from optimized response:', {
+        messagesCount: messages?.length || 0,
+        threadId: thread?.id,
+        firstMessage: messages?.[0],
+        hasResultMessages: !!result.messages,
+        hasResultThread: !!result.thread
+      });
 
 
       return {
@@ -127,15 +159,13 @@ export class ChatService {
         messages: messages.map(msg => {
           const mappedMessage = {
             id: msg.id,
-            conversation_id: msg.thread_id, // Map for UI compatibility
+            conversation_id: thread?.id, // Use persisted DB thread id for UI
             role: msg.role,
             content: msg.content,
             message_type: 'text',
             attachments: msg.attachments,
             created_at: msg.created_at
           };
-          
-          
           return mappedMessage;
         })
       };

@@ -132,6 +132,13 @@ export function useAIChat(): UseAIChatReturn {
       if (result.thread) {
         // Assistants API result
         console.log('[useAIChat] Received Assistants API result');
+        console.log('[useAIChat] 🔍 About to setMessages with:', {
+          isArray: Array.isArray(result.messages),
+          length: result.messages?.length,
+          type: typeof result.messages,
+          firstItem: result.messages?.[0],
+          rawMessages: result.messages
+        });
         setThread(result.thread);
         setMessages(result.messages); // This will replace the optimistic message with real ones
         setIsUsingAssistants(true);

@@ -574,7 +574,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${client?.tax_number ? `${business?.tax_name || 'Tax'}: ${client.tax_number}` : ''}`)
+      .addText(client?.tax_number ? `${business?.tax_name || 'Tax'}: ${client.tax_number}` : '')
       .build();
 
       // From section paragraphs
@@ -599,7 +599,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 16, // Made bigger for prominence in header
         fontStyle: { weight: 700 }
       })
-      .addText(`${displaySettings.show_business_name ? (business?.business_name || 'Hello mate') : ''}`)
+      .addText(displaySettings.show_business_name ? (business?.business_name || 'Hello mate') : '')
       .build();
 
       // Business address for header - single line, same width as INVOICE, smaller text
@@ -612,7 +612,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 8, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.replace(/\n/g, ', ') : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? business.business_address.replace(/\n/g, ', ') : '')
       .build();
 
       const businessAddress1Paragraph = Skia.ParagraphBuilder.Make({
@@ -624,7 +624,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[0] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[0] || '') : '')
       .build();
 
       const businessAddress2Paragraph = Skia.ParagraphBuilder.Make({
@@ -636,7 +636,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[1] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[1] || '') : '')
       .build();
 
       const businessAddress3Paragraph = Skia.ParagraphBuilder.Make({
@@ -648,7 +648,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[2] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[2] || '') : '')
       .build();
 
       const businessAddress4Paragraph = Skia.ParagraphBuilder.Make({
@@ -660,7 +660,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[3] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[3] || '') : '')
       .build();
 
       const businessTaxNumberParagraph = Skia.ParagraphBuilder.Make({
@@ -672,7 +672,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_tax_number && business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : ''}`)
+      .addText(displaySettings.show_business_tax_number && business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : '')
       .build();
 
       // Totals paragraphs - separate labels and values for better spacing
@@ -1201,7 +1201,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
                   <Text 
                     x={descX + 15 + (item.item_name.length * 6) + 2} 
                     y={rowY + textOffsetY + 5} 
-                    text={` (${item.item_description})`} 
+                    text={item.item_description ? ` (${item.item_description})` : ''} 
                     font={scaledFonts.tiny} 
                     color="#999" 
                   />
@@ -1357,7 +1357,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
                           <Text 
                             x={descX + 15 + (item.item_name.length * 6) + 2} 
                             y={rowY + textOffsetY + 5} 
-                            text={` (${item.item_description})`} 
+                            text={item.item_description ? ` (${item.item_description})` : ''} 
                             font={scaledFonts.tiny} 
                             color="#999" 
                           />
@@ -1369,7 +1369,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
                   })}
                   
                   {/* Page number */}
-                  <Text x={canvasWidth - 65} y={pageYOffset + canvasHeight - 35} text={`Page ${currentPage}`} font={scaledFonts.bodyBold} color="black" />
+                  <Text x={canvasWidth - 65} y={pageYOffset + canvasHeight - 35} text={`Page ${currentPage || 1}`} font={scaledFonts.bodyBold} color="black" />
                 </React.Fragment>
               );
               

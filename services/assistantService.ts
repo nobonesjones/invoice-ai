@@ -33,6 +33,9 @@ export interface AssistantRunResult {
     completion_tokens: number;
     total_tokens: number;
   };
+  // Add missing properties for optimized response
+  messages?: any[];
+  thread?: any;
 }
 
 export class AssistantService {
@@ -40,6 +43,9 @@ export class AssistantService {
   private static isInitialized = false;
   private static assistantPromise: Promise<string> | null = null; // Cache the initialization promise
   private static FORCE_RECREATE = false; // Set to true only when debugging assistant setup
+  
+  // Feature flag for optimized AI endpoint
+  private static USE_OPTIMIZED_AI = true; // Set to false to use original endpoint
 
   // Edge function helper for AI requests
   private static async callAIChatEdgeFunction(payload: {
@@ -52,7 +58,24 @@ export class AssistantService {
     runId?: string;
   }): Promise<any> {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/functions/v1/ai-chat`, {
+      // Add timeout + single retry for transient RN network timeouts
+      const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs: number) => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          // @ts-ignore - RN fetch supports signal in modern polyfills
+          return await fetch(url, { ...init, signal: (controller as any).signal });
+        } finally {
+          clearTimeout(id);
+        }
+      };
+      
+      // Use optimized or original endpoint based on feature flag
+      const endpoint = this.USE_OPTIMIZED_AI ? 'ai-chat-optimized' : 'ai-chat';
+      console.log(`[AssistantService] Using ${endpoint} endpoint`);
+      
+      const url = `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/${endpoint}`;
+      const init: RequestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,7 +83,16 @@ export class AssistantService {
           'apikey': process.env.EXPO_PUBLIC_ANON_KEY!,
         },
         body: JSON.stringify(payload),
-      });
+      };
+
+      let response: Response | null = null;
+      try {
+        response = await fetchWithTimeout(url, init, 25000); // 25s client budget
+      } catch (e: any) {
+        console.warn('[AssistantService] First call timed out, retrying once...');
+        await new Promise(r => setTimeout(r, 400));
+        response = await fetchWithTimeout(url, init, 25000);
+      }
 
       if (!response.ok) {
         const errorData = await response.text();
@@ -68,13 +100,94 @@ export class AssistantService {
         throw new Error(`AI request failed: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // CRITICAL DEBUG - This MUST appear in logs!
+      console.log('[AssistantService] 🚨 CRITICAL DEBUG - JSON PARSED!');
+      console.log('[AssistantService] 🔍 RAW JSON result:', {
+        messagesIsArray: Array.isArray(result.messages),
+        messagesType: typeof result.messages,
+        messagesLength: result.messages?.length,
+        rawResult: result.messages
+      });
+      
+      // Log optimization metrics if using optimized endpoint
+      if (this.USE_OPTIMIZED_AI && result.optimization) {
+        console.log('[AssistantService] 🚀 Optimization Metrics:', {
+          promptReduction: result.optimization.promptReduction,
+          toolReduction: result.optimization.toolReduction,
+          originalPrompt: result.optimization.originalPromptSize,
+          optimizedPrompt: result.optimization.optimizedPromptSize,
+          model: result.optimization.model,
+        });
+      }
+      
+      // Debug: Log the exact result structure
+      console.log('[AssistantService] 🔍 Response structure:', {
+        hasThread: !!result.thread,
+        hasMessages: !!result.messages,
+        messagesLength: result.messages?.length || 0,
+        hasConversation: !!result.conversation,
+        responseKeys: Object.keys(result),
+        firstMessage: result.messages?.[0],
+        messagesType: typeof result.messages
+      });
+      
+      // Debug: Show what we're actually returning
+      console.log('[AssistantService] 🔍 RETURNING to ChatService:', {
+        resultKeys: Object.keys(result),
+        hasMessages: !!result.messages,
+        hasThread: !!result.thread,
+        resultType: typeof result
+      });
+      
+      return result;
     } catch (error) {
       console.error('[AssistantService] Edge function request failed:', error);
       throw error;
     }
   }
 
+  // Persist optimized edge-function results into DB so UI can load history
+  static async persistOptimizedResult(userId: string, thread: { id: string }, messages: any[]): Promise<AssistantThread | null> {
+    try {
+      // Deactivate existing threads
+      await supabase
+        .from('chat_threads')
+        .update({ is_active: false })
+        .eq('user_id', userId);
+
+      // Create a new thread row
+      const { data: newThread, error: threadErr } = await supabase
+        .from('chat_threads')
+        .insert({
+          user_id: userId,
+          openai_thread_id: thread?.id || `optimized-${Date.now()}`,
+          title: 'New Chat',
+          is_active: true,
+          metadata: { optimized: true }
+        })
+        .select()
+        .single();
+
+      if (threadErr || !newThread) return null;
+
+      // Insert messages for display
+      const rows = (messages || []).map(m => ({
+        thread_id: newThread.id,
+        role: m.role,
+        content: m.content,
+        attachments: m.attachments || []
+      }));
+      if (rows.length > 0) {
+        await supabase.from('chat_message_display').insert(rows);
+      }
+
+      return newThread as any;
+    } catch {
+      return null;
+    }
+  }
   // Initialize the assistant (create or get existing)
   static async initialize(): Promise<void> {
     if (this.isInitialized) return;
@@ -985,6 +1098,47 @@ Use tools to take action. Reference previous conversation naturally.`;
     try {
       statusCallback?.('SuperAI is initializing...');
       
+      // Use optimized edge function if enabled
+      if (this.USE_OPTIMIZED_AI) {
+        statusCallback?.('SuperAI is processing your message...');
+        
+        const result = await this.callAIChatEdgeFunction({
+          type: 'assistant',
+          action: 'send_message',
+          message,
+          userId,
+          userContext
+        });
+
+        if (!result.success) {
+          throw new Error(result.error || 'AI request failed');
+        }
+
+        // Pass through messages/thread and ensure thread_id is present on each message
+        const threadId = result.thread?.id;
+        const messages = Array.isArray(result.messages)
+          ? result.messages.map((m: any) => ({ ...m, thread_id: m.thread_id || threadId }))
+          : [];
+
+        // Prefer attachments from the assistant message if present
+        const assistantMsg = messages.find((m: any) => m.role === 'assistant');
+        const attachments = assistantMsg?.attachments || [];
+
+        const assistantResult: AssistantRunResult = {
+          content: result.content || result.message || 'Response received',
+          attachments,
+          status: 'completed',
+          usage: result.usage,
+          messages,
+          thread: result.thread
+        };
+
+        return assistantResult;
+      }
+
+      // Fallback to original implementation
+      statusCallback?.('SuperAI is connecting...');
+      
       // Ensure assistant is initialized
       await this.initialize();
 
@@ -1107,6 +1261,11 @@ Use tools to take action. Reference previous conversation naturally.`;
       return result;
     } catch (error) {
       // Error in sendMessage
+      
+      // If optimized AI fails, bubble up and let ChatService fallback to Chat Completions
+      if (this.USE_OPTIMIZED_AI && error instanceof Error) {
+        console.warn('[AssistantService] Optimized AI failed:', error.message);
+      }
       
       // If it's the "active run" error, try creating a new thread
       if (error instanceof Error && error.message.includes('while a run') && error.message.includes('is active')) {
