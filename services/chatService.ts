@@ -34,8 +34,7 @@ export interface ChatConversation {
 export class ChatService {
   // Feature flag for Assistants API
   private static async shouldUseAssistants(userId: string): Promise<boolean> {
-    // For now, enable for all users. Later you can add user-specific logic
-    // or environment variables for gradual rollout
+    // Enable the optimized V2 system
     const shouldUse = true;
     return shouldUse;
     
@@ -98,8 +97,8 @@ export class ChatService {
           console.log('[ChatService] ✅ Assistants API completed successfully');
           return result;
         } catch (assistantError) {
-          console.error('[ChatService] ❌ Assistants API failed, falling back to Chat Completions:', assistantError);
-          return await this.processWithChatCompletions(userId, userMessage, userContext, statusCallback);
+          console.error('[ChatService] ❌ Assistants API failed:', assistantError);
+          throw assistantError; // No fallback - throw the error to debug the optimized system
         }
       } else {
         console.log('[ChatService] ⚠️ Using legacy Chat Completions system');
@@ -128,15 +127,29 @@ export class ChatService {
 
       statusCallback?.('SuperAI is preparing...');
 
+      // Reuse existing active thread if available
+      const existingThread = await AssistantService.getCurrentThread(userId);
+
+      // Prepare up to 15 previous messages for context (user/assistant only)
+      let history: { role: 'user' | 'assistant'; content: string }[] | undefined = undefined;
+      try {
+        const threadMessages = await AssistantService.getThreadMessages(userId);
+        const mapped = (threadMessages || [])
+          .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: String(m.content || '') }))
+          .filter(m => m.role === 'user' || m.role === 'assistant');
+        // Keep last 15 in chronological order
+        history = mapped.slice(-15);
+      } catch {}
+
       // Send message via Assistants API with user context and status updates
-      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, userContext, statusCallback);
+      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, userContext, statusCallback, existingThread?.id, history);
 
       statusCallback?.('SuperAI is finalizing response...');
 
       // Use messages directly from optimized response, and persist for history
       console.log('[ChatService] 🔍 Using optimized response messages directly');
       let messages = result.messages || [];
-      let thread = result.thread || { id: `thread-${Date.now()}`, user_id: userId };
+      let thread = result.thread || existingThread || { id: `thread-${Date.now()}`, user_id: userId };
 
       try {
         const savedThread = await AssistantService.persistOptimizedResult(userId, thread, messages);
@@ -145,29 +158,27 @@ export class ChatService {
         console.warn('[ChatService] Persist optimized result failed:', e);
       }
       
-      console.log('[ChatService] 🔍 Direct messages from optimized response:', {
-        messagesCount: messages?.length || 0,
-        threadId: thread?.id,
-        firstMessage: messages?.[0],
-        hasResultMessages: !!result.messages,
-        hasResultThread: !!result.thread
-      });
-
+      // Load full history for this thread from DB
+      let fullHistory: any[] = [];
+      try {
+        const all = await AssistantService.getThreadMessages(userId);
+        fullHistory = all || [];
+      } catch (e) {
+        console.warn('[ChatService] Failed to load full history, falling back to current messages:', e);
+        fullHistory = messages.map(m => ({ ...m, thread_id: thread?.id }));
+      }
 
       return {
         thread,
-        messages: messages.map(msg => {
-          const mappedMessage = {
-            id: msg.id,
-            conversation_id: thread?.id, // Use persisted DB thread id for UI
-            role: msg.role,
-            content: msg.content,
-            message_type: 'text',
-            attachments: msg.attachments,
-            created_at: msg.created_at
-          };
-          return mappedMessage;
-        })
+        messages: fullHistory.map(msg => ({
+          id: msg.id,
+          conversation_id: msg.thread_id || thread?.id,
+          role: msg.role,
+          content: msg.content,
+          message_type: (msg.attachments && msg.attachments.length > 0) ? 'document' : 'text',
+          attachments: msg.attachments,
+          created_at: msg.created_at
+        }))
       };
     } catch (error) {
       console.error('[ChatService] Assistants API error:', error);

@@ -55,6 +55,7 @@ export class AssistantService {
     threadId?: string;
     userId?: string;
     userContext?: any;
+    history?: { role: 'user' | 'assistant'; content: string }[];
     runId?: string;
   }): Promise<any> {
     try {
@@ -151,30 +152,36 @@ export class AssistantService {
   // Persist optimized edge-function results into DB so UI can load history
   static async persistOptimizedResult(userId: string, thread: { id: string }, messages: any[]): Promise<AssistantThread | null> {
     try {
-      // Deactivate existing threads
-      await supabase
+      // Reuse existing active thread if present; otherwise create one
+      const { data: activeThread } = await supabase
         .from('chat_threads')
-        .update({ is_active: false })
-        .eq('user_id', userId);
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      // Create a new thread row
-      const { data: newThread, error: threadErr } = await supabase
-        .from('chat_threads')
-        .insert({
-          user_id: userId,
-          openai_thread_id: thread?.id || `optimized-${Date.now()}`,
-          title: 'New Chat',
-          is_active: true,
-          metadata: { optimized: true }
-        })
-        .select()
-        .single();
+      let dbThread = activeThread;
+      if (!dbThread) {
+        const { data: newThread, error: threadErr } = await supabase
+          .from('chat_threads')
+          .insert({
+            user_id: userId,
+            openai_thread_id: thread?.id || `optimized-${Date.now()}`,
+            title: 'New Chat',
+            is_active: true,
+            metadata: { optimized: true }
+          })
+          .select()
+          .single();
+        if (threadErr || !newThread) return null;
+        dbThread = newThread;
+      }
 
-      if (threadErr || !newThread) return null;
-
-      // Insert messages for display
+      // Insert messages for display (append only)
       const rows = (messages || []).map(m => ({
-        thread_id: newThread.id,
+        thread_id: dbThread.id,
         role: m.role,
         content: m.content,
         attachments: m.attachments || []
@@ -183,7 +190,13 @@ export class AssistantService {
         await supabase.from('chat_message_display').insert(rows);
       }
 
-      return newThread as any;
+      // Touch thread updated_at
+      await supabase
+        .from('chat_threads')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', dbThread.id);
+
+      return dbThread as any;
     } catch {
       return null;
     }
@@ -1094,7 +1107,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   }
 
   // Send message and get response
-  static async sendMessage(userId: string, message: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }, statusCallback?: (status: string) => void): Promise<AssistantRunResult> {
+  static async sendMessage(userId: string, message: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }, statusCallback?: (status: string) => void, currentThreadId?: string, history?: { role: 'user' | 'assistant'; content: string }[]): Promise<AssistantRunResult> {
     try {
       statusCallback?.('SuperAI is initializing...');
       
@@ -1107,7 +1120,9 @@ Use tools to take action. Reference previous conversation naturally.`;
           action: 'send_message',
           message,
           userId,
-          userContext
+          userContext,
+          threadId: currentThreadId,
+          history
         });
 
         if (!result.success) {

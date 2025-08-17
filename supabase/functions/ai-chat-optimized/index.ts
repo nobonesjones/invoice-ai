@@ -37,6 +37,16 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Simple validator class to fix missing function error
+class ContextAwareValidator {
+  static validateUserId(userId: string): { isValid: boolean; error?: string } {
+    if (!userId || typeof userId !== 'string') {
+      return { isValid: false, error: 'User ID is required and must be a string' };
+    }
+    return { isValid: true };
+  }
+}
+
 // Function result interface
 interface FunctionResult {
   success: boolean;
@@ -73,6 +83,10 @@ class InvoiceFunctionService {
           return await this.getRecentInvoices({ limit: 1 }, userId);
         case 'regenerate_invoice_with_updates':
           return await this.regenerateInvoiceWithUpdates(parameters, userId);
+        case 'setup_paypal_payments':
+          return await this.setupPaypalPayments(parameters, userId);
+        case 'get_payment_options':
+          return await this.getPaymentOptions(parameters, userId);
         // Add more cases as needed for the dynamic tool selection
         default:
           return {
@@ -506,7 +520,7 @@ Would you like me to help you send this invoice or make any changes?`;
         name: params.name,
         email: params.email || null,
         phone: params.phone || null,
-        address: params.address || null,
+        address_client: params.address || null,
         created_at: new Date().toISOString()
       };
 
@@ -563,6 +577,213 @@ Would you like me to help you send this invoice or make any changes?`;
       data: { invoice_id: params.invoice_number }
     };
   }
+
+  private static async getPaymentOptions(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log(`[Optimized] Getting payment options for user ${userId}`);
+
+      const { data: paymentOptions, error } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[Optimized] Error fetching payment options:', error);
+        return {
+          success: false,
+          message: `Failed to get payment options: ${error.message}`,
+          error: error.message
+        };
+      }
+
+      // If no payment options exist, return defaults
+      if (!paymentOptions) {
+        return {
+          success: true,
+          data: {
+            paypal_enabled: false,
+            stripe_enabled: false,
+            bank_transfer_enabled: false,
+            paypal_email: null
+          },
+          message: "No payment options configured yet."
+        };
+      }
+
+      return {
+        success: true,
+        data: paymentOptions,
+        message: `Payment options retrieved: PayPal ${paymentOptions.paypal_enabled ? 'enabled' : 'disabled'}, Stripe ${paymentOptions.stripe_enabled ? 'enabled' : 'disabled'}, Bank Transfer ${paymentOptions.bank_transfer_enabled ? 'enabled' : 'disabled'}`
+      };
+
+    } catch (error) {
+      console.error('[Optimized] Error getting payment options:', error);
+      return {
+        success: false,
+        message: `Failed to get payment options: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  private static async setupPaypalPayments(params: any, userId: string): Promise<FunctionResult> {
+    try {
+      console.log(`[Optimized] Setting up PayPal for user ${userId}:`, params);
+
+      const paypalEmail = params.paypal_email;
+      if (!paypalEmail) {
+        return {
+          success: false,
+          message: "PayPal email is required to set up PayPal payments",
+          error: "missing_paypal_email"
+        };
+      }
+
+      // Step 1: Enable PayPal globally in payment_options
+      let paymentOptions;
+      const { data: existingOptions } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existingOptions) {
+        // Update existing payment options
+        const { data, error } = await supabase
+          .from('payment_options')
+          .update({
+            paypal_enabled: true,
+            paypal_email: paypalEmail,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        paymentOptions = data;
+      } else {
+        // Create new payment options
+        const { data, error } = await supabase
+          .from('payment_options')
+          .insert({
+            user_id: userId,
+            paypal_enabled: true,
+            paypal_email: paypalEmail,
+            stripe_enabled: false,
+            bank_transfer_enabled: false,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        paymentOptions = data;
+      }
+
+      // Step 2: ALWAYS find and update a recent invoice - this is essential for User Satisfaction Principle
+      let updatedInvoice = null;
+      
+      // First try: if specific invoice_number provided
+      if (params.invoice_number) {
+        console.log(`[PayPal] Trying to update specific invoice: ${params.invoice_number}`);
+        const { data: invoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .update({
+            paypal_active: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('invoice_number', params.invoice_number)
+          .select()
+          .single();
+
+        if (invoiceError) {
+          console.warn('[PayPal] Could not update specific invoice:', invoiceError);
+        } else {
+          updatedInvoice = invoice;
+          console.log('[PayPal] Successfully updated specific invoice');
+        }
+      }
+      
+      // Second try: if no specific invoice OR first try failed, get most recent invoice
+      if (!updatedInvoice) {
+        console.log('[PayPal] Finding most recent invoice to update...');
+        const recentResult = await this.getRecentInvoices({ limit: 1 }, userId);
+        console.log('[PayPal] Recent invoices result:', recentResult);
+        
+        if (recentResult.success && recentResult.data?.invoices?.length > 0) {
+          const recentInvoice = recentResult.data.invoices[0];
+          console.log(`[PayPal] Updating recent invoice ID: ${recentInvoice.id}, Number: ${recentInvoice.invoice_number}`);
+          
+          const { data: invoice, error: invoiceError } = await supabase
+            .from('invoices')
+            .update({
+              paypal_active: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', recentInvoice.id)
+            .select(`
+              *,
+              invoice_line_items(*)
+            `)
+            .single();
+
+          if (invoiceError) {
+            console.error('[PayPal] Error updating recent invoice:', invoiceError);
+          } else {
+            updatedInvoice = invoice;
+            console.log('[PayPal] Successfully updated recent invoice:', invoice.invoice_number);
+          }
+        } else {
+          console.warn('[PayPal] No recent invoices found to update');
+        }
+      }
+
+      // Format success message - ALWAYS prioritize showing updated invoice (User Satisfaction Principle)
+      if (updatedInvoice) {
+        console.log('[PayPal] SUCCESS: Will return updated invoice attachment');
+        const message = `Perfect! I've enabled PayPal with ${paypalEmail} and added it to your invoice #${updatedInvoice.invoice_number}.\n\nHere's your updated invoice with PayPal payment option:`;
+        
+        return {
+          success: true,
+          data: { 
+            paymentOptions, 
+            updatedInvoice: updatedInvoice,
+            paypal_email: paypalEmail 
+          },
+          message,
+          attachments: [{
+            type: 'invoice',
+            invoice_id: updatedInvoice.id,
+            invoice_number: updatedInvoice.invoice_number,
+            invoice: updatedInvoice,
+            line_items: updatedInvoice.invoice_line_items || [],
+            paypal_enabled: true,
+            context_update: 'paypal_added'
+          }]
+        };
+      } else {
+        console.warn('[PayPal] WARNING: No invoice updated - falling back to generic message');
+        const message = `I've enabled PayPal with ${paypalEmail}, but I couldn't find a recent invoice to update. PayPal will be available on all your future invoices.`;
+        
+        return {
+          success: true,
+          data: { paymentOptions, paypal_email: paypalEmail },
+          message
+        };
+      }
+
+    } catch (error) {
+      console.error('[Optimized] Error setting up PayPal:', error);
+      return {
+        success: false,
+        message: `Failed to set up PayPal: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
 }
 
 // Modular prompt sections (dramatically reduced from 43K)
@@ -580,7 +801,14 @@ ACT-FIRST DELIVERY MODE:
 • Default behavior: TAKE ACTION FIRST, THEN CLARIFY
 • When asked to create or edit, perform the action immediately using sensible defaults
 • If needed data is missing, assume reasonable defaults and create a DRAFT
-• Only ask ONE follow-up question if absolutely necessary`,
+• Only ask ONE follow-up question if absolutely necessary
+
+FUNCTION CALLING:
+• You have access to powerful functions for invoice/client/business management
+• ALWAYS use the appropriate functions to complete user requests
+• When user asks to create, update, search, or manage anything - call the relevant function
+• Do NOT just describe what you would do - actually DO IT by calling functions
+• Example: "create invoice" → call create_invoice function immediately`,
 
   invoice_creation: `INVOICE CREATION WORKFLOW:
 When users request to create an invoice:
@@ -629,12 +857,47 @@ INVOICE CONTEXT TRACKING RULES:
 • NEVER just say "future invoices will be different" - update the current one!`,
 
   payment_setup: `PAYMENT METHODS WORKFLOW:
-Payment setup for PayPal and Bank Transfer:
+Payment setup for PayPal and Bank Transfer - MUST follow proper sequence:
 
-FOR PAYPAL:
-- Ask for PayPal email
-- Use setup_paypal_payments function
-- This enables it in settings AND optionally on specific invoice
+FOR PAYPAL SETUP - CRITICAL FLOW:
+Step 1: ALWAYS check current payment options first
+- When user says "add PayPal to this invoice" or "enable PayPal"
+- FIRST call get_payment_options to check if PayPal is already enabled
+- Check if paypal_email is already configured
+
+Step 2: Handle based on current state
+IF PayPal already enabled with email:
+- Extract invoice_number from conversation history
+- Call setup_paypal_payments with existing email and invoice_number
+- Show updated invoice
+
+IF PayPal disabled OR no email configured:
+- Ask user for their PayPal email address
+- Example: "I'll add PayPal to your invoice. What's your PayPal email address?"
+- Wait for email, then call setup_paypal_payments
+
+Step 3: Execute setup with proper context
+- ALWAYS call setup_paypal_payments with both paypal_email AND invoice_number
+- Extract invoice_number from conversation history when user says "this" or "add to this"
+- This enables PayPal globally AND applies to specific invoice
+- Show updated invoice immediately
+
+MANDATORY SEQUENCE:
+1. get_payment_options (check current state)
+2. Ask for email if needed (don't assume they provided it)
+3. setup_paypal_payments (with email + invoice_number)
+4. Show updated invoice
+
+WRONG APPROACH:
+❌ Directly calling setup_paypal_payments without checking current state
+❌ Assuming user provided PayPal email when they didn't
+❌ Not checking if PayPal is already enabled
+
+CORRECT APPROACH:
+✅ Check payment options first
+✅ Ask for email if not configured
+✅ Setup with context-aware invoice_number
+✅ Show immediate result
 
 FOR BANK TRANSFER:
 - Ask for bank details (name, account, routing)
@@ -676,25 +939,210 @@ ACTIVE INVOICE CONTEXT:
 • User is likely still working on/thinking about this invoice
 • ANY subsequent changes should update and re-show this invoice
 
+PRONOUN REFERENCE RESOLUTION:
+• "this invoice" = the most recently created/discussed invoice in conversation history
+• "this" when talking about invoices = the invoice from the last message that showed an invoice
+• ALWAYS look at conversation history to identify what "this" refers to
+• Extract the invoice_number from the most recent assistant message that contained an invoice
+• Pass the specific invoice_number to functions like setup_paypal_payments
+
+CONVERSATION HISTORY ANALYSIS:
+• Scan recent conversation for invoice numbers (format: INV-XXXXXX)
+• Look for messages with invoice attachments
+• Identify the most recent invoice the user was working with
+• Use that invoice_number when user says "this invoice", "add to this", "update it", etc.
+
 CONTEXT TRIGGERS (Auto-update active invoice):
 • Business settings: "Change my name/address/phone" → update + show invoice
 • Client updates: "Change client email" → update + show invoice  
 • Invoice details: "Change due date/add discount" → update + show invoice
 • Design changes: "Make it purple/modern design" → update + show invoice
-• Payment setup: "Add PayPal" → update + show invoice
+• Payment setup: "Add PayPal to this" → find invoice_number from history + update + show invoice
 
-CONTEXT DETECTION:
-• Look for recent invoice creation in conversation
-• Assume user wants to see results of their changes
-• Default behavior: SHOW the updated invoice, don't just confirm changes
+CONTEXT DETECTION STEPS:
+1. Look for recent invoice creation in conversation history
+2. Extract the invoice_number from the most recent invoice discussion
+3. When user references "this" or "it", use that specific invoice_number
+4. Default behavior: SHOW the updated invoice, don't just confirm changes
 
 RESPONSE PATTERN:
-✅ "I've updated your business name to Harry Ltd. Here's your updated invoice:"
-❌ "I've updated your business name. Future invoices will use the new name."
+✅ "I've added PayPal to invoice #INV-123456. Here's your updated invoice:"
+❌ "I've enabled PayPal for future invoices."
 
 WHEN NO ACTIVE CONTEXT:
 • User asks for changes but no recent invoice → get most recent invoice and update it
 • Use get_recent_invoices to find last invoice, then update and show it`,
+
+  tax_management: `TAX HANDLING WORKFLOW:
+CRITICAL: Tax operations affect invoice totals - always show updated invoice after changes.
+
+TAX SETUP AND MANAGEMENT:
+• When user mentions "VAT", "tax", "GST", "sales tax" - this is tax_management intent
+• Common phrases: "add 20% VAT", "remove tax", "set tax rate", "tax exempt"
+
+TAX RATE APPLICATION:
+Step 1: Identify tax type and rate
+- "Add VAT" → ask for rate if not specified ("What VAT rate should I apply?")
+- "20% VAT" → apply 20% VAT rate
+- "Remove tax" → set tax rate to 0%
+
+Step 2: Apply to correct scope
+- "Add tax to this invoice" → apply to specific invoice
+- "Set my tax rate to 20%" → update business default tax rate
+- "Make this client tax exempt" → update client tax status
+
+Step 3: Always show updated invoice with new tax calculations
+- Recalculate totals including tax
+- Show breakdown: Subtotal + Tax = Total
+- Display tax rate clearly on invoice`,
+
+  invoice_content: `INVOICE NOTES AND CONTENT MANAGEMENT:
+Handle all text content on invoices - notes, descriptions, terms, footer text.
+
+NOTES AND DESCRIPTIONS:
+• "Add a note" → append to invoice notes section
+• "Change description" → modify line item descriptions
+• "Add payment terms" → add to terms section
+• "Thank you message" → add to footer or notes
+
+LINE ITEM DESCRIPTIONS:
+• "Change item 1 description to 'Website Design'" → update specific line item
+• "Add details about the service" → enhance existing descriptions
+• "Make the description more professional" → rewrite descriptions
+
+PAYMENT TERMS AND LEGAL TEXT:
+• "Add net 30 terms" → "Payment due within 30 days"
+• "Late fee warning" → add late payment penalties
+• "Add my bank details" → include payment instructions
+
+CONTEXT AWARENESS:
+• Always identify which invoice to modify
+• If "this invoice" mentioned, use active invoice from context
+• Show updated invoice immediately after content changes`,
+
+  line_item_operations: `LINE ITEM MANAGEMENT:
+Handle individual invoice items - quantities, prices, descriptions, additions, removals.
+
+INDIVIDUAL ITEM UPDATES:
+• "Change quantity of item 2 to 5" → update specific line item quantity
+• "Update price of website design to $800" → modify unit price
+• "Remove the consultation item" → delete specific line item
+• "Add another hour of work" → increase quantity by 1
+
+ITEM ADDITIONS:
+• "Add hosting fee $50" → create new line item
+• "Include travel expenses" → add new item with user-provided amount
+• "Add discount line" → create negative amount item
+
+PRICE AND QUANTITY CALCULATIONS:
+• Always recalculate line totals (quantity × unit_price)
+• Update subtotals and totals
+• Handle currency formatting properly
+• Show updated invoice with new calculations
+
+ITEM IDENTIFICATION:
+• By position: "item 1", "first item", "second line"
+• By name: "the website design item", "consultation fee"
+• By description matching: find items containing keywords`,
+
+  status_workflow: `INVOICE STATUS MANAGEMENT:
+Handle invoice lifecycle - draft, sent, paid, overdue, cancelled.
+
+STATUS CHANGES:
+• "Mark as sent" → change status to sent, record sent date
+• "Mark as paid" → change status to paid, record payment date
+• "This is overdue" → change status to overdue
+• "Cancel this invoice" → change status to cancelled
+
+WORKFLOW TRIGGERS:
+• When marking as sent → optionally send email to client
+• When marking as paid → update client balance, send receipt
+• When overdue → trigger follow-up reminders
+
+CLIENT COMMUNICATION:
+• "Send this invoice" → mark as sent + email to client
+• "Send payment reminder" → follow-up email for outstanding invoices
+• "Send receipt" → confirmation email after payment received
+
+CONTEXT AWARENESS:
+• Always identify which invoice status to change
+• If multiple invoices mentioned, ask for clarification
+• Show updated invoice with new status clearly displayed`,
+
+  discount_pricing: `DISCOUNT AND PRICING ADJUSTMENTS:
+Handle percentage discounts, fixed amount reductions, and pricing modifications.
+
+DISCOUNT APPLICATION:
+• "Apply 10% discount" → reduce total by percentage
+• "Give $50 off" → reduce by fixed amount
+• "Early payment discount" → conditional pricing reduction
+• "Bulk discount for multiple items" → quantity-based pricing
+
+DISCOUNT SCOPE:
+• Invoice level: "10% off the total invoice"
+• Item level: "Reduce website design by $100"
+• Client level: "This client gets 15% off everything"
+
+PRICING MODIFICATIONS:
+• "Increase price by 20%" → multiply existing prices
+• "Round up to nearest $10" → adjust for cleaner pricing
+• "Match competitor quote of $500" → adjust to specific amount
+
+CALCULATION DISPLAY:
+• Show original amount and discount clearly
+• Format: "Subtotal: $1000, Discount (10%): -$100, Total: $900"
+• Always recalculate taxes after discount application`,
+
+  template_branding: `TEMPLATE AND BRANDING CUSTOMIZATION:
+Handle invoice appearance, layout, colors, logos, and PDF formatting.
+
+DESIGN CHANGES:
+• "Make it more professional" → suggest Classic design
+• "Add my logo" → upload and position logo
+• "Change colors to blue" → apply blue color scheme
+• "Use modern template" → switch to Modern design
+
+LAYOUT CUSTOMIZATION:
+• "Move payment details to bottom" → adjust template layout
+• "Make text bigger" → increase font sizes
+• "Add more space between items" → adjust line spacing
+• "Include tax breakdown" → show detailed tax calculations
+
+BRANDING ELEMENTS:
+• Logo placement and sizing
+• Color scheme application
+• Font selection and sizing
+• Header and footer customization
+
+PDF FORMATTING:
+• Page margins and orientation
+• Paper size preferences
+• Print-friendly formatting
+• Digital vs print optimization`,
+
+  automation_workflow: `EMAIL AUTOMATION AND REMINDERS:
+Handle automated invoice sending, payment reminders, and follow-up sequences.
+
+AUTOMATED SENDING:
+• "Send this automatically" → schedule immediate sending
+• "Email this to the client" → send invoice via email
+• "Set up auto-reminders" → configure payment reminder sequence
+
+REMINDER SEQUENCES:
+• "Remind them in 7 days" → schedule follow-up reminder
+• "Send overdue notice" → immediate overdue payment reminder
+• "Weekly reminders until paid" → recurring reminder setup
+
+EMAIL CUSTOMIZATION:
+• "Add personal message" → customize email body
+• "Use professional tone" → apply business email template
+• "Include payment link" → add direct payment options
+
+AUTOMATION RULES:
+• Auto-send on invoice creation
+• Automatic overdue reminders
+• Payment confirmation emails
+• Client-specific email preferences`
 };
 
 // Define all available functions (copy from invoiceFunctions.ts)
@@ -848,6 +1296,14 @@ const INVOICE_FUNCTIONS = [
       },
       required: ["invoice_number"]
     }
+  },
+  {
+    name: "get_payment_options",
+    description: "Get current payment options to check if PayPal, Stripe, or Bank Transfer are enabled",
+    parameters: {
+      type: "object",
+      properties: {}
+    }
   }
 ];
 
@@ -905,6 +1361,48 @@ const TOOL_GROUPS = {
     'delete_invoice',
     'delete_client',
   ],
+  tax_ops: [
+    'update_tax_settings',
+    'apply_tax_to_invoice',
+    'remove_tax_from_invoice',
+    'set_client_tax_exempt',
+    'calculate_tax_totals',
+  ],
+  content_ops: [
+    'update_invoice_notes',
+    'update_line_item_description',
+    'add_payment_terms',
+    'update_invoice_footer',
+    'add_custom_fields',
+  ],
+  status_ops: [
+    'mark_invoice_sent',
+    'mark_invoice_paid', 
+    'mark_invoice_overdue',
+    'cancel_invoice',
+    'archive_invoice',
+  ],
+  template_ops: [
+    'update_invoice_template',
+    'customize_invoice_layout',
+    'upload_logo',
+    'update_brand_colors',
+    'set_invoice_fonts',
+  ],
+  automation_ops: [
+    'send_invoice_email',
+    'schedule_payment_reminder',
+    'setup_auto_reminders',
+    'send_receipt_email',
+    'configure_email_templates',
+  ],
+  discount_ops: [
+    'apply_percentage_discount',
+    'apply_fixed_discount',
+    'remove_discount',
+    'set_early_payment_discount',
+    'apply_bulk_discount',
+  ],
 };
 
 // Intent types
@@ -920,55 +1418,447 @@ type IntentType =
   | 'design_change'
   | 'analytics'
   | 'delete_operations'
-  | 'context_aware_update';
+  | 'context_aware_update'
+  | 'tax_management'
+  | 'invoice_notes'
+  | 'line_item_updates'
+  | 'status_management'
+  | 'recurring_setup'
+  | 'discount_adjustments'
+  | 'template_customization'
+  | 'email_automation';
 
 interface IntentClassification {
   intents: IntentType[];
   complexity: 'simple' | 'moderate' | 'complex';
   requiredToolGroups: string[];
   requiresSequencing: boolean;
-  suggestedModel: string;
+  suggestedModel: 'budget' | 'mid' | 'premium';
+  needsContext: boolean;
+  missingFields: string[];
+  scope: 'invoice' | 'global' | 'both' | 'unknown';
+  targets: { invoice_number: string | null };
+  confidence: number;
+  rationale: string;
 }
 
-// Classify user intent with minimal tokens
-async function classifyIntent(message: string): Promise<IntentClassification> {
+interface ContextPack {
+  user_profile: {
+    plan: 'free' | 'premium';
+    locale: string;
+    timezone: string;
+  };
+  app_state: {
+    active_invoice_number: string | null;
+    last_shown_invoice_number: string | null;
+    payment_methods: {
+      paypal: { enabled: boolean; email: string | null };
+      bank_transfer: { enabled: boolean };
+    };
+    usage_limits: { free_items_used: number; free_items_cap: number };
+  };
+  conversation_summary: string;
+  recent_user_intents: string[];
+  recent_entities: { 
+    invoice_numbers: string[]; 
+    client_emails: string[]; 
+  };
+  available_tool_groups: string[];
+}
+
+// Build context pack for enhanced classification
+async function buildContextPack(userId: string, history: any[] = []): Promise<ContextPack> {
+  // Get user profile info
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('subscription_tier, timezone')
+    .eq('id', userId)
+    .single();
+
+  // Get recent invoices to find active invoice
+  const { data: recentInvoices } = await supabase
+    .from('invoices')
+    .select('invoice_number, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  // Get payment settings
+  const { data: paymentSettings } = await supabase
+    .from('payment_settings')
+    .select('paypal_enabled, paypal_email, bank_transfer_enabled')
+    .eq('user_id', userId)
+    .single();
+
+  // Get usage stats for free users
+  const { data: usageStats } = await supabase
+    .from('user_usage_stats')
+    .select('total_invoices, total_estimates')
+    .eq('user_id', userId)
+    .single();
+
+  // Extract context from conversation history
+  const recentMessages = history.slice(-4); // Last 4 messages
+  const invoiceNumbers = extractInvoiceNumbers(recentMessages);
+  const clientEmails = extractClientEmails(recentMessages);
+  const recentIntents = extractRecentIntents(recentMessages);
+  
+  // Find active invoice from history or recent invoices
+  const activeInvoiceNumber = findActiveInvoice(recentMessages, recentInvoices);
+  const lastShownInvoiceNumber = findLastShownInvoice(recentMessages);
+
+  // Build conversation summary
+  const conversationSummary = buildConversationSummary(recentMessages);
+
+  const contextPack: ContextPack = {
+    user_profile: {
+      plan: profile?.subscription_tier === 'premium' ? 'premium' : 'free',
+      locale: 'en-GB', // Default, could be from user settings
+      timezone: profile?.timezone || 'UTC'
+    },
+    app_state: {
+      active_invoice_number: activeInvoiceNumber,
+      last_shown_invoice_number: lastShownInvoiceNumber,
+      payment_methods: {
+        paypal: { 
+          enabled: paymentSettings?.paypal_enabled || false, 
+          email: paymentSettings?.paypal_email || null 
+        },
+        bank_transfer: { 
+          enabled: paymentSettings?.bank_transfer_enabled || false 
+        }
+      },
+      usage_limits: { 
+        free_items_used: (usageStats?.total_invoices || 0) + (usageStats?.total_estimates || 0),
+        free_items_cap: 3 
+      }
+    },
+    conversation_summary: conversationSummary,
+    recent_user_intents: recentIntents,
+    recent_entities: { 
+      invoice_numbers: invoiceNumbers, 
+      client_emails: clientEmails 
+    },
+    available_tool_groups: ['invoice_core', 'payment_ops', 'design_ops', 'search_ops', 'estimate_ops', 'client_ops', 'business_ops', 'utility_ops']
+  };
+
+  return contextPack;
+}
+
+// Helper functions for context extraction
+function extractInvoiceNumbers(messages: any[]): string[] {
+  const invoiceNumbers = new Set<string>();
+  messages.forEach(msg => {
+    if (msg.content) {
+      const matches = msg.content.match(/INV-\d+/g);
+      if (matches) matches.forEach(inv => invoiceNumbers.add(inv));
+    }
+  });
+  return Array.from(invoiceNumbers);
+}
+
+function extractClientEmails(messages: any[]): string[] {
+  const emails = new Set<string>();
+  messages.forEach(msg => {
+    if (msg.content) {
+      const matches = msg.content.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g);
+      if (matches) matches.forEach(email => emails.add(email));
+    }
+  });
+  return Array.from(emails);
+}
+
+function extractRecentIntents(messages: any[]): string[] {
+  // Simple keyword-based intent extraction from recent messages
+  const intents = new Set<string>();
+  const userMessages = messages.filter(m => m.role === 'user');
+  
+  userMessages.forEach(msg => {
+    const content = msg.content.toLowerCase();
+    if (content.includes('create') && content.includes('invoice')) intents.add('create_invoice');
+    if (content.includes('paypal') || content.includes('payment')) intents.add('payment_setup');
+    if (content.includes('design') || content.includes('color')) intents.add('design_change');
+    if (content.includes('client') || content.includes('customer')) intents.add('client_management');
+    if (content.includes('vat') || content.includes('tax') || content.includes('gst')) intents.add('tax_management');
+    if (content.includes('note') || content.includes('description') || content.includes('terms')) intents.add('invoice_notes');
+    if (content.includes('quantity') || content.includes('price') || content.includes('item')) intents.add('line_item_updates');
+    if (content.includes('paid') || content.includes('sent') || content.includes('overdue')) intents.add('status_management');
+    if (content.includes('discount') || content.includes('off') || content.includes('%')) intents.add('discount_adjustments');
+    if (content.includes('template') || content.includes('logo') || content.includes('brand')) intents.add('template_customization');
+    if (content.includes('send') || content.includes('email') || content.includes('remind')) intents.add('email_automation');
+  });
+  
+  return Array.from(intents);
+}
+
+function findActiveInvoice(messages: any[], recentInvoices: any[]): string | null {
+  // Look for most recent invoice in conversation
+  const invoiceNumbers = extractInvoiceNumbers(messages);
+  if (invoiceNumbers.length > 0) {
+    return invoiceNumbers[invoiceNumbers.length - 1]; // Most recent mentioned
+  }
+  
+  // Fall back to most recent created invoice
+  if (recentInvoices && recentInvoices.length > 0) {
+    return recentInvoices[0].invoice_number;
+  }
+  
+  return null;
+}
+
+function findLastShownInvoice(messages: any[]): string | null {
+  // Look for the last assistant message that mentioned showing an invoice
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === 'assistant' && msg.content) {
+      const invoiceMatch = msg.content.match(/INV-\d+/);
+      if (invoiceMatch) return invoiceMatch[0];
+    }
+  }
+  return null;
+}
+
+function buildConversationSummary(messages: any[]): string {
+  if (messages.length === 0) return "New conversation.";
+  
+  const recentUserMessages = messages
+    .filter(m => m.role === 'user')
+    .slice(-2)
+    .map(m => m.content.substring(0, 50))
+    .join('; ');
+    
+  return recentUserMessages || "User started conversation.";
+}
+
+// Enhanced classify user intent with context pack
+async function classifyIntent(message: string, userId: string, history: any[] = []): Promise<IntentClassification> {
   try {
-    const classificationPrompt = `Analyze this invoice app request and return JSON only:
+    // Build context pack for enhanced classification
+    const contextPack = await buildContextPack(userId, history);
+    
+    const classificationPrompt = `You are an intent classifier for an invoicing app.
 
-"${message}"
+Return STRICT JSON only that matches the schema below. Do not include comments or prose.
+Temperature=0, top_p=1.
 
-Identify ALL actions requested. Return JSON:
+SCHEMA:
 {
-  "intents": ["create_invoice", "payment_setup"], // List all actions
-  "complexity": "simple|moderate|complex",
-  "requiredToolGroups": ["invoice_core", "payment_ops"], // Tool groups needed
-  "requiresSequencing": false, // Do actions depend on each other?
-  "suggestedModel": "gpt-4o-mini" // or "gpt-4o" for complex
+  "intents": string[],  // allowed list below
+  "complexity": "simple"|"moderate"|"complex",
+  "requiredToolGroups": string[],      // allowed list below
+  "requiresSequencing": boolean,
+  "suggestedModel": "budget"|"mid"|"premium",
+  "needsContext": boolean,
+  "missingFields": string[],           // e.g., ["paypal_email","invoice_number"]
+  "scope": "invoice"|"global"|"both"|"unknown",
+  "targets": { "invoice_number": string|null },
+  "confidence": number,                // 0..1
+  "rationale": string                  // <=120 chars
 }
 
-Intent types: create_invoice, create_estimate, create_client, update_invoice, update_client, update_business, search_data, payment_setup, design_change, analytics, delete_operations, context_aware_update
+ALLOWED_INTENTS:
+create_invoice, update_invoice, delete_operations,
+create_estimate, update_estimate,
+create_client, update_client, update_business,
+search_data, payment_setup, design_change, analytics, context_aware_update,
+tax_management, invoice_notes, line_item_updates, status_management,
+recurring_setup, discount_adjustments, template_customization, email_automation
 
-CONTEXT AWARENESS:
-- If user is making changes that could affect an existing invoice, include "context_aware_update"
-- Business changes: "change my business name", "update address", "change phone"
-- Design changes: "make it purple", "change design", "use modern template"
-- Payment changes: "add PayPal", "enable bank transfer"
-- Any vague request that assumes context: "make it...", "change it...", "update it..."
+ALLOWED_TOOL_GROUPS:
+invoice_core, client_ops, business_ops, payment_ops, design_ops, search_ops, estimate_ops, utility_ops,
+tax_ops, content_ops, status_ops, template_ops, automation_ops, discount_ops
 
-Tool groups: invoice_core, client_ops, business_ops, payment_ops, design_ops, search_ops, estimate_ops, utility_ops`;
+BUSINESS RULES & MAPPINGS:
+- Pronouns like "this", "it" referencing invoices => include "context_aware_update".
+- If action implies ordered steps (check state → maybe ask → setup → show), set "requiresSequencing": true.
+- If plan is "free" and creating items may exceed cap, include "utility_ops".
+- Payment enabling usually "scope":"both" (global enable + apply to active invoice).
+- If "active_invoice_number" exists, set targets.invoice_number to that value; else null.
+
+EMAIL & INVOICE:
+- Never assume a PayPal email unless present.
+- If user requests PayPal and no email exists, include "missingFields":["paypal_email"].
+- Never invent invoice numbers; use provided or active if present.
+
+MODEL TIERS:
+- simple→budget, moderate→budget or mid, complex→premium.
+(Map tiers to concrete models server-side.)
+
+INPUTS:
+- USER_MESSAGE: "${message}"
+- CONTEXT_PACK: ${JSON.stringify(contextPack)}
+
+OUTPUT:
+Return only the JSON per schema.
+
+FEW-SHOT EXAMPLES:
+
+USER_MESSAGE: "add paypal to this invoice"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-609767","payment_methods":{"paypal":{"enabled":false}}}}
+OUTPUT:
+{
+  "intents":["payment_setup","context_aware_update"],
+  "complexity":"moderate",
+  "requiredToolGroups":["payment_ops","invoice_core"],
+  "requiresSequencing":true,
+  "suggestedModel":"budget",
+  "needsContext":true,
+  "missingFields":["paypal_email"],
+  "scope":"both",
+  "targets":{"invoice_number":"INV-609767"},
+  "confidence":0.86,
+  "rationale":"Add PayPal to active invoice; email missing."
+}
+
+USER_MESSAGE: "enable bank transfer globally"
+CONTEXT_PACK: {"app_state":{"payment_methods":{"bank_transfer":{"enabled":false}}}}
+OUTPUT:
+{
+  "intents":["payment_setup"],
+  "complexity":"simple",
+  "requiredToolGroups":["payment_ops"],
+  "requiresSequencing":true,
+  "suggestedModel":"budget",
+  "needsContext":false,
+  "missingFields":[],
+  "scope":"global",
+  "targets":{"invoice_number":null},
+  "confidence":0.83,
+  "rationale":"Global payment method toggle needs enable call."
+}
+
+USER_MESSAGE: "change the date"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-112233"}}
+OUTPUT:
+{
+  "intents":["update_invoice","context_aware_update"],
+  "complexity":"simple",
+  "requiredToolGroups":["invoice_core"],
+  "requiresSequencing":false,
+  "suggestedModel":"budget",
+  "needsContext":true,
+  "missingFields":["due_date"],
+  "scope":"invoice",
+  "targets":{"invoice_number":"INV-112233"},
+  "confidence":0.78,
+  "rationale":"Ambiguous update; needs due_date."
+}
+
+USER_MESSAGE: "add 20% VAT to this invoice"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-445566"}}
+OUTPUT:
+{
+  "intents":["tax_management","context_aware_update"],
+  "complexity":"simple",
+  "requiredToolGroups":["tax_ops","invoice_core"],
+  "requiresSequencing":false,
+  "suggestedModel":"budget",
+  "needsContext":false,
+  "missingFields":[],
+  "scope":"invoice",
+  "targets":{"invoice_number":"INV-445566"},
+  "confidence":0.92,
+  "rationale":"Apply specific VAT rate to active invoice."
+}
+
+USER_MESSAGE: "add a note about payment terms"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-778899"}}
+OUTPUT:
+{
+  "intents":["invoice_notes","context_aware_update"],
+  "complexity":"simple",
+  "requiredToolGroups":["content_ops","invoice_core"],
+  "requiresSequencing":false,
+  "suggestedModel":"budget",
+  "needsContext":true,
+  "missingFields":["note_content"],
+  "scope":"invoice",
+  "targets":{"invoice_number":"INV-778899"},
+  "confidence":0.85,
+  "rationale":"Add notes to specific invoice; content needed."
+}
+
+USER_MESSAGE: "mark this as paid"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-334455"}}
+OUTPUT:
+{
+  "intents":["status_management","context_aware_update"],
+  "complexity":"simple",
+  "requiredToolGroups":["status_ops","invoice_core"],
+  "requiresSequencing":false,
+  "suggestedModel":"budget",
+  "needsContext":false,
+  "missingFields":[],
+  "scope":"invoice",
+  "targets":{"invoice_number":"INV-334455"},
+  "confidence":0.94,
+  "rationale":"Update invoice status to paid."
+}
+
+USER_MESSAGE: "change quantity of item 2 to 5"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-667788"}}
+OUTPUT:
+{
+  "intents":["line_item_updates","context_aware_update"],
+  "complexity":"simple",
+  "requiredToolGroups":["invoice_core","content_ops"],
+  "requiresSequencing":false,
+  "suggestedModel":"budget",
+  "needsContext":false,
+  "missingFields":[],
+  "scope":"invoice",
+  "targets":{"invoice_number":"INV-667788"},
+  "confidence":0.91,
+  "rationale":"Update specific line item quantity."
+}
+
+USER_MESSAGE: "apply 10% discount"
+CONTEXT_PACK: {"app_state":{"active_invoice_number":"INV-889900"}}
+OUTPUT:
+{
+  "intents":["discount_adjustments","context_aware_update"],
+  "complexity":"simple",
+  "requiredToolGroups":["discount_ops","invoice_core"],
+  "requiresSequencing":false,
+  "suggestedModel":"budget",
+  "needsContext":false,
+  "missingFields":[],
+  "scope":"invoice",
+  "targets":{"invoice_number":"INV-889900"},
+  "confidence":0.88,
+  "rationale":"Apply percentage discount to invoice."
+}`;
+
+    // 🔍 LOG CLASSIFICATION
+    console.log(`\n[${requestId}] [STEP ${++stepCounter}] 🔍 CLASSIFYING REQUEST`);
+    console.log(`User asked: "${message}"`);
+    
+    // Simple logging - detailed prompts available via direct code inspection
+    console.log('\n🟢 CLASSIFICATION PROMPT SENT');
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-mini',
       messages: [
-        { role: 'system', content: classificationPrompt },
-        { role: 'user', content: message }
+        { role: 'user', content: classificationPrompt }
       ],
-      temperature: 0.1,
-      max_tokens: 200,
+      temperature: 0,
+      max_tokens: 300,
     });
 
     const result = response.choices[0].message.content || '{}';
-    return JSON.parse(result);
+    const classification = JSON.parse(result);
+    
+    // Small delay to help with log ordering
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    console.log(`→ Classified as: ${classification.intents?.join(', ') || 'unknown'}`);
+    console.log(`→ Complexity: ${classification.complexity} | Confidence: ${classification.confidence}`);
+    console.log(`→ Tools needed: ${classification.requiredToolGroups?.join(', ') || 'none'}`);
+    console.log(`→ Scope: ${classification.scope} | Target: ${classification.targets?.invoice_number || 'none'}`);
+    console.log(`→ Missing fields: ${classification.missingFields?.join(', ') || 'none'}`);
+    console.log(`→ Rationale: ${classification.rationale}`);
+
+    return classification;
   } catch (error) {
     console.error('Classification error:', error);
     // Fallback: assume complex to be safe
@@ -977,7 +1867,13 @@ Tool groups: invoice_core, client_ops, business_ops, payment_ops, design_ops, se
       complexity: 'complex',
       requiredToolGroups: Object.keys(TOOL_GROUPS),
       requiresSequencing: false,
-      suggestedModel: 'gpt-4o-mini'
+      suggestedModel: 'premium',
+      needsContext: false,
+      missingFields: [],
+      scope: 'unknown',
+      targets: { invoice_number: null },
+      confidence: 0.5,
+      rationale: 'Fallback due to classification error'
     };
   }
 }
@@ -1021,6 +1917,31 @@ function buildDynamicPrompt(intents: IntentType[], userContext?: any): string {
         modules.push(PROMPT_MODULES.business_updates);
         modules.push(PROMPT_MODULES.invoice_creation);
         break;
+      case 'tax_management':
+        modules.push(PROMPT_MODULES.tax_management);
+        break;
+      case 'invoice_notes':
+        modules.push(PROMPT_MODULES.invoice_content);
+        break;
+      case 'line_item_updates':
+        modules.push(PROMPT_MODULES.line_item_operations);
+        break;
+      case 'status_management':
+        modules.push(PROMPT_MODULES.status_workflow);
+        break;
+      case 'discount_adjustments':
+        modules.push(PROMPT_MODULES.discount_pricing);
+        break;
+      case 'template_customization':
+        modules.push(PROMPT_MODULES.template_branding);
+        break;
+      case 'email_automation':
+        modules.push(PROMPT_MODULES.automation_workflow);
+        break;
+      case 'recurring_setup':
+        modules.push(PROMPT_MODULES.automation_workflow);
+        modules.push(PROMPT_MODULES.invoice_creation);
+        break;
     }
   });
 
@@ -1050,7 +1971,9 @@ async function executeWithCompletions(
   model: string,
   systemPrompt: string,
   tools: any[],
-  preferredFirstFunction?: string
+  preferredFirstFunction?: string,
+  history: any[] = [],
+  requestId?: string
 ): Promise<{ content: string; attachments?: any[]; usage?: any }> {
   const openaiKey = Deno.env.get('OPENAI_API_KEY');
   if (!openaiKey) throw new Error('OPENAI_API_KEY not set');
@@ -1062,10 +1985,38 @@ async function executeWithCompletions(
   }));
 
   // Tool loop with time budget and max steps
-  const messages: any[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: message }
-  ];
+  // Build conversation with history: system + prior turns + latest user message
+  const messages: any[] = [{ role: 'system', content: systemPrompt }];
+  
+  // Add conversation history (last 10 messages for context)
+  const recentHistory = history.slice(-10);
+  for (const historyMessage of recentHistory) {
+    if (historyMessage && historyMessage.role && historyMessage.content) {
+      messages.push({
+        role: historyMessage.role === 'assistant' ? 'assistant' : 'user',
+        content: historyMessage.content
+      });
+    }
+  }
+  
+  // Add current user message
+  messages.push({ role: 'user', content: message });
+  
+  // 🤖 LOG MAIN LLM CONVERSATION
+  console.log(`\n[${requestId}] 🤖 SENDING TO MAIN AI`);
+  console.log(`→ Model: ${model}`);
+  console.log(`→ Messages: ${messages.length} total (${recentHistory.length} from history + current)`);
+  console.log(`→ Available functions: ${functions.map(f => f.name).join(', ')}`);
+  
+  // Show recent context if any
+  if (recentHistory.length > 0) {
+    const lastUserMsg = recentHistory.filter(m => m.role === 'user').pop();
+    const lastAssistantMsg = recentHistory.filter(m => m.role === 'assistant').pop();
+    if (lastUserMsg) console.log(`→ Previous user request: "${lastUserMsg.content.substring(0, 50)}..."`);
+    if (lastAssistantMsg) console.log(`→ Previous AI response: "${lastAssistantMsg.content.substring(0, 50)}..."`);
+  }
+  
+  console.log('\n🟢 COMPLETE CONVERSATION SENT TO AI');
   const MAX_STEPS = 5; // allow search -> (create_client) -> create_invoice -> finalize
   const budgetMs = 24000; // extend server budget; client has 25s with retry
   const start = Date.now();
@@ -1176,7 +2127,36 @@ async function executeWithCompletions(
     let args: any = {};
     const fn = msg.function_call;
     try { args = fn.arguments ? JSON.parse(fn.arguments) : {}; } catch {}
+    
+    // ⚡ LOG FUNCTION CALL
+    const funcStartTime = Date.now();
+    console.log(`\n[${requestId || 'UNKNOWN'}] [${new Date().toISOString().substring(11, 23)}] ⚡ AI CALLING FUNCTION: ${fn.name}`);
+    
+    // Log key arguments in a readable way
+    if (fn.name === 'create_invoice') {
+      console.log(`   → Client: ${args.client_name || 'unknown'}`);
+      console.log(`   → Items: ${args.line_items?.length || 0} items`);
+    } else if (fn.name === 'setup_paypal_payments') {
+      console.log(`   → Email: ${args.paypal_email || 'not provided'}`);
+      console.log(`   → Invoice: ${args.invoice_number || 'not specified'}`);
+    } else if (fn.name === 'get_payment_options') {
+      console.log(`   → Checking current payment settings...`);
+    } else {
+      console.log(`   → Args: ${JSON.stringify(args)}`);
+    }
+    
     const toolResult = await InvoiceFunctionService.executeFunction(fn.name, args, userId);
+    
+    // 📋 LOG FUNCTION RESULT
+    const funcDuration = Date.now() - funcStartTime;
+    if (toolResult.success) {
+      console.log(`   ✅ Success (${funcDuration}ms): ${toolResult.message?.substring(0, 80)}...`);
+      if (toolResult.attachments?.length) {
+        console.log(`   📎 Returning: ${toolResult.attachments[0].type} ${toolResult.attachments[0].invoice_number || ''}`);
+      }
+    } else {
+      console.log(`   ❌ Failed (${funcDuration}ms): ${toolResult.error}`);
+    }
     if (toolResult.attachments && toolResult.attachments.length) {
       lastAttachments = toolResult.attachments;
     }
@@ -1184,7 +2164,14 @@ async function executeWithCompletions(
       lastToolMessage = toolResult.message;
     }
 
-    // If we just created an invoice successfully, return immediately with that message
+    // If we just executed a function that returns attachments, return immediately with that message
+    if (toolResult.success && toolResult.attachments && toolResult.attachments.length > 0) {
+      const msgText = toolResult.message || 'Action completed.';
+      console.log(`   → Returning immediately with invoice attachment`);
+      return { content: msgText, attachments: lastAttachments || [], usage: lastUsage };
+    }
+    
+    // Also return immediately for successful invoice creation (legacy check)
     if (fn.name === 'create_invoice' && toolResult.success) {
       const msgText = toolResult.message || 'Invoice created.';
       return { content: msgText, attachments: lastAttachments || [], usage: lastUsage };
@@ -1399,17 +2386,26 @@ serve(async (req) => {
   }
 
   try {
-    const { message, threadId, userId, userContext, action = 'send_message', testMode = false } = await req.json();
+    const { message, threadId, userId, userContext, history = [], action = 'send_message', testMode = false } = await req.json();
 
     if (!message || !userId) {
       throw new Error('Message and userId are required');
     }
 
-    console.log(`[AI-Chat-Optimized] Processing request for user ${userId}`);
-    console.log(`[AI-Chat-Optimized] Test mode: ${testMode}`);
+    const startTime = Date.now();
+    const requestId = `REQ-${startTime}`;
+    let stepCounter = 0;
+    
+    console.log('\n══════════════════════════════════════════════════════════════════════════════');
+    console.log(`🚀 [${requestId}] [STEP ${++stepCounter}] NEW REQUEST: "${message}"`);
+    console.log(`→ User: ${userId.substring(0, 8)}...`);
+    console.log(`→ History: ${history?.length || 0} messages`);
+    console.log(`→ Verbose logging: ${Deno.env.get('VERBOSE_LOGS') === 'true' ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`→ Started at: ${new Date().toISOString()}`);
+    console.log('══════════════════════════════════════════════════════════════════════════════');
 
-    // Small-talk fast path to avoid full pipeline
-    const smallTalk = /^(hi|hello|hey)\b/i;
+    // Small-talk fast path to avoid full pipeline - but only for standalone greetings
+    const smallTalk = /^(hi|hello|hey)[\s\.\!\?]*$/i;
     if (smallTalk.test(message.trim())) {
       const nowId = `optimized-${Date.now()}`;
       const messagesArray = [
@@ -1432,28 +2428,82 @@ serve(async (req) => {
         complexity: 'simple',
         requiredToolGroups: ['invoice_core','client_ops'],
         requiresSequencing: false,
-        suggestedModel: 'gpt-4o-mini'
+        suggestedModel: 'budget'
       };
       console.log('[AI-Chat-Optimized] Heuristic: create_invoice fast-path');
     } else {
       // Step 1: Classify intent (fast & cheap)
       const startTime = Date.now();
-      classification = await classifyIntent(message);
+      classification = await classifyIntent(message, userId, history);
       classificationTime = Date.now() - startTime;
-      console.log(`[AI-Chat-Optimized] Classification took ${classificationTime}ms:`, classification);
+      console.log(`→ Classification time: ${classificationTime}ms`);
     }
 
     // Step 2: Build minimal prompt
     const systemPrompt = buildDynamicPrompt(classification.intents, userContext);
-    console.log(`[AI-Chat-Optimized] Dynamic prompt size: ${systemPrompt.length} chars (vs 43K original)`);
+    
+    // 🔧 LOG PROMPT BUILDING
+    console.log(`\n[${requestId}] [STEP ${++stepCounter}] 🔧 BUILDING AI INSTRUCTIONS`);
+    
+    // Show which instruction modules are being activated
+    const activeModules = [];
+    if (classification.intents.includes('create_invoice')) activeModules.push('invoice_creation');
+    if (classification.intents.includes('payment_setup')) activeModules.push('payment_setup');
+    if (classification.intents.includes('context_aware_update')) activeModules.push('context_awareness');
+    if (classification.intents.includes('update_business')) activeModules.push('business_updates');
+    if (classification.intents.includes('design_change')) activeModules.push('design_changes');
+    
+    // Map suggested model to actual model first  
+    const modelMapping = {
+      'budget': 'gpt-5-mini',
+      'mid': 'gpt-5-mini', 
+      'premium': 'gpt-5-mini'
+    };
+    const model = modelMapping[classification.suggestedModel] || 'gpt-5-mini';
+    
+    console.log(`→ Active instruction modules: ${activeModules.join(', ')}`);
+    console.log(`→ Prompt size: ${systemPrompt.length} chars (reduced from 43,000)`);
+    console.log(`→ Model: ${model} (${classification.suggestedModel} tier)`);
+    console.log(`→ Scope: ${classification.scope}`);
+    
+    // Show key instructions for the detected intents
+    if (classification.intents.includes('payment_setup')) {
+        console.log('→ PayPal flow: CHECK settings first → ASK for email if needed → SETUP → SHOW invoice');
+    }
+    if (classification.intents.includes('context_aware_update')) {
+        console.log('→ Context mode: Will look for "this invoice" in conversation history');
+        if (classification.targets.invoice_number) {
+            console.log(`→ Target invoice: ${classification.targets.invoice_number}`);
+        }
+    }
+    
+    console.log('\n🟢 MAIN SYSTEM PROMPT BUILT AND SENT');
 
     // Step 3: Get relevant tools
     const tools = selectTools(classification.requiredToolGroups);
-    console.log(`[AI-Chat-Optimized] Selected ${tools.length} tools (vs 46 original)`);
+    console.log(`→ Selected tools: ${tools.length} (optimized from 46)`);
 
-    // Step 4: Use suggested model
-    const model = classification.suggestedModel;
-    console.log(`[AI-Chat-Optimized] Using model: ${model}`);
+    // Step 4: Handle needsContext and missingFields
+    if (classification.needsContext && classification.missingFields.length > 0) {
+      console.log(`→ Context needed: Missing ${classification.missingFields.join(', ')}`);
+      
+      // For PayPal email missing, ask directly
+      if (classification.missingFields.includes('paypal_email')) {
+        const invoiceRef = classification.targets.invoice_number ? 
+          ` to invoice ${classification.targets.invoice_number}` : '';
+        const askForEmailResponse = {
+          content: `I'll add PayPal${invoiceRef}. What's your PayPal email address?`,
+          attachments: [],
+          usage: { total_tokens: 50 }
+        };
+        
+        console.log(`\n🎯 ASKING FOR MISSING INFO: PayPal email`);
+        return askForEmailResponse;
+      }
+      
+      // For other missing fields, try to proceed with available context
+      console.log(`→ Proceeding with available context despite missing: ${classification.missingFields.join(', ')}`);
+    }
 
     // Optimization metrics
     const optimization = {
@@ -1487,7 +2537,6 @@ serve(async (req) => {
     }
 
     // In production mode, execute via Chat Completions (fast, reliable, single-shot)
-    console.log('[AI-Chat-Optimized] Starting Chat Completions execution...');
     let assistantResult;
     try {
       assistantResult = await executeWithCompletions(
@@ -1496,9 +2545,10 @@ serve(async (req) => {
         model,
         systemPrompt,
         tools,
-        classification.intents.includes('create_invoice') ? 'create_invoice' : undefined
+        classification.intents.includes('create_invoice') ? 'create_invoice' : undefined,
+        history,
+        requestId
       );
-      console.log('[AI-Chat-Optimized] Completions execution completed');
     } catch (executeError) {
       console.error('[AI-Chat-Optimized] Completions execution failed:', executeError);
       throw executeError;
@@ -1521,12 +2571,6 @@ serve(async (req) => {
       }
     ];
 
-    console.log('[AI-Chat-Optimized] Messages array check:', {
-      isArray: Array.isArray(messagesArray),
-      length: messagesArray.length,
-      firstMessage: messagesArray[0],
-      secondMessage: messagesArray[1]
-    });
 
     const thread_id_val = threadId || `optimized-${Date.now()}`;
     const formattedResponse = {
@@ -1536,6 +2580,18 @@ serve(async (req) => {
       optimization,
       usage: assistantResult.usage,
     };
+
+    // 🎯 LOG FINAL RESPONSE  
+    console.log(`\n[${requestId}] [STEP ${++stepCounter}] 🎯 FINAL RESPONSE TO USER:`);
+    console.log(`→ Message: "${assistantResult.content.substring(0, 100)}..."`);
+    if (assistantResult.attachments?.length) {
+      console.log(`→ Attachments: ${assistantResult.attachments.map(a => `${a.type} ${a.invoice_number || ''}`).join(', ')}`);
+    }
+    console.log(`→ Tokens used: ${assistantResult.usage?.total_tokens || 'unknown'}`);
+    
+    console.log('\n🟢 FINAL AI RESPONSE RETURNED TO USER');
+    
+    console.log('\n══════════════════════════════════════════════════════════════════════════════');
 
     return new Response(
       JSON.stringify(formattedResponse),

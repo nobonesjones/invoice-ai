@@ -52,8 +52,11 @@ interface InvoicePreviewModalProps {
   onSaveComplete?: () => void;
 }
 
-export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePreviewModalProps>(
-  ({ invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice', onSaveComplete }, ref) => {
+export const InvoicePreviewModal = forwardRef(
+  (
+    { invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice', onSaveComplete }: InvoicePreviewModalProps,
+    ref: React.Ref<InvoicePreviewModalRef>
+  ) => {
     const colorScheme = useColorScheme();
     const isLightMode = colorScheme === 'light';
     // Ensure we have a valid color scheme, default to light if undefined/null
@@ -65,31 +68,20 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
     
     const [isVisible, setIsVisible] = useState(false);
     
-    // Debug logging for visibility changes
+    // Reduced noisy logs for visibility changes
     React.useEffect(() => {
-      console.log('[InvoicePreviewModal] ===== isVisible CHANGED =====');
-      console.log('[InvoicePreviewModal] isVisible changed to:', isVisible);
-      console.log('[InvoicePreviewModal] Current invoiceData:', invoiceData ? 'has data' : 'null');
-      console.log('[InvoicePreviewModal] Stack trace:');
-      console.trace();
+      // console.log('[InvoicePreviewModal] isVisible:', isVisible);
     }, [isVisible]);
     
-    // Debug logging for invoiceData changes
+    // Reduced noisy logs for invoiceData changes
     React.useEffect(() => {
-      console.log('[InvoicePreviewModal] ===== invoiceData CHANGED =====');
-      console.log('[InvoicePreviewModal] invoiceData changed:', invoiceData ? 'has data' : 'null');
-      console.log('[InvoicePreviewModal] Current isVisible:', isVisible);
-      if (!invoiceData) {
-        console.log('[InvoicePreviewModal] invoiceData is null - this might cause issues');
-      }
+      // console.log('[InvoicePreviewModal] invoiceData changed:', !!invoiceData);
     }, [invoiceData]);
     
     // Update estimate design and color when invoiceData changes (for estimates)
     React.useEffect(() => {
       if (documentType === 'estimate' && invoiceData) {
-        console.log('[InvoicePreviewModal] Updating estimate design from invoiceData');
-        console.log('[InvoicePreviewModal] estimate_template:', invoiceData.estimate_template);
-        console.log('[InvoicePreviewModal] accent_color:', invoiceData.accent_color);
+        // Reduced noisy logs
         
         // Update design
         const designId = mode === 'settings' ? initialDesign : invoiceData.estimate_template;
@@ -219,33 +211,24 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
 
     useImperativeHandle(ref, () => ({
       present: () => {
-        console.log('[InvoicePreviewModal] ===== PRESENT CALLED =====');
-        console.log('[InvoicePreviewModal] present() called');
-        console.log('[InvoicePreviewModal] Current isVisible:', isVisible);
-        console.log('[InvoicePreviewModal] Has invoiceData:', !!invoiceData);
+        // Reduced noisy logs
         setIsVisible(true);
-        console.log('[InvoicePreviewModal] setIsVisible(true) called');
       },
       dismiss: () => {
-        console.log('[InvoicePreviewModal] ===== DISMISS CALLED =====');
-        console.log('[InvoicePreviewModal] dismiss() called');
-        console.log('[InvoicePreviewModal] Current isVisible:', isVisible);
+        // Reduced noisy logs
         setIsVisible(false);
-        console.log('[InvoicePreviewModal] setIsVisible(false) called');
       },
     }));
 
     // Note: Removed auto-close effect to prevent conflicts with manual modal control
 
     const handleClose = useCallback(() => {
-      console.log('[InvoicePreviewModal] handleClose called');
       setIsVisible(false);
       onClose?.();
     }, [onClose]);
 
     // Handle discarding changes and closing modal
     const handleDiscard = useCallback(() => {
-      console.log('[InvoicePreviewModal] handleDiscard called - closing modal');
       // Reset to original design if user had made changes
       // For now, just close the modal without saving
       setIsVisible(false);
@@ -254,17 +237,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
 
     // Handle saving design changes and closing modal
     const handleSave = useCallback(async () => {
-      console.log('[InvoicePreviewModal] ===== HANDLE SAVE START =====');
-      console.log('[InvoicePreviewModal] handleSave called with:', {
-        mode,
-        invoiceId,
-        documentType,
-        currentDesignId: currentDesign.id,
-        currentAccentColor,
-        hasOnClose: !!onClose,
-        hasOnSaveComplete: !!onSaveComplete,
-        isVisible
-      });
+      // Reduced noisy logs
       
       try {
         let saveSuccess = false;
@@ -276,7 +249,7 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
           saveSuccess = true;
         } else if (invoiceId) {
           if (documentType === 'estimate') {
-            console.log('[InvoicePreviewModal] Estimate mode - updating estimate in database');
+            // Reduced noisy logs
             // Save design and color to specific estimate
             const { error: updateError } = await supabase.from('estimates')
               .update({
@@ -286,19 +259,19 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
               .eq('id', invoiceId);
             
             if (!updateError) {
-              console.log('[InvoicePreviewModal] Estimate design and color saved successfully');
+              // Reduced noisy logs
               saveSuccess = true;
             } else {
               console.error('[InvoicePreviewModal] Error saving estimate design:', updateError);
             }
           } else {
-            console.log('[InvoicePreviewModal] Invoice mode - saving to invoice and updating defaults');
+            // Reduced noisy logs
             // Save design and color to specific invoice
             const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
             if (success) {
-              console.log('[InvoicePreviewModal] Invoice design and color saved successfully');
+              // Reduced noisy logs
               // Also update default for new invoices
-              console.log('[InvoicePreviewModal] Updating defaults for new invoices');
+              // Reduced noisy logs
               await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
               saveSuccess = true;
             } else {
@@ -306,38 +279,36 @@ export const InvoicePreviewModal = forwardRef<InvoicePreviewModalRef, InvoicePre
             }
           }
         } else {
-          console.log('[InvoicePreviewModal] No invoice ID - updating defaults only');
+          // Reduced noisy logs
           // For new invoices, just update the default
           const success = await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
           if (success) {
-            console.log('[InvoicePreviewModal] Default design and color preferences saved successfully');
+            // Reduced noisy logs
             saveSuccess = true;
           } else {
             console.log('[InvoicePreviewModal] Failed to update defaults');
           }
         }
         
-        console.log('[InvoicePreviewModal] Save completed, saveSuccess:', saveSuccess);
-        console.log('[InvoicePreviewModal] About to close modal - NOT calling onClose for saves');
+        // Reduced noisy logs
         
         // Call onSaveComplete callback if save was successful
         if (saveSuccess && onSaveComplete) {
-          console.log('[InvoicePreviewModal] Calling onSaveComplete callback');
+          // Reduced noisy logs
           onSaveComplete();
         }
         
         // Close modal WITHOUT calling onClose callback for saves (prevents state conflicts)
-        console.log('[InvoicePreviewModal] Setting isVisible to false');
+        // Reduced noisy logs
         setIsVisible(false);
-        console.log('[InvoicePreviewModal] Modal closed - save complete');
+        // Reduced noisy logs
       } catch (error) {
         console.error('[InvoicePreviewModal] Error in handleSave:', error);
         // Close modal WITHOUT calling onClose for errors (prevents state conflicts)
-        console.log('[InvoicePreviewModal] Error case - setting isVisible to false');
         setIsVisible(false);
-        console.log('[InvoicePreviewModal] Error case - modal closed');
+        // Reduced noisy logs
       }
-      console.log('[InvoicePreviewModal] ===== HANDLE SAVE END =====');
+      // Reduced noisy logs
     }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase]);
 
 
