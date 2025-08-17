@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { ChatService, ChatMessage, ChatConversation } from '@/services/chatService';
 import { AssistantService, AssistantThread } from '@/services/assistantService';
 import { useSupabase } from '@/context/supabase-provider';
+import { UserContext } from '@/services/userContextService';
 
 interface UseAIChatReturn {
   messages: ChatMessage[];
@@ -35,7 +36,6 @@ export function useAIChat(): UseAIChatReturn {
 
   // Helper function to update status with smooth transitions
   const updateStatus = useCallback((message: string) => {
-    console.log('[useAIChat] Status update:', message);
     setStatusMessage(message);
   }, []);
 
@@ -69,6 +69,9 @@ export function useAIChat(): UseAIChatReturn {
           created_at: msg.created_at
         }));
 
+        // Sort messages by timestamp to ensure correct chronological order
+        convertedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
         setMessages(convertedMessages);
         setThread(currentThread);
         console.log('[useAIChat] Loaded', convertedMessages.length, 'messages from thread');
@@ -80,6 +83,10 @@ export function useAIChat(): UseAIChatReturn {
       setConversation(conv);
 
       const existingMessages = await ChatService.getConversationMessages(conv.id);
+      
+      // Sort messages by timestamp to ensure correct chronological order
+      existingMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
       setMessages(existingMessages);
         console.log('[useAIChat] Loaded', existingMessages.length, 'messages from conversation');
       }
@@ -95,7 +102,7 @@ export function useAIChat(): UseAIChatReturn {
     }
   }, [user?.id, isUsingAssistants, updateStatus, clearStatus]);
 
-  const sendMessage = useCallback(async (messageContent: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }) => {
+  const sendMessage = useCallback(async (messageContent: string, userContext?: UserContext) => {
     if (!user?.id || !messageContent.trim()) return;
 
     // Create optimistic user message to show immediately in UI
@@ -124,7 +131,7 @@ export function useAIChat(): UseAIChatReturn {
       
       updateStatus('SuperAI is analyzing your request...');
 
-      console.log('[useAIChat] Sending message via ChatService...');
+      // Processing message...
       
       // Prepare user context if available
       const result = await ChatService.processUserMessage(user.id, messageContent.trim(), userContext, updateStatus);
@@ -132,25 +139,31 @@ export function useAIChat(): UseAIChatReturn {
       if (result.thread) {
         // Assistants API result
         console.log('[useAIChat] Received Assistants API result');
-        console.log('[useAIChat] 🔍 About to setMessages with:', {
-          isArray: Array.isArray(result.messages),
-          length: result.messages?.length,
-          type: typeof result.messages,
-          firstItem: result.messages?.[0],
-          rawMessages: result.messages
-        });
+        console.log('[useAIChat] ✅ Received messages:', result.messages?.length || 0);
         setThread(result.thread);
+        
+        // Sort messages by timestamp before updating state
+        if (result.messages) {
+          result.messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        }
+        
         setMessages(result.messages); // This will replace the optimistic message with real ones
         setIsUsingAssistants(true);
       } else if (result.conversation) {
         // Chat Completions API result
         console.log('[useAIChat] Received Chat Completions API result');
       setConversation(result.conversation);
+        
+        // Sort messages by timestamp before updating state
+        if (result.messages) {
+          result.messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        }
+        
         setMessages(result.messages); // This will replace the optimistic message with real ones
         setIsUsingAssistants(false);
       }
 
-      console.log('[useAIChat] Updated messages count:', result.messages.length);
+      // Total messages updated to: ${result.messages.length}
 
     } catch (err) {
       console.error('Error sending message:', err);

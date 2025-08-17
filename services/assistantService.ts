@@ -1,6 +1,7 @@
 import { supabase } from '@/config/supabase';
 import { INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
 import { MemoryService } from '@/services/memoryService';
+import { UserContext } from './userContextService';
 
 export interface AssistantThread {
   id: string;
@@ -103,13 +104,10 @@ export class AssistantService {
 
       const result = await response.json();
       
-      // CRITICAL DEBUG - This MUST appear in logs!
-      console.log('[AssistantService] 🚨 CRITICAL DEBUG - JSON PARSED!');
-      console.log('[AssistantService] 🔍 RAW JSON result:', {
-        messagesIsArray: Array.isArray(result.messages),
-        messagesType: typeof result.messages,
-        messagesLength: result.messages?.length,
-        rawResult: result.messages
+      // Response received successfully
+      console.log('[AssistantService] ✅ Response received:', {
+        messages: result.messages?.length || 0,
+        hasThread: !!result.thread
       });
       
       // Log optimization metrics if using optimized endpoint
@@ -123,24 +121,8 @@ export class AssistantService {
         });
       }
       
-      // Debug: Log the exact result structure
-      console.log('[AssistantService] 🔍 Response structure:', {
-        hasThread: !!result.thread,
-        hasMessages: !!result.messages,
-        messagesLength: result.messages?.length || 0,
-        hasConversation: !!result.conversation,
-        responseKeys: Object.keys(result),
-        firstMessage: result.messages?.[0],
-        messagesType: typeof result.messages
-      });
-      
-      // Debug: Show what we're actually returning
-      console.log('[AssistantService] 🔍 RETURNING to ChatService:', {
-        resultKeys: Object.keys(result),
-        hasMessages: !!result.messages,
-        hasThread: !!result.thread,
-        resultType: typeof result
-      });
+      // Clean success log
+      console.log('[AssistantService] ✅ Processing complete');
       
       return result;
     } catch (error) {
@@ -269,11 +251,11 @@ export class AssistantService {
   }
 
   // Enhanced system instructions for Assistant
-  private static async getSystemInstructions(userId?: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }): Promise<string> {
+  private static async getSystemInstructions(userId?: string, userContext?: UserContext): Promise<string> {
     const currencyInstruction = userContext 
       ? `\n\nCURRENCY CONTEXT - CRITICAL:
-The user's business currency is ${userContext.currency} (${userContext.symbol}). 
-ALWAYS use ${userContext.symbol} when displaying prices, amounts, or totals.
+The user's business currency is ${userContext.currency} (${userContext.currencySymbol}). 
+ALWAYS use ${userContext.currencySymbol} when displaying prices, amounts, or totals.
 NEVER use $ if the user's currency is different.
 Examples:
 • If user currency is GBP (£): "Total: £250" not "Total: $250"
@@ -1107,7 +1089,7 @@ Use tools to take action. Reference previous conversation naturally.`;
   }
 
   // Send message and get response
-  static async sendMessage(userId: string, message: string, userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean }, statusCallback?: (status: string) => void, currentThreadId?: string, history?: { role: 'user' | 'assistant'; content: string }[]): Promise<AssistantRunResult> {
+  static async sendMessage(userId: string, message: string, userContext?: UserContext, statusCallback?: (status: string) => void, currentThreadId?: string, history?: { role: 'user' | 'assistant'; content: string }[]): Promise<AssistantRunResult> {
     try {
       statusCallback?.('SuperAI is initializing...');
       
@@ -1233,7 +1215,7 @@ Use tools to take action. Reference previous conversation naturally.`;
         const contextInstructions = [];
         
         // Currency context
-        contextInstructions.push(`CURRENCY CONTEXT: User's business currency is ${userContext.currency} (${userContext.symbol}). ALWAYS use ${userContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`);
+        contextInstructions.push(`CURRENCY CONTEXT: User's business currency is ${userContext.currency} (${userContext.currencySymbol}). ALWAYS use ${userContext.currencySymbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`);
         
         // First invoice mode
         if (userContext.isFirstInvoice) {
@@ -1304,7 +1286,7 @@ Use tools to take action. Reference previous conversation naturally.`;
             const contextInstructions = [];
             
             // Currency context
-            contextInstructions.push(`CURRENCY CONTEXT: User's business currency is ${userContext.currency} (${userContext.symbol}). ALWAYS use ${userContext.symbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`);
+            contextInstructions.push(`CURRENCY CONTEXT: User's business currency is ${userContext.currency} (${userContext.currencySymbol}). ALWAYS use ${userContext.currencySymbol} when displaying prices, amounts, or totals. Never use $ if the user's currency is different.`);
             
             // First invoice mode
             if (userContext.isFirstInvoice) {

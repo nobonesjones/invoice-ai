@@ -1752,17 +1752,21 @@ or '${example2}'`,
 										// console.log('Attachment type:', attachment?.type);
 										// console.log('Full attachment:', JSON.stringify(attachment, null, 2));
 										
-										// Check if attachment has invoice data
-										if (attachment && attachment.invoice && attachment.line_items) {
-											// console.log('✅ Rendering InvoicePreview');
-											return (
-												<InvoicePreview 
-														key={`invoice-${index}`}
-													invoiceData={attachment} 
-													theme={theme} 
-												/>
-											);
-										}
+                                    // Check if attachment has invoice data
+                                    if (attachment && attachment.invoice && (attachment.line_items || attachment.invoice?.invoice_line_items)) {
+                                        // Ensure top-level line_items for renderer compatibility
+                                        const normalized = attachment.line_items 
+                                          ? attachment 
+                                          : { ...attachment, line_items: attachment.invoice?.invoice_line_items || [] };
+                                        // console.log('✅ Rendering InvoicePreview (normalized attachment)');
+                                        return (
+                                            <InvoicePreview 
+                                                key={`invoice-${index}`}
+                                                invoiceData={normalized} 
+                                                theme={theme} 
+                                            />
+                                        );
+                                    }
 										
 										// Check if attachment has estimate data
 										if (attachment && attachment.estimate && attachment.line_items) {

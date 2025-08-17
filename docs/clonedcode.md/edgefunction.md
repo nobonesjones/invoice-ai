@@ -1,5 +1,6 @@
+this is cloned code here for safe keeping for another days; 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
 import OpenAI from 'https://deno.land/x/openai@v4.20.1/mod.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -3845,8 +3846,8 @@ serve(async (req)=>{
     if (classification.intents.includes('context_aware_update')) activeModules.push('context_awareness');
     if (classification.intents.includes('update_business')) activeModules.push('business_updates');
     if (classification.intents.includes('design_change')) activeModules.push('design_changes');
-    // Use a more reliable tool-capable model for function-calling
-    const model = 'gpt-4o-mini';
+    // Using gpt-5-nano for optimal performance
+    const model = 'gpt-5-nano';
     console.log(`→ Active instruction modules: ${activeModules.join(', ')}`);
     console.log(`→ Prompt size: ${systemPrompt.length} chars (reduced from 43,000)`);
     console.log(`→ Model: ${model}`);

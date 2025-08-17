@@ -10,6 +10,7 @@ export interface UserContext {
   hasLogo: boolean;
   businessName: string;
   isFirstInvoice: boolean;
+  conversationCount: number;
 }
 
 class UserContextService {
@@ -26,8 +27,8 @@ class UserContextService {
     try {
       console.log('[UserContext] Getting context for user:', userId);
 
-      // Get invoice and estimate counts
-      const [invoiceResult, estimateResult, businessResult] = await Promise.all([
+      // Get invoice, estimate, and conversation counts
+      const [invoiceResult, estimateResult, conversationResult, businessResult] = await Promise.all([
         supabase
           .from('invoices')
           .select('id', { count: 'exact', head: true })
@@ -35,6 +36,11 @@ class UserContextService {
         
         supabase
           .from('estimates')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId),
+        
+        supabase
+          .from('chat_threads')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId),
         
@@ -47,6 +53,7 @@ class UserContextService {
 
       const totalInvoices = invoiceResult.count || 0;
       const totalEstimates = estimateResult.count || 0;
+      const conversationCount = conversationResult.count || 0;
       const businessSettings = businessResult.data;
 
       // Default settings if no business settings found
@@ -59,11 +66,13 @@ class UserContextService {
         taxRate: businessSettings?.tax_rate || 0,
         hasLogo: !!businessSettings?.logo_url,
         businessName: businessSettings?.business_name || '',
-        isFirstInvoice: totalInvoices === 0
+        isFirstInvoice: totalInvoices === 0,
+        conversationCount
       };
 
       console.log('[UserContext] Context loaded:', {
         totalInvoices: context.totalInvoices,
+        conversationCount: context.conversationCount,
         currency: context.currency,
         hasLogo: context.hasLogo,
         isFirstInvoice: context.isFirstInvoice
@@ -83,7 +92,8 @@ class UserContextService {
         taxRate: 0,
         hasLogo: false,
         businessName: '',
-        isFirstInvoice: true
+        isFirstInvoice: true,
+        conversationCount: 0
       };
     }
   }

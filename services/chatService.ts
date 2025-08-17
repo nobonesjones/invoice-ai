@@ -1,6 +1,7 @@
 import { supabase } from '@/config/supabase';
 import { AssistantService, AssistantRunResult } from '@/services/assistantService';
 import { InvoiceFunctionService, INVOICE_FUNCTIONS } from '@/services/invoiceFunctions';
+import { UserContext } from './userContextService';
 
 export interface OpenAIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -81,7 +82,7 @@ export class ChatService {
   static async processUserMessage(
     userId: string,
     userMessage: string,
-    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean },
+    userContext?: UserContext,
     statusCallback?: (status: string) => void
   ): Promise<{ conversation?: ChatConversation; thread?: any; messages: any[] }> {
     try {
@@ -114,7 +115,7 @@ export class ChatService {
   private static async processWithAssistants(
     userId: string,
     userMessage: string,
-    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean },
+    userContext?: UserContext,
     statusCallback?: (status: string) => void
   ): Promise<{ thread: any; messages: any[] }> {
     try {
@@ -125,7 +126,7 @@ export class ChatService {
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
-      statusCallback?.('SuperAI is preparing...');
+      statusCallback?.('Processing...');
 
       // Reuse existing active thread if available
       const existingThread = await AssistantService.getCurrentThread(userId);
@@ -144,12 +145,42 @@ export class ChatService {
       // Send message via Assistants API with user context and status updates
       const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, userContext, statusCallback, existingThread?.id, history);
 
-      statusCallback?.('SuperAI is finalizing response...');
+      // Remove redundant status - processing is complete
 
       // Use messages directly from optimized response, and persist for history
       console.log('[ChatService] 🔍 Using optimized response messages directly');
+      
+      // 🐛 DEBUG: Check what the edge function returned
+      console.log(`🐛 DEBUG [ChatService]: Edge function result structure:`, {
+        has_messages: !!result.messages,
+        messages_count: result.messages?.length || 0,
+        has_content: !!result.content,
+        has_attachments: !!result.attachments,
+        attachments_count: result.attachments?.length || 0
+      });
+      
+      if (result.attachments && result.attachments.length > 0) {
+        console.log(`🐛 DEBUG [ChatService]: Result has ${result.attachments.length} attachments at root level, not in messages!`);
+        console.log(`🐛 DEBUG [ChatService]: First attachment:`, {
+          type: result.attachments[0].type,
+          invoice_id: result.attachments[0].invoice_id,
+          has_invoice: !!result.attachments[0].invoice,
+          has_line_items: !!result.attachments[0].line_items
+        });
+      }
+      
       let messages = result.messages || [];
       let thread = result.thread || existingThread || { id: `thread-${Date.now()}`, user_id: userId };
+
+      // 🔧 FIX: If edge function returns attachments at root level, add them to the assistant message
+      if (result.attachments && result.attachments.length > 0 && messages.length >= 2) {
+        console.log(`🔧 FIX [ChatService]: Moving ${result.attachments.length} root-level attachments to assistant message`);
+        const assistantMessage = messages[messages.length - 1]; // Last message should be assistant
+        if (assistantMessage && assistantMessage.role === 'assistant') {
+          assistantMessage.attachments = result.attachments;
+          console.log(`🔧 FIX [ChatService]: Assistant message now has ${assistantMessage.attachments.length} attachments`);
+        }
+      }
 
       try {
         const savedThread = await AssistantService.persistOptimizedResult(userId, thread, messages);
@@ -168,17 +199,39 @@ export class ChatService {
         fullHistory = messages.map(m => ({ ...m, thread_id: thread?.id }));
       }
 
+      // 🐛 DEBUG: Check if any messages have attachments before mapping
+      const messagesWithAttachments = fullHistory.filter(msg => msg.attachments && msg.attachments.length > 0);
+      console.log(`🐛 DEBUG [ChatService]: Full history has ${messagesWithAttachments.length} messages with attachments out of ${fullHistory.length} total`);
+      
+      if (messagesWithAttachments.length > 0) {
+        console.log(`🐛 DEBUG [ChatService]: First message with attachments:`, {
+          role: messagesWithAttachments[0].role,
+          has_attachments: !!messagesWithAttachments[0].attachments,
+          attachment_count: messagesWithAttachments[0].attachments?.length || 0,
+          attachment_type: messagesWithAttachments[0].attachments?.[0]?.type
+        });
+      }
+
       return {
         thread,
-        messages: fullHistory.map(msg => ({
-          id: msg.id,
-          conversation_id: msg.thread_id || thread?.id,
-          role: msg.role,
-          content: msg.content,
-          message_type: (msg.attachments && msg.attachments.length > 0) ? 'document' : 'text',
-          attachments: msg.attachments,
-          created_at: msg.created_at
-        }))
+        messages: fullHistory.map(msg => {
+          const mappedMessage = {
+            id: msg.id,
+            conversation_id: msg.thread_id || thread?.id,
+            role: msg.role,
+            content: msg.content,
+            message_type: (msg.attachments && msg.attachments.length > 0) ? 'document' : 'text',
+            attachments: msg.attachments,
+            created_at: msg.created_at
+          };
+          
+          // 🐛 DEBUG: Log when mapping a message with attachments
+          if (msg.attachments && msg.attachments.length > 0) {
+            console.log(`🐛 DEBUG [ChatService]: Mapping message with ${msg.attachments.length} attachments, message_type: ${mappedMessage.message_type}`);
+          }
+          
+          return mappedMessage;
+        })
       };
     } catch (error) {
       console.error('[ChatService] Assistants API error:', error);
@@ -191,7 +244,7 @@ export class ChatService {
   private static async processWithChatCompletions(
     userId: string,
     userMessage: string,
-    userContext?: { currency: string; symbol: string; isFirstInvoice: boolean; hasLogo: boolean },
+    userContext?: UserContext,
     statusCallback?: (status: string) => void
   ): Promise<{ conversation: ChatConversation; messages: ChatMessage[] }> {
     try {
