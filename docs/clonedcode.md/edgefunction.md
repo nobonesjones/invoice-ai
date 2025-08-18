@@ -1,6 +1,5 @@
-this is cloned code here for safe keeping for another days; 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import OpenAI from 'https://deno.land/x/openai@v4.20.1/mod.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2701,11 +2700,10 @@ function buildConversationSummary(messages) {
 }
 // Enhanced classify user intent with simplified approach
 async function classifyIntent(message, userId, history = []) {
-  try {
-    // Get last 3 message pairs for context (6 messages total)
-    const recentHistory = history.slice(-6);
-    const conversationContext = recentHistory.length > 0 ? recentHistory.map((msg)=>`${msg.role}: ${msg.content}`).join('\n') : "No previous messages";
-    const classificationPrompt1 = `You are a classification system for an invoice management app. Analyze the user's message along with recent conversation context to determine their intent.
+  // Get last 3 message pairs for context (6 messages total)
+  const recentHistory = history.slice(-6);
+  const conversationContext = recentHistory.length > 0 ? recentHistory.map((msg)=>`${msg.role}: ${msg.content}`).join('\n') : "No previous messages";
+  const classificationPrompt1 = `You are a classification system for an invoice management app. Analyze the user's message along with recent conversation context to determine their intent.
 
 AVAILABLE INTENTS:
 1. create_invoice - User wants to create a new invoice
@@ -2791,10 +2789,11 @@ Respond with ONLY a JSON object that matches this schema:
 
 Intent to Tool Groups Mapping:
 - create_invoice → ["invoice_core", "client_ops", "business_ops"]
-- manage_invoice → ["invoice_core", "client_ops", "business_ops", "search_ops"]
+- manage_invoice → ["invoice_core", "client_ops", "business_ops", "search_ops", "payment_ops"]
 - create_estimate → ["estimate_ops", "client_ops", "business_ops"]
 - manage_estimate → ["estimate_ops", "client_ops", "search_ops"]
 - general_query → ["business_ops", "client_ops", "search_ops", "utility_ops"]`;
+  try {
     // 🔍 LOG CLASSIFICATION
     console.log(`\n🔍 CLASSIFYING REQUEST: "${message}"`);
     console.log('\n🟢 CLASSIFICATION PROMPT SENT');
@@ -2806,8 +2805,7 @@ Intent to Tool Groups Mapping:
           content: classificationPrompt1
         }
       ],
-      temperature: 0,
-      max_tokens: 300,
+      max_completion_tokens: 300,
       response_format: {
         type: "json_object"
       }
@@ -2832,7 +2830,7 @@ Intent to Tool Groups Mapping:
     return classification;
   } catch (error) {
     console.error('Classification error:', error);
-    console.error('Classification prompt was:', classificationPrompt.substring(0, 500) + '...');
+    console.error('Classification prompt was:', classificationPrompt1.substring(0, 500) + '...');
     // Fallback: assume complex to be safe
     return {
       intents: [
@@ -2877,6 +2875,7 @@ ACT-FIRST DELIVERY MODE - CRITICAL:
 • CLIENTS: Search for an existing client; if none found, AUTOMATICALLY create the client and proceed
 • If exactly one strong match exists, use it without asking. If multiple ambiguous matches exist, pick the best match and proceed; afterwards, ask if they meant a different client
 • LINE ITEMS: If price is missing, create with quantity 1 and unit_price 0, then ask for the price after showing the draft
+• LINE ITEM FORMATTING: Always capitalize the first letter of each word in line item descriptions (e.g., "Professional Services" not "professional services", "New Door" not "new door")
 • DATES: Default invoice_date to today and due_date to payment_terms_days or 30 days
 • Be transparent post-action: "I created invoice #123 for Jane Doe with a placeholder price. Want me to set the price or send it?"
 
@@ -2959,6 +2958,7 @@ ACT-FIRST DELIVERY MODE - CRITICAL:
 • CLIENTS: Search for an existing client; if none found, AUTOMATICALLY create the client and proceed
 • If exactly one strong match exists, use it without asking. If multiple ambiguous matches exist, pick the best match and proceed; afterwards, ask if they meant a different client
 • LINE ITEMS: If price is missing, create with quantity 1 and unit_price 0, then ask for the price after showing the draft
+• LINE ITEM FORMATTING: Always capitalize the first letter of each word in line item descriptions (e.g., "Professional Services" not "professional services", "New Door" not "new door")
 • DATES: Default invoice_date to today and due_date to payment_terms_days or 30 days
 • Be transparent post-action: "I created invoice #123 for Jane Doe with a placeholder price. Want me to set the price or send it?"
 
@@ -3056,6 +3056,25 @@ When users want to modify invoice items:
 2. If adding to existing invoice: Use update_invoice_line_items with action="add"
 3. If removing items: Use update_invoice_line_items with action="remove"
 4. If modifying existing items: Update specific line items
+
+**LINE ITEM FORMATTING:** Always capitalize the first letter of each word in line item descriptions (e.g., "Professional Services" not "professional services", "New Door" not "new door")
+
+**⚠️ CRITICAL: PAYMENT METHODS vs LINE ITEMS**
+DO NOT confuse payment methods with billable line items:
+
+**PAYMENT METHODS** (update payment settings, NOT line items):
+- "Add PayPal to this invoice" → Use setup_paypal_payments or update_invoice_payment_methods
+- "Enable bank transfer" → Use setup_bank_transfer_payments
+- "Add ACH payments" → Use setup_bank_transfer_payments (ACH is US bank transfer)
+- "Set up wire transfer" → Use setup_bank_transfer_payments (wire transfer is US bank transfer)
+- "Enable direct deposit" → Use setup_bank_transfer_payments (another US term for bank transfer)
+- "Add Stripe" → Explain Stripe is coming soon
+- "Enable card payments" → Explain card payments via Stripe coming soon
+
+**BILLABLE LINE ITEMS** (actual services/products being charged):
+- "Add consulting services for $500" → Use update_invoice_line_items
+- "Include website hosting $25/month" → Use update_invoice_line_items
+- "Add 3 hours of design work" → Use update_invoice_line_items
 
 ### Address Management
 When users ask to "update address on invoice" or "change invoice address":
@@ -3340,7 +3359,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
       model,
       messages,
       temperature: 0.2,
-      max_tokens: 350
+      max_completion_tokens: 350
     };
     if (functions.length > 0) {
       reqBody.functions = functions;
@@ -3846,8 +3865,8 @@ serve(async (req)=>{
     if (classification.intents.includes('context_aware_update')) activeModules.push('context_awareness');
     if (classification.intents.includes('update_business')) activeModules.push('business_updates');
     if (classification.intents.includes('design_change')) activeModules.push('design_changes');
-    // Using gpt-5-nano for optimal performance
-    const model = 'gpt-5-nano';
+    // Use a more reliable tool-capable model for function-calling
+    const model = 'gpt-4o-mini';
     console.log(`→ Active instruction modules: ${activeModules.join(', ')}`);
     console.log(`→ Prompt size: ${systemPrompt.length} chars (reduced from 43,000)`);
     console.log(`→ Model: ${model}`);
@@ -3917,8 +3936,7 @@ serve(async (req)=>{
     // In production mode, execute via Chat Completions (fast, reliable, single-shot)
     let assistantResult;
     try {
-      assistantResult = await executeWithCompletions(message, userId, model, systemPrompt, tools, // Enable function forcing for create_invoice and manage_invoice
-      classification.intents.includes('create_invoice') ? 'create_invoice' : classification.intents.includes('manage_invoice') ? 'update_invoice_line_items' : undefined, history, requestId);
+      assistantResult = await executeWithCompletions(message, userId, model, systemPrompt, tools, classification.intents.includes('create_invoice') ? 'create_invoice' : classification.intents.includes('manage_invoice') ? 'update_invoice_line_items' : undefined, history, requestId);
     } catch (executeError) {
       console.error('[AI-Chat-Optimized] Completions execution failed:', executeError);
       throw executeError;

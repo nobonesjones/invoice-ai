@@ -72,9 +72,9 @@ export class AssistantService {
         }
       };
       
-      // Use optimized or original endpoint based on feature flag
-      const endpoint = this.USE_OPTIMIZED_AI ? 'ai-chat-optimized' : 'ai-chat';
-      console.log(`[AssistantService] Using ${endpoint} endpoint`);
+      // Use POC Assistants endpoint for testing
+      const endpoint = 'ai-chat-assistants-poc';
+      console.log(`[AssistantService] Using ${endpoint} endpoint (POC Testing)`);
       
       const url = `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/${endpoint}`;
       const init: RequestInit = {
@@ -166,7 +166,9 @@ export class AssistantService {
         thread_id: dbThread.id,
         role: m.role,
         content: m.content,
-        attachments: m.attachments || []
+        attachments: m.attachments || [],
+        // Preserve original timestamps from edge function to ensure correct ordering
+        created_at: m.created_at || new Date().toISOString()
       }));
       if (rows.length > 0) {
         await supabase.from('chat_message_display').insert(rows);

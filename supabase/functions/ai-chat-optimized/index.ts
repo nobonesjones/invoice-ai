@@ -277,12 +277,10 @@ class InvoiceFunctionService {
       // Step 7: Format success response
       const clientNote = createdNewClient ? `I've also added ${params.client_name} as a new client in your contacts.\n\n` : '';
       const successMessage = `Great! I've successfully created invoice #${invoiceNumber} for ${params.client_name}.
-${clientNote}The invoice includes:
-${lineItems.map((item)=>`• ${item.item_name}${item.item_description ? ` (${item.item_description})` : ''} - ${businessCurrencySymbol}${item.unit_price}${item.quantity > 1 ? ` x ${item.quantity} = ${businessCurrencySymbol}${item.total_price}` : ''}`).join('\n')}
 
-Total: ${businessCurrencySymbol}${totalAmount.toFixed(2)}${createdInvoice.due_date ? ` • Due: ${new Date(createdInvoice.due_date).toLocaleDateString()}` : ''}
+${clientNote}Total: ${businessCurrencySymbol}${totalAmount.toFixed(2)}${createdInvoice.due_date ? ` • Due: ${new Date(createdInvoice.due_date).toLocaleDateString()}` : ''}
 
-Would you like me to help you send this invoice or make any changes?`;
+Would you like me to make any changes?`;
       return {
         success: true,
         data: {
@@ -1906,7 +1904,7 @@ const INVOICE_FUNCTIONS = [
   },
   {
     name: "setup_paypal_payments",
-    description: "Setup PayPal payments",
+    description: "Enable PayPal payment option on invoices. Use this when users want to add PayPal as a payment method, NOT as a line item. This enables PayPal payments for the invoice.",
     parameters: {
       type: "object",
       properties: {
@@ -2700,11 +2698,10 @@ function buildConversationSummary(messages) {
 }
 // Enhanced classify user intent with simplified approach
 async function classifyIntent(message, userId, history = []) {
-  try {
-    // Get last 3 message pairs for context (6 messages total)
-    const recentHistory = history.slice(-6);
-    const conversationContext = recentHistory.length > 0 ? recentHistory.map((msg)=>`${msg.role}: ${msg.content}`).join('\n') : "No previous messages";
-    const classificationPrompt1 = `You are a classification system for an invoice management app. Analyze the user's message along with recent conversation context to determine their intent.
+  // Get last 3 message pairs for context (6 messages total)
+  const recentHistory = history.slice(-6);
+  const conversationContext = recentHistory.length > 0 ? recentHistory.map((msg)=>`${msg.role}: ${msg.content}`).join('\n') : "No previous messages";
+  const classificationPrompt1 = `You are a classification system for an invoice management app. Analyze the user's message along with recent conversation context to determine their intent.
 
 AVAILABLE INTENTS:
 1. create_invoice - User wants to create a new invoice
@@ -2790,40 +2787,44 @@ Respond with ONLY a JSON object that matches this schema:
 
 Intent to Tool Groups Mapping:
 - create_invoice → ["invoice_core", "client_ops", "business_ops"]
-- manage_invoice → ["invoice_core", "client_ops", "business_ops", "search_ops"]
+- manage_invoice → ["invoice_core", "client_ops", "business_ops", "search_ops", "payment_ops"]
 - create_estimate → ["estimate_ops", "client_ops", "business_ops"]
 - manage_estimate → ["estimate_ops", "client_ops", "search_ops"]
 - general_query → ["business_ops", "client_ops", "search_ops", "utility_ops"]`;
+  
+  try {
     // 🔍 LOG CLASSIFICATION
     console.log(`\n🔍 CLASSIFYING REQUEST: "${message}"`);
+    console.log('🧪 TESTING: Phase 2 - gpt-5-nano + v1/responses format');
     console.log('\n🟢 CLASSIFICATION PROMPT SENT');
     const response = await openai.chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'user',
           content: classificationPrompt1
         }
       ],
-      temperature: 0,
-      max_tokens: 300,
+      max_completion_tokens: 300,
       response_format: {
         type: "json_object"
       }
     });
-    const result = response.choices[0].message.content || '{}';
+    const result = response.choices?.[0]?.message?.content || '{}';
     const classification = JSON.parse(result);
     // Small delay to help with log ordering
     await new Promise((resolve)=>setTimeout(resolve, 10));
+    console.log(`\n🎯 CLASSIFICATION COMPLETE:`);
     console.log(`→ Classified as: ${classification.intents?.join(', ') || 'unknown'}`);
     console.log(`→ Complexity: ${classification.complexity} | Confidence: ${classification.confidence}`);
     console.log(`→ Tools needed: ${classification.requiredToolGroups?.join(', ') || 'none'}`);
     console.log(`→ Scope: ${classification.scope} | Target: ${classification.targets?.invoice_number || 'none'}`);
+    console.log(`🧪 v1/responses format working: ✅`);
     // 🐛 DEBUG: Check if this is manage_invoice
-    if (classification.intents.includes('manage_invoice')) {
+    if (classification.intents && classification.intents.includes('manage_invoice')) {
       console.log(`🐛 DEBUG: MANAGE_INVOICE path detected - will use chat completion with functions`);
     } else {
-      console.log(`🐛 DEBUG: NOT manage_invoice - intent is: ${classification.intents.join(', ')}`);
+      console.log(`🐛 DEBUG: NOT manage_invoice - intent is: ${classification.intents?.join(', ') || 'unknown'}`);
       console.log(`🐛 DEBUG: This explains why attachments might not show - not going through manage_invoice path`);
     }
     console.log(`→ Missing fields: ${classification.missingFields?.join(', ') || 'none'}`);
@@ -2831,7 +2832,7 @@ Intent to Tool Groups Mapping:
     return classification;
   } catch (error) {
     console.error('Classification error:', error);
-    console.error('Classification prompt was:', classificationPrompt.substring(0, 500) + '...');
+    console.error('Classification prompt was:', classificationPrompt1.substring(0, 500) + '...');
     // Fallback: assume complex to be safe
     return {
       intents: [
@@ -2858,7 +2859,7 @@ Intent to Tool Groups Mapping:
 // Build dynamic prompt based on intents
 function buildDynamicPrompt(intents, userContext) {
   // Get the primary intent (first one)
-  const primaryIntent = intents[0] || 'general_query';
+  const primaryIntent = intents?.[0] || 'general_query';
   // Base prompt from AssistantService (simplified version for now)
   const basePrompt = `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.
 
@@ -2876,6 +2877,7 @@ ACT-FIRST DELIVERY MODE - CRITICAL:
 • CLIENTS: Search for an existing client; if none found, AUTOMATICALLY create the client and proceed
 • If exactly one strong match exists, use it without asking. If multiple ambiguous matches exist, pick the best match and proceed; afterwards, ask if they meant a different client
 • LINE ITEMS: If price is missing, create with quantity 1 and unit_price 0, then ask for the price after showing the draft
+• LINE ITEM FORMATTING: Always capitalize the first letter of each word in line item descriptions (e.g., "Professional Services" not "professional services", "New Door" not "new door")
 • DATES: Default invoice_date to today and due_date to payment_terms_days or 30 days
 • Be transparent post-action: "I created invoice #123 for Jane Doe with a placeholder price. Want me to set the price or send it?"
 
@@ -2958,6 +2960,7 @@ ACT-FIRST DELIVERY MODE - CRITICAL:
 • CLIENTS: Search for an existing client; if none found, AUTOMATICALLY create the client and proceed
 • If exactly one strong match exists, use it without asking. If multiple ambiguous matches exist, pick the best match and proceed; afterwards, ask if they meant a different client
 • LINE ITEMS: If price is missing, create with quantity 1 and unit_price 0, then ask for the price after showing the draft
+• LINE ITEM FORMATTING: Always capitalize the first letter of each word in line item descriptions (e.g., "Professional Services" not "professional services", "New Door" not "new door")
 • DATES: Default invoice_date to today and due_date to payment_terms_days or 30 days
 • Be transparent post-action: "I created invoice #123 for Jane Doe with a placeholder price. Want me to set the price or send it?"
 
@@ -3055,6 +3058,30 @@ When users want to modify invoice items:
 2. If adding to existing invoice: Use update_invoice_line_items with action="add"
 3. If removing items: Use update_invoice_line_items with action="remove"
 4. If modifying existing items: Update specific line items
+
+**LINE ITEM FORMATTING:** Always capitalize the first letter of each word in line item descriptions (e.g., "Professional Services" not "professional services", "New Door" not "new door")
+
+**🚨🚨🚨 ABSOLUTELY CRITICAL: PAYMENT METHODS vs LINE ITEMS 🚨🚨🚨**
+PayPal is a PAYMENT METHOD, NOT a billable service. NEVER EVER add PayPal as a line item.
+
+**🔥 CRITICAL RULE: PayPal = setup_paypal_payments function ONLY! 🔥**
+
+**PAYMENT METHODS** (use setup_paypal_payments, NEVER update_invoice_line_items):
+- "Add PayPal to this invoice" → MANDATORY: setup_paypal_payments
+- "Enable PayPal" → MANDATORY: setup_paypal_payments  
+- "Add PayPal payments" → MANDATORY: setup_paypal_payments
+- "Paypal please add this payment option" → MANDATORY: setup_paypal_payments
+- ANY PayPal request → MANDATORY: setup_paypal_payments
+
+**BILLABLE LINE ITEMS** (actual services/products being charged):
+- "Add consulting services for $500" → Use update_invoice_line_items
+- "Include website hosting $25/month" → Use update_invoice_line_items  
+- "Add 3 hours of design work" → Use update_invoice_line_items
+
+**ABSOLUTELY WRONG:** Adding "PayPal Payment - $0" as a line item ❌❌❌
+**ABSOLUTELY RIGHT:** Using setup_paypal_payments to enable PayPal payment option ✅✅✅
+
+🚨 IF YOU USE update_invoice_line_items FOR PAYPAL YOU ARE MAKING A CRITICAL ERROR! 🚨
 
 ### Address Management
 When users ask to "update address on invoice" or "change invoice address":
@@ -3240,7 +3267,7 @@ NEVER perform business operations. Focus on explaining the classification logic.
 // Select only needed tools based on intents
 function selectTools(toolGroups, classification) {
   // Enable tools for create_invoice and manage_invoice, keep other paths in verification mode
-  if (classification.intents.includes('create_invoice') || classification.intents.includes('manage_invoice')) {
+  if (classification.intents && (classification.intents.includes('create_invoice') || classification.intents.includes('manage_invoice'))) {
     const intentType = classification.intents.includes('create_invoice') ? 'create_invoice' : 'manage_invoice';
     console.log(`→ PRODUCTION MODE: Enabling tools for ${intentType} path`);
     const selectedToolNames = new Set();
@@ -3259,10 +3286,13 @@ function selectTools(toolGroups, classification) {
 async function executeWithCompletions(message, userId, model, systemPrompt, tools, preferredFirstFunction, history = [], requestId) {
   const openaiKey = Deno.env.get('OPENAI_API_KEY');
   if (!openaiKey) throw new Error('OPENAI_API_KEY not set');
-  const functions = tools.map((func)=>({
-      name: func.name,
-      description: func.description,
-      parameters: func.parameters
+  const toolsArray = tools.map((func)=>({
+      type: "function",
+      function: {
+        name: func.name,
+        description: func.description,
+        parameters: func.parameters
+      }
     }));
   // Tool loop with time budget and max steps
   // Build conversation with history: system + prior turns + latest user message
@@ -3291,7 +3321,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
   console.log(`\n[${requestId}] 🤖 SENDING TO MAIN AI`);
   console.log(`→ Model: ${model}`);
   console.log(`→ Messages: ${messages.length} total (${recentHistory.length} from history + current)`);
-  console.log(`→ Available functions: ${functions.map((f)=>f.name).join(', ')}`);
+  console.log(`→ Available tools: ${toolsArray.map((t)=>t.function.name).join(', ')}`);
   // Show recent context if any
   if (recentHistory.length > 0) {
     const lastUserMsg = recentHistory.filter((m)=>m.role === 'user').pop();
@@ -3338,18 +3368,18 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
     const reqBody = {
       model,
       messages,
-      temperature: 0.2,
-      max_tokens: 350
+      max_completion_tokens: 350
     };
-    if (functions.length > 0) {
-      reqBody.functions = functions;
+    if (toolsArray.length > 0) {
+      reqBody.tools = toolsArray;
       // Nudge first step to call the primary function if intent is clear
       if (step === 0 && preferredFirstFunction || forceFunctionNext) {
-        reqBody.function_call = {
-          name: preferredFirstFunction
+        reqBody.tool_choice = {
+          type: "function",
+          function: { name: preferredFirstFunction }
         };
       } else {
-        reqBody.function_call = 'auto';
+        reqBody.tool_choice = 'auto';
       }
     }
     let json;
@@ -3390,7 +3420,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
     lastUsage = json.usage;
     const msg = json.choices?.[0]?.message;
     // If no tool call
-    if (!msg?.function_call) {
+    if (!msg?.tool_calls || msg.tool_calls.length === 0) {
       // Enforce action once when intent is create_invoice: push a strict instruction and retry
       if (step === 0 && preferredFirstFunction === 'create_invoice' && !forceFunctionNext) {
         messages.push({
@@ -3431,7 +3461,8 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
     }
     // Execute tool
     let args = {};
-    const fn = msg.function_call;
+    const toolCall = msg.tool_calls[0];
+    const fn = toolCall.function;
     try {
       args = fn.arguments ? JSON.parse(fn.arguments) : {};
     } catch  {}
@@ -3441,7 +3472,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
     // Log key arguments in a readable way
     if (fn.name === 'create_invoice') {
       console.log(`   → Client: ${args.client_name || 'unknown'}`);
-      console.log(`   → Items: ${args.line_items?.length || 0} items`);
+      console.log(`   → Items: ${args.line_items?.length || 0} | First: ${args.line_items?.[0]?.item_name || 'none'}`);
     } else if (fn.name === 'setup_paypal_payments') {
       console.log(`   → Email: ${args.paypal_email || 'not provided'}`);
       console.log(`   → Invoice: ${args.invoice_number || 'not specified'}`);
@@ -3505,10 +3536,16 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
         usage: lastUsage
       };
     }
-    // Append function result
+    // Append assistant message with tool call
     messages.push({
-      role: 'function',
-      name: fn.name,
+      role: 'assistant',
+      content: msg.content || null,
+      tool_calls: msg.tool_calls
+    });
+    // Append tool result
+    messages.push({
+      role: 'tool',
+      tool_call_id: toolCall.id,
       content: JSON.stringify(toolResult)
     });
     // Check time budget
@@ -3793,7 +3830,7 @@ serve(async (req)=>{
       console.log(`→ Classification time: ${classificationTime}ms`);
     }
     // Step 2: Check usage limits for creation intents (before building prompts)
-    if (classification.intents.includes('create_invoice') || classification.intents.includes('create_estimate')) {
+    if (classification.intents && (classification.intents.includes('create_invoice') || classification.intents.includes('create_estimate'))) {
       console.log(`\n[${requestId}] [STEP ${++stepCounter}] 🔒 CHECKING USAGE LIMITS`);
       console.log(`→ User attempting creation intent: ${classification.intents.join(', ')}`);
       try {
@@ -3840,24 +3877,24 @@ serve(async (req)=>{
     console.log(`\n[${requestId}] [STEP ${++stepCounter}] 🔧 BUILDING AI INSTRUCTIONS`);
     // Show which instruction modules are being activated
     const activeModules = [];
-    if (classification.intents.includes('create_invoice')) activeModules.push('invoice_creation');
-    if (classification.intents.includes('payment_setup')) activeModules.push('payment_setup');
-    if (classification.intents.includes('context_aware_update')) activeModules.push('context_awareness');
-    if (classification.intents.includes('update_business')) activeModules.push('business_updates');
-    if (classification.intents.includes('design_change')) activeModules.push('design_changes');
-    // Use a more reliable tool-capable model for function-calling
+    if (classification.intents && classification.intents.includes('create_invoice')) activeModules.push('invoice_creation');
+    if (classification.intents && classification.intents.includes('payment_setup')) activeModules.push('payment_setup');
+    if (classification.intents && classification.intents.includes('context_aware_update')) activeModules.push('context_awareness');
+    if (classification.intents && classification.intents.includes('update_business')) activeModules.push('business_updates');
+    if (classification.intents && classification.intents.includes('design_change')) activeModules.push('design_changes');
+    // Use gpt-4o-mini for reliable processing (tested working)
     const model = 'gpt-4o-mini';
     console.log(`→ Active instruction modules: ${activeModules.join(', ')}`);
     console.log(`→ Prompt size: ${systemPrompt.length} chars (reduced from 43,000)`);
     console.log(`→ Model: ${model}`);
     console.log(`→ Scope: ${classification.scope}`);
     // Show key instructions for the detected intents
-    if (classification.intents.includes('payment_setup')) {
+    if (classification.intents && classification.intents.includes('payment_setup')) {
       console.log('→ PayPal flow: CHECK settings first → ASK for email if needed → SETUP → SHOW invoice');
     }
-    if (classification.intents.includes('context_aware_update')) {
+    if (classification.intents && classification.intents.includes('context_aware_update')) {
       console.log('→ Context mode: Will look for "this invoice" in conversation history');
-      if (classification.targets.invoice_number) {
+      if (classification.targets && classification.targets.invoice_number) {
         console.log(`→ Target invoice: ${classification.targets.invoice_number}`);
       }
     }
@@ -3866,10 +3903,10 @@ serve(async (req)=>{
     const tools = selectTools(classification.requiredToolGroups, classification);
     console.log(`→ Selected tools: ${tools.length} (optimized from 46)`);
     // Step 4: Handle needsContext and missingFields
-    if (classification.needsContext && classification.missingFields.length > 0) {
+    if (classification.needsContext && classification.missingFields && classification.missingFields.length > 0) {
       console.log(`→ Context needed: Missing ${classification.missingFields.join(', ')}`);
       // For PayPal email missing, ask directly
-      if (classification.missingFields.includes('paypal_email')) {
+      if (classification.missingFields && classification.missingFields.includes('paypal_email')) {
         const invoiceRef = classification.targets.invoice_number ? ` to invoice ${classification.targets.invoice_number}` : '';
         const askForEmailResponse = {
           content: `I'll add PayPal${invoiceRef}. What's your PayPal email address?`,
@@ -3917,7 +3954,7 @@ serve(async (req)=>{
     let assistantResult;
     try {
       assistantResult = await executeWithCompletions(message, userId, model, systemPrompt, tools, // Enable function forcing for create_invoice and manage_invoice
-      classification.intents.includes('create_invoice') ? 'create_invoice' : classification.intents.includes('manage_invoice') ? 'update_invoice_line_items' : undefined, history, requestId);
+      (classification.intents && classification.intents.includes('create_invoice')) ? 'create_invoice' : (classification.intents && classification.intents.includes('manage_invoice')) ? 'update_invoice_line_items' : undefined, history, requestId);
     } catch (executeError) {
       console.error('[AI-Chat-Optimized] Completions execution failed:', executeError);
       throw executeError;
