@@ -125,7 +125,7 @@ export const INVOICE_DESIGNS: InvoiceDesign[] = [
     description: 'Clean design with accent color header and alternating rows',
     thumbnail: '/assets/invoice-designs/clean-thumb.png',
     component: SkiaInvoiceCanvasClean,
-    colorScheme: COLOR_SCHEMES.modernOriginal, // Uses original green accent color
+    colorScheme: COLOR_SCHEMES.classic, // Uses blue colors
     layoutConfig: {
       headerPosition: 'top',
       sectionsLayout: 'standard',
