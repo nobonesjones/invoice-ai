@@ -3334,7 +3334,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
   const budgetMs = 24000; // extend server budget; client has 25s with retry
   const start = Date.now();
   let lastUsage = undefined;
-  let lastAttachments = undefined;
+  let currentAttachments = undefined; // Only for current conversation, not persistent
   let lastToolMessage = undefined;
   // Minimal parser for direct fallback when model refuses tool call
   const parseQuickInvoiceRequest = (text)=>{
@@ -3412,7 +3412,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
         const fallback = lastToolMessage || 'I completed the requested steps.';
         return {
           content: fallback,
-          attachments: lastAttachments || [],
+          attachments: [], // Never return stale attachments on parse fallback
           usage: lastUsage
         };
       }
@@ -3455,7 +3455,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
       const finalText = msg?.content || 'Okay.';
       return {
         content: finalText,
-        attachments: lastAttachments || [],
+        attachments: currentAttachments || [], // Only return attachments from current operation
         usage: lastUsage
       };
     }
@@ -3503,7 +3503,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
       console.log(`   ❌ Failed (${funcDuration}ms): ${toolResult.error}`);
     }
     if (toolResult.attachments && toolResult.attachments.length) {
-      lastAttachments = toolResult.attachments;
+      currentAttachments = toolResult.attachments;
     }
     if (toolResult.message) {
       lastToolMessage = toolResult.message;
@@ -3553,7 +3553,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
       const fallback = toolResult.message || 'Processed your request.';
       return {
         content: fallback,
-        attachments: lastAttachments || [],
+        attachments: [], // Never return stale attachments on tool execution failure
         usage: lastUsage
       };
     }
@@ -3562,7 +3562,7 @@ async function executeWithCompletions(message, userId, model, systemPrompt, tool
   const fallbackText = lastToolMessage || 'I completed the requested steps.';
   return {
     content: fallbackText,
-    attachments: lastAttachments || [],
+    attachments: currentAttachments || [], // Only return attachments from current operation
     usage: lastUsage
   };
 }
@@ -3960,10 +3960,11 @@ serve(async (req)=>{
       throw executeError;
     }
     // Format response to match AssistantService expectations
-    // Fix message ordering by ensuring proper sequential timestamps
+    // Fix message ordering by ensuring proper sequential timestamps with millisecond precision
     const baseTimestamp = Date.now();
     const userTimestamp = new Date(baseTimestamp).toISOString();
-    const assistantTimestamp = new Date(baseTimestamp + 1000).toISOString(); // Add 1 second to ensure proper ordering
+    // Add 5 seconds to ensure proper ordering even with processing delays
+    const assistantTimestamp = new Date(baseTimestamp + 5000).toISOString();
     const messagesArray = [
       {
         id: `msg-${baseTimestamp}`,

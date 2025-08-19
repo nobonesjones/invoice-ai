@@ -1832,7 +1832,9 @@ export class InvoiceFunctionService {
           }
           if (businessSettings.default_invoice_design) {
             defaultDesign = businessSettings.default_invoice_design;
-            // Using default design
+            console.log('[createInvoice] 🎨 Using business settings design:', defaultDesign);
+          } else {
+            console.log('[createInvoice] 🎨 No business design setting, using fallback:', defaultDesign);
           }
           if (businessSettings.default_accent_color) {
             defaultAccentColor = businessSettings.default_accent_color;
@@ -1968,6 +1970,8 @@ export class InvoiceFunctionService {
       const taxAmount = discountedAmount * ((taxPercentage || 0) / 100);
       const totalAmount = discountedAmount + taxAmount;
 
+      // console.log('[createInvoice] 🎨 About to save invoice with design:', defaultDesign, 'accent:', defaultAccentColor);
+
       // Step 6: Create invoice with user's enabled payment methods
       const { data: invoice, error: invoiceError } = await supabase
         .from('invoices')
@@ -2054,6 +2058,8 @@ ${lineItems.map((item: any, index: number) =>
 Total: $${totalAmount.toFixed(2)}${invoice.due_date ? ` • Due: ${new Date(invoice.due_date).toLocaleDateString()}` : ''}
 
 Would you like me to help you send this invoice or make any changes?`;
+
+      console.log('[createInvoice] 🎨 Attaching invoice with design:', invoice.invoice_design, 'full invoice:', JSON.stringify(invoice, null, 2));
 
       return {
         success: true,

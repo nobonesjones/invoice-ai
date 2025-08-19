@@ -531,7 +531,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Get the correct invoice design component based on invoice design type
 	const getInvoiceDesignComponent = () => {
 		const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-		// console.log('[AI InvoicePreview] Selected design type for invoice:', designType);
+		// console.log('[AI InvoicePreview] 🎨 Preview rendering design:', designType, 'from invoice:', invoice?.invoice_design, 'fallback:', DEFAULT_DESIGN_ID);
 		
 		switch (designType.toLowerCase()) {
 			case 'modern':

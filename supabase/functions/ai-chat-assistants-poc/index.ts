@@ -7,6 +7,337 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+
+// Function to find invoice by identifier
+async function findInvoice(supabase: any, user_id: string, invoice_identifier: string) {
+  try {
+    let targetInvoice = null
+    
+    if (invoice_identifier === 'latest') {
+      // Get most recent invoice
+      console.log('[findInvoice] Searching for latest invoice for user:', user_id)
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('user_id', user_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      if (error) {
+        console.error('[findInvoice] Database error for latest:', error)
+        return `Database error finding latest invoice: ${error.message}`
+      }
+      
+      console.log('[findInvoice] Found latest invoices:', invoices?.length || 0, invoices?.map(i => ({ id: i.id, number: i.invoice_number })))
+      targetInvoice = invoices?.[0]
+    } else if (invoice_identifier.startsWith('INV-')) {
+      // Search by invoice number
+      console.log('[findInvoice] Searching for invoice:', invoice_identifier, 'for user:', user_id)
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('user_id', user_id)
+        .eq('invoice_number', invoice_identifier)
+      
+      if (error) {
+        console.error('[findInvoice] Database error:', error)
+        return `Database error finding invoice: ${error.message}`
+      }
+      
+      console.log('[findInvoice] Found invoices:', invoices?.length || 0, invoices?.map(i => ({ id: i.id, number: i.invoice_number })))
+      targetInvoice = invoices?.[0]
+    } else {
+      // Search by client name
+      const { data: clients } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user_id)
+        .ilike('name', `%${invoice_identifier}%`)
+      
+      if (clients && clients.length > 0) {
+        const { data: invoices } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('user_id', user_id)
+          .in('client_id', clients.map(c => c.id))
+          .order('created_at', { ascending: false })
+          .limit(1)
+        targetInvoice = invoices?.[0]
+      }
+    }
+    
+    if (!targetInvoice) {
+      console.log('[findInvoice] No invoice found for identifier:', invoice_identifier, 'user:', user_id)
+      return `No invoice found for identifier: ${invoice_identifier}. Please provide a valid invoice number (like INV-123) or client name.`
+    }
+    
+    console.log('[findInvoice] Successfully found invoice:', targetInvoice.invoice_number, 'id:', targetInvoice.id)
+    return targetInvoice
+  } catch (error) {
+    return `Error finding invoice: ${error.message}`
+  }
+}
+
+// Function to detect if user wants to create invoice/estimate
+function detectInvoiceCreationIntent(message: string): boolean {
+  const lowerMessage = message.toLowerCase();
+  const createKeywords = [
+    'create invoice', 'make invoice', 'new invoice', 'invoice for',
+    'create estimate', 'make estimate', 'new estimate', 'estimate for',
+    'generate invoice', 'build invoice', 'add invoice'
+  ];
+  return createKeywords.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Optimized function to get user context for invoice/estimate creation
+async function getInvoiceCreationContext(supabase: any, userId: string): Promise<string> {
+  try {
+    console.log('[InvoiceContext] Fetching optimized context for user:', userId);
+    
+    // Single optimized query to get business settings + latest invoice patterns
+    const { data: contextData } = await supabase
+      .from('business_settings')
+      .select(`
+        default_tax_rate,
+        tax_label,
+        currency,
+        payment_terms_days,
+        stripe_enabled,
+        paypal_enabled,
+        bank_transfer_enabled,
+        venmo_enabled,
+        cash_app_enabled,
+        zelle_enabled,
+        invoice_reference_format,
+        default_invoice_design
+      `)
+      .eq('user_id', userId)
+      .single();
+
+    // Get latest invoice to understand user's recent preferences
+    const { data: latestInvoice } = await supabase
+      .from('invoices')
+      .select('payment_methods_enabled, tax_rate, invoice_design, payment_terms_days')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    // Build lightweight context
+    const bs = contextData;
+    const recent = latestInvoice;
+
+    // Payment methods available vs typically used
+    const availablePayments = [];
+    if (bs?.stripe_enabled) availablePayments.push('stripe');
+    if (bs?.paypal_enabled) availablePayments.push('paypal');
+    if (bs?.bank_transfer_enabled) availablePayments.push('bank_transfer');
+    if (bs?.venmo_enabled) availablePayments.push('venmo');
+    if (bs?.cash_app_enabled) availablePayments.push('cash_app');
+    if (bs?.zelle_enabled) availablePayments.push('zelle');
+
+    let typicallyUsed = [];
+    if (recent?.payment_methods_enabled) {
+      typicallyUsed = Object.entries(recent.payment_methods_enabled)
+        .filter(([key, value]) => value === true)
+        .map(([key]) => key);
+    }
+
+    // Compact context format
+    let context = '\n\nINVOICE CREATION CONTEXT:\n';
+    context += `TAX: ${recent?.tax_rate || bs?.default_tax_rate || 0}% (${bs?.tax_label || 'Tax'}) | `;
+    context += `PAYMENTS_AVAILABLE: ${availablePayments.join(',') || 'none'} | `;
+    context += `USER_TYPICALLY_ENABLES: ${typicallyUsed.join(',') || 'none'} | `;
+    context += `DESIGN: ${recent?.invoice_design || bs?.default_invoice_design || 'clean'} | `;
+    context += `TERMS: ${recent?.payment_terms_days || bs?.payment_terms_days || 30}days | `;
+    context += `FORMAT: ${bs?.invoice_reference_format || 'INV-001'}\n`;
+    
+    context += '\nCRITICAL PAYMENT METHOD RULES:\n';
+    context += '⚠️  NEVER enable payment methods that are NOT in PAYMENTS_AVAILABLE list above\n';
+    context += '⚠️  If PAYMENTS_AVAILABLE shows "none" - DO NOT enable any payment methods\n';
+    context += '⚠️  You can ONLY enable: ' + (availablePayments.join(', ') || 'NONE - no payment methods available') + '\n';
+    context += '⚠️  Example: If stripe is NOT in available list, you cannot enable stripe on invoice\n';
+    context += '\nINVOICE CREATION INSTRUCTIONS:\n';
+    context += '• Use the tax rate and label shown above as defaults\n';
+    context += '• If user typically enables certain payments AND they are available, default to those\n';
+    context += '• If user doesn\'t specify payments, use typical pattern ONLY if methods are available\n';
+    context += '• If no payments available, create invoice without any payment methods enabled\n';
+    context += '• Apply the user\'s preferred design and payment terms\n';
+
+    console.log('[InvoiceContext] Generated optimized context:', context);
+    return context;
+
+  } catch (error) {
+    console.error('[InvoiceContext] Error fetching context:', error);
+    return '\n\nINVOICE CREATION CONTEXT: Unable to load business settings, using system defaults.\n';
+  }
+}
+
+// Inline ReferenceNumberService for sequential invoice numbering
+class ReferenceNumberService {
+  static async generateNextReference(supabase: any, userId: string, type: 'invoice' | 'estimate' = 'invoice'): Promise<string> {
+    try {
+      console.log('[ReferenceNumberService] Generating reference for user:', userId, 'type:', type);
+      
+      // Get user's invoice reference format from settings
+      const { data: businessSettings, error: settingsError } = await supabase
+        .from('business_settings')
+        .select('invoice_reference_format')
+        .eq('user_id', userId)
+        .single();
+
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        // PGRST116 is "no rows found" which is expected for new users
+        console.error('[ReferenceNumberService] Error fetching business settings:', settingsError);
+      }
+
+      const referenceFormat = businessSettings?.invoice_reference_format || 'INV-001';
+      console.log('[ReferenceNumberService] Using reference format:', referenceFormat);
+      
+      // Parse the format to understand structure
+      const formatConfig = this.parseReferenceFormat(referenceFormat);
+      
+      // Get the latest number from the combined sequence
+      const latestNumber = await this.getLatestReferenceNumber(supabase, userId);
+      
+      // Generate the next number using the format
+      const nextNumber = latestNumber + 1;
+      console.log('[ReferenceNumberService] Next number will be:', nextNumber);
+      
+      // Apply the format structure
+      const newReference = this.formatReferenceNumber(formatConfig, nextNumber, type);
+      console.log('[ReferenceNumberService] Generated reference:', newReference);
+      
+      return newReference;
+      
+    } catch (error) {
+      console.error('[ReferenceNumberService] Error generating reference number:', error);
+      // Fallback to timestamp-based number
+      const timestamp = Date.now().toString().slice(-6);
+      const fallbackRef = type === 'estimate' ? `EST-${timestamp}` : `INV-${timestamp}`;
+      console.log('[ReferenceNumberService] Using fallback reference:', fallbackRef);
+      return fallbackRef;
+    }
+  }
+
+  private static parseReferenceFormat(format: string) {
+    // Extract prefix (everything before the first dash or number)
+    const prefixMatch = format.match(/^([A-Za-z]+)/);
+    const prefix = prefixMatch ? prefixMatch[1] : 'INV';
+    
+    // Check for year pattern
+    const includeYear = format.includes('YYYY') || /\d{4}/.test(format);
+    
+    // Check for month pattern
+    const includeMonth = format.includes('MM') || (includeYear && /\d{2}/.test(format.replace(/\d{4}/, '')));
+    
+    // Extract number length from the trailing number
+    const numberMatch = format.match(/(\d+)$/);
+    const numberLength = numberMatch ? numberMatch[1].length : 6; // Changed default from 3 to 6
+    
+    console.log('[ReferenceNumberService] Parsed format:', {
+      prefix,
+      includeYear,
+      includeMonth,
+      numberLength,
+      format
+    });
+    
+    return {
+      prefix,
+      includeYear,
+      includeMonth,
+      numberLength,
+      customFormat: format
+    };
+  }
+
+  private static async getLatestReferenceNumber(supabase: any, userId: string): Promise<number> {
+    try {
+      // Get latest from invoices - use maybeSingle() to avoid errors when no records exist
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('invoice_number')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      // Get latest from estimates  
+      const { data: estimates } = await supabase
+        .from('estimates')
+        .select('estimate_number')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      let maxNumber = 0;
+      
+      // Extract number from invoice
+      const latestInvoice = invoices?.[0];
+      if (latestInvoice?.invoice_number) {
+        console.log('[ReferenceNumberService] Latest invoice number:', latestInvoice.invoice_number);
+        const invoiceMatch = latestInvoice.invoice_number.match(/(\d+)$/);
+        if (invoiceMatch) {
+          const invoiceNum = parseInt(invoiceMatch[1]);
+          console.log('[ReferenceNumberService] Extracted invoice number:', invoiceNum);
+          
+          // SAFETY CHECK: Ignore timestamp-based numbers (likely AI-generated fallbacks)
+          // Normal invoice numbers should be under 1,000,000
+          if (invoiceNum > 1000000) {
+            console.log('[ReferenceNumberService] Ignoring timestamp-based invoice number:', invoiceNum);
+          } else {
+            maxNumber = Math.max(maxNumber, invoiceNum);
+          }
+        }
+      }
+      
+      // Extract number from estimate  
+      const latestEstimate = estimates?.[0];
+      if (latestEstimate?.estimate_number) {
+        console.log('[ReferenceNumberService] Latest estimate number:', latestEstimate.estimate_number);
+        const estimateMatch = latestEstimate.estimate_number.match(/(\d+)$/);
+        if (estimateMatch) {
+          const estimateNum = parseInt(estimateMatch[1]);
+          console.log('[ReferenceNumberService] Extracted estimate number:', estimateNum);
+          
+          // SAFETY CHECK: Ignore timestamp-based numbers (likely AI-generated fallbacks)
+          // Normal estimate numbers should be under 1,000,000
+          if (estimateNum > 1000000) {
+            console.log('[ReferenceNumberService] Ignoring timestamp-based estimate number:', estimateNum);
+          } else {
+            maxNumber = Math.max(maxNumber, estimateNum);
+          }
+        }
+      }
+      
+      console.log('[ReferenceNumberService] Found max number:', maxNumber, 'for user:', userId);
+      return maxNumber;
+      
+    } catch (error) {
+      console.error('[ReferenceNumberService] Error getting latest reference number:', error);
+      return 0;
+    }
+  }
+
+  private static formatReferenceNumber(config: any, number: number, type: 'invoice' | 'estimate'): string {
+    let reference = config.prefix || 'INV';
+    
+    if (config.includeYear) {
+      reference += `-${new Date().getFullYear()}`;
+    }
+    
+    if (config.includeMonth) {
+      const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
+      reference += `-${month}`;
+    }
+    
+    const paddedNumber = number.toString().padStart(config.numberLength || 3, '0');
+    reference += `-${paddedNumber}`;
+    
+    return reference;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -63,11 +394,22 @@ serve(async (req) => {
       assistant = await openai.beta.assistants.retrieve(ASSISTANT_ID)
       console.log('[Assistants POC] Found existing assistant:', assistant.id)
       
-      // Always update the assistant with latest instructions to ensure consistency
-      console.log('[Assistants POC] Updating assistant with latest instructions...')
+      // Check if user wants to create invoice/estimate - only inject context then
+      const isCreatingInvoice = detectInvoiceCreationIntent(message);
+      let contextString = '';
+      
+      if (isCreatingInvoice) {
+        console.log('[Assistants POC] Invoice creation detected - fetching business context...');
+        contextString = await getInvoiceCreationContext(supabase, user_id);
+      } else {
+        console.log('[Assistants POC] General conversation - no business context needed');
+      }
+      
+      // Always update the assistant with latest instructions 
+      console.log('[Assistants POC] Updating assistant with latest instructions...');
       assistant = await openai.beta.assistants.update(ASSISTANT_ID, {
         name: "Invoice AI Assistant",
-        instructions: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.
+        instructions: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.${contextString}
 
 RESPONSE STYLE:
 • Keep responses brief and to the point
@@ -88,6 +430,22 @@ FUNCTION CALLING:
 • When user asks to create, update, search, or manage anything - call the relevant function
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
+
+CRITICAL CONTEXT AWARENESS:
+When user says "add [item] to THE INVOICE" or "add [item] to THIS INVOICE":
+• NEVER create a new invoice
+• ALWAYS use add_line_item function with invoice_identifier: "latest"
+• The user is referring to the most recently created invoice in the conversation
+• Examples:
+  - "add a laptop to the invoice" → add_line_item(invoice_identifier: "latest", item_name: "laptop")
+  - "please add 5 chairs to this invoice" → add_line_item(invoice_identifier: "latest", item_name: "chairs", quantity: 5)
+  - "add light well chip to the invoice for 10000" → add_line_item(invoice_identifier: "latest", item_name: "Light Well Chip", unit_price: 10000)
+
+WHEN TO UPDATE vs CREATE:
+• "Create/Make invoice" → use create_invoice
+• "Add to [THE/THIS] invoice" → use add_line_item with "latest"
+• "Update invoice [INV-123]" → use add_line_item with specific invoice number
+• "Change client info on invoice" → use update_client_info with "latest"
 
 INVOICE CREATION WORKFLOW:
 When users request to create an invoice:
@@ -309,9 +667,15 @@ ACTIVE INVOICE CONTEXT:
 PRONOUN REFERENCE RESOLUTION:
 • "this invoice" = the most recently created/discussed invoice in conversation history
 • "this" when talking about invoices = the invoice from the last message that showed an invoice
-• ALWAYS look at conversation history to identify what "this" refers to
+• "it" when talking about invoices = the invoice just created or discussed
+• "update it" = update the most recent invoice in conversation
+• ALWAYS look at conversation history to identify what "this"/"it" refers to
 • Extract the invoice_number from the most recent assistant message that contained an invoice
-• Pass the specific invoice_number to functions like setup_paypal_payments
+• Pass the specific invoice_number to functions like add_line_item, update_invoice, etc.
+
+CRITICAL: NEVER ask "Who is this invoice for?" when user says "update it" after creating an invoice!
+
+MOST IMPORTANT: When user says "update it" - look at the conversation history and find the most recent invoice number (INV-XXXXXX) from assistant messages, then use that directly!
 
 CONVERSATION HISTORY ANALYSIS:
 • Scan recent conversation for invoice numbers (format: INV-XXXXXX)
@@ -325,6 +689,26 @@ CONTEXT TRIGGERS (Auto-update active invoice):
 • Invoice details: "Change due date/add discount" → update + show invoice
 • Design changes: "Make it purple/modern design" → update + show invoice
 • Payment setup: "Add PayPal to this" → find invoice_number from history + update + show invoice
+• Line item additions: "Please update it too have 10 Blackwall's also - 10000 each" → use add_line_item with most recent invoice number
+
+SPECIFIC EXAMPLES FROM LOGS:
+• Assistant says: "I've created invoice **INV-009** for Jensen that totals **$25,000.00**"
+• User says: "Please update it too have 10 Blackwall's also - 10000 each"
+• AI should IMMEDIATELY:
+  1. Scan conversation history for "INV-009" (most recent invoice number)
+  2. Call add_line_item(invoice_identifier="INV-009", item_name="Blackwall's", quantity=10, unit_price=10000)
+  3. Return updated invoice preview
+• AI should NEVER call find_invoice or ask "Who is this invoice for?"
+
+WRONG BEHAVIOR (from logs):
+❌ Calling find_invoice { get_latest: true }
+❌ Getting database errors
+❌ Asking "Who is this invoice for?"
+
+CORRECT BEHAVIOR:
+✅ Extract "INV-009" from conversation history directly
+✅ Call add_line_item with extracted invoice number
+✅ Return updated invoice
 
 CONTEXT DETECTION STEPS:
 1. Look for recent invoice creation in conversation history
@@ -418,7 +802,7 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   enable_paypal: {
                     type: "boolean",
-                    description: "Enable PayPal payments on this invoice (optional, defaults to false)"
+                    description: "Enable PayPal payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
                   },
                   paypal_email: {
                     type: "string",
@@ -426,15 +810,15 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   enable_stripe: {
                     type: "boolean",
-                    description: "Enable Stripe card payments on this invoice (optional, defaults to false)"
+                    description: "Enable Stripe card payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
                   },
                   enable_bank_transfer: {
                     type: "boolean",
-                    description: "Enable bank transfer payments on this invoice (optional, defaults to true)"
+                    description: "Enable bank transfer payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
                   },
                   invoice_design: {
                     type: "string",
-                    description: "Invoice design template: 'professional', 'modern', 'clean', 'simple' (optional, defaults to 'professional')",
+                    description: "Invoice design template: 'professional', 'modern', 'clean', 'simple' (optional, defaults to 'clean')",
                     enum: ["professional", "modern", "clean", "simple", "wave"]
                   },
                   accent_color: {
@@ -539,6 +923,269 @@ Always be helpful and create exactly what the user requests.`,
                 required: ["invoice_number"]
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice",
+              description: "Update any aspect of an existing invoice - client info, line items, amounts, design, payment methods, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string", 
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    description: "Update invoice date (YYYY-MM-DD format)"
+                  },
+                  due_date: {
+                    type: "string", 
+                    description: "Update due date (YYYY-MM-DD format)"
+                  },
+                  payment_terms_days: {
+                    type: "number",
+                    description: "Update payment terms in days"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Update invoice notes"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Update invoice status: 'draft', 'sent', 'paid', 'overdue'",
+                    enum: ["draft", "sent", "paid", "overdue"]
+                  },
+                  tax_rate: {
+                    type: "number",
+                    description: "Update tax rate percentage"
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Update discount type: 'percentage' or 'fixed'",
+                    enum: ["percentage", "fixed"]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Update discount amount"
+                  },
+                  invoice_design: {
+                    type: "string", 
+                    description: "Update invoice design: 'professional', 'modern', 'clean', 'simple', 'wave'",
+                    enum: ["professional", "modern", "clean", "simple", "wave"]
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Update accent color (hex code, e.g., '#FF6B35')"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe payments"
+                  },
+                  enable_paypal: {
+                    type: "boolean", 
+                    description: "Enable/disable PayPal payments"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Replace all line items with new ones",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: { type: "string" },
+                        item_description: { type: "string" },
+                        unit_price: { type: "number" },
+                        quantity: { type: "number" }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  }
+                },
+                required: ["invoice_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_line_item",
+              description: "Add a new line item to an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Name/description of the line item"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Quantity of the item (default: 1)"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Price per unit of the item"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Optional detailed description of the item"
+                  }
+                },
+                required: ["invoice_identifier", "item_name", "unit_price"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "remove_line_item",
+              description: "Remove a specific line item from an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_identifier: {
+                    type: "string",
+                    description: "Name of the line item to remove, or item index (1st item, 2nd item, etc.)"
+                  }
+                },
+                required: ["invoice_identifier", "item_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_line_item",
+              description: "Update a specific line item in an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_identifier: {
+                    type: "string",
+                    description: "Name of the line item to update, or item index (1st item, 2nd item, etc.)"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Update item name/description"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Update item quantity"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Update item unit price"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Update item detailed description (use null to remove)"
+                  }
+                },
+                required: ["invoice_identifier", "item_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_client_info",
+              description: "Update client information for an existing invoice and save to client profile",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  }
+                },
+                required: ["invoice_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_payment_methods",
+              description: "Update payment methods for an existing invoice. Only enables methods if they are enabled in business settings.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe card payments"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable/disable PayPal payments"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments"
+                  }
+                },
+                required: ["invoice_identifier"]
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -569,6 +1216,22 @@ FUNCTION CALLING:
 • When user asks to create, update, search, or manage anything - call the relevant function
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
+
+CRITICAL CONTEXT AWARENESS:
+When user says "add [item] to THE INVOICE" or "add [item] to THIS INVOICE":
+• NEVER create a new invoice
+• ALWAYS use add_line_item function with invoice_identifier: "latest"
+• The user is referring to the most recently created invoice in the conversation
+• Examples:
+  - "add a laptop to the invoice" → add_line_item(invoice_identifier: "latest", item_name: "laptop")
+  - "please add 5 chairs to this invoice" → add_line_item(invoice_identifier: "latest", item_name: "chairs", quantity: 5)
+  - "add light well chip to the invoice for 10000" → add_line_item(invoice_identifier: "latest", item_name: "Light Well Chip", unit_price: 10000)
+
+WHEN TO UPDATE vs CREATE:
+• "Create/Make invoice" → use create_invoice
+• "Add to [THE/THIS] invoice" → use add_line_item with "latest"
+• "Update invoice [INV-123]" → use add_line_item with specific invoice number
+• "Change client info on invoice" → use update_client_info with "latest"
 
 INVOICE CREATION WORKFLOW:
 When users request to create an invoice:
@@ -761,7 +1424,7 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   enable_paypal: {
                     type: "boolean",
-                    description: "Enable PayPal payments on this invoice (optional, defaults to false)"
+                    description: "Enable PayPal payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
                   },
                   paypal_email: {
                     type: "string",
@@ -769,15 +1432,15 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   enable_stripe: {
                     type: "boolean",
-                    description: "Enable Stripe card payments on this invoice (optional, defaults to false)"
+                    description: "Enable Stripe card payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
                   },
                   enable_bank_transfer: {
                     type: "boolean",
-                    description: "Enable bank transfer payments on this invoice (optional, defaults to true)"
+                    description: "Enable bank transfer payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
                   },
                   invoice_design: {
                     type: "string",
-                    description: "Invoice design template: 'professional', 'modern', 'clean', 'simple' (optional, defaults to 'professional')",
+                    description: "Invoice design template: 'professional', 'modern', 'clean', 'simple' (optional, defaults to 'clean')",
                     enum: ["professional", "modern", "clean", "simple", "wave"]
                   },
                   accent_color: {
@@ -882,6 +1545,269 @@ Always be helpful and create exactly what the user requests.`,
                 required: ["invoice_number"]
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice",
+              description: "Update any aspect of an existing invoice - client info, line items, amounts, design, payment methods, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string", 
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    description: "Update invoice date (YYYY-MM-DD format)"
+                  },
+                  due_date: {
+                    type: "string", 
+                    description: "Update due date (YYYY-MM-DD format)"
+                  },
+                  payment_terms_days: {
+                    type: "number",
+                    description: "Update payment terms in days"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Update invoice notes"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Update invoice status: 'draft', 'sent', 'paid', 'overdue'",
+                    enum: ["draft", "sent", "paid", "overdue"]
+                  },
+                  tax_rate: {
+                    type: "number",
+                    description: "Update tax rate percentage"
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Update discount type: 'percentage' or 'fixed'",
+                    enum: ["percentage", "fixed"]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Update discount amount"
+                  },
+                  invoice_design: {
+                    type: "string", 
+                    description: "Update invoice design: 'professional', 'modern', 'clean', 'simple', 'wave'",
+                    enum: ["professional", "modern", "clean", "simple", "wave"]
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Update accent color (hex code, e.g., '#FF6B35')"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe payments"
+                  },
+                  enable_paypal: {
+                    type: "boolean", 
+                    description: "Enable/disable PayPal payments"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Replace all line items with new ones",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: { type: "string" },
+                        item_description: { type: "string" },
+                        unit_price: { type: "number" },
+                        quantity: { type: "number" }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  }
+                },
+                required: ["invoice_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_line_item",
+              description: "Add a new line item to an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Name/description of the line item"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Quantity of the item (default: 1)"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Price per unit of the item"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Optional detailed description of the item"
+                  }
+                },
+                required: ["invoice_identifier", "item_name", "unit_price"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "remove_line_item",
+              description: "Remove a specific line item from an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_identifier: {
+                    type: "string",
+                    description: "Name of the line item to remove, or item index (1st item, 2nd item, etc.)"
+                  }
+                },
+                required: ["invoice_identifier", "item_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_line_item",
+              description: "Update a specific line item in an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_identifier: {
+                    type: "string",
+                    description: "Name of the line item to update, or item index (1st item, 2nd item, etc.)"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Update item name/description"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Update item quantity"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Update item unit price"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Update item detailed description (use null to remove)"
+                  }
+                },
+                required: ["invoice_identifier", "item_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_client_info",
+              description: "Update client information for an existing invoice and save to client profile",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  }
+                },
+                required: ["invoice_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_payment_methods",
+              description: "Update payment methods for an existing invoice. Only enables methods if they are enabled in business settings.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe card payments"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable/disable PayPal payments"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments"
+                  }
+                },
+                required: ["invoice_identifier"]
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -966,8 +1892,19 @@ Always be helpful and create exactly what the user requests.`,
         const invoiceDate = invoice_date || new Date().toISOString().split('T')[0]
         const invoiceDueDate = due_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-        // Generate invoice number
-        const invoice_number = `INV-${Date.now()}`
+        // Generate invoice number using sequential numbering
+        const invoice_number = await ReferenceNumberService.generateNextReference(supabase, user_id, 'invoice')
+        
+        // Get user's business settings for default design and color
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('default_invoice_design, default_accent_color')
+          .eq('user_id', user_id)
+          .single()
+        
+        // Use user's defaults instead of hardcoded values
+        const defaultDesign = businessSettings?.default_invoice_design || 'clean'
+        const defaultColor = businessSettings?.default_accent_color || '#3B82F6'
         
         // Combine notes and payment terms
         let finalNotes = ''
@@ -984,7 +1921,7 @@ Always be helpful and create exactly what the user requests.`,
           invoice_number,
           due_date: invoiceDueDate,
           paypal_enabled: enable_paypal || false,
-          design: invoice_design || 'professional'
+          design: invoice_design || 'clean'
         })
 
         // First, create or get client  
@@ -1062,9 +1999,9 @@ Always be helpful and create exactly what the user requests.`,
             status: 'draft',
             stripe_active: enable_stripe || false,
             paypal_active: enable_paypal || false,
-            bank_account_active: enable_bank_transfer !== false, // Default true unless explicitly false
-            invoice_design: invoice_design || 'professional',
-            accent_color: accent_color || '#3B82F6',
+            bank_account_active: enable_bank_transfer === true, // Only enable if explicitly requested
+            invoice_design: invoice_design || defaultDesign,
+            accent_color: accent_color || defaultColor,
             created_at: new Date().toISOString()
           })
           .select()
@@ -1129,44 +2066,11 @@ Always be helpful and create exactly what the user requests.`,
           client: clientData // Include full client object for UI
         })
 
-        // Build comprehensive success message
-        let successMessage = `✅ Created invoice ${invoice_number} for ${client_name}`
-        
-        // Add line items summary
-        successMessage += ` with ${line_items.length} line item${line_items.length > 1 ? 's' : ''}:`
-        successMessage += `\n${line_items.map(item => `• ${item.item_name}: $${item.unit_price}${item.quantity > 1 ? ` x ${item.quantity}` : ''}`).join('\n')}`
-        
-        // Add pricing breakdown
-        successMessage += `\n\nSubtotal: $${subtotal_amount.toFixed(2)}`
-        if (discount_amount > 0) {
-          successMessage += `\nDiscount (${discount_type === 'percentage' ? discount_value + '%' : '$' + discount_value}): -$${discount_amount.toFixed(2)}`
-        }
-        if (tax_rate > 0) {
-          successMessage += `\nTax (${tax_rate}%): $${tax_amount.toFixed(2)}`
-        }
-        successMessage += `\n**Total: $${total_amount.toFixed(2)}**`
-        
-        // Add due date
-        successMessage += `\nDue: ${new Date(invoiceDueDate).toLocaleDateString()}`
-        
-        // Add payment methods enabled
-        const paymentMethods = []
-        if (enable_paypal) paymentMethods.push('PayPal')
-        if (enable_stripe) paymentMethods.push('Card payments')
-        if (enable_bank_transfer !== false) paymentMethods.push('Bank transfer')
-        if (paymentMethods.length > 0) {
-          successMessage += `\nPayment options: ${paymentMethods.join(', ')}`
-        }
-        
-        // Add design info
-        if (invoice_design && invoice_design !== 'professional') {
-          successMessage += `\nDesign: ${invoice_design.charAt(0).toUpperCase() + invoice_design.slice(1)}`
-        }
-        
-        // Add notes if any
-        if (finalNotes) {
-          successMessage += `\n\nNotes: ${finalNotes}`
-        }
+        // Build concise success message as requested
+        const successMessage = `I've created invoice ${invoice_number} for ${client_name} that totals $${total_amount.toFixed(2)}.
+
+
+Let me know if you'd like any changes?`
         
         return successMessage
       }
@@ -1337,6 +2241,699 @@ Always be helpful and create exactly what the user requests.`,
         return successMessage
       }
 
+      if (name === 'find_invoice') {
+        const { invoice_number, client_name, search_term, get_latest, limit = 5 } = parsedArgs
+        
+        console.log('[Assistants POC] Finding invoice with:', { invoice_number, client_name, search_term, get_latest, limit })
+        
+        try {
+          let query = supabase
+            .from('invoices')
+            .select(`
+              id,
+              invoice_number,
+              client_id,
+              status,
+              total_amount,
+              invoice_date,
+              due_date,
+              created_at,
+              clients!invoices_client_id_fkey(name, email, phone)
+            `)
+            .eq('user_id', user_id)
+          
+          // Search by exact invoice number
+          if (invoice_number) {
+            query = query.eq('invoice_number', invoice_number)
+          }
+          // Search by client name (fuzzy)
+          else if (client_name) {
+            // First try to find client by name, then get their invoices
+            const { data: clients } = await supabase
+              .from('clients')
+              .select('id, name')
+              .eq('user_id', user_id)
+              .ilike('name', `%${client_name}%`)
+            
+            if (clients && clients.length > 0) {
+              const clientIds = clients.map(c => c.id)
+              query = query.in('client_id', clientIds)
+            } else {
+              return `No clients found matching "${client_name}"`
+            }
+          }
+          // Search in line items and notes
+          else if (search_term) {
+            // This is a simplified search - in production you might want to search line_items table
+            query = query.or(`notes.ilike.%${search_term}%`)
+          }
+          // Get latest if no specific criteria
+          else if (get_latest) {
+            // Will be ordered by created_at desc below
+          } else {
+            return "Please specify invoice_number, client_name, search_term, or set get_latest to true"
+          }
+          
+          // Always order by most recent first and limit results
+          const { data: invoices, error } = await query
+            .order('created_at', { ascending: false })
+            .limit(limit)
+          
+          if (error) {
+            console.error('[Assistants POC] Find invoice error:', error)
+            return `Error searching invoices: ${error.message}`
+          }
+          
+          if (!invoices || invoices.length === 0) {
+            return "No invoices found matching your criteria"
+          }
+          
+          // Format results
+          let response = `Found ${invoices.length} invoice${invoices.length > 1 ? 's' : ''}:\n\n`
+          
+          invoices.forEach(invoice => {
+            const clientName = invoice.clients?.name || 'Unknown Client'
+            const status = invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || 'Draft'
+            const total = invoice.total_amount ? `$${invoice.total_amount.toFixed(2)}` : '$0.00'
+            const date = new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString()
+            
+            response += `• **${invoice.invoice_number}** - ${clientName}\n`
+            response += `  Status: ${status} | Total: ${total} | Date: ${date}\n\n`
+          })
+          
+          return response.trim()
+          
+        } catch (error) {
+          console.error('[Assistants POC] Find invoice error:', error)
+          return `Error finding invoice: ${error.message}`
+        }
+      }
+
+      if (name === 'update_invoice') {
+        const { 
+          invoice_identifier,
+          client_name,
+          client_email,
+          client_phone, 
+          client_address,
+          client_tax_number,
+          invoice_date,
+          due_date,
+          payment_terms_days,
+          notes,
+          status,
+          tax_rate,
+          discount_type,
+          discount_value,
+          invoice_design,
+          accent_color,
+          enable_stripe,
+          enable_paypal,
+          enable_bank_transfer,
+          line_items
+        } = parsedArgs
+        
+        console.log('[Assistants POC] Updating invoice:', { invoice_identifier, ...parsedArgs })
+        
+        try {
+          // First, find the invoice to update
+          let targetInvoice = null
+          
+          if (invoice_identifier === 'latest') {
+            // Get most recent invoice
+            const { data: invoices } = await supabase
+              .from('invoices')
+              .select('*')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+            targetInvoice = invoices?.[0]
+          } else if (invoice_identifier.startsWith('INV-')) {
+            // Search by invoice number
+            const { data: invoices } = await supabase
+              .from('invoices')
+              .select('*')
+              .eq('user_id', user_id)
+              .eq('invoice_number', invoice_identifier)
+            targetInvoice = invoices?.[0]
+          } else {
+            // Search by client name
+            const { data: clients } = await supabase
+              .from('clients')
+              .select('id')
+              .eq('user_id', user_id)
+              .ilike('name', `%${invoice_identifier}%`)
+            
+            if (clients && clients.length > 0) {
+              const { data: invoices } = await supabase
+                .from('invoices')
+                .select('*')
+                .eq('user_id', user_id)
+                .in('client_id', clients.map(c => c.id))
+                .order('created_at', { ascending: false })
+                .limit(1)
+              targetInvoice = invoices?.[0]
+            }
+          }
+          
+          if (!targetInvoice) {
+            return `No invoice found for "${invoice_identifier}"`
+          }
+          
+          console.log('[Assistants POC] Found invoice to update:', targetInvoice.invoice_number)
+          
+          // Prepare update data for invoice
+          const invoiceUpdates = {}
+          if (invoice_date !== undefined) invoiceUpdates.invoice_date = invoice_date
+          if (due_date !== undefined) invoiceUpdates.due_date = due_date
+          if (payment_terms_days !== undefined) invoiceUpdates.payment_terms_days = payment_terms_days
+          if (notes !== undefined) invoiceUpdates.notes = notes
+          if (status !== undefined) invoiceUpdates.status = status
+          if (tax_rate !== undefined) {
+            invoiceUpdates.tax_rate = tax_rate
+            invoiceUpdates.tax_percentage = tax_rate
+          }
+          if (discount_type !== undefined) invoiceUpdates.discount_type = discount_type
+          if (discount_value !== undefined) invoiceUpdates.discount_value = discount_value
+          if (invoice_design !== undefined) invoiceUpdates.invoice_design = invoice_design
+          if (accent_color !== undefined) invoiceUpdates.accent_color = accent_color
+          if (enable_stripe !== undefined) invoiceUpdates.stripe_active = enable_stripe
+          if (enable_paypal !== undefined) invoiceUpdates.paypal_active = enable_paypal
+          if (enable_bank_transfer !== undefined) invoiceUpdates.bank_account_active = enable_bank_transfer
+          
+          // Update client information if provided
+          let clientUpdates = {}
+          if (client_name !== undefined) clientUpdates.name = client_name
+          if (client_email !== undefined) clientUpdates.email = client_email
+          if (client_phone !== undefined) clientUpdates.phone = client_phone
+          if (client_address !== undefined) clientUpdates.address = client_address
+          if (client_tax_number !== undefined) clientUpdates.tax_number = client_tax_number
+          
+          // Update client if there are changes
+          if (Object.keys(clientUpdates).length > 0 && targetInvoice.client_id) {
+            const { error: clientError } = await supabase
+              .from('clients')
+              .update(clientUpdates)
+              .eq('id', targetInvoice.client_id)
+            
+            if (clientError) {
+              console.error('[Assistants POC] Client update error:', clientError)
+            }
+          }
+          
+          // Handle line items replacement
+          if (line_items && line_items.length > 0) {
+            // Delete existing line items
+            await supabase
+              .from('line_items')
+              .delete()
+              .eq('invoice_id', targetInvoice.id)
+            
+            // Calculate totals
+            let subtotal = 0
+            const lineItemsToCreate = line_items.map(item => {
+              const itemTotal = (item.unit_price || 0) * (item.quantity || 1)
+              subtotal += itemTotal
+              return {
+                invoice_id: targetInvoice.id,
+                item_name: item.item_name,
+                item_description: item.item_description || null,
+                unit_price: item.unit_price || 0,
+                quantity: item.quantity || 1,
+                total_price: itemTotal
+              }
+            })
+            
+            // Create new line items
+            const { error: lineItemsError } = await supabase
+              .from('line_items')
+              .insert(lineItemsToCreate)
+            
+            if (lineItemsError) {
+              console.error('[Assistants POC] Line items update error:', lineItemsError)
+              return `Error updating line items: ${lineItemsError.message}`
+            }
+            
+            // Recalculate totals
+            const discountAmount = discount_value || targetInvoice.discount_value || 0
+            const discountType = discount_type || targetInvoice.discount_type
+            
+            let afterDiscount = subtotal
+            if (discountType === 'percentage') {
+              afterDiscount = subtotal * (1 - (discountAmount / 100))
+            } else if (discountType === 'fixed') {
+              afterDiscount = subtotal - discountAmount
+            }
+            
+            const taxRate = tax_rate !== undefined ? tax_rate : (targetInvoice.tax_rate || 0)
+            const taxAmount = afterDiscount * (taxRate / 100)
+            const totalAmount = afterDiscount + taxAmount
+            
+            invoiceUpdates.subtotal_amount = subtotal
+            invoiceUpdates.discount_amount = subtotal - afterDiscount
+            invoiceUpdates.tax_amount = taxAmount
+            invoiceUpdates.total_amount = totalAmount
+          }
+          
+          // Update invoice if there are changes
+          if (Object.keys(invoiceUpdates).length > 0) {
+            const { error: invoiceError } = await supabase
+              .from('invoices')
+              .update(invoiceUpdates)
+              .eq('id', targetInvoice.id)
+            
+            if (invoiceError) {
+              console.error('[Assistants POC] Invoice update error:', invoiceError)
+              return `Error updating invoice: ${invoiceError.message}`
+            }
+          }
+          
+          return `I've updated invoice ${targetInvoice.invoice_number}. 
+
+Let me know if you'd like any other changes?`
+          
+        } catch (error) {
+          console.error('[Assistants POC] Update invoice error:', error)
+          return `Error updating invoice: ${error.message}`
+        }
+      }
+
+      if (name === 'add_line_item') {
+        const { invoice_identifier, item_name, quantity = 1, unit_price, item_description } = parsedArgs
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
+          }
+          const targetInvoice = findResult
+          
+          // Insert new line item into invoice_line_items table
+          console.log('[add_line_item] Adding line item to invoice:', targetInvoice.invoice_number)
+          const { data: newLineItem, error: lineItemError } = await supabase
+            .from('invoice_line_items')
+            .insert({
+              invoice_id: targetInvoice.id,
+              user_id: user_id,
+              item_name,
+              item_description: item_description || null,
+              quantity: quantity || 1,
+              unit_price,
+              total_price: (quantity || 1) * unit_price,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+          
+          if (lineItemError) {
+            console.error('[add_line_item] Line item insert error:', lineItemError)
+            return `Error adding line item: ${lineItemError.message}`
+          }
+          
+          console.log('[add_line_item] Successfully inserted line item:', newLineItem.id)
+          
+          // Get all line items for this invoice to recalculate totals
+          const { data: allLineItems, error: fetchError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+          
+          if (fetchError) {
+            console.error('[add_line_item] Error fetching line items:', fetchError)
+            return `Error recalculating totals: ${fetchError.message}`
+          }
+          
+          // Recalculate totals from all line items
+          const subtotal = allLineItems.reduce((sum, item) => sum + (item.total_price || 0), 0)
+          const taxAmount = subtotal * (targetInvoice.tax_percentage || 0) / 100
+          const discountAmount = targetInvoice.discount_type === 'percentage' ? 
+            subtotal * (targetInvoice.discount_value || 0) / 100 : 
+            (targetInvoice.discount_value || 0)
+          const total = subtotal + taxAmount - discountAmount
+          
+          // Update invoice totals
+          console.log('[add_line_item] Updating invoice totals:', { subtotal, total })
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({ 
+              subtotal_amount: subtotal,
+              total_amount: total 
+            })
+            .eq('user_id', user_id)
+            .eq('id', targetInvoice.id)
+            
+          if (updateError) {
+            console.error('[add_line_item] Update error:', updateError)
+            return `Error updating invoice totals: ${updateError.message}`
+          }
+          
+          console.log('[add_line_item] Successfully updated invoice:', targetInvoice.invoice_number)
+          
+          // Get updated invoice data with client info for attachment
+          const { data: updatedInvoice } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single()
+            
+          // Get client data if exists
+          let clientData = null
+          if (targetInvoice.client_id) {
+            const { data: client } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single()
+            clientData = client
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: allLineItems,
+            client_id: targetInvoice.client_id,
+            client: clientData
+          })
+          
+          return `Added line item "${item_name}" (${quantity || 1}x $${unit_price}) to invoice ${targetInvoice.invoice_number}.
+
+Total updated to $${total.toFixed(2)}.
+
+Let me know if you'd like any other changes?`
+          
+        } catch (error) {
+          console.error('[Assistants POC] Add line item error:', error)
+          return `Error adding line item: ${error.message}`
+        }
+      }
+
+      if (name === 'remove_line_item') {
+        const { invoice_identifier, item_identifier } = parsedArgs
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
+          }
+          const targetInvoice = findResult
+          
+          const currentItems = targetInvoice.line_items || []
+          if (currentItems.length === 0) return 'Error: No line items found in invoice'
+          
+          // Find item to remove
+          let itemIndex = -1
+          
+          // Check if it's a numeric index (1st, 2nd, etc.)
+          const indexMatch = item_identifier.match(/(\d+)(st|nd|rd|th)/i)
+          if (indexMatch) {
+            itemIndex = parseInt(indexMatch[1]) - 1
+          } else {
+            // Search by item name
+            itemIndex = currentItems.findIndex(item => 
+              item.item_name.toLowerCase().includes(item_identifier.toLowerCase())
+            )
+          }
+          
+          if (itemIndex === -1) {
+            return `Error: Could not find line item "${item_identifier}". Available items: ${currentItems.map(item => item.item_name).join(', ')}`
+          }
+          
+          const removedItem = currentItems[itemIndex]
+          const updatedItems = currentItems.filter((_, index) => index !== itemIndex)
+          
+          // Recalculate totals
+          const subtotal = updatedItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
+          const taxAmount = subtotal * (targetInvoice.tax_rate || 0) / 100
+          const discountAmount = targetInvoice.discount_type === 'percentage' ? 
+            subtotal * (targetInvoice.discount_value || 0) / 100 : 
+            (targetInvoice.discount_value || 0)
+          const total = subtotal + taxAmount - discountAmount
+          
+          // Update invoice
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({ 
+              line_items: updatedItems, 
+              subtotal_amount: subtotal,
+              total_amount: total 
+            })
+            .eq('user_id', user_id)
+            .eq('invoice_number', targetInvoice.invoice_number)
+            
+          if (updateError) return `Error updating invoice: ${updateError.message}`
+          
+          return `Removed line item "${removedItem.item_name}" from invoice ${invoiceNumber}.
+
+Total updated to $${total.toFixed(2)}.
+
+Let me know if you'd like any other changes?`
+          
+        } catch (error) {
+          console.error('[Assistants POC] Remove line item error:', error)
+          return `Error removing line item: ${error.message}`
+        }
+      }
+
+      if (name === 'update_line_item') {
+        const { invoice_identifier, item_identifier, item_name, quantity, unit_price, item_description } = parsedArgs
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
+          }
+          const targetInvoice = findResult
+          
+          const currentItems = targetInvoice.line_items || []
+          if (currentItems.length === 0) return 'Error: No line items found in invoice'
+          
+          // Find item to update
+          let itemIndex = -1
+          
+          // Check if it's a numeric index (1st, 2nd, etc.)
+          const indexMatch = item_identifier.match(/(\d+)(st|nd|rd|th)/i)
+          if (indexMatch) {
+            itemIndex = parseInt(indexMatch[1]) - 1
+          } else {
+            // Search by item name
+            itemIndex = currentItems.findIndex(item => 
+              item.item_name.toLowerCase().includes(item_identifier.toLowerCase())
+            )
+          }
+          
+          if (itemIndex === -1) {
+            return `Error: Could not find line item "${item_identifier}". Available items: ${currentItems.map(item => item.item_name).join(', ')}`
+          }
+          
+          // Update the item
+          const updatedItems = [...currentItems]
+          if (item_name !== undefined) updatedItems[itemIndex].item_name = item_name
+          if (quantity !== undefined) updatedItems[itemIndex].quantity = quantity
+          if (unit_price !== undefined) updatedItems[itemIndex].unit_price = unit_price
+          if (item_description !== undefined) updatedItems[itemIndex].item_description = item_description === null ? null : item_description
+          
+          // Recalculate totals
+          const subtotal = updatedItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
+          const taxAmount = subtotal * (targetInvoice.tax_rate || 0) / 100
+          const discountAmount = targetInvoice.discount_type === 'percentage' ? 
+            subtotal * (targetInvoice.discount_value || 0) / 100 : 
+            (targetInvoice.discount_value || 0)
+          const total = subtotal + taxAmount - discountAmount
+          
+          // Update invoice
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({ 
+              line_items: updatedItems, 
+              subtotal_amount: subtotal,
+              total_amount: total 
+            })
+            .eq('user_id', user_id)
+            .eq('invoice_number', targetInvoice.invoice_number)
+            
+          if (updateError) return `Error updating invoice: ${updateError.message}`
+          
+          const updatedItem = updatedItems[itemIndex]
+          return `Updated line item "${updatedItem.item_name}" in invoice ${invoiceNumber}.
+
+Total updated to $${total.toFixed(2)}.
+
+Let me know if you'd like any other changes?`
+          
+        } catch (error) {
+          console.error('[Assistants POC] Update line item error:', error)
+          return `Error updating line item: ${error.message}`
+        }
+      }
+
+      if (name === 'update_client_info') {
+        const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number } = parsedArgs
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
+          }
+          const targetInvoice = findResult
+          
+          // Use targetInvoice directly
+          
+          let clientData = {}
+          let message = `Updated client information for invoice ${targetInvoice.invoice_number}:`
+          
+          if (client_name) {
+            clientData.client_name = client_name
+            message += `\n- Name: ${client_name}`
+          }
+          if (client_email) {
+            clientData.client_email = client_email  
+            message += `\n- Email: ${client_email}`
+          }
+          if (client_phone) {
+            clientData.client_phone = client_phone
+            message += `\n- Phone: ${client_phone}`
+          }
+          if (client_address) {
+            clientData.client_address = client_address
+            message += `\n- Address: ${client_address}`
+          }
+          if (client_tax_number) {
+            clientData.client_tax_number = client_tax_number
+            message += `\n- Tax Number: ${client_tax_number}`
+          }
+          
+          // Update invoice
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update(clientData)
+            .eq('user_id', user_id)
+            .eq('invoice_number', targetInvoice.invoice_number)
+            
+          if (updateError) return `Error updating invoice: ${updateError.message}`
+          
+          // Also update the client record if it exists
+          if (targetInvoice.client_id) {
+            await supabase
+              .from('clients')
+              .update({
+                ...clientData,
+                ...(client_name && { name: client_name }),
+                ...(client_email && { email: client_email }),
+                ...(client_phone && { phone: client_phone }),
+                ...(client_address && { address: client_address }),
+                ...(client_tax_number && { tax_number: client_tax_number })
+              })
+              .eq('id', targetInvoice.client_id)
+              .eq('user_id', user_id)
+          }
+          
+          message += `\n\nLet me know if you'd like any other changes?`
+          return message
+          
+        } catch (error) {
+          console.error('[Assistants POC] Update client info error:', error)
+          return `Error updating client info: ${error.message}`
+        }
+      }
+
+      if (name === 'update_payment_methods') {
+        const { invoice_identifier, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
+          }
+          const targetInvoice = findResult
+          
+          // Parse invoice ID from the find result
+          const match = findResult.match(/Found invoice (INV-[^\s]+)/)
+          if (!match) return 'Error: Could not identify invoice from search result'
+          
+          const invoiceNumber = match[1]
+          
+          // Get business settings to check enabled payment methods
+          const { data: businessSettings } = await supabase
+            .from('business_settings')
+            .select('enable_stripe_payments, enable_paypal_payments, enable_bank_transfer_payments')
+            .eq('user_id', user_id)
+            .single()
+          
+          if (!businessSettings) {
+            return 'Error: Could not fetch business settings to validate payment methods'
+          }
+          
+          let paymentUpdates = {}
+          let message = `Updated payment methods for invoice ${invoiceNumber}:`
+          let skippedMethods = []
+          
+          // Check each payment method
+          if (enable_stripe !== undefined) {
+            if (enable_stripe && businessSettings.enable_stripe_payments) {
+              paymentUpdates.enable_stripe_payments = true
+              message += `\n- ✅ Stripe payments enabled`
+            } else if (enable_stripe && !businessSettings.enable_stripe_payments) {
+              skippedMethods.push('Stripe (not enabled in business settings)')
+            } else {
+              paymentUpdates.enable_stripe_payments = false
+              message += `\n- ❌ Stripe payments disabled`
+            }
+          }
+          
+          if (enable_paypal !== undefined) {
+            if (enable_paypal && businessSettings.enable_paypal_payments) {
+              paymentUpdates.enable_paypal_payments = true
+              message += `\n- ✅ PayPal payments enabled`
+            } else if (enable_paypal && !businessSettings.enable_paypal_payments) {
+              skippedMethods.push('PayPal (not enabled in business settings)')
+            } else {
+              paymentUpdates.enable_paypal_payments = false
+              message += `\n- ❌ PayPal payments disabled`
+            }
+          }
+          
+          if (enable_bank_transfer !== undefined) {
+            if (enable_bank_transfer && businessSettings.enable_bank_transfer_payments) {
+              paymentUpdates.enable_bank_transfer_payments = true
+              message += `\n- ✅ Bank transfer enabled`
+            } else if (enable_bank_transfer && !businessSettings.enable_bank_transfer_payments) {
+              skippedMethods.push('Bank transfer (not enabled in business settings)')
+            } else {
+              paymentUpdates.enable_bank_transfer_payments = false
+              message += `\n- ❌ Bank transfer disabled`
+            }
+          }
+          
+          if (skippedMethods.length > 0) {
+            message += `\n\n⚠️ Skipped enabling: ${skippedMethods.join(', ')}`
+            message += `\nPlease enable these in your business settings first.`
+          }
+          
+          // Update invoice
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update(paymentUpdates)
+            .eq('user_id', user_id)
+            .eq('invoice_number', targetInvoice.invoice_number)
+            
+          if (updateError) return `Error updating payment methods: ${updateError.message}`
+          
+          message += `\n\nLet me know if you'd like any other changes?`
+          return message
+          
+        } catch (error) {
+          console.error('[Assistants POC] Update payment methods error:', error)
+          return `Error updating payment methods: ${error.message}`
+        }
+      }
+
       return `Unknown function: ${name}`
     }
 
@@ -1369,7 +2966,7 @@ Always be helpful and create exactly what the user requests.`,
                 attachments: attachments,
                 messages: [
                   { id: `user-${Date.now()}`, role: 'user', content: message, created_at: new Date().toISOString() },
-                  { id: `assistant-${Date.now()}`, role: 'assistant', content: assistantMessage, attachments: attachments, created_at: new Date().toISOString() }
+                  { id: `assistant-${Date.now()}`, role: 'assistant', content: assistantMessage, attachments: attachments, created_at: new Date(Date.now() + 5000).toISOString() }
                 ],
                 thread: { id: thread.id, user_id: user_id }
               })

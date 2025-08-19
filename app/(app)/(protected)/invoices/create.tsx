@@ -646,8 +646,10 @@ export default function CreateInvoiceScreen() {
       console.log('[handleSaveInvoice] formData.due_date_option:', formData.due_date_option);
 
       // Get default design and color from business settings for new invoices
-      let defaultDesign = 'classic';
+      let defaultDesign = DEFAULT_DESIGN_ID; // Use correct default ('clean') instead of hardcoded 'classic'
       let defaultAccentColor = '#14B8A6';
+      
+      console.log('[handleSaveInvoice] 🎨 Initial default design:', defaultDesign, '(should be clean)');
       
       if (!isEditMode) {
         try {
@@ -660,7 +662,9 @@ export default function CreateInvoiceScreen() {
           if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
             defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
-            console.log('[handleSaveInvoice] Using default design:', defaultDesign, 'color:', defaultAccentColor);
+            console.log('[handleSaveInvoice] 🎨 Business settings loaded - design:', defaultDesign, 'from DB:', businessSettings.default_invoice_design, 'fallback:', DEFAULT_DESIGN_ID);
+          } else {
+            console.log('[handleSaveInvoice] 🎨 No business settings found, using fallback design:', defaultDesign);
           }
         } catch (error) {
           console.log('[handleSaveInvoice] Could not load business settings, using defaults');

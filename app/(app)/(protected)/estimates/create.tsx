@@ -333,7 +333,7 @@ export default function CreateEstimateScreen() {
   const [currentEstimateId, setCurrentEstimateId] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [estimateTerminology, setEstimateTerminology] = useState<'estimate' | 'quote'>('estimate');
-  const [currentDesign, setCurrentDesign] = useState<string>('classic');
+  const [currentDesign, setCurrentDesign] = useState<string>(DEFAULT_DESIGN_ID); // Use correct default ('clean') instead of hardcoded 'classic'
   const [currentAccentColor, setCurrentAccentColor] = useState<string>('#14B8A6');
   const [isLoadingEstimateNumber, setIsLoadingEstimateNumber] = useState(true);
   
