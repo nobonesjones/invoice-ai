@@ -2353,56 +2353,18 @@ Let me know if you'd like any changes?`
           line_items
         } = parsedArgs
         
-        console.log('[Assistants POC] Updating invoice:', { invoice_identifier, ...parsedArgs })
+        console.log('[update_invoice] Starting with:', { invoice_identifier, ...parsedArgs })
         
         try {
-          // First, find the invoice to update
-          let targetInvoice = null
-          
-          if (invoice_identifier === 'latest') {
-            // Get most recent invoice
-            const { data: invoices } = await supabase
-              .from('invoices')
-              .select('*')
-              .eq('user_id', user_id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-            targetInvoice = invoices?.[0]
-          } else if (invoice_identifier.startsWith('INV-')) {
-            // Search by invoice number
-            const { data: invoices } = await supabase
-              .from('invoices')
-              .select('*')
-              .eq('user_id', user_id)
-              .eq('invoice_number', invoice_identifier)
-            targetInvoice = invoices?.[0]
-          } else {
-            // Search by client name
-            const { data: clients } = await supabase
-              .from('clients')
-              .select('id')
-              .eq('user_id', user_id)
-              .ilike('name', `%${invoice_identifier}%`)
-            
-            if (clients && clients.length > 0) {
-              const { data: invoices } = await supabase
-                .from('invoices')
-                .select('*')
-                .eq('user_id', user_id)
-                .in('client_id', clients.map(c => c.id))
-                .order('created_at', { ascending: false })
-                .limit(1)
-              targetInvoice = invoices?.[0]
-            }
+          // Use the findInvoice helper instead of duplicating search logic
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
           }
+          const targetInvoice = findResult
+          console.log('[update_invoice] Found invoice:', targetInvoice.id, targetInvoice.invoice_number)
           
-          if (!targetInvoice) {
-            return `No invoice found for "${invoice_identifier}"`
-          }
-          
-          console.log('[Assistants POC] Found invoice to update:', targetInvoice.invoice_number)
-          
-          // Prepare update data for invoice
+          // Prepare update data for invoice - use correct column names
           const invoiceUpdates = {}
           if (invoice_date !== undefined) invoiceUpdates.invoice_date = invoice_date
           if (due_date !== undefined) invoiceUpdates.due_date = due_date
@@ -2410,18 +2372,19 @@ Let me know if you'd like any changes?`
           if (notes !== undefined) invoiceUpdates.notes = notes
           if (status !== undefined) invoiceUpdates.status = status
           if (tax_rate !== undefined) {
-            invoiceUpdates.tax_rate = tax_rate
+            // Only use tax_percentage - tax_rate column doesn't exist
             invoiceUpdates.tax_percentage = tax_rate
           }
           if (discount_type !== undefined) invoiceUpdates.discount_type = discount_type
           if (discount_value !== undefined) invoiceUpdates.discount_value = discount_value
           if (invoice_design !== undefined) invoiceUpdates.invoice_design = invoice_design
           if (accent_color !== undefined) invoiceUpdates.accent_color = accent_color
+          // Use correct payment method column names from schema
           if (enable_stripe !== undefined) invoiceUpdates.stripe_active = enable_stripe
           if (enable_paypal !== undefined) invoiceUpdates.paypal_active = enable_paypal
           if (enable_bank_transfer !== undefined) invoiceUpdates.bank_account_active = enable_bank_transfer
           
-          // Update client information if provided
+          // Update client information if provided - invoice table does NOT have client fields
           let clientUpdates = {}
           if (client_name !== undefined) clientUpdates.name = client_name
           if (client_email !== undefined) clientUpdates.email = client_email
@@ -2431,23 +2394,31 @@ Let me know if you'd like any changes?`
           
           // Update client if there are changes
           if (Object.keys(clientUpdates).length > 0 && targetInvoice.client_id) {
+            console.log('[update_invoice] Updating client:', targetInvoice.client_id)
             const { error: clientError } = await supabase
               .from('clients')
               .update(clientUpdates)
               .eq('id', targetInvoice.client_id)
             
             if (clientError) {
-              console.error('[Assistants POC] Client update error:', clientError)
+              console.error('[update_invoice] Client update error:', clientError)
             }
           }
           
-          // Handle line items replacement
+          // Handle line items replacement - use correct table name
           if (line_items && line_items.length > 0) {
-            // Delete existing line items
-            await supabase
-              .from('line_items')
+            console.log('[update_invoice] Replacing line items:', line_items.length)
+            
+            // Delete existing line items from correct table
+            const { error: deleteError } = await supabase
+              .from('invoice_line_items')  // Use correct table name
               .delete()
               .eq('invoice_id', targetInvoice.id)
+              .eq('user_id', user_id)  // Add user_id for security
+            
+            if (deleteError) {
+              console.error('[update_invoice] Delete line items error:', deleteError)
+            }
             
             // Calculate totals
             let subtotal = 0
@@ -2456,6 +2427,7 @@ Let me know if you'd like any changes?`
               subtotal += itemTotal
               return {
                 invoice_id: targetInvoice.id,
+                user_id: user_id,  // Add user_id for security
                 item_name: item.item_name,
                 item_description: item.item_description || null,
                 unit_price: item.unit_price || 0,
@@ -2464,17 +2436,17 @@ Let me know if you'd like any changes?`
               }
             })
             
-            // Create new line items
+            // Create new line items in correct table
             const { error: lineItemsError } = await supabase
-              .from('line_items')
+              .from('invoice_line_items')  // Use correct table name
               .insert(lineItemsToCreate)
             
             if (lineItemsError) {
-              console.error('[Assistants POC] Line items update error:', lineItemsError)
+              console.error('[update_invoice] Line items update error:', lineItemsError)
               return `Error updating line items: ${lineItemsError.message}`
             }
             
-            // Recalculate totals
+            // Recalculate totals using correct column names
             const discountAmount = discount_value || targetInvoice.discount_value || 0
             const discountType = discount_type || targetInvoice.discount_type
             
@@ -2485,15 +2457,19 @@ Let me know if you'd like any changes?`
               afterDiscount = subtotal - discountAmount
             }
             
-            const taxRate = tax_rate !== undefined ? tax_rate : (targetInvoice.tax_rate || 0)
+            // Use correct column name for tax calculation
+            const taxRate = tax_rate !== undefined ? tax_rate : (targetInvoice.tax_percentage || 0)
             const taxAmount = afterDiscount * (taxRate / 100)
             const totalAmount = afterDiscount + taxAmount
             
+            // Update totals with correct column names (don't set non-existent columns)
             invoiceUpdates.subtotal_amount = subtotal
-            invoiceUpdates.discount_amount = subtotal - afterDiscount
-            invoiceUpdates.tax_amount = taxAmount
             invoiceUpdates.total_amount = totalAmount
+            
+            console.log('[update_invoice] Calculated totals:', { subtotal, totalAmount, taxRate })
           }
+          
+          console.log('[update_invoice] Updating invoice with:', invoiceUpdates)
           
           // Update invoice if there are changes
           if (Object.keys(invoiceUpdates).length > 0) {
@@ -2503,17 +2479,65 @@ Let me know if you'd like any changes?`
               .eq('id', targetInvoice.id)
             
             if (invoiceError) {
-              console.error('[Assistants POC] Invoice update error:', invoiceError)
+              console.error('[update_invoice] Invoice update error:', invoiceError)
               return `Error updating invoice: ${invoiceError.message}`
             }
           }
           
+          // Get updated invoice for attachment
+          const { data: updatedInvoice, error: invoiceFetchError } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single()
+            
+          if (invoiceFetchError) {
+            console.error('[update_invoice] Updated invoice fetch error:', invoiceFetchError)
+          }
+          
+          // Get line items from correct table
+          const { data: allLineItems, error: lineItemsError } = await supabase
+            .from('invoice_line_items')  // Use correct table name
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+            .order('created_at', { ascending: true })
+          
+          if (lineItemsError) {
+            console.error('[update_invoice] Line items fetch error:', lineItemsError)
+          }
+          
+          // Get client data for attachment
+          let clientData = null
+          if (targetInvoice.client_id) {
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single()
+            
+            if (!clientError) {
+              clientData = client
+            }
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: allLineItems || [],
+            client_id: targetInvoice.client_id,
+            client: clientData
+          })
+          
+          console.log('[update_invoice] Success - created attachment')
+          
           return `I've updated invoice ${targetInvoice.invoice_number}. 
 
-Let me know if you'd like any other changes?`
+Let me know if you'd like any other changes!`
           
         } catch (error) {
-          console.error('[Assistants POC] Update invoice error:', error)
+          console.error('[update_invoice] Error:', error)
           return `Error updating invoice: ${error.message}`
         }
       }
@@ -2641,52 +2665,114 @@ Let me know if you'd like any other changes?`
           }
           const targetInvoice = findResult
           
-          const currentItems = targetInvoice.line_items || []
-          if (currentItems.length === 0) return 'Error: No line items found in invoice'
+          // Get all line items for this invoice from database
+          console.log('[remove_line_item] Getting line items for invoice:', targetInvoice.invoice_number)
+          const { data: currentItems, error: fetchError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+            .order('created_at', { ascending: true })
+            
+          if (fetchError) {
+            console.error('[remove_line_item] Error fetching line items:', fetchError)
+            return `Error fetching line items: ${fetchError.message}`
+          }
+          
+          if (!currentItems || currentItems.length === 0) {
+            return 'Error: No line items found in invoice'
+          }
           
           // Find item to remove
-          let itemIndex = -1
+          let itemToRemove = null
           
           // Check if it's a numeric index (1st, 2nd, etc.)
           const indexMatch = item_identifier.match(/(\d+)(st|nd|rd|th)/i)
           if (indexMatch) {
-            itemIndex = parseInt(indexMatch[1]) - 1
+            const index = parseInt(indexMatch[1]) - 1
+            if (index >= 0 && index < currentItems.length) {
+              itemToRemove = currentItems[index]
+            }
           } else {
             // Search by item name
-            itemIndex = currentItems.findIndex(item => 
+            itemToRemove = currentItems.find(item => 
               item.item_name.toLowerCase().includes(item_identifier.toLowerCase())
             )
           }
           
-          if (itemIndex === -1) {
+          if (!itemToRemove) {
             return `Error: Could not find line item "${item_identifier}". Available items: ${currentItems.map(item => item.item_name).join(', ')}`
           }
           
-          const removedItem = currentItems[itemIndex]
-          const updatedItems = currentItems.filter((_, index) => index !== itemIndex)
+          // Delete the line item from database
+          console.log('[remove_line_item] Deleting line item:', itemToRemove.id)
+          const { error: deleteError } = await supabase
+            .from('invoice_line_items')
+            .delete()
+            .eq('id', itemToRemove.id)
+            
+          if (deleteError) {
+            console.error('[remove_line_item] Delete error:', deleteError)
+            return `Error deleting line item: ${deleteError.message}`
+          }
           
-          // Recalculate totals
-          const subtotal = updatedItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
-          const taxAmount = subtotal * (targetInvoice.tax_rate || 0) / 100
+          // Get remaining line items
+          const remainingItems = currentItems.filter(item => item.id !== itemToRemove.id)
+          
+          // Recalculate totals from remaining items
+          const subtotal = remainingItems.reduce((sum, item) => sum + (item.total_price || 0), 0)
+          const taxAmount = subtotal * (targetInvoice.tax_percentage || 0) / 100
           const discountAmount = targetInvoice.discount_type === 'percentage' ? 
             subtotal * (targetInvoice.discount_value || 0) / 100 : 
             (targetInvoice.discount_value || 0)
           const total = subtotal + taxAmount - discountAmount
           
-          // Update invoice
+          // Update invoice totals
+          console.log('[remove_line_item] Updating invoice totals:', { subtotal, total })
           const { error: updateError } = await supabase
             .from('invoices')
             .update({ 
-              line_items: updatedItems, 
               subtotal_amount: subtotal,
               total_amount: total 
             })
             .eq('user_id', user_id)
-            .eq('invoice_number', targetInvoice.invoice_number)
+            .eq('id', targetInvoice.id)
             
-          if (updateError) return `Error updating invoice: ${updateError.message}`
+          if (updateError) {
+            console.error('[remove_line_item] Update error:', updateError)
+            return `Error updating invoice totals: ${updateError.message}`
+          }
           
-          return `Removed line item "${removedItem.item_name}" from invoice ${invoiceNumber}.
+          console.log('[remove_line_item] Successfully removed line item:', itemToRemove.item_name)
+          
+          // Get updated invoice data for attachment
+          const { data: updatedInvoice } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single()
+            
+          // Get client data if exists
+          let clientData = null
+          if (targetInvoice.client_id) {
+            const { data: client } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single()
+            clientData = client
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: remainingItems,
+            client_id: targetInvoice.client_id,
+            client: clientData
+          })
+          
+          return `Removed line item "${itemToRemove.item_name}" from invoice ${targetInvoice.invoice_number}.
 
 Total updated to $${total.toFixed(2)}.
 
@@ -2701,78 +2787,7 @@ Let me know if you'd like any other changes?`
       if (name === 'update_line_item') {
         const { invoice_identifier, item_identifier, item_name, quantity, unit_price, item_description } = parsedArgs
         
-        try {
-          // First find the invoice
-          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
-          if (typeof findResult === 'string') {
-            return findResult
-          }
-          const targetInvoice = findResult
-          
-          const currentItems = targetInvoice.line_items || []
-          if (currentItems.length === 0) return 'Error: No line items found in invoice'
-          
-          // Find item to update
-          let itemIndex = -1
-          
-          // Check if it's a numeric index (1st, 2nd, etc.)
-          const indexMatch = item_identifier.match(/(\d+)(st|nd|rd|th)/i)
-          if (indexMatch) {
-            itemIndex = parseInt(indexMatch[1]) - 1
-          } else {
-            // Search by item name
-            itemIndex = currentItems.findIndex(item => 
-              item.item_name.toLowerCase().includes(item_identifier.toLowerCase())
-            )
-          }
-          
-          if (itemIndex === -1) {
-            return `Error: Could not find line item "${item_identifier}". Available items: ${currentItems.map(item => item.item_name).join(', ')}`
-          }
-          
-          // Update the item
-          const updatedItems = [...currentItems]
-          if (item_name !== undefined) updatedItems[itemIndex].item_name = item_name
-          if (quantity !== undefined) updatedItems[itemIndex].quantity = quantity
-          if (unit_price !== undefined) updatedItems[itemIndex].unit_price = unit_price
-          if (item_description !== undefined) updatedItems[itemIndex].item_description = item_description === null ? null : item_description
-          
-          // Recalculate totals
-          const subtotal = updatedItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
-          const taxAmount = subtotal * (targetInvoice.tax_rate || 0) / 100
-          const discountAmount = targetInvoice.discount_type === 'percentage' ? 
-            subtotal * (targetInvoice.discount_value || 0) / 100 : 
-            (targetInvoice.discount_value || 0)
-          const total = subtotal + taxAmount - discountAmount
-          
-          // Update invoice
-          const { error: updateError } = await supabase
-            .from('invoices')
-            .update({ 
-              line_items: updatedItems, 
-              subtotal_amount: subtotal,
-              total_amount: total 
-            })
-            .eq('user_id', user_id)
-            .eq('invoice_number', targetInvoice.invoice_number)
-            
-          if (updateError) return `Error updating invoice: ${updateError.message}`
-          
-          const updatedItem = updatedItems[itemIndex]
-          return `Updated line item "${updatedItem.item_name}" in invoice ${invoiceNumber}.
-
-Total updated to $${total.toFixed(2)}.
-
-Let me know if you'd like any other changes?`
-          
-        } catch (error) {
-          console.error('[Assistants POC] Update line item error:', error)
-          return `Error updating line item: ${error.message}`
-        }
-      }
-
-      if (name === 'update_client_info') {
-        const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number } = parsedArgs
+        console.log('[update_line_item] Starting with:', { invoice_identifier, item_identifier, item_name, quantity, unit_price, item_description })
         
         try {
           // First find the invoice
@@ -2781,8 +2796,172 @@ Let me know if you'd like any other changes?`
             return findResult
           }
           const targetInvoice = findResult
+          console.log('[update_line_item] Found invoice:', targetInvoice.id, targetInvoice.invoice_number)
           
-          // Use targetInvoice directly
+          // Get current line items from the database (separate table)
+          const { data: currentItems, error: lineItemsError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+            .order('created_at', { ascending: true })
+          
+          if (lineItemsError) {
+            console.error('[update_line_item] Line items fetch error:', lineItemsError)
+            return `Error fetching line items: ${lineItemsError.message}`
+          }
+          
+          if (!currentItems || currentItems.length === 0) {
+            return 'Error: No line items found in invoice'
+          }
+          
+          console.log('[update_line_item] Found line items:', currentItems.length)
+          
+          // Find item to update
+          let targetLineItem = null
+          
+          // Check if it's a numeric index (1st, 2nd, etc.)
+          const indexMatch = item_identifier.match(/(\d+)(st|nd|rd|th)/i)
+          if (indexMatch) {
+            const itemIndex = parseInt(indexMatch[1]) - 1
+            targetLineItem = currentItems[itemIndex]
+          } else {
+            // Search by item name
+            targetLineItem = currentItems.find(item => 
+              item.item_name.toLowerCase().includes(item_identifier.toLowerCase())
+            )
+          }
+          
+          if (!targetLineItem) {
+            return `Error: Could not find line item "${item_identifier}". Available items: ${currentItems.map(item => item.item_name).join(', ')}`
+          }
+          
+          console.log('[update_line_item] Found target line item:', targetLineItem.id, targetLineItem.item_name)
+          
+          // Build update object with only changed fields
+          const updateFields = {}
+          if (item_name !== undefined) updateFields.item_name = item_name
+          if (quantity !== undefined) updateFields.quantity = quantity
+          if (unit_price !== undefined) updateFields.unit_price = unit_price
+          if (item_description !== undefined) updateFields.item_description = item_description === null ? null : item_description
+          
+          // Recalculate total_price if quantity or unit_price changed
+          const finalQuantity = quantity !== undefined ? quantity : targetLineItem.quantity
+          const finalUnitPrice = unit_price !== undefined ? unit_price : targetLineItem.unit_price
+          updateFields.total_price = finalQuantity * finalUnitPrice
+          
+          console.log('[update_line_item] Updating with fields:', updateFields)
+          
+          // Update the specific line item
+          const { error: updateLineItemError } = await supabase
+            .from('invoice_line_items')
+            .update(updateFields)
+            .eq('id', targetLineItem.id)
+            
+          if (updateLineItemError) {
+            console.error('[update_line_item] Line item update error:', updateLineItemError)
+            return `Error updating line item: ${updateLineItemError.message}`
+          }
+          
+          // Get all updated line items to recalculate totals
+          const { data: allLineItems, error: allItemsError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+          
+          if (allItemsError) {
+            console.error('[update_line_item] All items fetch error:', allItemsError)
+            return `Error fetching updated line items: ${allItemsError.message}`
+          }
+          
+          console.log('[update_line_item] Recalculating totals from', allLineItems.length, 'items')
+          
+          // Recalculate totals using correct column names
+          const subtotal = allLineItems.reduce((sum, item) => sum + item.total_price, 0)
+          const taxAmount = subtotal * (targetInvoice.tax_percentage || 0) / 100
+          const discountAmount = targetInvoice.discount_type === 'percentage' ? 
+            subtotal * (targetInvoice.discount_value || 0) / 100 : 
+            (targetInvoice.discount_value || 0)
+          const total = subtotal + taxAmount - discountAmount
+          
+          console.log('[update_line_item] New totals:', { subtotal, taxAmount, discountAmount, total })
+          
+          // Update invoice totals with correct column names
+          const { error: updateInvoiceError } = await supabase
+            .from('invoices')
+            .update({ 
+              subtotal_amount: subtotal,
+              total_amount: total 
+            })
+            .eq('id', targetInvoice.id)
+            
+          if (updateInvoiceError) {
+            console.error('[update_line_item] Invoice update error:', updateInvoiceError)
+            return `Error updating invoice totals: ${updateInvoiceError.message}`
+          }
+          
+          // Get updated invoice for attachment
+          const { data: updatedInvoice, error: invoiceFetchError } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single()
+            
+          if (invoiceFetchError) {
+            console.error('[update_line_item] Updated invoice fetch error:', invoiceFetchError)
+          }
+          
+          // Get client data for attachment
+          let clientData = null
+          if (targetInvoice.client_id) {
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single()
+            
+            if (!clientError) {
+              clientData = client
+            }
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: allLineItems,
+            client_id: targetInvoice.client_id,
+            client: clientData
+          })
+          
+          console.log('[update_line_item] Success - created attachment')
+          
+          const updatedItemName = item_name !== undefined ? item_name : targetLineItem.item_name
+          return `Updated line item "${updatedItemName}" in invoice ${targetInvoice.invoice_number}.
+
+Total updated to $${total.toFixed(2)}.
+
+Let me know if you'd like any other changes!`
+          
+        } catch (error) {
+          console.error('[update_line_item] Error:', error)
+          return `Error updating line item: ${error.message}`
+        }
+      }
+
+      if (name === 'update_client_info') {
+        const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number } = parsedArgs
+        
+        console.log('[update_client_info] Starting with:', { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number })
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier)
+          if (typeof findResult === 'string') {
+            return findResult
+          }
+          const targetInvoice = findResult
+          console.log('[update_client_info] Found invoice:', targetInvoice.id, targetInvoice.invoice_number)
           
           let clientData = {}
           let message = `Updated client information for invoice ${targetInvoice.invoice_number}:`
@@ -2808,6 +2987,8 @@ Let me know if you'd like any other changes?`
             message += `\n- Tax Number: ${client_tax_number}`
           }
           
+          console.log('[update_client_info] Updating invoice with:', clientData)
+          
           // Update invoice
           const { error: updateError } = await supabase
             .from('invoices')
@@ -2815,11 +2996,15 @@ Let me know if you'd like any other changes?`
             .eq('user_id', user_id)
             .eq('invoice_number', targetInvoice.invoice_number)
             
-          if (updateError) return `Error updating invoice: ${updateError.message}`
+          if (updateError) {
+            console.error('[update_client_info] Invoice update error:', updateError)
+            return `Error updating invoice: ${updateError.message}`
+          }
           
           // Also update the client record if it exists
           if (targetInvoice.client_id) {
-            await supabase
+            console.log('[update_client_info] Updating client record:', targetInvoice.client_id)
+            const { error: clientUpdateError } = await supabase
               .from('clients')
               .update({
                 ...clientData,
@@ -2831,19 +3016,73 @@ Let me know if you'd like any other changes?`
               })
               .eq('id', targetInvoice.client_id)
               .eq('user_id', user_id)
+              
+            if (clientUpdateError) {
+              console.error('[update_client_info] Client update error:', clientUpdateError)
+            }
           }
           
-          message += `\n\nLet me know if you'd like any other changes?`
+          // Get updated invoice for attachment
+          const { data: updatedInvoice, error: invoiceFetchError } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single()
+            
+          if (invoiceFetchError) {
+            console.error('[update_client_info] Updated invoice fetch error:', invoiceFetchError)
+          }
+          
+          // Get line items from separate table
+          const { data: lineItems, error: lineItemsError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+            .order('created_at', { ascending: true })
+          
+          if (lineItemsError) {
+            console.error('[update_client_info] Line items fetch error:', lineItemsError)
+          }
+          
+          // Get updated client data for attachment
+          let updatedClientData = null
+          if (targetInvoice.client_id) {
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single()
+            
+            if (!clientError) {
+              updatedClientData = client
+            }
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: lineItems || [],
+            client_id: targetInvoice.client_id,
+            client: updatedClientData
+          })
+          
+          console.log('[update_client_info] Success - created attachment')
+          
+          message += `\n\nLet me know if you'd like any other changes!`
           return message
           
         } catch (error) {
-          console.error('[Assistants POC] Update client info error:', error)
+          console.error('[update_client_info] Error:', error)
           return `Error updating client info: ${error.message}`
         }
       }
 
       if (name === 'update_payment_methods') {
         const { invoice_identifier, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs
+        
+        console.log('[update_payment_methods] Starting with:', { invoice_identifier, enable_stripe, enable_paypal, enable_bank_transfer })
         
         try {
           // First find the invoice
@@ -2852,61 +3091,59 @@ Let me know if you'd like any other changes?`
             return findResult
           }
           const targetInvoice = findResult
-          
-          // Parse invoice ID from the find result
-          const match = findResult.match(/Found invoice (INV-[^\s]+)/)
-          if (!match) return 'Error: Could not identify invoice from search result'
-          
-          const invoiceNumber = match[1]
+          console.log('[update_payment_methods] Found invoice:', targetInvoice.id, targetInvoice.invoice_number)
           
           // Get business settings to check enabled payment methods
-          const { data: businessSettings } = await supabase
+          const { data: businessSettings, error: businessSettingsError } = await supabase
             .from('business_settings')
             .select('enable_stripe_payments, enable_paypal_payments, enable_bank_transfer_payments')
             .eq('user_id', user_id)
             .single()
           
-          if (!businessSettings) {
+          if (businessSettingsError) {
+            console.error('[update_payment_methods] Business settings fetch error:', businessSettingsError)
             return 'Error: Could not fetch business settings to validate payment methods'
           }
           
+          console.log('[update_payment_methods] Business settings:', businessSettings)
+          
           let paymentUpdates = {}
-          let message = `Updated payment methods for invoice ${invoiceNumber}:`
+          let message = `Updated payment methods for invoice ${targetInvoice.invoice_number}:`
           let skippedMethods = []
           
-          // Check each payment method
+          // Check each payment method - use correct column names
           if (enable_stripe !== undefined) {
             if (enable_stripe && businessSettings.enable_stripe_payments) {
-              paymentUpdates.enable_stripe_payments = true
+              paymentUpdates.stripe_active = true
               message += `\n- ✅ Stripe payments enabled`
             } else if (enable_stripe && !businessSettings.enable_stripe_payments) {
               skippedMethods.push('Stripe (not enabled in business settings)')
             } else {
-              paymentUpdates.enable_stripe_payments = false
+              paymentUpdates.stripe_active = false
               message += `\n- ❌ Stripe payments disabled`
             }
           }
           
           if (enable_paypal !== undefined) {
             if (enable_paypal && businessSettings.enable_paypal_payments) {
-              paymentUpdates.enable_paypal_payments = true
+              paymentUpdates.paypal_active = true
               message += `\n- ✅ PayPal payments enabled`
             } else if (enable_paypal && !businessSettings.enable_paypal_payments) {
               skippedMethods.push('PayPal (not enabled in business settings)')
             } else {
-              paymentUpdates.enable_paypal_payments = false
+              paymentUpdates.paypal_active = false
               message += `\n- ❌ PayPal payments disabled`
             }
           }
           
           if (enable_bank_transfer !== undefined) {
             if (enable_bank_transfer && businessSettings.enable_bank_transfer_payments) {
-              paymentUpdates.enable_bank_transfer_payments = true
+              paymentUpdates.bank_account_active = true
               message += `\n- ✅ Bank transfer enabled`
             } else if (enable_bank_transfer && !businessSettings.enable_bank_transfer_payments) {
               skippedMethods.push('Bank transfer (not enabled in business settings)')
             } else {
-              paymentUpdates.enable_bank_transfer_payments = false
+              paymentUpdates.bank_account_active = false
               message += `\n- ❌ Bank transfer disabled`
             }
           }
@@ -2916,6 +3153,8 @@ Let me know if you'd like any other changes?`
             message += `\nPlease enable these in your business settings first.`
           }
           
+          console.log('[update_payment_methods] Updating with:', paymentUpdates)
+          
           // Update invoice
           const { error: updateError } = await supabase
             .from('invoices')
@@ -2923,13 +3162,64 @@ Let me know if you'd like any other changes?`
             .eq('user_id', user_id)
             .eq('invoice_number', targetInvoice.invoice_number)
             
-          if (updateError) return `Error updating payment methods: ${updateError.message}`
+          if (updateError) {
+            console.error('[update_payment_methods] Invoice update error:', updateError)
+            return `Error updating payment methods: ${updateError.message}`
+          }
           
-          message += `\n\nLet me know if you'd like any other changes?`
+          // Get updated invoice for attachment
+          const { data: updatedInvoice, error: invoiceFetchError } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single()
+            
+          if (invoiceFetchError) {
+            console.error('[update_payment_methods] Updated invoice fetch error:', invoiceFetchError)
+          }
+          
+          // Get line items from separate table
+          const { data: lineItems, error: lineItemsError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id)
+            .order('created_at', { ascending: true })
+          
+          if (lineItemsError) {
+            console.error('[update_payment_methods] Line items fetch error:', lineItemsError)
+          }
+          
+          // Get client data for attachment
+          let clientData = null
+          if (targetInvoice.client_id) {
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single()
+            
+            if (!clientError) {
+              clientData = client
+            }
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: lineItems || [],
+            client_id: targetInvoice.client_id,
+            client: clientData
+          })
+          
+          console.log('[update_payment_methods] Success - created attachment')
+          
+          message += `\n\nLet me know if you'd like any other changes!`
           return message
           
         } catch (error) {
-          console.error('[Assistants POC] Update payment methods error:', error)
+          console.error('[update_payment_methods] Error:', error)
           return `Error updating payment methods: ${error.message}`
         }
       }
