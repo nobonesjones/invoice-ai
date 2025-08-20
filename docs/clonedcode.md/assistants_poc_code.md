@@ -879,6 +879,22 @@ Always be helpful and create exactly what the user requests.`,
           {
             type: "function",
             function: {
+              name: "setup_paypal_payments",
+              description: "Enable PayPal payment option on invoices. Use this when users want to add PayPal as a payment method, NOT as a line item.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_id: {
+                    type: "string",
+                    description: "Invoice ID to enable PayPal for (optional if setting up generally)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
               name: "update_business_settings",
               description: "Update the user's business information and tax settings that appear on all invoices. Use when user mentions 'my', 'our', 'my business' address/details or wants to adjust tax settings.",
               parameters: {
@@ -1495,6 +1511,593 @@ LINE ITEM CLEANING RULES:
 • Focus on the main product/service being provided
 
 Always be helpful and create exactly what the user requests.`,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "create_invoice",
+              description: "Creates a comprehensive invoice with all options - line items, due dates, payment terms, PayPal setup, notes, tax rates, and more",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Email of the client (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Phone number of the client (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Address of the client (optional)"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Tax number/VAT number of the client (optional)"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Array of line items for the invoice",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string",
+                          description: "Name/description of the service/product"
+                        },
+                        item_description: {
+                          type: "string",
+                          description: "Detailed description of the service/product (optional)"
+                        },
+                        unit_price: {
+                          type: "number",
+                          description: "Price per unit for this line item"
+                        },
+                        quantity: {
+                          type: "number",
+                          description: "Quantity (defaults to 1 if not specified)"
+                        }
+                      },
+                      required: [
+                        "item_name",
+                        "unit_price"
+                      ]
+                    }
+                  },
+                  due_date: {
+                    type: "string",
+                    description: "Due date in YYYY-MM-DD format (optional, defaults to 30 days from now)"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    description: "Invoice date in YYYY-MM-DD format (optional, defaults to today)"
+                  },
+                  tax_percentage: {
+                    type: "number",
+                    description: "Tax rate as percentage (e.g., 20 for 20% VAT, optional)"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Additional notes or payment terms to include on the invoice (optional)"
+                  },
+                  payment_terms: {
+                    type: "string",
+                    description: "Payment terms like 'Net 30', 'Due on receipt', etc. (optional)"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable PayPal payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
+                  },
+                  paypal_email: {
+                    type: "string",
+                    description: "PayPal email if enabling PayPal payments (required if enable_paypal is true)"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable Stripe card payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable bank transfer payments on this invoice - ONLY if available in business settings (optional, defaults to false)"
+                  },
+                  invoice_design: {
+                    type: "string",
+                    description: "Invoice design template: 'professional', 'modern', 'clean', 'simple' (optional, defaults to 'clean')",
+                    enum: [
+                      "professional",
+                      "modern",
+                      "clean",
+                      "simple",
+                      "wave"
+                    ]
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Hex color code for invoice accent color (optional, e.g., '#3B82F6')"
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Type of discount: 'percentage' or 'fixed' (optional)",
+                    enum: [
+                      "percentage",
+                      "fixed"
+                    ]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Discount amount (percentage or fixed amount based on discount_type, optional)"
+                  }
+                },
+                required: [
+                  "client_name",
+                  "line_items"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "setup_paypal_payments",
+              description: "Enable PayPal payment option on invoices. Use this when users want to add PayPal as a payment method, NOT as a line item.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_id: {
+                    type: "string",
+                    description: "Invoice ID to enable PayPal for (optional if setting up generally)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_business_settings",
+              description: "Update the user's business information and tax settings that appear on all invoices. Use when user mentions 'my', 'our', 'my business' address/details or wants to adjust tax settings.",
+              parameters: {
+                type: "object",
+                properties: {
+                  business_name: {
+                    type: "string",
+                    description: "Business name (optional)"
+                  },
+                  business_address: {
+                    type: "string",
+                    description: "Business address (optional)"
+                  },
+                  business_phone: {
+                    type: "string",
+                    description: "Business phone number (optional)"
+                  },
+                  business_email: {
+                    type: "string",
+                    description: "Business email address (optional)"
+                  },
+                  business_website: {
+                    type: "string",
+                    description: "Business website URL (optional)"
+                  },
+                  tax_number: {
+                    type: "string",
+                    description: "Business tax/VAT number (optional)"
+                  },
+                  tax_name: {
+                    type: "string",
+                    description: "Tax label/name (e.g., 'VAT', 'Sales Tax', 'GST') (optional)"
+                  },
+                  default_tax_rate: {
+                    type: "number",
+                    description: "Default tax rate as percentage (e.g., 20 for 20%) (optional)"
+                  },
+                  auto_apply_tax: {
+                    type: "boolean",
+                    description: "Whether to automatically apply tax to new invoices (optional)"
+                  }
+                }
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "enable_payment_methods",
+              description: "Enable specific payment methods on an invoice. Only works if the payment methods are enabled in business settings.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to enable payments for (required)"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable Stripe card payments (optional)"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable PayPal payments (optional)"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable bank transfer payments (optional)"
+                  }
+                },
+                required: [
+                  "invoice_number"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_payment_options",
+              description: "Check what payment methods are currently enabled and configured",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "setup_paypal_payments",
+              description: "Enable PayPal payments by providing PayPal email address. Can also activate PayPal on a specific invoice.",
+              parameters: {
+                type: "object",
+                properties: {
+                  paypal_email: {
+                    type: "string",
+                    description: "PayPal email address for receiving payments (required)"
+                  },
+                  invoice_number: {
+                    type: "string",
+                    description: "Optional invoice number to also activate PayPal on"
+                  }
+                },
+                required: [
+                  "paypal_email"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "setup_bank_transfer",
+              description: "Enable bank transfer payments by providing bank details. Can also activate bank transfer on a specific invoice.",
+              parameters: {
+                type: "object",
+                properties: {
+                  bank_details: {
+                    type: "string",
+                    description: "Bank account details for receiving transfers (e.g., account name, number, sort code, IBAN) (required)"
+                  },
+                  invoice_number: {
+                    type: "string",
+                    description: "Optional invoice number to also activate bank transfer on"
+                  }
+                },
+                required: [
+                  "bank_details"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice",
+              description: "Update any aspect of an existing invoice - client info, line items, amounts, design, payment methods, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    description: "Update invoice date (YYYY-MM-DD format)"
+                  },
+                  due_date: {
+                    type: "string",
+                    description: "Update due date (YYYY-MM-DD format)"
+                  },
+                  payment_terms_days: {
+                    type: "number",
+                    description: "Update payment terms in days"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Update invoice notes"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Update invoice status: 'draft', 'sent', 'paid', 'overdue'",
+                    enum: [
+                      "draft",
+                      "sent",
+                      "paid",
+                      "overdue"
+                    ]
+                  },
+                  tax_rate: {
+                    type: "number",
+                    description: "Update tax rate percentage"
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Update discount type: 'percentage' or 'fixed'",
+                    enum: [
+                      "percentage",
+                      "fixed"
+                    ]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Update discount amount"
+                  },
+                  invoice_design: {
+                    type: "string",
+                    description: "Update invoice design: 'professional', 'modern', 'clean', 'simple', 'wave'",
+                    enum: [
+                      "professional",
+                      "modern",
+                      "clean",
+                      "simple",
+                      "wave"
+                    ]
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Update accent color (hex code, e.g., '#FF6B35')"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe payments"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable/disable PayPal payments"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Replace all line items with new ones",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string"
+                        },
+                        item_description: {
+                          type: "string"
+                        },
+                        unit_price: {
+                          type: "number"
+                        },
+                        quantity: {
+                          type: "number"
+                        }
+                      },
+                      required: [
+                        "item_name",
+                        "unit_price"
+                      ]
+                    }
+                  }
+                },
+                required: [
+                  "invoice_identifier"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_line_item",
+              description: "Add a new line item to an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Name/description of the line item"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Quantity of the item (default: 1)"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Price per unit of the item"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Optional detailed description of the item"
+                  }
+                },
+                required: [
+                  "invoice_identifier",
+                  "item_name",
+                  "unit_price"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "remove_line_item",
+              description: "Remove a specific line item from an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_identifier: {
+                    type: "string",
+                    description: "Name of the line item to remove, or item index (1st item, 2nd item, etc.)"
+                  }
+                },
+                required: [
+                  "invoice_identifier",
+                  "item_identifier"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_line_item",
+              description: "Update a specific line item in an existing invoice",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  item_identifier: {
+                    type: "string",
+                    description: "Name of the line item to update, or item index (1st item, 2nd item, etc.)"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Update item name/description"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Update item quantity"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Update item unit price"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Update item detailed description (use null to remove)"
+                  }
+                },
+                required: [
+                  "invoice_identifier",
+                  "item_identifier"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_client_info",
+              description: "Update client information for an existing invoice and save to client profile",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  }
+                },
+                required: [
+                  "invoice_identifier"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_payment_methods",
+              description: "Update payment methods for an existing invoice. Only enables methods if they are enabled in business settings.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe card payments"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable/disable PayPal payments"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments"
+                  }
+                },
+                required: [
+                  "invoice_identifier"
+                ]
+              }
+            }
+          }
+        ],
         model: "gpt-4o-mini"
       });
       console.log('[Assistants POC] Created new assistant:', assistant.id);

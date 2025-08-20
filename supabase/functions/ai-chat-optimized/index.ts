@@ -206,7 +206,7 @@ class InvoiceFunctionService {
           address_client: params.client_address || null,
           created_at: new Date().toISOString()
         };
-        const { data: client, error: clientError } = await supabase.from('clients').insert(newClient).select().single();
+        const { data: client, error: clientError } = await supabase.from('clients').insert(newClient).select('id, name, email, phone, address_client, notes, tax_number, created_at, updated_at').single();
         if (clientError) {
           throw new Error(`Failed to create client: ${clientError.message}`);
         }
@@ -375,6 +375,16 @@ Would you like me to make any changes?`;
   static async updateBusinessSettings(params, userId) {
     try {
       console.log(`[Optimized] Updating business settings for user ${userId}:`, params);
+      
+      // Check if user is trying to update logo
+      if (params.logo || params.business_logo || params.company_logo) {
+        return {
+          success: true,
+          data: {},
+          message: "I can't update your logo through chat, but you can do it from Settings > Business Information. Upload it there and it will show on future invoices."
+        };
+      }
+      
       // Get current business settings
       const { data: currentSettings } = await supabase.from('business_settings').select('*').eq('user_id', userId).maybeSingle();
       // Prepare update data
@@ -486,7 +496,7 @@ Would you like me to make any changes?`;
         address_client: params.address || null,
         created_at: new Date().toISOString()
       };
-      const { data: client, error } = await supabase.from('clients').insert(newClient).select().single();
+      const { data: client, error } = await supabase.from('clients').insert(newClient).select('id, name, email, phone, address_client, notes, tax_number, created_at, updated_at').single();
       if (error) throw error;
       return {
         success: true,
@@ -505,6 +515,8 @@ Would you like me to make any changes?`;
   }
   static async updateClient(params, userId) {
     try {
+      console.log(`[Optimized] Updating client for user ${userId}:`, params);
+      
       // First find the client by name
       const { data: existingClient, error: findError } = await supabase.from('clients').select('id').eq('user_id', userId).ilike('name', params.client_name).single();
       if (findError || !existingClient) {
@@ -514,26 +526,100 @@ Would you like me to make any changes?`;
           error: 'Client not found'
         };
       }
+      
       // Build update object with only provided fields
       const updateData = {};
       if (params.email !== undefined) updateData.email = params.email;
       if (params.phone !== undefined) updateData.phone = params.phone;
       if (params.address !== undefined) updateData.address_client = params.address;
+      
+      console.log('[updateClient] Update data:', updateData);
+      
       // Update the client
-      const { data: updatedClient, error: updateError } = await supabase.from('clients').update(updateData).eq('id', existingClient.id).select().single();
-      if (updateError) throw updateError;
-      return {
-        success: true,
-        data: {
-          client: updatedClient
-        },
-        message: `Successfully updated client "${params.client_name}"`
-      };
+      const { data: updatedClient, error: updateError } = await supabase.from('clients').update(updateData).eq('id', existingClient.id).select('id, name, email, phone, address_client, notes, tax_number, created_at, updated_at').single();
+      if (updateError) {
+        console.error('[updateClient] Database error:', updateError);
+        throw updateError;
+      }
+
+      console.log('[updateClient] Client updated successfully, looking for recent invoice...');
+
+      // CRITICAL: Find recent invoice to update and show, following the exact pattern from updateInvoiceLineItems
+      const recentResult = await this.getRecentInvoices({ limit: 1 }, userId);
+      
+      if (recentResult.success && recentResult.data?.invoices?.length > 0) {
+        const recentInvoice = recentResult.data.invoices[0];
+        console.log(`[updateClient] Found recent invoice: ${recentInvoice.invoice_number}`);
+        
+        // Get the updated invoice data with line items for the attachment (following exact pattern)
+        const { data: updatedInvoiceData, error: fetchError } = await supabase.from('invoices').select(`
+            *,
+            invoice_line_items(*),
+            clients(id, name, email, phone, address_client, notes, tax_number, created_at, updated_at)
+          `).eq('id', recentInvoice.id).single();
+        
+        if (fetchError) {
+          console.error('[updateClient] Error fetching updated invoice:', fetchError);
+        }
+
+        // Create attachment exactly like updateInvoiceLineItems does
+        const attachmentData = {
+          type: 'invoice',
+          invoice_id: recentInvoice.id,
+          invoice_number: recentInvoice.invoice_number,
+          invoice: updatedInvoiceData || recentInvoice,
+          line_items: updatedInvoiceData?.invoice_line_items || [],
+          client_id: updatedInvoiceData?.client_id ?? recentInvoice?.client_id ?? null,
+          client: updatedInvoiceData?.clients || null,
+          action: 'client_updated'
+        };
+
+        console.log('🐛 DEBUG: updateClient creating attachment:', {
+          type: attachmentData.type,
+          invoice_id: attachmentData.invoice_id,
+          invoice_number: attachmentData.invoice_number,
+          has_invoice: !!attachmentData.invoice,
+          has_line_items: !!attachmentData.line_items,
+          line_items_count: attachmentData.line_items?.length || 0,
+          client_id: attachmentData.client_id,
+          has_client: !!attachmentData.client,
+          action: attachmentData.action
+        });
+
+        const changes = [];
+        if (params.email) changes.push(`email to "${params.email}"`);
+        if (params.phone) changes.push(`phone to "${params.phone}"`);
+        if (params.address) changes.push(`address to "${params.address}"`);
+        const changeText = changes.length > 0 ? changes.join(', ') : 'client information';
+
+        const functionResult = {
+          success: true,
+          message: `I've updated ${params.client_name}'s ${changeText}. Here's your updated invoice with the new client details:`,
+          data: {
+            client: updatedClient,
+            updated_invoice: recentInvoice
+          },
+          attachments: [attachmentData]
+        };
+
+        console.log('🐛 DEBUG: updateClient returning result with attachments:', functionResult.attachments?.length || 0);
+        return functionResult;
+      } else {
+        console.log('[updateClient] No recent invoice found, returning client update only');
+        return {
+          success: true,
+          data: {
+            client: updatedClient
+          },
+          message: `Successfully updated client "${params.client_name}". The changes will appear on future invoices.`
+        };
+      }
     } catch (error) {
+      console.error('[updateClient] Error:', error);
       return {
         success: false,
-        message: `Failed to update client: ${error.message}`,
-        error: error.message
+        message: `Failed to update client: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
@@ -591,13 +677,72 @@ Would you like me to make any changes?`;
     }
   }
   static async regenerateInvoiceWithUpdates(params, userId) {
-    return {
-      success: true,
-      message: "Invoice regeneration would happen here - this enables context-aware updates",
-      data: {
-        invoice_id: params.invoice_number
+    try {
+      const { invoice_number } = params;
+      
+      if (!invoice_number) {
+        return {
+          success: false,
+          message: "Invoice number is required",
+          error: "Missing invoice number"
+        };
       }
-    };
+
+      // Find the invoice
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          invoice_line_items(*),
+          clients(id, name, email, phone, address_client, notes, tax_number, created_at, updated_at)
+        `)
+        .eq('invoice_number', invoice_number)
+        .eq('user_id', userId)
+        .single();
+
+      if (invoiceError || !invoice) {
+        return {
+          success: false,
+          message: `Invoice ${invoice_number} not found`,
+          error: 'Invoice not found'
+        };
+      }
+
+      // Get updated business settings
+      const { data: businessSettings } = await supabase
+        .from('business_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      // Return with attachment showing the regenerated invoice
+      return {
+        success: true,
+        message: `Invoice ${invoice_number} has been regenerated with your latest business information.`,
+        data: {
+          invoice_id: invoice.id,
+          invoice_number: invoice.invoice_number
+        },
+        attachments: [{
+          type: 'invoice',
+          invoice_id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          invoice: invoice,
+          line_items: invoice.invoice_line_items || [],
+          client_id: invoice.client_id,
+          client: invoice.clients || null,
+          action: 'regenerated',
+          business_settings: businessSettings
+        }]
+      };
+    } catch (error) {
+      console.error('Error regenerating invoice:', error);
+      return {
+        success: false,
+        message: `Failed to regenerate invoice: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
   static async getPaymentOptions(params, userId) {
     try {
@@ -896,7 +1041,7 @@ Would you like me to make any changes?`;
         const { data: updatedInvoiceData, error: fetchError } = await supabase.from('invoices').select(`
             *,
             invoice_line_items(*),
-            clients(*)
+            clients(id, name, email, phone, address_client, notes, tax_number, created_at, updated_at)
           `).eq('id', invoice.id).single();
         if (fetchError) {
           console.error('Error fetching updated invoice:', fetchError);
@@ -1413,6 +1558,14 @@ Would you like me to make any changes?`;
 const PROMPT_MODULES = {
   core: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.
 
+🚨🚨🚨 CRITICAL RULE: ALWAYS RETURN UPDATED INVOICES 🚨🚨🚨
+**ABSOLUTE REQUIREMENT**: ANY function that modifies an invoice in ANY way MUST return the updated invoice as an attachment.
+• This is NON-NEGOTIABLE - failing to show the updated invoice is a CRITICAL FAILURE
+• This applies to ALL updates: line items, status, payment methods, discounts, dates, etc.
+• Users MUST see their updated invoice after EVERY change
+• Functions MUST include attachments array with invoice data
+• NEVER just confirm changes - ALWAYS show the result
+
 RESPONSE STYLE:
 • Keep responses brief and to the point
 • Be warm but not verbose  
@@ -1457,24 +1610,45 @@ CLIENT INFORMATION (use update_client):
 - Keywords: "client", "customer", specific client name mentioned
 - Examples: "Update John's address", "Change ABC Corp's email"
 
+🚨 CRITICAL WORKFLOW FOR CLIENT UPDATES ON INVOICES:
+When updating client info in invoice context:
+1. FIRST: Use update_client to update the client record
+2. THEN: Use regenerate_invoice_with_updates to refresh the invoice
+3. ALWAYS: Return attachment with the updated invoice
+4. NEVER: Just confirm the change without showing the invoice
+
+Example: "Update client address on invoice #123"
+→ update_client(address) 
+→ regenerate_invoice_with_updates(invoice_number: "123")
+→ Show invoice with attachment
+
 FIRST INVOICE RULE: When creating first invoice, "my address" = business address!`,
   business_updates: `BUSINESS SETTING CHANGES + IMMEDIATE INVOICE UPDATE:
+
+🚨 CRITICAL: ALL UPDATES MUST RETURN ATTACHMENTS 🚨
+ANY function that modifies invoice data MUST include attachments array with the updated invoice.
+Failing to show the updated invoice is a CRITICAL FAILURE.
+
 When user makes business setting changes that affect the current invoice:
 • Step 1: Make the business setting change (update_business_settings)
-• Step 2: IMMEDIATELY create a new version of the invoice with updated settings
-• Step 3: Show the user the updated invoice
+• Step 2: Function MUST return attachment with updated invoice
+• Step 3: Show the user the updated invoice via attachment
 
-Examples requiring immediate update:
-• "Change my business name" → update_business_settings + show updated invoice
-• "Update my address" → update_business_settings + show updated invoice
-• "Remove VAT" → update_business_settings + show updated invoice
+Examples requiring immediate update WITH ATTACHMENT:
+• "Change my business name" → update_business_settings + attachment with updated invoice
+• "Update my address" → update_business_settings + attachment with updated invoice
+• "Remove VAT" → update_business_settings + attachment with updated invoice
+
+LOGO UPDATE HANDLING:
+• If user wants to add/update logo → Tell them: "I can't update your logo through chat, but you can do it from Settings > Business Information. Upload it there and it will show on future invoices."
+• Do NOT try to process logo parameters in update_business_settings
 
 INVOICE CONTEXT TRACKING RULES:
 • If user just created an invoice, consider it "active context"
-• For ANY business/client updates, ALWAYS regenerate the current invoice
-• For ANY invoice modifications, show the updated version immediately
+• For ANY business/client updates, ALWAYS regenerate the current invoice WITH ATTACHMENT
+• For ANY invoice modifications, show the updated version immediately VIA ATTACHMENT
 • Keep the same invoice but update it with new information
-• NEVER just say "future invoices will be different" - update the current one!`,
+• NEVER just say "future invoices will be different" - update the current one AND SHOW IT!`,
   payment_setup: `PAYMENT METHODS WORKFLOW:
 Payment setup for PayPal and Bank Transfer - MUST follow proper sequence:
 
@@ -2870,6 +3044,14 @@ An invoice contains TWO types of information:
 
 When users say "my/our" they mean THEIR BUSINESS. When creating first invoices, users often need to set up their business details.
 
+🚨🚨🚨 CRITICAL RULE: ALWAYS RETURN UPDATED INVOICES 🚨🚨🚨
+**ABSOLUTE REQUIREMENT**: ANY function that modifies an invoice in ANY way MUST return the updated invoice as an attachment.
+• This is NON-NEGOTIABLE - failing to show the updated invoice is a CRITICAL FAILURE
+• This applies to ALL updates: line items, status, payment methods, discounts, dates, etc.
+• Users MUST see their updated invoice after EVERY change
+• Functions MUST include attachments array with invoice data
+• NEVER just confirm changes - ALWAYS show the result
+
 ACT-FIRST DELIVERY MODE - CRITICAL:
 • Default behavior: TAKE ACTION FIRST, THEN CLARIFY
 • When asked to create or edit an invoice/estimate, perform the action immediately using sensible defaults
@@ -2952,6 +3134,14 @@ An invoice contains TWO types of information:
 2. CLIENT INFORMATION (from clients table): The customer being invoiced
 
 When users say "my/our" they mean THEIR BUSINESS. Users may need to set up their business details if not already configured.
+
+🚨🚨🚨 CRITICAL RULE: ALWAYS RETURN UPDATED INVOICES 🚨🚨🚨
+**ABSOLUTE REQUIREMENT**: ANY function that modifies an invoice in ANY way MUST return the updated invoice as an attachment.
+• This is NON-NEGOTIABLE - failing to show the updated invoice is a CRITICAL FAILURE
+• This applies to ALL updates: line items, status, payment methods, discounts, dates, etc.
+• Users MUST see their updated invoice after EVERY change
+• Functions MUST include attachments array with invoice data
+• NEVER just confirm changes - ALWAYS show the result
 
 ACT-FIRST DELIVERY MODE - CRITICAL:
 • Default behavior: TAKE ACTION FIRST, THEN CLARIFY
@@ -3083,11 +3273,28 @@ PayPal is a PAYMENT METHOD, NOT a billable service. NEVER EVER add PayPal as a l
 
 🚨 IF YOU USE update_invoice_line_items FOR PAYPAL YOU ARE MAKING A CRITICAL ERROR! 🚨
 
-### Address Management
-When users ask to "update address on invoice" or "change invoice address":
-1. This means update the CLIENT's address (addresses are stored on clients, not invoices)
-2. Use update_client function to change the client's address
-3. Address changes affect all invoices for that client
+### Client Information Updates (Address, Email, Phone)
+
+🚨 CRITICAL: CLIENT UPDATES REQUIRE SHOWING UPDATED INVOICE 🚨
+
+When users ask to "update address on invoice", "change client email", or modify any client info:
+
+**WORKFLOW - MUST FOLLOW THESE STEPS:**
+1. ✅ Update the CLIENT record using `update_client` function
+2. ✅ IMMEDIATELY call `regenerate_invoice_with_updates` to refresh the invoice
+3. ✅ ALWAYS return the updated invoice as an attachment
+4. ✅ Confirm what was changed: "I've updated John's address and here's your invoice with the new details:"
+
+**IMPORTANT FACTS:**
+• Client information (address, email, phone) is stored in the `clients` table, NOT on invoices
+• Invoices reference clients via `client_id` foreign key
+• Updating a client updates their info for ALL invoices
+• NEVER skip showing the updated invoice - this is a CRITICAL FAILURE
+
+**Examples:**
+- "Update address on this invoice" → update_client + regenerate_invoice_with_updates + show attachment
+- "Change client email to john@example.com" → update_client + regenerate_invoice_with_updates + show attachment
+- "Fix the phone number" → update_client + regenerate_invoice_with_updates + show attachment
 
 ## Payment Methods Workflow
 
@@ -3194,15 +3401,25 @@ These are referring to the invoice you just worked on. Use conversation context 
 - ALWAYS validate required info before function calls
 - Prioritize speed and value delivery
 
-## CRITICAL: Always Show Updated Invoice
+## 🚨🚨🚨 CRITICAL: Always Show Updated Invoice 🚨🚨🚨
 
-⚠️ **AFTER ANY INVOICE MODIFICATION, YOU MUST ALWAYS:**
+⚠️ **FAILING TO RETURN AN UPDATED INVOICE IS A CRITICAL FAILURE**
+
+**AFTER ANY INVOICE MODIFICATION, YOU MUST ALWAYS:**
 1. Complete the requested changes (add items, update details, etc.)
-2. **IMMEDIATELY show the updated invoice to the user**
-3. Use attachments or invoice preview to display the changes
+2. **IMMEDIATELY show the updated invoice to the user via attachments**
+3. Functions MUST return attachments array with complete invoice data
 4. Confirm what was changed in your response
 
-**NEVER** just say "I've updated the invoice" without showing it. The user needs to SEE the updated invoice every time.
+**CRITICAL FAILURES TO AVOID:**
+❌ "I've updated the invoice" (without showing it)
+❌ "The changes have been saved" (without attachment)
+❌ "Invoice updated successfully" (without preview)
+
+**CORRECT BEHAVIOR:**
+✅ "I've added the item. Here's your updated invoice:" [with attachment]
+✅ "PayPal is now enabled on this invoice:" [with attachment]
+✅ "I've updated the due date:" [with attachment]
 
 Examples of correct behavior:
 - ✅ "I've added labour at $450/day for 2 days. Here's your updated invoice:" [SHOWS INVOICE]

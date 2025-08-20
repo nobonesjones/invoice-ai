@@ -130,6 +130,11 @@ export class ChatService {
 
       // Reuse existing active thread if available
       const existingThread = await AssistantService.getCurrentThread(userId);
+      console.log('[ChatService] Existing thread:', existingThread ? {
+        id: existingThread.id,
+        openai_thread_id: existingThread.openai_thread_id,
+        is_active: existingThread.is_active
+      } : 'None');
 
       // Prepare up to 15 previous messages for context (user/assistant only)
       let history: { role: 'user' | 'assistant'; content: string }[] | undefined = undefined;
@@ -143,7 +148,8 @@ export class ChatService {
       } catch {}
 
       // Send message via Assistants API with user context and status updates
-      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, userContext, statusCallback, existingThread?.id, history);
+      // 🚨 CRITICAL FIX: Pass openai_thread_id, not the database id!
+      const result: AssistantRunResult = await AssistantService.sendMessage(userId, userMessage, userContext, statusCallback, existingThread?.openai_thread_id, history);
 
       // Remove redundant status - processing is complete
 
@@ -171,6 +177,9 @@ export class ChatService {
       
       let messages = result.messages || [];
       let thread = result.thread || existingThread || { id: `thread-${Date.now()}`, user_id: userId };
+      
+      console.log('[ChatService] Thread from edge function:', result.thread);
+      console.log('[ChatService] Using thread:', thread);
 
       // 🔧 FIX: If edge function returns attachments at root level, add them to the assistant message
       if (result.attachments && result.attachments.length > 0 && messages.length >= 2) {

@@ -146,6 +146,7 @@ export class AssistantService {
 
       let dbThread = activeThread;
       if (!dbThread) {
+        // Create new thread
         const { data: newThread, error: threadErr } = await supabase
           .from('chat_threads')
           .insert({
@@ -159,6 +160,21 @@ export class AssistantService {
           .single();
         if (threadErr || !newThread) return null;
         dbThread = newThread;
+      } else if (thread?.id && thread.id.startsWith('thread_') && dbThread.openai_thread_id !== thread.id) {
+        // 🚨 CRITICAL FIX: Update existing thread with real OpenAI thread ID
+        console.log('[persistOptimizedResult] Updating thread with real OpenAI ID:', thread.id);
+        const { data: updatedThread, error: updateErr } = await supabase
+          .from('chat_threads')
+          .update({ 
+            openai_thread_id: thread.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', dbThread.id)
+          .select()
+          .single();
+        if (!updateErr && updatedThread) {
+          dbThread = updatedThread;
+        }
       }
 
       // Insert messages for display (append only)
@@ -1098,6 +1114,9 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Use optimized edge function if enabled
       if (this.USE_OPTIMIZED_AI) {
         statusCallback?.('SuperAI is processing your message...');
+        
+        // 🚨 DEBUG: Log thread ID being sent
+        console.log('[AssistantService] Sending message with threadId:', currentThreadId || 'NEW THREAD');
         
         const result = await this.callAIChatEdgeFunction({
           type: 'assistant',
