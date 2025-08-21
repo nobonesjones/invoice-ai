@@ -473,9 +473,18 @@ Example: "Make invoice for ABC Corp with 5 desks at $100 each"
 ✅ CORRECT: create_invoice(client_name: "ABC Corp", line_items: [{item_name: "Desk", quantity: 5, unit_price: 100}])
 ❌ WRONG: create_invoice() then add_line_item() - causes duplicates!
 
-When to use add_line_item:
-• ONLY when adding items to an EXISTING invoice
-• User says "add X to the invoice" AFTER invoice is created
+🚨 ADDING MULTIPLE ITEMS - CRITICAL:
+When user asks to ADD MULTIPLE items to an existing invoice:
+• Use add_line_items (plural) WITH line_items array - adds all items in ONE operation
+• DO NOT make multiple add_line_item calls - that creates duplicates!
+
+Examples: 
+✅ CORRECT: "add headphones, mouse, and pen" → add_line_items(invoice_identifier: "latest", line_items: [{item_name: "Headphones", unit_price: 200}, {item_name: "Mouse", unit_price: 50}, {item_name: "Pen", unit_price: 100}])
+❌ WRONG: Multiple add_line_item calls for the same request - causes duplicates!
+
+When to use add_line_item (singular):
+• ONLY when adding ONE SINGLE item to an existing invoice
+• User says "add X to the invoice" (just one item)
 • NEVER use during initial invoice creation
 
 🚨🚨 CRITICAL CONTEXT AWARENESS - NEVER LOSE CONTEXT! 🚨🚨
@@ -1340,6 +1349,52 @@ Always be helpful and create exactly what the user requests.`,
           {
             type: "function",
             function: {
+              name: "add_line_items",
+              description: "Add multiple line items to an existing invoice in a single operation (prevents duplicates)",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Array of line items to add to the invoice",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string",
+                          description: "Name/description of the line item"
+                        },
+                        quantity: {
+                          type: "number",
+                          description: "Quantity of the item (default: 1)"
+                        },
+                        unit_price: {
+                          type: "number",
+                          description: "Price per unit of the item"
+                        },
+                        item_description: {
+                          type: "string",
+                          description: "Optional detailed description of the item"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  }
+                },
+                required: [
+                  "invoice_identifier",
+                  "line_items"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
               name: "remove_line_item",
               description: "Remove a specific line item from an existing invoice",
               parameters: {
@@ -1522,9 +1577,18 @@ Example: "Make invoice for ABC Corp with 5 desks at $100 each"
 ✅ CORRECT: create_invoice(client_name: "ABC Corp", line_items: [{item_name: "Desk", quantity: 5, unit_price: 100}])
 ❌ WRONG: create_invoice() then add_line_item() - causes duplicates!
 
-When to use add_line_item:
-• ONLY when adding items to an EXISTING invoice
-• User says "add X to the invoice" AFTER invoice is created
+🚨 ADDING MULTIPLE ITEMS - CRITICAL:
+When user asks to ADD MULTIPLE items to an existing invoice:
+• Use add_line_items (plural) WITH line_items array - adds all items in ONE operation
+• DO NOT make multiple add_line_item calls - that creates duplicates!
+
+Examples: 
+✅ CORRECT: "add headphones, mouse, and pen" → add_line_items(invoice_identifier: "latest", line_items: [{item_name: "Headphones", unit_price: 200}, {item_name: "Mouse", unit_price: 50}, {item_name: "Pen", unit_price: 100}])
+❌ WRONG: Multiple add_line_item calls for the same request - causes duplicates!
+
+When to use add_line_item (singular):
+• ONLY when adding ONE SINGLE item to an existing invoice
+• User says "add X to the invoice" (just one item)
 • NEVER use during initial invoice creation
 
 🚨🚨 CRITICAL CONTEXT AWARENESS - NEVER LOSE CONTEXT! 🚨🚨
@@ -2538,6 +2602,141 @@ Let me know if you'd like any other changes?`;
           return `Error adding line item: ${error.message}`;
         }
       }
+      
+      if (name === 'add_line_items') {
+        const { invoice_identifier, line_items } = parsedArgs;
+        
+        if (!line_items || !Array.isArray(line_items) || line_items.length === 0) {
+          return 'Error: line_items array is required and must contain at least one item';
+        }
+        
+        try {
+          // First find the invoice
+          const findResult = await findInvoice(supabase, user_id, invoice_identifier);
+          if (typeof findResult === 'string') {
+            return findResult;
+          }
+          const targetInvoice = findResult;
+          
+          console.log('[add_line_items] Adding', line_items.length, 'line items to invoice:', targetInvoice.invoice_number);
+          
+          // Prepare line items for bulk insert
+          const itemsToInsert = line_items.map(item => ({
+            invoice_id: targetInvoice.id,
+            user_id: user_id,
+            item_name: item.item_name,
+            item_description: item.item_description || null,
+            quantity: item.quantity || 1,
+            unit_price: item.unit_price,
+            total_price: (item.quantity || 1) * item.unit_price,
+            created_at: new Date().toISOString()
+          }));
+          
+          // Bulk insert all line items
+          const { data: newLineItems, error: lineItemError } = await supabase
+            .from('invoice_line_items')
+            .insert(itemsToInsert)
+            .select();
+            
+          if (lineItemError) {
+            console.error('[add_line_items] Bulk insert error:', lineItemError);
+            return `Error adding line items: ${lineItemError.message}`;
+          }
+          
+          console.log('[add_line_items] Successfully inserted', newLineItems.length, 'line items');
+          
+          // Get all line items for this invoice to recalculate totals
+          const { data: allLineItems, error: fetchError } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', targetInvoice.id);
+            
+          if (fetchError) {
+            console.error('[add_line_items] Error fetching line items:', fetchError);
+            return `Error recalculating totals: ${fetchError.message}`;
+          }
+          
+          // Recalculate totals from all line items
+          const subtotal = allLineItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
+          const taxAmount = subtotal * (targetInvoice.tax_percentage || 0) / 100;
+          const discountAmount = targetInvoice.discount_type === 'percentage' 
+            ? subtotal * (targetInvoice.discount_value || 0) / 100 
+            : targetInvoice.discount_value || 0;
+          const total = subtotal + taxAmount - discountAmount;
+          
+          // Update invoice totals
+          console.log('[add_line_items] Updating invoice totals:', { subtotal, total });
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({
+              subtotal_amount: subtotal,
+              total_amount: total
+            })
+            .eq('user_id', user_id)
+            .eq('id', targetInvoice.id);
+            
+          if (updateError) {
+            console.error('[add_line_items] Update error:', updateError);
+            return `Error updating invoice totals: ${updateError.message}`;
+          }
+          
+          console.log('[add_line_items] Successfully updated invoice:', targetInvoice.invoice_number);
+          
+          // Get updated invoice data with client info for attachment
+          const { data: updatedInvoice } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', targetInvoice.id)
+            .single();
+            
+          // Get client data if exists
+          let clientData = null;
+          if (targetInvoice.client_id) {
+            const { data: client } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetInvoice.client_id)
+              .single();
+            clientData = client;
+          }
+          
+          // Create attachment for updated invoice
+          attachments.push({
+            type: 'invoice',
+            invoice_id: targetInvoice.id,
+            invoice: updatedInvoice || targetInvoice,
+            line_items: allLineItems,
+            client_id: targetInvoice.client_id,
+            client: clientData
+          });
+          
+          // Track in conversation memory
+          ConversationMemory.setLastAction(user_id, 'added_multiple_line_items', {
+            invoice_number: targetInvoice.invoice_number,
+            invoice_id: targetInvoice.id,
+            client_id: targetInvoice.client_id,
+            items_added: line_items.map(item => item.item_name).join(', '),
+            items_count: line_items.length
+          });
+          
+          const itemsList = line_items.map(item => 
+            `• ${item.item_name} (${item.quantity || 1}x $${item.unit_price})`
+          ).join('\n');
+          
+          return `Added ${line_items.length} line items to invoice ${targetInvoice.invoice_number}:
+
+${itemsList}
+
+Total updated to $${total.toFixed(2)}.
+
+Let me know if you'd like any other changes!`;
+          
+        } catch (error) {
+          console.error('[add_line_items] Error:', error);
+          return `Error adding line items: ${error.message}`;
+        }
+      }
+      
       if (name === 'remove_line_item') {
         const { invoice_identifier, item_identifier } = parsedArgs;
         try {
