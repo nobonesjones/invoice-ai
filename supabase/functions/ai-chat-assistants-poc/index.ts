@@ -549,15 +549,14 @@ If user mentions payments during invoice creation:
 
 PAYMENT METHOD ENABLEMENT:
 When users want to enable payment options on invoices:
-• Use enable_payment_methods function with the invoice number
-• Keywords: "enable", "activate", "turn on", "card payments", "stripe", "paypal", "bank transfer", "venmo", "ach"
+• Use update_payment_methods function (returns updated invoice attachment)
+• Keywords: "enable", "activate", "turn on", "add", "card payments", "stripe", "paypal", "bank transfer"
 • Examples:
-  - "Enable card payments on invoice INV-123456" → enable_payment_methods(invoice_number: "INV-123456", enable_stripe: true)
-  - "Add PayPal to this invoice" → extract invoice number from context, enable_payment_methods(enable_paypal: true)
-  - "Turn on bank transfer for invoice INV-789012" → enable_payment_methods(invoice_number: "INV-789012", enable_bank_transfer: true)
-  - "Enable all payment methods on invoice INV-456789" → enable all available methods
-• IMPORTANT: Only enable payment methods that are enabled in the user's business settings
-• If a payment method is not enabled in business settings, include in response: "Sorry, I cannot activate [payment method], it must first be enabled in your payment options."
+  - "Enable card payments on invoice INV-123456" → update_payment_methods(invoice_identifier: "INV-123456", enable_stripe: true)
+  - "Add PayPal to this invoice" → update_payment_methods(invoice_identifier: "latest", enable_paypal: true)
+  - "Turn on bank transfer for invoice INV-789012" → update_payment_methods(invoice_identifier: "INV-789012", enable_bank_transfer: true)
+• IMPORTANT: Only enable payment methods that are enabled in business settings
+• Function automatically shows updated invoice with payment options enabled
 
 LINE ITEM FORMATTING RULES:
 • ALWAYS capitalize the first letter of each line item name
@@ -653,30 +652,29 @@ FOR PAYPAL SETUP - CRITICAL FLOW:
 Step 1: ALWAYS check current payment options first
 - When user says "add PayPal to this invoice" or "enable PayPal"
 - FIRST call get_payment_options to check if PayPal is already enabled
-- Check if paypal_email is already configured
+- Check if paypal_enabled is true AND paypal_email exists
 
 Step 2: Handle based on current state
-IF PayPal already enabled with email:
-- Extract invoice_number from conversation history
-- Call setup_paypal_payments with existing email and invoice_number
-- Show updated invoice
+IF PayPal already enabled with email (paypal_enabled=true AND paypal_email exists):
+- ✅ CORRECT: Use update_payment_methods(invoice_identifier: "INV-XXX", enable_paypal: true)
+- ❌ WRONG: Do NOT call setup_paypal_payments - that's for global setup only
+- Show updated invoice with PayPal enabled
 
-IF PayPal disabled OR no email configured:
+IF PayPal disabled (paypal_enabled=false) OR no email configured:
 - Ask user for their PayPal email address
 - Example: "I'll add PayPal to your invoice. What's your PayPal email address?"
-- Wait for email, then call setup_paypal_payments
+- Wait for email, then call setup_paypal_payments(paypal_email: "[email]", invoice_number: "INV-XXX")
+- This sets up PayPal globally AND enables it on the specific invoice
 
-Step 3: Execute setup with proper context
-- ALWAYS call setup_paypal_payments with both paypal_email AND invoice_number
-- Extract invoice_number from conversation history when user says "this" or "add to this"
-- This enables PayPal globally AND applies to specific invoice
-- Show updated invoice immediately
+🚨 CRITICAL DISTINCTION:
+- update_payment_methods = Enable payment method on invoice (when already configured globally)
+- setup_paypal_payments = Configure PayPal globally + enable on invoice (when not configured)
 
 MANDATORY SEQUENCE:
 1. get_payment_options (check current state)
-2. Ask for email if needed (don't assume they provided it)
-3. setup_paypal_payments (with email + invoice_number)
-4. Show updated invoice
+2A. IF already configured: update_payment_methods(enable_paypal: true) 
+2B. IF not configured: Ask for email → setup_paypal_payments
+3. Always show updated invoice
 
 CONVERSATION CONTEXT & INVOICE FLOW:
 CORE PRINCIPLE: Always try to show the user an invoice when possible!
@@ -745,6 +743,44 @@ RESPONSE PATTERN:
 WHEN NO ACTIVE CONTEXT:
 • User asks for changes but no recent invoice → get most recent invoice and update it
 • Use get_recent_invoices to find last invoice, then update and show it
+
+🚨 CRITICAL PAYMENT WORKFLOWS - FOLLOW EXACTLY! 🚨
+
+**MARK INVOICE AS PAID WORKFLOW:**
+When user says "mark [invoice] as paid" or "set [invoice] to paid":
+1. MUST call update_invoice with ALL payment parameters:
+   - status: "paid" 
+   - paid_amount: [FULL invoice total_amount - get from context]
+   - payment_date: [current date in YYYY-MM-DD format]
+   - payment_notes: "Marked as paid via AI assistant"
+2. NEVER just set status alone - ALWAYS include all payment tracking
+3. Example call: update_invoice(invoice_identifier="latest", status="paid", paid_amount=1500.00, payment_date="2024-12-21", payment_notes="Marked as paid via AI assistant")
+
+**RECORD PAYMENT WORKFLOW (Partial/Incremental):**
+When user says "record $X payment" or "client paid $X":
+1. MUST call update_invoice with payment parameters:
+   - paid_amount: [specified amount - let function auto-calculate status]  
+   - payment_date: [current date]
+   - payment_notes: "Payment recorded via AI assistant: $X.XX"
+2. Do NOT set status manually - let function auto-calculate
+3. Example: update_invoice(invoice_identifier="INV-123", paid_amount=500.00, payment_date="2024-12-21", payment_notes="Payment recorded via AI assistant: $500.00")
+
+**MARK INVOICE AS UNPAID WORKFLOW:**
+When user says "mark as unpaid" or "reset payment":
+1. MUST call update_invoice with:
+   - status: "sent"
+   - paid_amount: 0
+   - payment_date: null
+   - payment_notes: null
+2. This completely resets payment tracking
+
+**PAYMENT AMOUNT LOGIC:**
+- For "mark as paid": paid_amount = FULL invoice total
+- For "record $X payment": paid_amount = specified amount (incremental)
+- For "set payment to $X": paid_amount = exact specified amount
+- Status will auto-calculate: 0=sent, partial=partial, full=paid
+
+**CRITICAL RULE:** NEVER update payment status without updating payment amounts!
 
 Always be helpful and create exactly what the user requests.`,
         tools: [
@@ -1017,7 +1053,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice",
-              description: "Update any aspect of an existing invoice - client info, line items, amounts, design, payment methods, etc.",
+              description: "Update any aspect of an existing invoice - client info, line items, amounts, design, payment methods, etc. PAYMENT WORKFLOWS: For 'mark as paid' set paid_amount=total_amount + status='paid'. For partial payments use cumulative amounts. For 'mark as unpaid' set paid_amount=0 + status='sent'.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1063,10 +1099,11 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   status: {
                     type: "string",
-                    description: "Update invoice status: 'draft', 'sent', 'paid', 'overdue'",
+                    description: "Update invoice status. BUSINESS LOGIC: Use 'paid' for full payments, 'partial' for partial payments, 'sent' for unpaid/sent invoices, 'draft' for work-in-progress. Status should match payment amount: 0=sent, 0<partial<total=partial, full=paid.",
                     enum: [
                       "draft",
                       "sent",
+                      "partial",
                       "paid",
                       "overdue"
                     ]
@@ -1113,6 +1150,22 @@ Always be helpful and create exactly what the user requests.`,
                   enable_bank_transfer: {
                     type: "boolean",
                     description: "Enable/disable bank transfer payments"
+                  },
+                  invoice_number: {
+                    type: "string",
+                    description: "Update invoice reference number (e.g., change from INV-123 to INV-2024-001)"
+                  },
+                  paid_amount: {
+                    type: "number",
+                    description: "PAYMENT WORKFLOW: Set exact paid amount. For 'mark as paid' use total_amount. For partial payments use cumulative amount. Status auto-calculated: 0=sent, partial=partial, full=paid."
+                  },
+                  payment_date: {
+                    type: "string",
+                    description: "Date payment was received (YYYY-MM-DD format). Use current date for new payments, null for unpaid invoices."
+                  },
+                  payment_notes: {
+                    type: "string",
+                    description: "Payment method and context. Use 'Marked as paid via AI assistant' for full payments, 'Payment recorded via AI assistant: $XXX.XX' for partials."
                   },
                   line_items: {
                     type: "array",
@@ -1461,15 +1514,14 @@ If user mentions payments during invoice creation:
 
 PAYMENT METHOD ENABLEMENT:
 When users want to enable payment options on invoices:
-• Use enable_payment_methods function with the invoice number
-• Keywords: "enable", "activate", "turn on", "card payments", "stripe", "paypal", "bank transfer", "venmo", "ach"
+• Use update_payment_methods function (returns updated invoice attachment)
+• Keywords: "enable", "activate", "turn on", "add", "card payments", "stripe", "paypal", "bank transfer"
 • Examples:
-  - "Enable card payments on invoice INV-123456" → enable_payment_methods(invoice_number: "INV-123456", enable_stripe: true)
-  - "Add PayPal to this invoice" → extract invoice number from context, enable_payment_methods(enable_paypal: true)
-  - "Turn on bank transfer for invoice INV-789012" → enable_payment_methods(invoice_number: "INV-789012", enable_bank_transfer: true)
-  - "Enable all payment methods on invoice INV-456789" → enable all available methods
-• IMPORTANT: Only enable payment methods that are enabled in the user's business settings
-• If a payment method is not enabled in business settings, include in response: "Sorry, I cannot activate [payment method], it must first be enabled in your payment options."
+  - "Enable card payments on invoice INV-123456" → update_payment_methods(invoice_identifier: "INV-123456", enable_stripe: true)
+  - "Add PayPal to this invoice" → update_payment_methods(invoice_identifier: "latest", enable_paypal: true)
+  - "Turn on bank transfer for invoice INV-789012" → update_payment_methods(invoice_identifier: "INV-789012", enable_bank_transfer: true)
+• IMPORTANT: Only enable payment methods that are enabled in business settings
+• Function automatically shows updated invoice with payment options enabled
 
 LINE ITEM FORMATTING RULES:
 • ALWAYS capitalize the first letter of each line item name
@@ -1599,8 +1651,16 @@ Always be helpful and create exactly what the user requests.`,
         // First, create or get client  
         let clientId = null;
         if (client_name) {
-          // Try to find existing client
-          const { data: existingClient } = await supabase.from('clients').select('id').eq('user_id', user_id).eq('name', client_name).single();
+          // Try to find existing client (use case-insensitive search to avoid duplicates from spacing/case issues)
+          const { data: existingClient, error: searchError } = await supabase.from('clients').select('id').eq('user_id', user_id).ilike('name', client_name.trim()).maybeSingle();
+          
+          if (searchError) {
+            console.error('[create_invoice] Error searching for existing client:', searchError);
+            return `Error searching for client: ${searchError.message}`;
+          }
+          
+          console.log('[create_invoice] Client search result for "' + client_name + '":', existingClient ? 'FOUND existing client' : 'NOT FOUND - will create new');
+          
           if (existingClient) {
             clientId = existingClient.id;
             // Update existing client with any new information provided
@@ -1619,6 +1679,7 @@ Always be helpful and create exactly what the user requests.`,
             }
           } else {
             // Create new client with all available info
+            console.log('[create_invoice] Creating NEW client:', client_name);
             const { data: newClient, error: clientError } = await supabase.from('clients').insert({
               user_id: user_id,
               name: client_name,
@@ -1629,9 +1690,10 @@ Always be helpful and create exactly what the user requests.`,
               created_at: new Date().toISOString()
             }).select('id').single();
             if (clientError) {
-              console.error('[Assistants POC] Client creation error:', clientError);
+              console.error('[create_invoice] Client creation error:', clientError);
               return `Error creating client: ${clientError.message}`;
             }
+            console.log('[create_invoice] Successfully created new client with ID:', newClient.id);
             clientId = newClient.id;
           }
         }
@@ -1992,7 +2054,7 @@ To accept payments, configure at least one payment method.`;
         }
       }
       if (name === 'update_invoice') {
-        const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number, invoice_date, due_date, payment_terms_days, notes, status, tax_rate, discount_type, discount_value, invoice_design, accent_color, enable_stripe, enable_paypal, enable_bank_transfer, line_items } = parsedArgs;
+        const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number, invoice_date, due_date, payment_terms_days, notes, status, tax_rate, discount_type, discount_value, invoice_design, accent_color, enable_stripe, enable_paypal, enable_bank_transfer, invoice_number, paid_amount, payment_date, payment_notes, line_items } = parsedArgs;
         console.log('[update_invoice] Starting with:', {
           invoice_identifier,
           ...parsedArgs
@@ -2024,6 +2086,25 @@ To accept payments, configure at least one payment method.`;
           if (enable_stripe !== undefined) invoiceUpdates.stripe_active = enable_stripe;
           if (enable_paypal !== undefined) invoiceUpdates.paypal_active = enable_paypal;
           if (enable_bank_transfer !== undefined) invoiceUpdates.bank_account_active = enable_bank_transfer;
+          
+          // Add new parameters for payment tracking and invoice number updates
+          if (invoice_number !== undefined) invoiceUpdates.invoice_number = invoice_number;
+          if (paid_amount !== undefined) invoiceUpdates.paid_amount = paid_amount;
+          if (payment_date !== undefined) invoiceUpdates.payment_date = payment_date;
+          if (payment_notes !== undefined) invoiceUpdates.payment_notes = payment_notes;
+          
+          // BUSINESS LOGIC: Auto-calculate status based on payment amount if payment is being updated
+          if (paid_amount !== undefined && status === undefined) {
+            const totalAmount = targetInvoice.total_amount || 0;
+            if (paid_amount <= 0) {
+              invoiceUpdates.status = 'sent'; // No payment = sent
+            } else if (paid_amount >= totalAmount) {
+              invoiceUpdates.status = 'paid'; // Full payment = paid
+            } else {
+              invoiceUpdates.status = 'partial'; // Partial payment = partial
+            }
+            console.log('[update_invoice] Auto-calculated status:', invoiceUpdates.status, 'for payment:', paid_amount, 'of total:', totalAmount);
+          }
           // Update client information if provided - invoice table does NOT have client fields
           let clientUpdates = {};
           if (client_name !== undefined) clientUpdates.name = client_name;
@@ -2133,9 +2214,33 @@ To accept payments, configure at least one payment method.`;
             client: clientData
           });
           console.log('[update_invoice] Success - created attachment');
-          return `I've updated invoice ${targetInvoice.invoice_number}. 
-
-Let me know if you'd like any other changes!`;
+          
+          // Enhanced response with payment details if payment was updated
+          let response = `I've updated invoice ${targetInvoice.invoice_number}.`;
+          
+          if (paid_amount !== undefined) {
+            const finalInvoice = updatedInvoice || targetInvoice;
+            const totalAmount = finalInvoice.total_amount || 0;
+            const remainingAmount = Math.max(totalAmount - paid_amount, 0);
+            const paymentPercentage = totalAmount > 0 ? Math.min((paid_amount / totalAmount) * 100, 100) : 0;
+            
+            response += `\n\n💰 Payment Details:`;
+            response += `\n• Amount Paid: $${paid_amount.toFixed(2)}`;
+            response += `\n• Total Invoice: $${totalAmount.toFixed(2)}`;
+            response += `\n• Remaining: $${remainingAmount.toFixed(2)}`;
+            response += `\n• Status: ${finalInvoice.status || 'updated'}`;
+            response += `\n• Paid: ${paymentPercentage.toFixed(1)}%`;
+            
+            if (payment_date) {
+              response += `\n• Payment Date: ${payment_date}`;
+            }
+            if (payment_notes) {
+              response += `\n• Notes: ${payment_notes}`;
+            }
+          }
+          
+          response += `\n\nLet me know if you'd like any other changes!`;
+          return response;
         } catch (error) {
           console.error('[update_invoice] Error:', error);
           return `Error updating invoice: ${error.message}`;
@@ -2583,45 +2688,45 @@ Let me know if you'd like any other changes!`;
           }
           const targetInvoice = findResult;
           console.log('[update_payment_methods] Found invoice:', targetInvoice.id, targetInvoice.invoice_number);
-          // Get business settings to check enabled payment methods
-          const { data: businessSettings, error: businessSettingsError } = await supabase.from('business_settings').select('enable_stripe_payments, enable_paypal_payments, enable_bank_transfer_payments').eq('user_id', user_id).single();
-          if (businessSettingsError) {
-            console.error('[update_payment_methods] Business settings fetch error:', businessSettingsError);
-            return 'Error: Could not fetch business settings to validate payment methods';
+          // Get payment options to check what's actually enabled (NOT business_settings)
+          const { data: paymentOptions, error: paymentOptionsError } = await supabase.from('payment_options').select('stripe_enabled, paypal_enabled, bank_transfer_enabled').eq('user_id', user_id).single();
+          if (paymentOptionsError) {
+            console.error('[update_payment_methods] Payment options fetch error:', paymentOptionsError);
+            return 'Error: Could not fetch payment options to validate payment methods';
           }
-          console.log('[update_payment_methods] Business settings:', businessSettings);
+          console.log('[update_payment_methods] Payment options:', paymentOptions);
           let paymentUpdates = {};
           let message = `Updated payment methods for invoice ${targetInvoice.invoice_number}:`;
           let skippedMethods = [];
-          // Check each payment method - use correct column names
+          // Check each payment method - use correct column names from payment_options
           if (enable_stripe !== undefined) {
-            if (enable_stripe && businessSettings.enable_stripe_payments) {
+            if (enable_stripe && paymentOptions.stripe_enabled) {
               paymentUpdates.stripe_active = true;
               message += `\n- ✅ Stripe payments enabled`;
-            } else if (enable_stripe && !businessSettings.enable_stripe_payments) {
-              skippedMethods.push('Stripe (not enabled in business settings)');
+            } else if (enable_stripe && !paymentOptions.stripe_enabled) {
+              skippedMethods.push('Stripe (not configured in payment options)');
             } else {
               paymentUpdates.stripe_active = false;
               message += `\n- ❌ Stripe payments disabled`;
             }
           }
           if (enable_paypal !== undefined) {
-            if (enable_paypal && businessSettings.enable_paypal_payments) {
+            if (enable_paypal && paymentOptions.paypal_enabled) {
               paymentUpdates.paypal_active = true;
               message += `\n- ✅ PayPal payments enabled`;
-            } else if (enable_paypal && !businessSettings.enable_paypal_payments) {
-              skippedMethods.push('PayPal (not enabled in business settings)');
+            } else if (enable_paypal && !paymentOptions.paypal_enabled) {
+              skippedMethods.push('PayPal (not configured in payment options)');
             } else {
               paymentUpdates.paypal_active = false;
               message += `\n- ❌ PayPal payments disabled`;
             }
           }
           if (enable_bank_transfer !== undefined) {
-            if (enable_bank_transfer && businessSettings.enable_bank_transfer_payments) {
+            if (enable_bank_transfer && paymentOptions.bank_transfer_enabled) {
               paymentUpdates.bank_account_active = true;
               message += `\n- ✅ Bank transfer enabled`;
-            } else if (enable_bank_transfer && !businessSettings.enable_bank_transfer_payments) {
-              skippedMethods.push('Bank transfer (not enabled in business settings)');
+            } else if (enable_bank_transfer && !paymentOptions.bank_transfer_enabled) {
+              skippedMethods.push('Bank transfer (not configured in payment options)');
             } else {
               paymentUpdates.bank_account_active = false;
               message += `\n- ❌ Bank transfer disabled`;
@@ -2629,7 +2734,7 @@ Let me know if you'd like any other changes!`;
           }
           if (skippedMethods.length > 0) {
             message += `\n\n⚠️ Skipped enabling: ${skippedMethods.join(', ')}`;
-            message += `\nPlease enable these in your business settings first.`;
+            message += `\nPlease configure these in your payment options first.`;
           }
           console.log('[update_payment_methods] Updating with:', paymentUpdates);
           // Update invoice
