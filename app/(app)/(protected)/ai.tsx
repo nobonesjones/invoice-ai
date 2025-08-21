@@ -525,6 +525,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 		show_business_tax_number?: boolean;
 		show_notes_section?: boolean;
 	}) | null>(null);
+	const [paymentOptions, setPaymentOptions] = useState<any>(null);
 	const [fullClientData, setFullClientData] = useState<any>(null);
 	const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
 
@@ -558,6 +559,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	// Load business settings, client data, and fresh invoice data on mount and when client_id or invoice changes
 	useEffect(() => {
 		loadBusinessSettings();
+		loadPaymentOptions();
 		loadFullClientData();
 		loadFreshInvoiceData();
 	}, [client_id, initialInvoice.id]); // Re-run when client_id or invoice.id changes
@@ -675,6 +677,27 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			console.error('[AI Invoice Preview] Error loading client data:', error);
 			console.error('[AI Invoice Preview] Failed to load client for client_id:', client_id);
 			setFullClientData(null);
+		}
+	};
+
+	const loadPaymentOptions = async () => {
+		try {
+			console.log('[AI Invoice Preview] Loading payment options for user:', invoice.user_id);
+			
+			const { data: paymentOptionsData, error } = await supabase
+				.from('payment_options')
+				.select('*')
+				.eq('user_id', invoice.user_id)
+				.single();
+
+			if (error && error.code !== 'PGRST116') {
+				console.error('[AI Invoice Preview] Error loading payment options:', error);
+			} else if (paymentOptionsData) {
+				console.log('[AI Invoice Preview] Loaded payment options - bank_details:', paymentOptionsData.bank_details);
+				setPaymentOptions(paymentOptionsData);
+			}
+		} catch (error) {
+			console.error('[AI Invoice Preview] Error loading payment options:', error);
 		}
 	};
 
@@ -974,7 +997,11 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 											elevation: 5,
 										}}
 										invoice={transformedInvoice}
-										business={businessSettings}
+										business={{
+											...businessSettings,
+											// Merge payment options bank details into business settings
+											bank_details: paymentOptions?.bank_details || businessSettings?.bank_details
+										}}
 										client={transformedClient}
 										currencySymbol={businessSettings?.currency_symbol || '$'}
 										accentColor={invoice?.accent_color || '#14B8A6'}
@@ -1013,7 +1040,11 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 			<InvoicePreviewModal
 				ref={invoicePreviewModalRef}
 				invoiceData={transformedInvoice}
-				businessSettings={businessSettings}
+				businessSettings={{
+					...businessSettings,
+					// Merge payment options bank details into business settings
+					bank_details: paymentOptions?.bank_details || businessSettings?.bank_details
+				}}
 				clientData={transformedClient}
 				invoiceId={invoice?.id}
 				onSaveComplete={() => {

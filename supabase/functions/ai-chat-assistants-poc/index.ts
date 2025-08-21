@@ -362,7 +362,36 @@ serve(async (req)=>{
     const conversation_id = payload.conversation_id;
     const threadId = payload.threadId;
     const userContext = payload.userContext;
+    const requestId = payload.requestId;
+    
+    // Create deduplication key for this request
+    const deduplicationKey = requestId || `${user_id}-${message?.substring(0, 50)}-${Date.now()}`;
+    
+    // Simple in-memory deduplication (resets on cold start but prevents immediate duplicates)
+    if (!globalThis.processingRequests) {
+      globalThis.processingRequests = new Map();
+    }
+    
+    // Check if we're already processing this exact request
+    if (globalThis.processingRequests.has(deduplicationKey)) {
+      console.log('[Assistants POC] 🚫 Duplicate request detected, ignoring:', deduplicationKey);
+      return new Response(JSON.stringify({
+        error: 'Duplicate request - processing in parallel instance'
+      }), {
+        status: 409,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    
+    // Mark this request as being processed
+    globalThis.processingRequests.set(deduplicationKey, Date.now());
+    console.log('[Assistants POC] ✅ Processing request:', deduplicationKey);
+    
     if (!message || !user_id) {
+      globalThis.processingRequests.delete(deduplicationKey);
       return new Response(JSON.stringify({
         error: 'Message and user_id/userId required'
       }), {
@@ -434,6 +463,20 @@ FUNCTION CALLING:
 • When user asks to create, update, search, or manage anything - call the relevant function
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
+
+🚨 INVOICE CREATION WITH ITEMS - CRITICAL:
+When user asks to CREATE a new invoice WITH items:
+• Use create_invoice WITH line_items array - this adds all items at once
+• DO NOT use create_invoice AND THEN add_line_item - that creates duplicates!
+
+Example: "Make invoice for ABC Corp with 5 desks at $100 each"
+✅ CORRECT: create_invoice(client_name: "ABC Corp", line_items: [{item_name: "Desk", quantity: 5, unit_price: 100}])
+❌ WRONG: create_invoice() then add_line_item() - causes duplicates!
+
+When to use add_line_item:
+• ONLY when adding items to an EXISTING invoice
+• User says "add X to the invoice" AFTER invoice is created
+• NEVER use during initial invoice creation
 
 🚨🚨 CRITICAL CONTEXT AWARENESS - NEVER LOSE CONTEXT! 🚨🚨
 
@@ -676,6 +719,39 @@ MANDATORY SEQUENCE:
 2B. IF not configured: Ask for email → setup_paypal_payments
 3. Always show updated invoice
 
+FOR BANK TRANSFER SETUP - CRITICAL FLOW:
+Step 1: ALWAYS check current payment options first
+- When user says "add bank transfer", "enable bank transfer", "add my bank details" etc.
+- FIRST call get_payment_options to check if bank transfer is already enabled
+- Check if bank_transfer_enabled is true AND bank_details exists
+
+Step 2: Handle based on current state and user intent
+IF Bank transfer already enabled with details (bank_transfer_enabled=true AND bank_details exists):
+- DEFAULT ACTION: ✅ Use update_payment_methods(invoice_identifier: "INV-XXX", enable_bank_transfer: true)
+- Response: "I've enabled bank transfer on your invoice using your existing bank details: [show details]"
+- ❌ NEVER ask for new bank details when they already exist
+- ONLY ask to change details if user SPECIFICALLY mentions "change", "update", "new" bank details
+
+IF user explicitly wants to CHANGE existing bank details:
+- Keywords: "change bank details", "update bank account", "new bank details", "different account"
+- Confirm: "You currently have bank details set up. Do you want to replace them with new details?"
+- If confirmed: setup_bank_transfer(bank_details: "[new_details]", invoice_number: "INV-XXX")
+
+IF Bank transfer disabled (bank_transfer_enabled=false) OR no bank details configured:
+- Ask user for their bank details
+- Example: "I'll add bank transfer to your invoice. What are your bank account details?"
+- Wait for details, then call setup_bank_transfer(bank_details: "[details]", invoice_number: "INV-XXX")
+
+🚨 CRITICAL DISTINCTION:
+- update_payment_methods = Enable payment method on invoice (when already configured globally)
+- setup_bank_transfer = Configure bank transfer globally + enable on invoice (when not configured)
+
+MANDATORY SEQUENCE:
+1. get_payment_options (check current state)
+2A. IF already configured: update_payment_methods(enable_bank_transfer: true) 
+2B. IF not configured: Ask for bank details → setup_bank_transfer
+3. Always show updated invoice
+
 CONVERSATION CONTEXT & INVOICE FLOW:
 CORE PRINCIPLE: Always try to show the user an invoice when possible!
 
@@ -710,6 +786,31 @@ CONTEXT TRIGGERS (Auto-update active invoice):
 • Design changes: "Make it purple/modern design" → update + show invoice
 • Payment setup: "Add PayPal to this" → find invoice_number from history + update + show invoice
 • Line item additions: "Please update it too have 10 Blackwall's also - 10000 each" → use add_line_item with most recent invoice number
+
+🚨 MULTIPLE ITEMS HANDLING - CRITICAL RULE:
+When user asks to add MULTIPLE items in one request:
+• Use parallel tool calls to add all items at once
+• Return ONE summary message and ONE invoice preview after ALL items are added
+• NEVER show intermediate states or multiple invoice previews
+
+Example: "Add a suitcase $40, pump $10, backpack $15, pillow $30"
+✅ CORRECT APPROACH: 
+  1. Make 4 parallel add_line_item calls in a single response
+  2. Wait for all to complete
+  3. Show ONE message: "I've added all 4 items to invoice INV-XXX:"
+     - Suitcase: $40
+     - Pump: $10  
+     - Backpack: $15
+     - Pillow: $30
+     Total: $XXX
+  4. Show ONE invoice preview with all items
+
+❌ WRONG APPROACH:
+  - Making sequential calls with separate responses
+  - Showing multiple invoice previews
+  - Saying "I've added item X" multiple times
+
+IMPLEMENTATION TIP: Use OpenAI's parallel tool calling feature - submit all add_line_item calls in ONE tool_calls array!
 
 SPECIFIC EXAMPLES FROM LOGS:
 • Assistant says: "I've created invoice **INV-009** for Jensen that totals **$25,000.00**"
@@ -1340,6 +1441,18 @@ Always be helpful and create exactly what the user requests.`,
             }
           },
           {
+            type: "function", 
+            function: {
+              name: "sync_bank_details",
+              description: "Sync bank details from payment options to business settings for invoice display. Use this if bank details aren't showing correctly on invoices.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          },
+          {
             type: "function",
             function: {
               name: "update_payment_methods",
@@ -1399,6 +1512,20 @@ FUNCTION CALLING:
 • When user asks to create, update, search, or manage anything - call the relevant function
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
+
+🚨 INVOICE CREATION WITH ITEMS - CRITICAL:
+When user asks to CREATE a new invoice WITH items:
+• Use create_invoice WITH line_items array - this adds all items at once
+• DO NOT use create_invoice AND THEN add_line_item - that creates duplicates!
+
+Example: "Make invoice for ABC Corp with 5 desks at $100 each"
+✅ CORRECT: create_invoice(client_name: "ABC Corp", line_items: [{item_name: "Desk", quantity: 5, unit_price: 100}])
+❌ WRONG: create_invoice() then add_line_item() - causes duplicates!
+
+When to use add_line_item:
+• ONLY when adding items to an EXISTING invoice
+• User says "add X to the invoice" AFTER invoice is created
+• NEVER use during initial invoice creation
 
 🚨🚨 CRITICAL CONTEXT AWARENESS - NEVER LOSE CONTEXT! 🚨🚨
 
@@ -1603,6 +1730,37 @@ Always be helpful and create exactly what the user requests.`,
       const { name, arguments: args } = toolCall.function;
       const parsedArgs = JSON.parse(args);
       console.log('[Assistants POC] Tool call:', name, parsedArgs);
+      // Helper function to create complete invoice attachment with all required data
+      const createInvoiceAttachment = async (invoiceData: any, lineItems: any[] = [], clientData: any = null) => {
+        try {
+          // Get payment options and business settings for complete invoice display
+          const { data: paymentOptions } = await supabase.from('payment_options').select('*').eq('user_id', user_id).single();
+          const { data: businessSettings } = await supabase.from('business_settings').select('*').eq('user_id', user_id).single();
+          
+          return {
+            type: 'invoice',
+            invoice_id: invoiceData.id,
+            invoice: invoiceData,
+            line_items: lineItems,
+            client_id: invoiceData.client_id,
+            client: clientData,
+            paymentOptions: paymentOptions,
+            businessSettings: businessSettings
+          };
+        } catch (error) {
+          console.error('[createInvoiceAttachment] Error:', error);
+          // Fallback without payment/business data
+          return {
+            type: 'invoice',
+            invoice_id: invoiceData.id,
+            invoice: invoiceData,
+            line_items: lineItems,
+            client_id: invoiceData.client_id,
+            client: clientData
+          };
+        }
+      };
+
       if (name === 'create_invoice') {
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, due_date, invoice_date, tax_percentage, notes, payment_terms, enable_paypal, paypal_email, enable_stripe, enable_bank_transfer, invoice_design, accent_color, discount_type, discount_value } = parsedArgs;
         // Calculate subtotal
@@ -1753,14 +1911,8 @@ Always be helpful and create exactly what the user requests.`,
           }
         }
         // Store attachment for UI with full client data
-        attachments.push({
-          type: 'invoice',
-          invoice_id: invoice.id,
-          invoice: invoice,
-          line_items: createdLineItems,
-          client_id: clientId,
-          client: clientData // Include full client object for UI
-        });
+        const invoiceAttachment = await createInvoiceAttachment(invoice, createdLineItems, clientData);
+        attachments.push(invoiceAttachment);
         // 🚨 CONVERSATION MEMORY - Track that we just created this invoice
         ConversationMemory.setLastAction(user_id, 'created_invoice', {
           invoice_number: invoice_number,
@@ -1950,7 +2102,7 @@ To accept payments, configure at least one payment method.`;
           bank_details,
           invoice_number
         });
-        // Update payment_options table  
+        // Update payment_options table (for AI functions)
         const { error: paymentError } = await supabase.from('payment_options').upsert({
           user_id: user_id,
           bank_transfer_enabled: true,
@@ -1960,6 +2112,20 @@ To accept payments, configure at least one payment method.`;
         if (paymentError) {
           console.error('[Assistants POC] Bank transfer setup error:', paymentError);
           return `Error setting up bank transfer: ${paymentError.message}`;
+        }
+
+        // CRITICAL FIX: Also update business_settings table (for invoice display)
+        const { error: businessError } = await supabase.from('business_settings').upsert({
+          user_id: user_id,
+          bank_details: bank_details,
+          enable_bank_transfer_payments: true,
+          updated_at: new Date().toISOString()
+        });
+        if (businessError) {
+          console.error('[Assistants POC] Business settings bank details update error:', businessError);
+          // Don't fail - payment_options is the primary source
+        } else {
+          console.log('[Assistants POC] Successfully synced bank details to business_settings for invoice display');
         }
         let response = `✅ Bank transfer payments enabled\n\n**Bank Details:**\n${bank_details}`;
         // If invoice_number provided, also enable bank transfer on that specific invoice
@@ -1971,19 +2137,60 @@ To accept payments, configure at least one payment method.`;
             }).eq('id', invoice.id);
             if (!updateError) {
               response += `\n• Bank transfer activated on invoice ${invoice_number}`;
-              // Return updated invoice
+              
+              // Get complete updated invoice data (same pattern as update_payment_methods)
               const { data: updatedInvoice } = await supabase.from('invoices').select('*').eq('id', invoice.id).single();
+              
+              // Get line items from correct table
+              const { data: lineItems, error: lineItemsError } = await supabase.from('invoice_line_items').select('*').eq('invoice_id', invoice.id).order('created_at', { ascending: true });
+              if (lineItemsError) {
+                console.error('[setup_bank_transfer] Line items fetch error:', lineItemsError);
+              }
+              
+              // Get client data for attachment
+              let clientData = null;
+              if (updatedInvoice && updatedInvoice.client_id) {
+                const { data: client, error: clientError } = await supabase.from('clients').select('*').eq('id', updatedInvoice.client_id).single();
+                if (!clientError) {
+                  clientData = client;
+                }
+              }
+              
+              // Create complete attachment for updated invoice
               if (updatedInvoice) {
-                attachments.push({
-                  type: 'invoice',
-                  invoice_id: invoice.id,
-                  invoice: updatedInvoice
-                });
+                const invoiceAttachment = await createInvoiceAttachment(updatedInvoice, lineItems || [], clientData);
+                attachments.push(invoiceAttachment);
+                console.log('[setup_bank_transfer] Success - created complete invoice attachment with payment options');
               }
             }
           }
         }
         return response;
+      }
+      if (name === 'sync_bank_details') {
+        console.log('[Assistants POC] Syncing bank details from payment_options to business_settings');
+        
+        // Get bank details from payment_options
+        const { data: paymentOptions, error: paymentError } = await supabase.from('payment_options').select('bank_details, bank_transfer_enabled').eq('user_id', user_id).single();
+        
+        if (paymentError || !paymentOptions || !paymentOptions.bank_details) {
+          return 'No bank details found in payment options to sync.';
+        }
+        
+        // Update business_settings with the bank details
+        const { error: businessError } = await supabase.from('business_settings').upsert({
+          user_id: user_id,
+          bank_details: paymentOptions.bank_details,
+          enable_bank_transfer_payments: paymentOptions.bank_transfer_enabled,
+          updated_at: new Date().toISOString()
+        });
+        
+        if (businessError) {
+          console.error('[sync_bank_details] Error:', businessError);
+          return `Error syncing bank details: ${businessError.message}`;
+        }
+        
+        return `✅ Successfully synced bank details to business settings:\n\n${paymentOptions.bank_details}`;
       }
       if (name === 'find_invoice') {
         const { invoice_number, client_name, search_term, get_latest, limit = 5 } = parsedArgs;
@@ -2825,6 +3032,12 @@ Let me know if you'd like any other changes!`;
               });
               controller.enqueue(new TextEncoder().encode(response));
               controller.close();
+              
+              // Clean up request tracking
+              if (globalThis.processingRequests) {
+                globalThis.processingRequests.delete(deduplicationKey);
+                console.log('[Assistants POC] 🧹 Cleaned up successful request:', deduplicationKey);
+              }
               break;
             }
             if (runStatus.status === 'requires_action') {
@@ -2865,6 +3078,13 @@ Let me know if you'd like any other changes!`;
           }
         } catch (error) {
           console.error('[Assistants POC] Stream error:', error);
+          
+          // Clean up request tracking on error
+          if (globalThis.processingRequests) {
+            globalThis.processingRequests.delete(deduplicationKey);
+            console.log('[Assistants POC] 🧹 Cleaned up failed request:', deduplicationKey);
+          }
+          
           controller.error(error);
         }
       }
@@ -2879,6 +3099,13 @@ Let me know if you'd like any other changes!`;
     });
   } catch (error) {
     console.error('[Assistants POC] Error:', error);
+    
+    // Clean up request tracking on error
+    if (globalThis.processingRequests) {
+      globalThis.processingRequests.delete(deduplicationKey);
+      console.log('[Assistants POC] 🧹 Cleaned up error request:', deduplicationKey);
+    }
+    
     return new Response(JSON.stringify({
       error: error.message
     }), {

@@ -58,6 +58,7 @@ export class AssistantService {
     userContext?: any;
     history?: { role: 'user' | 'assistant'; content: string }[];
     runId?: string;
+    requestId?: string;  // Add requestId parameter for deduplication
   }): Promise<any> {
     try {
       // Add timeout + single retry for transient RN network timeouts
@@ -1109,6 +1110,10 @@ Use tools to take action. Reference previous conversation naturally.`;
   // Send message and get response
   static async sendMessage(userId: string, message: string, userContext?: UserContext, statusCallback?: (status: string) => void, currentThreadId?: string, history?: { role: 'user' | 'assistant'; content: string }[]): Promise<AssistantRunResult> {
     try {
+      // Generate unique request ID to prevent duplicate executions on retry
+      const requestId = `${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      console.log('[AssistantService] Request ID:', requestId);
+      
       statusCallback?.('SuperAI is initializing...');
       
       // Use optimized edge function if enabled
@@ -1125,7 +1130,8 @@ Use tools to take action. Reference previous conversation naturally.`;
           userId,
           userContext,
           threadId: currentThreadId,
-          history
+          history,
+          requestId: requestId  // Pass the request ID to enable deduplication
         });
 
         if (!result.success) {
