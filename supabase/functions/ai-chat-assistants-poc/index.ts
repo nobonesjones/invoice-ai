@@ -99,9 +99,19 @@ function detectConversationContext(message, userId) {
     'make estimate',
     'new estimate',
     'estimate for',
+    'create quote',
+    'make quote', 
+    'new quote',
+    'quote for',
     'generate invoice',
+    'generate estimate',
+    'generate quote',
     'build invoice',
-    'start invoice'
+    'build estimate',
+    'build quote',
+    'start invoice',
+    'start estimate',
+    'start quote'
   ];
   if (createKeywords.some((keyword)=>lowerMessage.includes(keyword))) {
     return 'create';
@@ -119,18 +129,25 @@ function detectConversationContext(message, userId) {
   const contextReferences = [
     'the invoice',
     'this invoice',
+    'the estimate',
+    'this estimate', 
+    'the quote',
+    'this quote',
     'it',
     'the client',
     'address',
-    'that invoice'
+    'that invoice',
+    'that estimate',
+    'that quote'
   ];
   const hasUpdateKeyword = updateKeywords.some((keyword)=>lowerMessage.includes(keyword));
   const hasContextReference = contextReferences.some((ref)=>lowerMessage.includes(ref));
   // If user just created/updated something and now wants to modify it
   if (hasUpdateKeyword && (hasContextReference || lastAction)) {
-    // Check if referring to specific invoice number
+    // Check if referring to specific invoice or estimate number
     const invoiceMatch = lowerMessage.match(/inv-\d+/i);
-    if (invoiceMatch) {
+    const estimateMatch = lowerMessage.match(/(est|q)-\d+/i);
+    if (invoiceMatch || estimateMatch) {
       return 'update_specific';
     }
     return 'update_latest';
@@ -425,14 +442,40 @@ serve(async (req)=>{
       console.log('[Assistants POC] Update context detected with recent action');
       contextString = `\n\nACTIVE CONVERSATION CONTEXT:\n`;
       contextString += `• Last action: ${lastAction.action}\n`;
-      if (lastAction.invoice_number) {
-        contextString += `• Current invoice: ${lastAction.invoice_number}\n`;
+      
+      // Handle both invoice and estimate contexts
+      const isEstimateAction = lastAction.action && (lastAction.action.includes('estimate') || lastAction.estimate_number);
+      const isInvoiceAction = lastAction.action && (lastAction.action.includes('invoice') || lastAction.invoice_number);
+      
+      if (isEstimateAction) {
+        // Estimate context
+        const terminology = lastAction.terminology || 'estimate';
+        if (lastAction.estimate_number) {
+          contextString += `• Current ${terminology}: ${lastAction.estimate_number}\n`;
+        }
+        if (lastAction.client_name) {
+          contextString += `• Current client: ${lastAction.client_name}\n`;
+        }
+        contextString += `• When user says "add", "update", "change" - they mean THIS ${terminology}/client\n`;
+        contextString += `• Use estimate_identifier: "latest" or "${lastAction.estimate_number || 'latest'}"\n`;
+        contextString += `• 🚨 IMPORTANT: User is referring to the ${terminology.toUpperCase()}, not an invoice!\n`;
+      } else if (isInvoiceAction) {
+        // Invoice context (original logic)
+        if (lastAction.invoice_number) {
+          contextString += `• Current invoice: ${lastAction.invoice_number}\n`;
+        }
+        if (lastAction.client_name) {
+          contextString += `• Current client: ${lastAction.client_name}\n`;
+        }
+        contextString += `• When user says "add", "update", "change" - they mean THIS invoice/client\n`;
+        contextString += `• Use invoice_identifier: "latest" or "${lastAction.invoice_number || 'latest'}"\n`;
+      } else {
+        // Generic context
+        if (lastAction.client_name) {
+          contextString += `• Current client: ${lastAction.client_name}\n`;
+        }
+        contextString += `• When user says "add", "update", "change" - refer to the most recent item\n`;
       }
-      if (lastAction.client_name) {
-        contextString += `• Current client: ${lastAction.client_name}\n`;
-      }
-      contextString += `• When user says "add", "update", "change" - they mean THIS invoice/client\n`;
-      contextString += `• Use invoice_identifier: "latest" or "${lastAction.invoice_number || 'latest'}"\n`;
     } else {
       console.log('[Assistants POC] General conversation - minimal context');
     }
@@ -539,6 +582,23 @@ AI: MUST use add_line_item(invoice_identifier: "latest", item_name: "Consulting"
 **CONTEXT KEYWORDS THAT MEAN "UPDATE THE CURRENT THING":**
 "add", "update", "change", "set", "include", "modify", "edit", "his", "her", "their", "it", "this", "that", "the invoice", "the client"
 
+🚨 **CRITICAL: COMBINE MULTIPLE CLIENT UPDATES INTO SINGLE CALLS** 🚨
+When user requests multiple client field updates, ALWAYS combine them into ONE function call:
+
+❌ WRONG (causes timeouts):
+- update_estimate(client_address: "123 Main St") 
+- update_estimate(client_tax_number: "12345")
+
+✅ CORRECT (fast, single call):
+- update_estimate(client_address: "123 Main St", client_tax_number: "12345")
+
+**Examples that MUST be combined:**
+- "Add address and tax number" → ONE update_estimate call with both fields
+- "Set client email and phone" → ONE update_estimate call with both fields  
+- "Update client name, address, and tax number" → ONE update_estimate call with all fields
+
+**RULE: If updating multiple client fields, use ONE function call with ALL the fields together.**
+
 INVOICE CREATION WORKFLOW:
 When users request to create an invoice:
 1. EXTRACT client name from user request immediately - NEVER use "[client name required]"
@@ -617,16 +677,28 @@ If user mentions payments during invoice creation:
   - "Invoice with payment of $200" → Create invoice first, then ask about payment
   - "Make invoice, received $300 payment" → Create invoice first, then ask about payment
 
-PAYMENT METHOD ENABLEMENT:
-When users want to enable payment options on invoices:
-• Use update_payment_methods function (returns updated invoice attachment)
+PAYMENT METHOD MANAGEMENT:
+When users want to enable/disable payment options on invoices or estimates:
+
+**ENABLING PAYMENTS:**
+• Use update_payment_methods (invoices) or update_estimate_payment_methods (estimates)
 • Keywords: "enable", "activate", "turn on", "add", "card payments", "stripe", "paypal", "bank transfer"
 • Examples:
   - "Enable card payments on invoice INV-123456" → update_payment_methods(invoice_identifier: "INV-123456", enable_stripe: true)
-  - "Add PayPal to this invoice" → update_payment_methods(invoice_identifier: "latest", enable_paypal: true)
-  - "Turn on bank transfer for invoice INV-789012" → update_payment_methods(invoice_identifier: "INV-789012", enable_bank_transfer: true)
+  - "Add PayPal to this estimate" → update_estimate_payment_methods(estimate_identifier: "latest", enable_paypal: true)
+  - "Turn on bank transfer for quote Q-001" → update_estimate_payment_methods(estimate_identifier: "Q-001", enable_bank_transfer: true)
 • IMPORTANT: Only enable payment methods that are enabled in business settings
-• Function automatically shows updated invoice with payment options enabled
+
+**DISABLING/REMOVING PAYMENTS:**
+• Use update_payment_methods (invoices) or update_estimate_payment_methods (estimates) with false values
+• Keywords: "remove", "disable", "turn off", "delete", "take off", "deactivate"
+• Examples:
+  - "Remove PayPal from invoice INV-123456" → update_payment_methods(invoice_identifier: "INV-123456", enable_paypal: false)
+  - "Disable card payments on this estimate" → update_estimate_payment_methods(estimate_identifier: "latest", enable_stripe: false)
+  - "Turn off bank transfer for quote Q-001" → update_estimate_payment_methods(estimate_identifier: "Q-001", enable_bank_transfer: false)
+• IMPORTANT: Disabling always works regardless of business settings
+
+• Both functions automatically show updated invoice/estimate with payment options updated
 
 LINE ITEM FORMATTING RULES:
 • ALWAYS capitalize the first letter of each line item name
@@ -1544,7 +1616,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_payment_methods",
-              description: "Update payment methods for an existing invoice. Only enables methods if they are enabled in business settings.",
+              description: "Enable or disable payment methods for an existing invoice. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1978,6 +2050,35 @@ Always be helpful and create exactly what the user requests.`,
                 required: []
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_estimate_payment_methods",
+              description: "Enable or disable payment methods for an existing estimate/quote. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number (e.g., 'EST-001' or 'Q-001'), client name, or 'latest' for most recent estimate"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe card payments on this estimate"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable/disable PayPal payments on this estimate"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments on this estimate"
+                  }
+                },
+                required: ["estimate_identifier"]
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -2077,6 +2178,23 @@ AI: MUST use add_line_item(invoice_identifier: "latest", item_name: "Consulting"
 **CONTEXT KEYWORDS THAT MEAN "UPDATE THE CURRENT THING":**
 "add", "update", "change", "set", "include", "modify", "edit", "his", "her", "their", "it", "this", "that", "the invoice", "the client"
 
+🚨 **CRITICAL: COMBINE MULTIPLE CLIENT UPDATES INTO SINGLE CALLS** 🚨
+When user requests multiple client field updates, ALWAYS combine them into ONE function call:
+
+❌ WRONG (causes timeouts):
+- update_estimate(client_address: "123 Main St") 
+- update_estimate(client_tax_number: "12345")
+
+✅ CORRECT (fast, single call):
+- update_estimate(client_address: "123 Main St", client_tax_number: "12345")
+
+**Examples that MUST be combined:**
+- "Add address and tax number" → ONE update_estimate call with both fields
+- "Set client email and phone" → ONE update_estimate call with both fields  
+- "Update client name, address, and tax number" → ONE update_estimate call with all fields
+
+**RULE: If updating multiple client fields, use ONE function call with ALL the fields together.**
+
 INVOICE CREATION WORKFLOW:
 When users request to create an invoice:
 1. EXTRACT client name from user request immediately - NEVER use "[client name required]"
@@ -2155,16 +2273,28 @@ If user mentions payments during invoice creation:
   - "Invoice with payment of $200" → Create invoice first, then ask about payment
   - "Make invoice, received $300 payment" → Create invoice first, then ask about payment
 
-PAYMENT METHOD ENABLEMENT:
-When users want to enable payment options on invoices:
-• Use update_payment_methods function (returns updated invoice attachment)
+PAYMENT METHOD MANAGEMENT:
+When users want to enable/disable payment options on invoices or estimates:
+
+**ENABLING PAYMENTS:**
+• Use update_payment_methods (invoices) or update_estimate_payment_methods (estimates)
 • Keywords: "enable", "activate", "turn on", "add", "card payments", "stripe", "paypal", "bank transfer"
 • Examples:
   - "Enable card payments on invoice INV-123456" → update_payment_methods(invoice_identifier: "INV-123456", enable_stripe: true)
-  - "Add PayPal to this invoice" → update_payment_methods(invoice_identifier: "latest", enable_paypal: true)
-  - "Turn on bank transfer for invoice INV-789012" → update_payment_methods(invoice_identifier: "INV-789012", enable_bank_transfer: true)
+  - "Add PayPal to this estimate" → update_estimate_payment_methods(estimate_identifier: "latest", enable_paypal: true)
+  - "Turn on bank transfer for quote Q-001" → update_estimate_payment_methods(estimate_identifier: "Q-001", enable_bank_transfer: true)
 • IMPORTANT: Only enable payment methods that are enabled in business settings
-• Function automatically shows updated invoice with payment options enabled
+
+**DISABLING/REMOVING PAYMENTS:**
+• Use update_payment_methods (invoices) or update_estimate_payment_methods (estimates) with false values
+• Keywords: "remove", "disable", "turn off", "delete", "take off", "deactivate"
+• Examples:
+  - "Remove PayPal from invoice INV-123456" → update_payment_methods(invoice_identifier: "INV-123456", enable_paypal: false)
+  - "Disable card payments on this estimate" → update_estimate_payment_methods(estimate_identifier: "latest", enable_stripe: false)
+  - "Turn off bank transfer for quote Q-001" → update_estimate_payment_methods(estimate_identifier: "Q-001", enable_bank_transfer: false)
+• IMPORTANT: Disabling always works regardless of business settings
+
+• Both functions automatically show updated invoice/estimate with payment options updated
 
 LINE ITEM FORMATTING RULES:
 • ALWAYS capitalize the first letter of each line item name
@@ -2741,6 +2871,35 @@ Always be helpful and create exactly what the user requests.`,
                 required: []
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_estimate_payment_methods",
+              description: "Enable or disable payment methods for an existing estimate/quote. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number (e.g., 'EST-001' or 'Q-001'), client name, or 'latest' for most recent estimate"
+                  },
+                  enable_stripe: {
+                    type: "boolean",
+                    description: "Enable/disable Stripe card payments on this estimate"
+                  },
+                  enable_paypal: {
+                    type: "boolean",
+                    description: "Enable/disable PayPal payments on this estimate"
+                  },
+                  enable_bank_transfer: {
+                    type: "boolean",
+                    description: "Enable/disable bank transfer payments on this estimate"
+                  }
+                },
+                required: ["estimate_identifier"]
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -2825,6 +2984,37 @@ Always be helpful and create exactly what the user requests.`,
             invoice: invoiceData,
             line_items: lineItems,
             client_id: invoiceData.client_id,
+            client: clientData
+          };
+        }
+      };
+      
+      // Helper function to create complete estimate attachment with all required data
+      const createEstimateAttachment = async (estimateData: any, lineItems: any[] = [], clientData: any = null) => {
+        try {
+          // Get payment options and business settings for complete estimate display
+          const { data: paymentOptions } = await supabase.from('payment_options').select('*').eq('user_id', user_id).single();
+          const { data: businessSettings } = await supabase.from('business_settings').select('*').eq('user_id', user_id).single();
+          
+          return {
+            type: 'estimate',
+            estimate_id: estimateData.id,
+            estimate: estimateData,
+            line_items: lineItems,
+            client_id: estimateData.client_id,
+            client: clientData,
+            paymentOptions: paymentOptions,
+            businessSettings: businessSettings
+          };
+        } catch (error) {
+          console.error('[createEstimateAttachment] Error:', error);
+          // Fallback without payment/business data
+          return {
+            type: 'estimate',
+            estimate_id: estimateData.id,
+            estimate: estimateData,
+            line_items: lineItems,
+            client_id: estimateData.client_id,
             client: clientData
           };
         }
@@ -4592,13 +4782,39 @@ To change colors, just say:
         // Use user's defaults
         const defaultTemplate = businessSettings?.default_estimate_template || 'clean';
         
+        // 🚨 CRITICAL FIX: Check global payment settings like invoices do
+        let paypalEnabled = false;
+        let stripeEnabled = false;
+        let bankTransferEnabled = false;
+        
+        try {
+          const { data: paymentOptions } = await supabase
+            .from('payment_options')
+            .select('paypal_enabled, stripe_enabled, bank_transfer_enabled')
+            .eq('user_id', user_id)
+            .maybeSingle(); // Use maybeSingle() to handle missing records
+            
+          if (paymentOptions) {
+            paypalEnabled = paymentOptions.paypal_enabled || false;
+            stripeEnabled = paymentOptions.stripe_enabled || false;
+            bankTransferEnabled = paymentOptions.bank_transfer_enabled || false;
+            console.log(`[create_estimate] Global payment settings: PayPal=${paypalEnabled}, Stripe=${stripeEnabled}, Bank=${bankTransferEnabled}`);
+          } else {
+            console.log(`[create_estimate] No payment options configured - all payment methods disabled`);
+          }
+        } catch (paymentError) {
+          console.error('[create_estimate] Error loading payment options:', paymentError);
+          // Error loading payment options (will disable all)
+        }
+        
         console.log(`[create_estimate] Creating ${terminology} with:`, {
           client_name,
           line_items_count: line_items.length,
           subtotal_amount,
           total_amount,
           estimate_number,
-          valid_until: validUntilDate
+          valid_until: validUntilDate,
+          payment_methods: { paypalEnabled, stripeEnabled, bankTransferEnabled }
         });
         
         // First, create or get client  
@@ -4661,7 +4877,7 @@ To change colors, just say:
           }
         }
         
-        // Create estimate in database
+        // Create estimate in database - use global payment settings (like invoices)
         const { data: estimate, error: estimateError } = await supabase
           .from('estimates')
           .insert({
@@ -4679,6 +4895,10 @@ To change colors, just say:
             acceptance_terms: acceptance_terms || null,
             status: 'draft',
             estimate_template: estimate_template || defaultTemplate,
+            // 🚨 CRITICAL FIX: Apply global payment settings (like invoices do)
+            paypal_active: paypalEnabled,
+            stripe_active: stripeEnabled,
+            bank_account_active: bankTransferEnabled,
             created_at: new Date().toISOString()
           })
           .select()
@@ -4729,14 +4949,17 @@ To change colors, just say:
           }
         }
         
-        // Store attachment for UI
-        attachments.push({
-          type: 'estimate',
+        // Store attachment for UI with complete data (like invoices)
+        const estimateAttachment = await createEstimateAttachment(estimate, createdLineItems, clientData);
+        attachments.push(estimateAttachment);
+        
+        // 🚨 CONVERSATION MEMORY - Track that we just created this estimate
+        ConversationMemory.setLastAction(user_id, 'created_estimate', {
+          estimate_number: estimate_number,
+          client_name: client_name,
           estimate_id: estimate.id,
-          estimate: estimate,
-          line_items: createdLineItems,
           client_id: clientId,
-          client: clientData
+          terminology: terminology
         });
         
         // Build success message
@@ -4941,7 +5164,7 @@ To change colors, just say:
           }
           
           // Get line items
-          const { data: allLineItems, error: lineItemsError } = await supabase
+          const { data: allEstimateLineItems, error: lineItemsError } = await supabase
             .from('estimate_line_items')
             .select('*')
             .eq('estimate_id', targetEstimate.id)
@@ -4965,14 +5188,20 @@ To change colors, just say:
             }
           }
           
-          // Store attachment
-          attachments.push({
-            type: 'estimate',
+          // Store attachment with complete data (like invoices)
+          const estimateAttachment = await createEstimateAttachment(
+            updatedEstimate || targetEstimate, 
+            allEstimateLineItems || [], 
+            clientData
+          );
+          attachments.push(estimateAttachment);
+          
+          // 🚨 CONVERSATION MEMORY - Track that we just updated this estimate
+          ConversationMemory.setLastAction(user_id, 'updated_estimate', {
+            estimate_number: targetEstimate.estimate_number,
             estimate_id: targetEstimate.id,
-            estimate: updatedEstimate || targetEstimate,
-            line_items: allLineItems || [],
             client_id: targetEstimate.client_id,
-            client: clientData
+            terminology: terminology
           });
           
           return `I've updated ${terminology} ${targetEstimate.estimate_number}. Let me know if you'd like any other changes!`;
@@ -5038,13 +5267,13 @@ To change colors, just say:
           }
           
           // Recalculate totals
-          const { data: allLineItems, error: fetchError } = await supabase
+          const { data: lineItemTotals, error: fetchError } = await supabase
             .from('estimate_line_items')
             .select('total_price')
             .eq('estimate_id', targetEstimate.id);
           
-          if (!fetchError && allLineItems) {
-            const subtotal = allLineItems.reduce((sum, item) => sum + item.total_price, 0);
+          if (!fetchError && lineItemTotals) {
+            const subtotal = lineItemTotals.reduce((sum, item) => sum + item.total_price, 0);
             
             // Apply discount and tax
             let afterDiscount = subtotal;
@@ -5070,6 +5299,51 @@ To change colors, just say:
               console.error('[add_estimate_line_item] Update totals error:', updateError);
             }
           }
+          
+          // 🚨 CRITICAL: Get updated estimate and create attachment (like invoices do)
+          const { data: updatedEstimate, error: estimateFetchError } = await supabase
+            .from('estimates')
+            .select('*')
+            .eq('id', targetEstimate.id)
+            .single();
+          
+          // Get all line items for attachment
+          const { data: allEstimateLineItems, error: lineItemsError } = await supabase
+            .from('estimate_line_items')
+            .select('*')
+            .eq('estimate_id', targetEstimate.id)
+            .order('created_at', { ascending: true });
+          
+          // Get client data
+          let clientData = null;
+          if (targetEstimate.client_id) {
+            const { data: client } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetEstimate.client_id)
+              .single();
+            
+            if (client) {
+              clientData = client;
+            }
+          }
+          
+          // 🚨 CRITICAL: Create attachment with updated estimate (like invoices do)
+          const estimateAttachment = await createEstimateAttachment(
+            updatedEstimate || targetEstimate,
+            allEstimateLineItems || [],
+            clientData
+          );
+          attachments.push(estimateAttachment);
+          
+          // 🚨 CONVERSATION MEMORY - Track that we just added an item to this estimate
+          ConversationMemory.setLastAction(user_id, 'added_estimate_line_item', {
+            estimate_number: targetEstimate.estimate_number,
+            estimate_id: targetEstimate.id,
+            client_id: targetEstimate.client_id,
+            item_added: item_name,
+            terminology: terminology
+          });
           
           return `I've added "${item_name}" to ${terminology} ${targetEstimate.estimate_number}. Quantity: ${quantity}, Unit Price: $${unit_price}.`;
         } catch (error) {
@@ -5309,17 +5583,232 @@ To change colors, just say:
         }
       }
       
+      if (name === 'update_estimate_payment_methods') {
+        const { estimate_identifier, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs;
+        
+        // Get terminology
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology')
+          .eq('user_id', user_id)
+          .single();
+        
+        const terminology = businessSettings?.estimate_terminology || 'estimate';
+        
+        console.log('[update_estimate_payment_methods] Starting with:', {
+          estimate_identifier,
+          enable_stripe,
+          enable_paypal,
+          enable_bank_transfer
+        });
+        
+        try {
+          // Find the estimate (similar to update_estimate logic)
+          let targetEstimate;
+          
+          if (estimate_identifier === 'latest') {
+            const { data: estimates, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (error || !estimates || estimates.length === 0) {
+              return `No ${terminology}s found.`;
+            }
+            targetEstimate = estimates[0];
+          } else if (estimate_identifier.includes('EST') || estimate_identifier.includes('Q-')) {
+            // Search by estimate number
+            const { data: estimate, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .eq('estimate_number', estimate_identifier)
+              .single();
+            
+            if (error || !estimate) {
+              return `${terminology} ${estimate_identifier} not found.`;
+            }
+            targetEstimate = estimate;
+          } else {
+            // Search by client name
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('id')
+              .eq('user_id', user_id)
+              .ilike('name', `%${estimate_identifier}%`)
+              .single();
+            
+            if (clientError || !client) {
+              return `No client found with name matching "${estimate_identifier}".`;
+            }
+            
+            // Get latest estimate for this client
+            const { data: estimates, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .eq('client_id', client.id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (error || !estimates || estimates.length === 0) {
+              return `No ${terminology}s found for ${estimate_identifier}.`;
+            }
+            targetEstimate = estimates[0];
+          }
+          
+          console.log(`[update_estimate_payment_methods] Found ${terminology}:`, targetEstimate.id, targetEstimate.estimate_number);
+          
+          // Get payment options to check what's actually enabled (same logic as invoices)
+          const { data: paymentOptions, error: paymentOptionsError } = await supabase
+            .from('payment_options')
+            .select('stripe_enabled, paypal_enabled, bank_transfer_enabled')
+            .eq('user_id', user_id)
+            .single();
+          
+          if (paymentOptionsError) {
+            console.error('[update_estimate_payment_methods] Payment options fetch error:', paymentOptionsError);
+            return 'Error: Could not fetch payment options to validate payment methods';
+          }
+          
+          console.log('[update_estimate_payment_methods] Payment options:', paymentOptions);
+          
+          let paymentUpdates = {};
+          let message = `Updated payment methods for ${terminology} ${targetEstimate.estimate_number}:`;
+          let skippedMethods = [];
+          
+          // Check each payment method - use same logic as update_payment_methods
+          if (enable_stripe !== undefined) {
+            if (enable_stripe && paymentOptions.stripe_enabled) {
+              paymentUpdates.stripe_active = true;
+              message += `\n- ✅ Stripe payments enabled`;
+            } else if (enable_stripe && !paymentOptions.stripe_enabled) {
+              skippedMethods.push('Stripe (not configured in payment options)');
+            } else {
+              paymentUpdates.stripe_active = false;
+              message += `\n- ❌ Stripe payments disabled`;
+            }
+          }
+          
+          if (enable_paypal !== undefined) {
+            if (enable_paypal && paymentOptions.paypal_enabled) {
+              paymentUpdates.paypal_active = true;
+              message += `\n- ✅ PayPal payments enabled`;
+            } else if (enable_paypal && !paymentOptions.paypal_enabled) {
+              skippedMethods.push('PayPal (not configured in payment options)');
+            } else {
+              paymentUpdates.paypal_active = false;
+              message += `\n- ❌ PayPal payments disabled`;
+            }
+          }
+          
+          if (enable_bank_transfer !== undefined) {
+            if (enable_bank_transfer && paymentOptions.bank_transfer_enabled) {
+              paymentUpdates.bank_account_active = true;
+              message += `\n- ✅ Bank transfer enabled`;
+            } else if (enable_bank_transfer && !paymentOptions.bank_transfer_enabled) {
+              skippedMethods.push('Bank transfer (not configured in payment options)');
+            } else {
+              paymentUpdates.bank_account_active = false;
+              message += `\n- ❌ Bank transfer disabled`;
+            }
+          }
+          
+          if (skippedMethods.length > 0) {
+            message += `\n\nSkipped methods: ${skippedMethods.join(', ')}`;
+          }
+          
+          // Update the estimate if there are changes
+          if (Object.keys(paymentUpdates).length > 0) {
+            const { error: updateError } = await supabase
+              .from('estimates')
+              .update(paymentUpdates)
+              .eq('id', targetEstimate.id);
+            
+            if (updateError) {
+              console.error('[update_estimate_payment_methods] Update error:', updateError);
+              return `Error updating payment methods: ${updateError.message}`;
+            }
+          }
+          
+          // Get updated estimate for attachment
+          const { data: updatedEstimate } = await supabase
+            .from('estimates')
+            .select('*')
+            .eq('id', targetEstimate.id)
+            .single();
+          
+          // Get line items
+          const { data: allEstimateLineItems } = await supabase
+            .from('estimate_line_items')
+            .select('*')
+            .eq('estimate_id', targetEstimate.id)
+            .order('created_at', { ascending: true });
+          
+          // Get client data
+          let clientData = null;
+          if (targetEstimate.client_id) {
+            const { data: client } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetEstimate.client_id)
+              .single();
+            
+            if (client) {
+              clientData = client;
+            }
+          }
+          
+          // Create attachment with updated estimate (like invoices do)
+          const estimateAttachment = await createEstimateAttachment(
+            updatedEstimate || targetEstimate,
+            allEstimateLineItems || [],
+            clientData
+          );
+          attachments.push(estimateAttachment);
+          
+          // Track action in conversation memory
+          ConversationMemory.setLastAction(user_id, 'updated_estimate_payments', {
+            estimate_number: targetEstimate.estimate_number,
+            estimate_id: targetEstimate.id,
+            client_id: targetEstimate.client_id,
+            terminology: terminology
+          });
+          
+          return message;
+        } catch (error) {
+          console.error('[update_estimate_payment_methods] Error:', error);
+          return `Error updating ${terminology} payment methods: ${error.message}`;
+        }
+      }
+      
       return `Unknown function: ${name}`;
     };
-    // Use streaming response to prevent timeouts
+    // 🚨 TIMEOUT FIX: Enhanced streaming response with longer timeouts for multi-step operations
     const stream = new ReadableStream({
       async start (controller) {
         try {
           let runStatus = run;
           let attempts = 0;
-          while(true){
+          const maxAttempts = 150; // 2.5 minutes max for complex operations
+          const pollInterval = 1000; // 1 second polling
+          
+          // Send initial response to keep connection alive
+          const keepAlive = JSON.stringify({ type: 'status', message: 'Processing...' });
+          controller.enqueue(new TextEncoder().encode(`data: ${keepAlive}\n\n`));
+          
+          while(attempts < maxAttempts){
             runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-            console.log('[Assistants POC] Run status:', runStatus.status);
+            console.log('[Assistants POC] Run status:', runStatus.status, `(attempt ${attempts + 1}/${maxAttempts})`);
+            
+            // Send periodic keepalive for long operations
+            if (attempts % 10 === 0 && attempts > 0) {
+              const keepAliveMsg = JSON.stringify({ type: 'keepalive', message: 'Still processing...' });
+              controller.enqueue(new TextEncoder().encode(`data: ${keepAliveMsg}\n\n`));
+            }
+            
             if (runStatus.status === 'completed') {
               // Get final messages
               const messages = await openai.beta.threads.messages.list(thread.id);
@@ -5397,6 +5886,57 @@ To change colors, just say:
             const attempt = Math.min(attempts, delays.length - 1);
             await new Promise((resolve)=>setTimeout(resolve, delays[attempt] || 1000));
             attempts++;
+          }
+          
+          // 🚨 TIMEOUT HANDLING: If we've exhausted all attempts without completion
+          if (attempts >= maxAttempts) {
+            console.error('[Assistants POC] Request timed out after', maxAttempts, 'attempts (2.5 minutes)');
+            
+            // Try to get any partial response that might exist
+            try {
+              const messages = await openai.beta.threads.messages.list(thread.id);
+              const assistantMessage = messages.data.filter((msg)=>msg.role === 'assistant').map((msg)=>{
+                const textContent = msg.content.find((c)=>c.type === 'text');
+                return textContent ? textContent.text.value : '';
+              })[0];
+              
+              if (assistantMessage) {
+                // Return partial response with timeout warning
+                const timeoutResponse = JSON.stringify({
+                  success: true,
+                  content: `${assistantMessage}\n\n⚠️ Note: This operation took longer than expected and may have been partially completed.`,
+                  attachments: attachments,
+                  timeout: true,
+                  messages: [
+                    {
+                      id: `user-${Date.now()}`,
+                      role: 'user',
+                      content: message,
+                      created_at: new Date().toISOString()
+                    },
+                    {
+                      id: `assistant-${Date.now()}`,
+                      role: 'assistant',
+                      content: assistantMessage,
+                      attachments: attachments,
+                      created_at: new Date(Date.now() + 5000).toISOString()
+                    }
+                  ],
+                  thread: {
+                    id: thread.id,
+                    user_id: user_id
+                  }
+                });
+                controller.enqueue(new TextEncoder().encode(timeoutResponse));
+                controller.close();
+                return;
+              }
+            } catch (partialError) {
+              console.error('[Assistants POC] Error retrieving partial response:', partialError);
+            }
+            
+            // No partial response available - return timeout error
+            throw new Error(`Request timed out after 2.5 minutes. The operation may still be processing in the background.`);
           }
         } catch (error) {
           console.error('[Assistants POC] Stream error:', error);
