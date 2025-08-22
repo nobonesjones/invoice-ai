@@ -405,42 +405,52 @@ serve(async (req)=>{
     console.log('[Assistants POC] Processing message:', message);
     console.log('[Assistants POC] User ID:', user_id);
     console.log('[Assistants POC] Received threadId:', threadId || 'NONE - will create new');
-    // Use pre-created assistant for speed (no creation overhead)
-    const ASSISTANT_ID = "asst_o9Js9OWuPl2kEWLJu0qBHCqh" // Latest created assistant from logs
-    ;
-    console.log('[Assistants POC] Using pre-created assistant:', ASSISTANT_ID);
-    // Verify assistant exists and update it with latest instructions
+    // Force create new assistant to ensure estimate tools are available
+    const FORCE_NEW_ASSISTANT = true; // Set to true to fix estimate functions
     let assistant;
-    try {
-      assistant = await openai.beta.assistants.retrieve(ASSISTANT_ID);
-      console.log('[Assistants POC] Found existing assistant:', assistant.id);
-      // ENHANCED CONVERSATION CONTEXT DETECTION
-      const conversationContext = detectConversationContext(message, user_id);
-      const lastAction = ConversationMemory.getLastAction(user_id);
-      console.log(`[Assistants POC] Conversation context: ${conversationContext}`);
-      console.log(`[Assistants POC] Last action:`, lastAction);
-      let contextString = '';
-      if (conversationContext === 'create') {
-        console.log('[Assistants POC] Invoice creation detected - fetching business context...');
-        contextString = await getInvoiceCreationContext(supabase, user_id);
-      } else if (conversationContext === 'update_latest' && lastAction) {
-        console.log('[Assistants POC] Update context detected with recent action');
-        contextString = `\n\nACTIVE CONVERSATION CONTEXT:\n`;
-        contextString += `• Last action: ${lastAction.action}\n`;
-        if (lastAction.invoice_number) {
-          contextString += `• Current invoice: ${lastAction.invoice_number}\n`;
-        }
-        if (lastAction.client_name) {
-          contextString += `• Current client: ${lastAction.client_name}\n`;
-        }
-        contextString += `• When user says "add", "update", "change" - they mean THIS invoice/client\n`;
-        contextString += `• Use invoice_identifier: "latest" or "${lastAction.invoice_number || 'latest'}"\n`;
-      } else {
-        console.log('[Assistants POC] General conversation - minimal context');
+    
+    // ENHANCED CONVERSATION CONTEXT DETECTION
+    const conversationContext = detectConversationContext(message, user_id);
+    const lastAction = ConversationMemory.getLastAction(user_id);
+    console.log(`[Assistants POC] Conversation context: ${conversationContext}`);
+    console.log(`[Assistants POC] Last action:`, lastAction);
+    let contextString = '';
+    if (conversationContext === 'create') {
+      console.log('[Assistants POC] Invoice creation detected - fetching business context...');
+      contextString = await getInvoiceCreationContext(supabase, user_id);
+    } else if (conversationContext === 'update_latest' && lastAction) {
+      console.log('[Assistants POC] Update context detected with recent action');
+      contextString = `\n\nACTIVE CONVERSATION CONTEXT:\n`;
+      contextString += `• Last action: ${lastAction.action}\n`;
+      if (lastAction.invoice_number) {
+        contextString += `• Current invoice: ${lastAction.invoice_number}\n`;
       }
-      // Always update the assistant with latest instructions 
-      console.log('[Assistants POC] Updating assistant with latest instructions...');
-      assistant = await openai.beta.assistants.update(ASSISTANT_ID, {
+      if (lastAction.client_name) {
+        contextString += `• Current client: ${lastAction.client_name}\n`;
+      }
+      contextString += `• When user says "add", "update", "change" - they mean THIS invoice/client\n`;
+      contextString += `• Use invoice_identifier: "latest" or "${lastAction.invoice_number || 'latest'}"\n`;
+    } else {
+      console.log('[Assistants POC] General conversation - minimal context');
+    }
+    
+    if (FORCE_NEW_ASSISTANT) {
+      console.log('[Assistants POC] Creating new assistant with estimate functions...');
+      // Skip to creation
+      assistant = null;
+    } else {
+      // Use pre-created assistant for speed (no creation overhead)
+      const ASSISTANT_ID = "asst_o9Js9OWuPl2kEWLJu0qBHCqh" // Latest created assistant from logs
+      ;
+      console.log('[Assistants POC] Using pre-created assistant:', ASSISTANT_ID);
+      // Verify assistant exists and update it with latest instructions
+      try {
+        assistant = await openai.beta.assistants.retrieve(ASSISTANT_ID);
+        console.log('[Assistants POC] Found existing assistant:', assistant.id);
+        
+        // Always update the assistant with latest instructions 
+        console.log('[Assistants POC] Updating assistant with latest instructions...');
+        assistant = await openai.beta.assistants.update(ASSISTANT_ID, {
         name: "Invoice AI Assistant",
         instructions: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.${contextString}
 
@@ -458,20 +468,25 @@ ACT-FIRST DELIVERY MODE:
 • Only ask ONE follow-up question if absolutely necessary
 
 FUNCTION CALLING:
-• You have access to powerful functions for invoice/client/business management
+• You have access to powerful functions for invoice/estimate/quote/client/business management
 • ALWAYS use the appropriate functions to complete user requests
 • When user asks to create, update, search, or manage anything - call the relevant function
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
+• Example: "create quote" → call create_estimate function immediately
 
-🚨 INVOICE CREATION WITH ITEMS - CRITICAL:
-When user asks to CREATE a new invoice WITH items:
-• Use create_invoice WITH line_items array - this adds all items at once
-• DO NOT use create_invoice AND THEN add_line_item - that creates duplicates!
+🚨 INVOICE/ESTIMATE CREATION WITH ITEMS - CRITICAL:
+When user asks to CREATE a new invoice/estimate/quote WITH items:
+• Use create_invoice/create_estimate WITH line_items array - this adds all items at once
+• DO NOT use create function AND THEN add_line_item - that creates duplicates!
 
 Example: "Make invoice for ABC Corp with 5 desks at $100 each"
 ✅ CORRECT: create_invoice(client_name: "ABC Corp", line_items: [{item_name: "Desk", quantity: 5, unit_price: 100}])
 ❌ WRONG: create_invoice() then add_line_item() - causes duplicates!
+
+Example: "Create quote for XYZ Ltd with consulting services at $500/hour for 10 hours"
+✅ CORRECT: create_estimate(client_name: "XYZ Ltd", line_items: [{item_name: "Consulting services", quantity: 10, unit_price: 500}])
+❌ WRONG: create_estimate() then add_estimate_line_item() - causes duplicates!
 
 🚨 ADDING MULTIPLE ITEMS - CRITICAL:
 When user asks to ADD MULTIPLE items to an existing invoice:
@@ -891,6 +906,21 @@ When user says "mark as unpaid" or "reset payment":
 - Status will auto-calculate: 0=sent, partial=partial, full=paid
 
 **CRITICAL RULE:** NEVER update payment status without updating payment amounts!
+
+🚨 ESTIMATE/QUOTE TERMINOLOGY:
+• Users may say "estimate" or "quote" - they mean the same thing
+• Use create_estimate function for BOTH "estimate" and "quote" requests
+• The system will use the user's preferred terminology in responses
+• Examples:
+  - "Create a quote for John" → create_estimate(client_name: "John", ...)
+  - "Make an estimate for Sarah" → create_estimate(client_name: "Sarah", ...)
+  - "Update my quote" → update_estimate(estimate_identifier: "latest", ...)
+
+ESTIMATE WORKFLOW:
+• Create estimate → Send to client → Client accepts → Convert to invoice
+• Use convert_estimate_to_invoice when client accepts an estimate/quote
+• Estimates have validity dates instead of due dates
+• Estimates can be: draft, sent, accepted, declined, expired, converted, cancelled
 
 Always be helpful and create exactly what the user requests.`,
         tools: [
@@ -1654,13 +1684,310 @@ Always be helpful and create exactly what the user requests.`,
                 required: []
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "create_estimate",
+              description: "Creates a comprehensive estimate/quote with all options - line items, validity dates, terms, tax rates, and more. Use 'estimate' or 'quote' based on user preference.",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client/company receiving the estimate (required)"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Client email address (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Client phone number (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Client address (optional)"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Client tax/VAT number (optional)"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "List of items/services in the estimate (required)",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string",
+                          description: "Name/description of the item or service"
+                        },
+                        item_description: {
+                          type: "string",
+                          description: "Detailed description of the item (optional)"
+                        },
+                        unit_price: {
+                          type: "number",
+                          description: "Price per unit"
+                        },
+                        quantity: {
+                          type: "number",
+                          description: "Quantity (default: 1)"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  },
+                  valid_until_date: {
+                    type: "string",
+                    description: "Validity expiration date in YYYY-MM-DD format (optional, default: 30 days from now)"
+                  },
+                  estimate_date: {
+                    type: "string",
+                    description: "Estimate creation date in YYYY-MM-DD format (optional, default: today)"
+                  },
+                  tax_percentage: {
+                    type: "number",
+                    description: "Tax rate percentage (optional, e.g., 20 for 20%)"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Additional notes or terms (optional)"
+                  },
+                  acceptance_terms: {
+                    type: "string",
+                    description: "Terms for client acceptance (optional)"
+                  },
+                  estimate_template: {
+                    type: "string",
+                    description: "Design template: 'classic', 'modern', 'minimal', 'bold', 'elegant', 'professional' (optional)",
+                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Type of discount: 'percentage' or 'fixed' (optional)",
+                    enum: ["percentage", "fixed"]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Discount amount (percentage or fixed amount based on discount_type, optional)"
+                  }
+                },
+                required: ["client_name", "line_items"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_estimate",
+              description: "Update any aspect of an existing estimate/quote - client info, line items, validity dates, status, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number (e.g., 'EST-001' or 'Q-001'), client name, or 'latest' for most recent estimate"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  },
+                  estimate_date: {
+                    type: "string",
+                    description: "Update estimate date (YYYY-MM-DD format)"
+                  },
+                  valid_until_date: {
+                    type: "string",
+                    description: "Update validity expiration date (YYYY-MM-DD format)"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Update estimate notes"
+                  },
+                  acceptance_terms: {
+                    type: "string",
+                    description: "Update acceptance terms"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Update estimate status",
+                    enum: ["draft", "sent", "accepted", "declined", "expired", "cancelled"]
+                  },
+                  tax_rate: {
+                    type: "number",
+                    description: "Update tax rate percentage"
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Update discount type: 'percentage' or 'fixed'",
+                    enum: ["percentage", "fixed"]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Update discount amount"
+                  },
+                  estimate_template: {
+                    type: "string",
+                    description: "Update estimate design template",
+                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                  },
+                  estimate_number: {
+                    type: "string",
+                    description: "Update estimate reference number"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Replace all line items with new ones",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string"
+                        },
+                        item_description: {
+                          type: "string"
+                        },
+                        unit_price: {
+                          type: "number"
+                        },
+                        quantity: {
+                          type: "number"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  }
+                },
+                required: ["estimate_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_estimate_line_item",
+              description: "Add a new line item to an existing estimate/quote",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number, client name, or 'latest' for most recent estimate"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Name/description of the line item"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Quantity of the item (default: 1)"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Price per unit of the item"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Optional detailed description of the item"
+                  }
+                },
+                required: ["estimate_identifier", "item_name", "unit_price"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "convert_estimate_to_invoice",
+              description: "Convert an accepted estimate/quote to an invoice. Copies all data and marks estimate as converted.",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number, client name, or 'latest' for most recent estimate"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    description: "Invoice date (YYYY-MM-DD format, optional - defaults to today)"
+                  },
+                  due_date: {
+                    type: "string",
+                    description: "Payment due date (YYYY-MM-DD format, optional - defaults to 30 days)"
+                  },
+                  additional_notes: {
+                    type: "string",
+                    description: "Additional notes to add to the invoice (optional)"
+                  }
+                },
+                required: ["estimate_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "search_estimates",
+              description: "Search for estimates/quotes by various criteria",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Filter by client name (partial match)"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Filter by status",
+                    enum: ["draft", "sent", "accepted", "declined", "expired", "converted", "cancelled"]
+                  },
+                  date_from: {
+                    type: "string",
+                    description: "Filter estimates from this date (YYYY-MM-DD)"
+                  },
+                  date_to: {
+                    type: "string",
+                    description: "Filter estimates until this date (YYYY-MM-DD)"
+                  },
+                  limit: {
+                    type: "number",
+                    description: "Maximum number of results (default: 10)"
+                  }
+                },
+                required: []
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
       });
       console.log('[Assistants POC] Updated assistant successfully');
-    } catch (error) {
-      console.log('[Assistants POC] Assistant not found, creating new one...');
+      } catch (error) {
+        console.log('[Assistants POC] Assistant not found, creating new one...');
+        assistant = null;
+      }
+    }
+    
+    if (!assistant) {
+      console.log('[Assistants POC] Creating new assistant with all tools...');
       assistant = await openai.beta.assistants.create({
         name: "Invoice AI Assistant",
         instructions: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.
@@ -1679,20 +2006,25 @@ ACT-FIRST DELIVERY MODE:
 • Only ask ONE follow-up question if absolutely necessary
 
 FUNCTION CALLING:
-• You have access to powerful functions for invoice/client/business management
+• You have access to powerful functions for invoice/estimate/quote/client/business management
 • ALWAYS use the appropriate functions to complete user requests
 • When user asks to create, update, search, or manage anything - call the relevant function
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
+• Example: "create quote" → call create_estimate function immediately
 
-🚨 INVOICE CREATION WITH ITEMS - CRITICAL:
-When user asks to CREATE a new invoice WITH items:
-• Use create_invoice WITH line_items array - this adds all items at once
-• DO NOT use create_invoice AND THEN add_line_item - that creates duplicates!
+🚨 INVOICE/ESTIMATE CREATION WITH ITEMS - CRITICAL:
+When user asks to CREATE a new invoice/estimate/quote WITH items:
+• Use create_invoice/create_estimate WITH line_items array - this adds all items at once
+• DO NOT use create function AND THEN add_line_item - that creates duplicates!
 
 Example: "Make invoice for ABC Corp with 5 desks at $100 each"
 ✅ CORRECT: create_invoice(client_name: "ABC Corp", line_items: [{item_name: "Desk", quantity: 5, unit_price: 100}])
 ❌ WRONG: create_invoice() then add_line_item() - causes duplicates!
+
+Example: "Create quote for XYZ Ltd with consulting services at $500/hour for 10 hours"
+✅ CORRECT: create_estimate(client_name: "XYZ Ltd", line_items: [{item_name: "Consulting services", quantity: 10, unit_price: 500}])
+❌ WRONG: create_estimate() then add_estimate_line_item() - causes duplicates!
 
 🚨 ADDING MULTIPLE ITEMS - CRITICAL:
 When user asks to ADD MULTIPLE items to an existing invoice:
@@ -1853,6 +2185,21 @@ LINE ITEM CLEANING RULES:
   - "the logo design work" → "Logo design work"
 • Keep essential descriptive words (size, color, type) but remove filler words
 • Focus on the main product/service being provided
+
+🚨 ESTIMATE/QUOTE TERMINOLOGY:
+• Users may say "estimate" or "quote" - they mean the same thing
+• Use create_estimate function for BOTH "estimate" and "quote" requests
+• The system will use the user's preferred terminology in responses
+• Examples:
+  - "Create a quote for John" → create_estimate(client_name: "John", ...)
+  - "Make an estimate for Sarah" → create_estimate(client_name: "Sarah", ...)
+  - "Update my quote" → update_estimate(estimate_identifier: "latest", ...)
+
+ESTIMATE WORKFLOW:
+• Create estimate → Send to client → Client accepts → Convert to invoice
+• Use convert_estimate_to_invoice when client accepts an estimate/quote
+• Estimates have validity dates instead of due dates
+• Estimates can be: draft, sent, accepted, declined, expired, converted, cancelled
 
 Always be helpful and create exactly what the user requests.`,
         tools: [
@@ -2095,6 +2442,297 @@ Always be helpful and create exactly what the user requests.`,
                   reasoning: {
                     type: "string",
                     description: "Explanation of the design and color choices (for user feedback)"
+                  }
+                },
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "create_estimate",
+              description: "Creates a comprehensive estimate/quote with all options - line items, validity dates, terms, tax rates, and more. Use 'estimate' or 'quote' based on user preference.",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client/company receiving the estimate (required)"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Client email address (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Client phone number (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Client address (optional)"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Client tax/VAT number (optional)"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "List of items/services in the estimate (required)",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string",
+                          description: "Name/description of the item or service"
+                        },
+                        item_description: {
+                          type: "string",
+                          description: "Detailed description of the item (optional)"
+                        },
+                        unit_price: {
+                          type: "number",
+                          description: "Price per unit"
+                        },
+                        quantity: {
+                          type: "number",
+                          description: "Quantity (default: 1)"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  },
+                  valid_until_date: {
+                    type: "string",
+                    description: "Validity expiration date in YYYY-MM-DD format (optional, default: 30 days from now)"
+                  },
+                  estimate_date: {
+                    type: "string",
+                    description: "Estimate creation date in YYYY-MM-DD format (optional, default: today)"
+                  },
+                  tax_percentage: {
+                    type: "number",
+                    description: "Tax rate percentage (optional, e.g., 20 for 20%)"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Additional notes or terms (optional)"
+                  },
+                  acceptance_terms: {
+                    type: "string",
+                    description: "Terms for client acceptance (optional)"
+                  },
+                  estimate_template: {
+                    type: "string",
+                    description: "Design template: 'classic', 'modern', 'minimal', 'bold', 'elegant', 'professional' (optional)",
+                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Type of discount: 'percentage' or 'fixed' (optional)",
+                    enum: ["percentage", "fixed"]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Discount amount (percentage or fixed amount based on discount_type, optional)"
+                  }
+                },
+                required: ["client_name", "line_items"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_estimate",
+              description: "Update any aspect of an existing estimate/quote - client info, line items, validity dates, status, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number (e.g., 'EST-001' or 'Q-001'), client name, or 'latest' for most recent estimate"
+                  },
+                  client_name: {
+                    type: "string",
+                    description: "Update client name"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Update client email"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Update client phone number"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Update client address"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Update client tax number"
+                  },
+                  estimate_date: {
+                    type: "string",
+                    description: "Update estimate date (YYYY-MM-DD format)"
+                  },
+                  valid_until_date: {
+                    type: "string",
+                    description: "Update validity expiration date (YYYY-MM-DD format)"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Update estimate notes"
+                  },
+                  acceptance_terms: {
+                    type: "string",
+                    description: "Update acceptance terms"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Update estimate status",
+                    enum: ["draft", "sent", "accepted", "declined", "expired", "cancelled"]
+                  },
+                  tax_rate: {
+                    type: "number",
+                    description: "Update tax rate percentage"
+                  },
+                  discount_type: {
+                    type: "string",
+                    description: "Update discount type: 'percentage' or 'fixed'",
+                    enum: ["percentage", "fixed"]
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Update discount amount"
+                  },
+                  estimate_template: {
+                    type: "string",
+                    description: "Update estimate design template",
+                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                  },
+                  estimate_number: {
+                    type: "string",
+                    description: "Update estimate reference number"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Replace all line items with new ones",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string"
+                        },
+                        item_description: {
+                          type: "string"
+                        },
+                        unit_price: {
+                          type: "number"
+                        },
+                        quantity: {
+                          type: "number"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  }
+                },
+                required: ["estimate_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_estimate_line_item",
+              description: "Add a new line item to an existing estimate/quote",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number, client name, or 'latest' for most recent estimate"
+                  },
+                  item_name: {
+                    type: "string",
+                    description: "Name/description of the line item"
+                  },
+                  quantity: {
+                    type: "number",
+                    description: "Quantity of the item (default: 1)"
+                  },
+                  unit_price: {
+                    type: "number",
+                    description: "Price per unit of the item"
+                  },
+                  item_description: {
+                    type: "string",
+                    description: "Optional detailed description of the item"
+                  }
+                },
+                required: ["estimate_identifier", "item_name", "unit_price"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "convert_estimate_to_invoice",
+              description: "Convert an accepted estimate/quote to an invoice. Copies all data and marks estimate as converted.",
+              parameters: {
+                type: "object",
+                properties: {
+                  estimate_identifier: {
+                    type: "string",
+                    description: "Estimate number, client name, or 'latest' for most recent estimate"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    description: "Invoice date (YYYY-MM-DD format, optional - defaults to today)"
+                  },
+                  due_date: {
+                    type: "string",
+                    description: "Payment due date (YYYY-MM-DD format, optional - defaults to 30 days)"
+                  },
+                  additional_notes: {
+                    type: "string",
+                    description: "Additional notes to add to the invoice (optional)"
+                  }
+                },
+                required: ["estimate_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "search_estimates",
+              description: "Search for estimates/quotes by various criteria",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Filter by client name (partial match)"
+                  },
+                  status: {
+                    type: "string",
+                    description: "Filter by status",
+                    enum: ["draft", "sent", "accepted", "declined", "expired", "converted", "cancelled"]
+                  },
+                  date_from: {
+                    type: "string",
+                    description: "Filter estimates from this date (YYYY-MM-DD)"
+                  },
+                  date_to: {
+                    type: "string",
+                    description: "Filter estimates until this date (YYYY-MM-DD)"
+                  },
+                  limit: {
+                    type: "number",
+                    description: "Maximum number of results (default: 10)"
                   }
                 },
                 required: []
@@ -3903,6 +4541,768 @@ To change colors, just say:
         } catch (error) {
           console.error('[update_invoice_appearance] Error:', error);
           return `Error updating invoice appearance: ${error.message}`;
+        }
+      }
+      
+      // Estimate/Quote Functions
+      if (name === 'create_estimate') {
+        const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, valid_until_date, estimate_date, tax_percentage, notes, acceptance_terms, estimate_template, discount_type, discount_value } = parsedArgs;
+        
+        // Get user's terminology preference
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology, default_estimate_template')
+          .eq('user_id', user_id)
+          .single();
+        
+        const terminology = businessSettings?.estimate_terminology || 'estimate';
+        const termCapitalized = terminology.charAt(0).toUpperCase() + terminology.slice(1);
+        
+        // Calculate subtotal
+        const subtotal_amount = line_items.reduce((sum, item) => sum + item.unit_price * (item.quantity || 1), 0);
+        
+        // Apply discount if specified
+        let discount_amount = 0;
+        if (discount_type && discount_value) {
+          if (discount_type === 'percentage') {
+            discount_amount = subtotal_amount * (discount_value / 100);
+          } else if (discount_type === 'fixed') {
+            discount_amount = discount_value;
+          }
+        }
+        const after_discount = subtotal_amount - discount_amount;
+        
+        // Calculate tax
+        const tax_rate = tax_percentage || 0;
+        const tax_amount = after_discount * (tax_rate / 100);
+        
+        // Calculate final total
+        const total_amount = after_discount + tax_amount;
+        
+        // Create dates
+        const estimateDate = estimate_date || new Date().toISOString().split('T')[0];
+        const validUntilDate = valid_until_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        
+        // Generate estimate number using sequential numbering
+        const estimate_number = await ReferenceNumberService.generateNextReference(supabase, user_id, 'estimate');
+        
+        // Use user's defaults
+        const defaultTemplate = businessSettings?.default_estimate_template || 'clean';
+        
+        console.log(`[create_estimate] Creating ${terminology} with:`, {
+          client_name,
+          line_items_count: line_items.length,
+          subtotal_amount,
+          total_amount,
+          estimate_number,
+          valid_until: validUntilDate
+        });
+        
+        // First, create or get client  
+        let clientId = null;
+        if (client_name) {
+          // Try to find existing client
+          const { data: existingClient, error: searchError } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('user_id', user_id)
+            .ilike('name', client_name.trim())
+            .maybeSingle();
+          
+          if (searchError) {
+            console.error('[create_estimate] Error searching for existing client:', searchError);
+            return `Error searching for client: ${searchError.message}`;
+          }
+          
+          if (existingClient) {
+            clientId = existingClient.id;
+            // Update existing client with any new information provided
+            const updateData = {};
+            if (client_email) updateData.email = client_email;
+            if (client_phone) updateData.phone = client_phone;
+            if (client_address) updateData.address_client = client_address;
+            if (client_tax_number) updateData.tax_number = client_tax_number;
+            
+            if (Object.keys(updateData).length > 0) {
+              const { error: updateError } = await supabase
+                .from('clients')
+                .update(updateData)
+                .eq('id', clientId);
+              
+              if (updateError) {
+                console.error('[create_estimate] Client update error:', updateError);
+              }
+            }
+          } else {
+            // Create new client
+            const { data: newClient, error: clientError } = await supabase
+              .from('clients')
+              .insert({
+                user_id: user_id,
+                name: client_name,
+                email: client_email || null,
+                phone: client_phone || null,
+                address_client: client_address || null,
+                tax_number: client_tax_number || null,
+                created_at: new Date().toISOString()
+              })
+              .select('id')
+              .single();
+            
+            if (clientError) {
+              console.error('[create_estimate] Client creation error:', clientError);
+              return `Error creating client: ${clientError.message}`;
+            }
+            
+            clientId = newClient.id;
+          }
+        }
+        
+        // Create estimate in database
+        const { data: estimate, error: estimateError } = await supabase
+          .from('estimates')
+          .insert({
+            user_id: user_id,
+            client_id: clientId,
+            estimate_number,
+            estimate_date: estimateDate,
+            valid_until_date: validUntilDate,
+            subtotal_amount: subtotal_amount,
+            discount_type: discount_type || null,
+            discount_value: discount_amount || 0,
+            tax_percentage: tax_rate,
+            total_amount,
+            notes: notes || null,
+            acceptance_terms: acceptance_terms || null,
+            status: 'draft',
+            estimate_template: estimate_template || defaultTemplate,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (estimateError) {
+          console.error('[create_estimate] Estimate creation error:', estimateError);
+          return `Error creating ${terminology}: ${estimateError.message}`;
+        }
+        
+        // Create line items
+        const createdLineItems = [];
+        for (const item of line_items) {
+          const quantity = item.quantity || 1;
+          const { data: lineItem, error } = await supabase
+            .from('estimate_line_items')
+            .insert({
+              estimate_id: estimate.id,
+              user_id: user_id,
+              item_name: item.item_name,
+              item_description: item.item_description || null,
+              quantity: quantity,
+              unit_price: item.unit_price,
+              total_price: item.unit_price * quantity,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          
+          if (error) {
+            console.error('[create_estimate] Line item error:', error);
+          } else {
+            createdLineItems.push(lineItem);
+          }
+        }
+        
+        // Fetch the full client data if we have a clientId
+        let clientData = null;
+        if (clientId) {
+          const { data: fullClient } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('id', clientId)
+            .single();
+          
+          if (fullClient) {
+            clientData = fullClient;
+          }
+        }
+        
+        // Store attachment for UI
+        attachments.push({
+          type: 'estimate',
+          estimate_id: estimate.id,
+          estimate: estimate,
+          line_items: createdLineItems,
+          client_id: clientId,
+          client: clientData
+        });
+        
+        // Build success message
+        const successMessage = `I've created ${terminology} ${estimate_number} for ${client_name} that totals $${total_amount.toFixed(2)}.\n\nValid until: ${validUntilDate}\n\nLet me know if you'd like any changes?`;
+        
+        return successMessage;
+      }
+      
+      if (name === 'update_estimate') {
+        const { estimate_identifier, client_name, client_email, client_phone, client_address, client_tax_number, estimate_date, valid_until_date, notes, acceptance_terms, status, tax_rate, discount_type, discount_value, estimate_template, estimate_number, line_items } = parsedArgs;
+        
+        // Get terminology
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology')
+          .eq('user_id', user_id)
+          .single();
+        
+        const terminology = businessSettings?.estimate_terminology || 'estimate';
+        
+        console.log(`[update_estimate] Starting with:`, {
+          estimate_identifier,
+          ...parsedArgs
+        });
+        
+        try {
+          // Find the estimate
+          let targetEstimate;
+          
+          if (estimate_identifier === 'latest') {
+            // Get most recent estimate
+            const { data: estimates, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (error || !estimates || estimates.length === 0) {
+              return `No ${terminology}s found.`;
+            }
+            targetEstimate = estimates[0];
+          } else if (estimate_identifier.includes('EST') || estimate_identifier.includes('Q-')) {
+            // Search by estimate number
+            const { data: estimate, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .eq('estimate_number', estimate_identifier)
+              .single();
+            
+            if (error || !estimate) {
+              return `${terminology} ${estimate_identifier} not found.`;
+            }
+            targetEstimate = estimate;
+          } else {
+            // Search by client name
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('id')
+              .eq('user_id', user_id)
+              .ilike('name', `%${estimate_identifier}%`)
+              .single();
+            
+            if (clientError || !client) {
+              return `No client found with name matching "${estimate_identifier}".`;
+            }
+            
+            // Get latest estimate for this client
+            const { data: estimates, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .eq('client_id', client.id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (error || !estimates || estimates.length === 0) {
+              return `No ${terminology}s found for ${estimate_identifier}.`;
+            }
+            targetEstimate = estimates[0];
+          }
+          
+          console.log(`[update_estimate] Found ${terminology}:`, targetEstimate.id, targetEstimate.estimate_number);
+          
+          // Prepare update data for estimate
+          const estimateUpdates = {};
+          if (estimate_date !== undefined) estimateUpdates.estimate_date = estimate_date;
+          if (valid_until_date !== undefined) estimateUpdates.valid_until_date = valid_until_date;
+          if (notes !== undefined) estimateUpdates.notes = notes;
+          if (acceptance_terms !== undefined) estimateUpdates.acceptance_terms = acceptance_terms;
+          if (status !== undefined) estimateUpdates.status = status;
+          if (tax_rate !== undefined) estimateUpdates.tax_percentage = tax_rate;
+          if (discount_type !== undefined) estimateUpdates.discount_type = discount_type;
+          if (discount_value !== undefined) estimateUpdates.discount_value = discount_value;
+          if (estimate_template !== undefined) estimateUpdates.estimate_template = estimate_template;
+          if (estimate_number !== undefined) estimateUpdates.estimate_number = estimate_number;
+          
+          // Update client information if provided
+          let clientUpdates = {};
+          if (client_name !== undefined) clientUpdates.name = client_name;
+          if (client_email !== undefined) clientUpdates.email = client_email;
+          if (client_phone !== undefined) clientUpdates.phone = client_phone;
+          if (client_address !== undefined) clientUpdates.address_client = client_address;
+          if (client_tax_number !== undefined) clientUpdates.tax_number = client_tax_number;
+          
+          // Update client if there are changes
+          if (Object.keys(clientUpdates).length > 0 && targetEstimate.client_id) {
+            const { error: clientError } = await supabase
+              .from('clients')
+              .update(clientUpdates)
+              .eq('id', targetEstimate.client_id);
+            
+            if (clientError) {
+              console.error('[update_estimate] Client update error:', clientError);
+            }
+          }
+          
+          // Handle line items replacement
+          if (line_items && line_items.length > 0) {
+            // Delete existing line items
+            const { error: deleteError } = await supabase
+              .from('estimate_line_items')
+              .delete()
+              .eq('estimate_id', targetEstimate.id)
+              .eq('user_id', user_id);
+            
+            if (deleteError) {
+              console.error('[update_estimate] Delete line items error:', deleteError);
+            }
+            
+            // Calculate totals
+            let subtotal = 0;
+            const lineItemsToCreate = line_items.map((item) => {
+              const itemTotal = (item.unit_price || 0) * (item.quantity || 1);
+              subtotal += itemTotal;
+              
+              return {
+                estimate_id: targetEstimate.id,
+                user_id: user_id,
+                item_name: item.item_name,
+                item_description: item.item_description || null,
+                quantity: item.quantity || 1,
+                unit_price: item.unit_price || 0,
+                total_price: itemTotal,
+                created_at: new Date().toISOString()
+              };
+            });
+            
+            // Create new line items
+            const { error: lineItemsError } = await supabase
+              .from('estimate_line_items')
+              .insert(lineItemsToCreate);
+            
+            if (lineItemsError) {
+              console.error('[update_estimate] Line items update error:', lineItemsError);
+              return `Error updating line items: ${lineItemsError.message}`;
+            }
+            
+            // Recalculate totals
+            const discountAmount = discount_value || targetEstimate.discount_value || 0;
+            const discountType = discount_type || targetEstimate.discount_type;
+            const taxRate = tax_rate !== undefined ? tax_rate : targetEstimate.tax_percentage || 0;
+            
+            let afterDiscount = subtotal;
+            if (discountType === 'percentage' && discountAmount > 0) {
+              afterDiscount = subtotal - (subtotal * (discountAmount / 100));
+            } else if (discountType === 'fixed' && discountAmount > 0) {
+              afterDiscount = subtotal - discountAmount;
+            }
+            
+            const taxAmount = afterDiscount * (taxRate / 100);
+            const totalAmount = afterDiscount + taxAmount;
+            
+            // Update totals
+            estimateUpdates.subtotal_amount = subtotal;
+            estimateUpdates.total_amount = totalAmount;
+          }
+          
+          // Update estimate if there are changes
+          if (Object.keys(estimateUpdates).length > 0) {
+            const { error: estimateError } = await supabase
+              .from('estimates')
+              .update(estimateUpdates)
+              .eq('id', targetEstimate.id);
+            
+            if (estimateError) {
+              console.error('[update_estimate] Estimate update error:', estimateError);
+              return `Error updating ${terminology}: ${estimateError.message}`;
+            }
+          }
+          
+          // Get updated estimate for attachment
+          const { data: updatedEstimate, error: estimateFetchError } = await supabase
+            .from('estimates')
+            .select('*')
+            .eq('id', targetEstimate.id)
+            .single();
+          
+          if (estimateFetchError) {
+            console.error('[update_estimate] Updated estimate fetch error:', estimateFetchError);
+          }
+          
+          // Get line items
+          const { data: allLineItems, error: lineItemsError } = await supabase
+            .from('estimate_line_items')
+            .select('*')
+            .eq('estimate_id', targetEstimate.id)
+            .order('created_at', { ascending: true });
+          
+          if (lineItemsError) {
+            console.error('[update_estimate] Line items fetch error:', lineItemsError);
+          }
+          
+          // Get client data for attachment
+          let clientData = null;
+          if (targetEstimate.client_id) {
+            const { data: client, error: clientError } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetEstimate.client_id)
+              .single();
+            
+            if (!clientError && client) {
+              clientData = client;
+            }
+          }
+          
+          // Store attachment
+          attachments.push({
+            type: 'estimate',
+            estimate_id: targetEstimate.id,
+            estimate: updatedEstimate || targetEstimate,
+            line_items: allLineItems || [],
+            client_id: targetEstimate.client_id,
+            client: clientData
+          });
+          
+          return `I've updated ${terminology} ${targetEstimate.estimate_number}. Let me know if you'd like any other changes!`;
+        } catch (error) {
+          console.error('[update_estimate] Error:', error);
+          return `Error updating ${terminology}: ${error.message}`;
+        }
+      }
+      
+      if (name === 'add_estimate_line_item') {
+        const { estimate_identifier, item_name, quantity = 1, unit_price, item_description } = parsedArgs;
+        
+        // Get terminology
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology')
+          .eq('user_id', user_id)
+          .single();
+        
+        const terminology = businessSettings?.estimate_terminology || 'estimate';
+        
+        try {
+          // Find the estimate (similar to update_estimate)
+          let targetEstimate;
+          
+          if (estimate_identifier === 'latest') {
+            const { data: estimates, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (error || !estimates || estimates.length === 0) {
+              return `No ${terminology}s found.`;
+            }
+            targetEstimate = estimates[0];
+          } else {
+            // Search by estimate number or client name
+            // ... (similar logic to update_estimate)
+            return `Please implement full search logic for ${terminology} identifier: ${estimate_identifier}`;
+          }
+          
+          // Add the line item
+          const { data: newLineItem, error: lineItemError } = await supabase
+            .from('estimate_line_items')
+            .insert({
+              estimate_id: targetEstimate.id,
+              user_id: user_id,
+              item_name: item_name,
+              item_description: item_description || null,
+              quantity: quantity,
+              unit_price: unit_price,
+              total_price: unit_price * quantity,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          
+          if (lineItemError) {
+            console.error('[add_estimate_line_item] Error:', lineItemError);
+            return `Error adding line item: ${lineItemError.message}`;
+          }
+          
+          // Recalculate totals
+          const { data: allLineItems, error: fetchError } = await supabase
+            .from('estimate_line_items')
+            .select('total_price')
+            .eq('estimate_id', targetEstimate.id);
+          
+          if (!fetchError && allLineItems) {
+            const subtotal = allLineItems.reduce((sum, item) => sum + item.total_price, 0);
+            
+            // Apply discount and tax
+            let afterDiscount = subtotal;
+            if (targetEstimate.discount_type === 'percentage' && targetEstimate.discount_value > 0) {
+              afterDiscount = subtotal - (subtotal * (targetEstimate.discount_value / 100));
+            } else if (targetEstimate.discount_type === 'fixed' && targetEstimate.discount_value > 0) {
+              afterDiscount = subtotal - targetEstimate.discount_value;
+            }
+            
+            const taxAmount = afterDiscount * (targetEstimate.tax_percentage / 100);
+            const totalAmount = afterDiscount + taxAmount;
+            
+            // Update estimate totals
+            const { error: updateError } = await supabase
+              .from('estimates')
+              .update({
+                subtotal_amount: subtotal,
+                total_amount: totalAmount
+              })
+              .eq('id', targetEstimate.id);
+            
+            if (updateError) {
+              console.error('[add_estimate_line_item] Update totals error:', updateError);
+            }
+          }
+          
+          return `I've added "${item_name}" to ${terminology} ${targetEstimate.estimate_number}. Quantity: ${quantity}, Unit Price: $${unit_price}.`;
+        } catch (error) {
+          console.error('[add_estimate_line_item] Error:', error);
+          return `Error adding line item: ${error.message}`;
+        }
+      }
+      
+      if (name === 'convert_estimate_to_invoice') {
+        const { estimate_identifier, invoice_date, due_date, additional_notes } = parsedArgs;
+        
+        // Get terminology
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology')
+          .eq('user_id', user_id)
+          .single();
+        
+        const terminology = businessSettings?.estimate_terminology || 'estimate';
+        
+        try {
+          // Find the estimate (similar to update_estimate)
+          let targetEstimate;
+          
+          if (estimate_identifier === 'latest') {
+            const { data: estimates, error } = await supabase
+              .from('estimates')
+              .select('*')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (error || !estimates || estimates.length === 0) {
+              return `No ${terminology}s found.`;
+            }
+            targetEstimate = estimates[0];
+          } else {
+            // Search by estimate number or client name
+            // ... (similar logic to update_estimate)
+            return `Please implement full search logic for ${terminology} identifier: ${estimate_identifier}`;
+          }
+          
+          // Check if already converted
+          if (targetEstimate.converted_to_invoice_id) {
+            return `This ${terminology} has already been converted to an invoice.`;
+          }
+          
+          // Get line items
+          const { data: lineItems, error: lineItemsError } = await supabase
+            .from('estimate_line_items')
+            .select('*')
+            .eq('estimate_id', targetEstimate.id);
+          
+          if (lineItemsError) {
+            console.error('[convert_estimate_to_invoice] Line items error:', lineItemsError);
+            return `Error fetching line items: ${lineItemsError.message}`;
+          }
+          
+          // Generate new invoice number
+          const invoice_number = await ReferenceNumberService.generateNextReference(supabase, user_id, 'invoice');
+          
+          // Create dates
+          const invoiceDate = invoice_date || new Date().toISOString().split('T')[0];
+          const invoiceDueDate = due_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          
+          // Combine notes
+          let finalNotes = targetEstimate.notes || '';
+          if (additional_notes) {
+            finalNotes += (finalNotes ? '\n\n' : '') + additional_notes;
+          }
+          
+          // Create invoice
+          const { data: invoice, error: invoiceError } = await supabase
+            .from('invoices')
+            .insert({
+              user_id: user_id,
+              client_id: targetEstimate.client_id,
+              invoice_number,
+              invoice_date: invoiceDate,
+              due_date: invoiceDueDate,
+              subtotal_amount: targetEstimate.subtotal_amount,
+              discount_type: targetEstimate.discount_type,
+              discount_value: targetEstimate.discount_value,
+              tax_percentage: targetEstimate.tax_percentage,
+              total_amount: targetEstimate.total_amount,
+              notes: finalNotes,
+              status: 'draft',
+              invoice_design: targetEstimate.estimate_template, // Use same design
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          
+          if (invoiceError) {
+            console.error('[convert_estimate_to_invoice] Invoice creation error:', invoiceError);
+            return `Error creating invoice: ${invoiceError.message}`;
+          }
+          
+          // Create invoice line items
+          const invoiceLineItems = lineItems.map((item) => ({
+            invoice_id: invoice.id,
+            user_id: user_id,
+            item_name: item.item_name,
+            item_description: item.item_description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.total_price,
+            created_at: new Date().toISOString()
+          }));
+          
+          const { error: lineItemsInsertError } = await supabase
+            .from('invoice_line_items')
+            .insert(invoiceLineItems);
+          
+          if (lineItemsInsertError) {
+            console.error('[convert_estimate_to_invoice] Line items insert error:', lineItemsInsertError);
+          }
+          
+          // Update estimate status and link
+          const { error: updateError } = await supabase
+            .from('estimates')
+            .update({
+              status: 'converted',
+              converted_to_invoice_id: invoice.id
+            })
+            .eq('id', targetEstimate.id);
+          
+          if (updateError) {
+            console.error('[convert_estimate_to_invoice] Estimate update error:', updateError);
+          }
+          
+          // Get client data
+          let clientData = null;
+          if (targetEstimate.client_id) {
+            const { data: client } = await supabase
+              .from('clients')
+              .select('*')
+              .eq('id', targetEstimate.client_id)
+              .single();
+            
+            if (client) {
+              clientData = client;
+            }
+          }
+          
+          // Create invoice attachment
+          const invoiceAttachment = await createInvoiceAttachment(invoice, lineItems.map(item => ({
+            ...item,
+            invoice_id: invoice.id
+          })), clientData);
+          attachments.push(invoiceAttachment);
+          
+          return `I've successfully converted ${terminology} ${targetEstimate.estimate_number} to invoice ${invoice_number}.\n\nThe invoice is ready to send to your client.`;
+        } catch (error) {
+          console.error('[convert_estimate_to_invoice] Error:', error);
+          return `Error converting ${terminology} to invoice: ${error.message}`;
+        }
+      }
+      
+      if (name === 'search_estimates') {
+        const { client_name, status, date_from, date_to, limit = 10 } = parsedArgs;
+        
+        // Get terminology
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology')
+          .eq('user_id', user_id)
+          .single();
+        
+        const terminology = businessSettings?.estimate_terminology || 'estimate';
+        const termPlural = terminology === 'quote' ? 'quotes' : 'estimates';
+        
+        try {
+          let query = supabase
+            .from('estimates')
+            .select(`
+              *,
+              client:clients(*)
+            `)
+            .eq('user_id', user_id)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+          
+          // Apply filters
+          if (status) {
+            query = query.eq('status', status);
+          }
+          
+          if (date_from) {
+            query = query.gte('estimate_date', date_from);
+          }
+          
+          if (date_to) {
+            query = query.lte('estimate_date', date_to);
+          }
+          
+          if (client_name) {
+            // First find matching clients
+            const { data: clients } = await supabase
+              .from('clients')
+              .select('id')
+              .eq('user_id', user_id)
+              .ilike('name', `%${client_name}%`);
+            
+            if (clients && clients.length > 0) {
+              const clientIds = clients.map(c => c.id);
+              query = query.in('client_id', clientIds);
+            } else {
+              return `No ${termPlural} found for clients matching "${client_name}".`;
+            }
+          }
+          
+          const { data: estimates, error } = await query;
+          
+          if (error) {
+            console.error('[search_estimates] Error:', error);
+            return `Error searching ${termPlural}: ${error.message}`;
+          }
+          
+          if (!estimates || estimates.length === 0) {
+            return `No ${termPlural} found matching your criteria.`;
+          }
+          
+          // Format results
+          let result = `Found ${estimates.length} ${estimates.length === 1 ? terminology : termPlural}:\n\n`;
+          
+          estimates.forEach((est) => {
+            const clientName = est.client?.name || 'Unknown Client';
+            const validUntil = new Date(est.valid_until_date).toLocaleDateString();
+            result += `• ${est.estimate_number} - ${clientName} - $${est.total_amount.toFixed(2)} - Status: ${est.status} - Valid until: ${validUntil}\n`;
+          });
+          
+          return result;
+        } catch (error) {
+          console.error('[search_estimates] Error:', error);
+          return `Error searching ${termPlural}: ${error.message}`;
         }
       }
       
