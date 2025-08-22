@@ -402,11 +402,14 @@ serve(async (req)=>{
         }
       });
     }
-    console.log('[Assistants POC] Processing message:', message);
+    console.log('[Assistants POC] 🚨 ESTIMATE FIX DEPLOYED - Processing message:', message);
     console.log('[Assistants POC] User ID:', user_id);
     console.log('[Assistants POC] Received threadId:', threadId || 'NONE - will create new');
     // Force create new assistant to ensure estimate tools are available
     const FORCE_NEW_ASSISTANT = true; // Set to true to fix estimate functions
+    // NUCLEAR OPTION: Always create new assistant until estimate functions work
+    const ASSISTANT_ID = null; // This will force creation
+    console.log('[ASSISTANTS POC] 🚨 FORCE_NEW_ASSISTANT FLAG IS:', FORCE_NEW_ASSISTANT);
     let assistant;
     
     // ENHANCED CONVERSATION CONTEXT DETECTION
@@ -435,14 +438,14 @@ serve(async (req)=>{
     }
     
     if (FORCE_NEW_ASSISTANT) {
-      console.log('[Assistants POC] Creating new assistant with estimate functions...');
+      console.log('[Assistants POC] 🚨 FORCE_NEW_ASSISTANT = TRUE - Creating new assistant with estimate functions...');
       // Skip to creation
       assistant = null;
     } else {
       // Use pre-created assistant for speed (no creation overhead)
-      const ASSISTANT_ID = "asst_o9Js9OWuPl2kEWLJu0qBHCqh" // Latest created assistant from logs
+      const ASSISTANT_ID = "asst_INVALID_FORCE_NEW" // Force new assistant creation
       ;
-      console.log('[Assistants POC] Using pre-created assistant:', ASSISTANT_ID);
+      console.log('[Assistants POC] 🚨 FORCE_NEW_ASSISTANT = FALSE - Using pre-created assistant:', ASSISTANT_ID);
       // Verify assistant exists and update it with latest instructions
       try {
         assistant = await openai.beta.assistants.retrieve(ASSISTANT_ID);
