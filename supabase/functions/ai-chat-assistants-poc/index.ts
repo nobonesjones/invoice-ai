@@ -1537,6 +1537,123 @@ Always be helpful and create exactly what the user requests.`,
                 ]
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_design_options",
+              description: "Get available invoice design templates with detailed descriptions, personality traits, and industry recommendations. Use this when user asks about design options or wants to change invoice appearance.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_color_options",
+              description: "Get available accent color options with color psychology, industry associations, and personality traits. Use this when user asks about colors or wants to change invoice colors.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice_design",
+              description: "Update the design template for a specific invoice or set new business default design. Use when user wants to change invoice appearance, make it more professional, modern, clean, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to update (optional - if not provided, updates business default)"
+                  },
+                  design_id: {
+                    type: "string",
+                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
+                    enum: ["classic", "modern", "clean", "simple"]
+                  },
+                  apply_to_defaults: {
+                    type: "boolean",
+                    description: "Whether to also update business default design (default: false)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Explanation of why this design was chosen (for user feedback)"
+                  }
+                },
+                required: ["design_id"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice_color",
+              description: "Update the accent color for a specific invoice or set new business default color. Use when user wants to change colors, match brand, or requests specific color personality.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to update (optional - if not provided, updates business default)"
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Hex color code (e.g., '#3B82F6')"
+                  },
+                  apply_to_defaults: {
+                    type: "boolean",
+                    description: "Whether to also update business default color (default: false)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Explanation of why this color was chosen (for user feedback)"
+                  }
+                },
+                required: ["accent_color"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice_appearance",
+              description: "Update both design and color for a specific invoice. Use when user wants comprehensive appearance changes or mentions both design and color preferences.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to update (optional - if not provided, updates business defaults)"
+                  },
+                  design_id: {
+                    type: "string",
+                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
+                    enum: ["classic", "modern", "clean", "simple"]
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Hex color code (e.g., '#3B82F6')"
+                  },
+                  apply_to_defaults: {
+                    type: "boolean",
+                    description: "Whether to also update business defaults (default: false)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Explanation of the design and color choices (for user feedback)"
+                  }
+                },
+                required: []
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -1738,6 +1855,253 @@ LINE ITEM CLEANING RULES:
 • Focus on the main product/service being provided
 
 Always be helpful and create exactly what the user requests.`,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "create_invoice",
+              description: "Create a new invoice with line items and client information. Creates client if they don't exist.",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client for this invoice (required)"
+                  },
+                  client_email: {
+                    type: "string", 
+                    description: "Client email address (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Client phone number (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Client address (optional)"
+                  },
+                  invoice_date: {
+                    type: "string",
+                    format: "date",
+                    description: "Invoice date in YYYY-MM-DD format (defaults to today)"
+                  },
+                  due_date: {
+                    type: "string", 
+                    format: "date",
+                    description: "Due date in YYYY-MM-DD format (defaults to 30 days from invoice date)"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Array of line items for the invoice",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string",
+                          description: "Name/description of the item or service"
+                        },
+                        quantity: {
+                          type: "number",
+                          description: "Quantity (defaults to 1)"
+                        },
+                        unit_price: {
+                          type: "number", 
+                          description: "Price per unit"
+                        },
+                        item_description: {
+                          type: "string",
+                          description: "Optional detailed description"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  },
+                  custom_headline: {
+                    type: "string",
+                    description: "Custom headline for the invoice (optional)"
+                  },
+                  notes: {
+                    type: "string",
+                    description: "Notes or terms for the invoice (optional)"
+                  },
+                  discount_type: {
+                    type: "string",
+                    enum: ["percentage", "fixed"],
+                    description: "Type of discount to apply"
+                  },
+                  discount_value: {
+                    type: "number",
+                    description: "Discount amount (percentage or fixed dollar amount)"
+                  }
+                },
+                required: ["client_name", "line_items"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_line_items",
+              description: "Add multiple line items to an existing invoice in a single operation (prevents duplicates)",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_identifier: {
+                    type: "string",
+                    description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+                  },
+                  line_items: {
+                    type: "array",
+                    description: "Array of line items to add to the invoice",
+                    items: {
+                      type: "object",
+                      properties: {
+                        item_name: {
+                          type: "string",
+                          description: "Name/description of the line item"
+                        },
+                        quantity: {
+                          type: "number",
+                          description: "Quantity of the item (default: 1)"
+                        },
+                        unit_price: {
+                          type: "number",
+                          description: "Price per unit of the item"
+                        },
+                        item_description: {
+                          type: "string",
+                          description: "Optional detailed description of the item"
+                        }
+                      },
+                      required: ["item_name", "unit_price"]
+                    }
+                  }
+                },
+                required: [
+                  "invoice_identifier",
+                  "line_items"
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_design_options",
+              description: "Get available invoice design templates with detailed descriptions, personality traits, and industry recommendations. Use this when user asks about design options or wants to change invoice appearance.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_color_options",
+              description: "Get available accent color options with color psychology, industry associations, and personality traits. Use this when user asks about colors or wants to change invoice colors.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice_design",
+              description: "Update the design template for a specific invoice or set new business default design. Use when user wants to change invoice appearance, make it more professional, modern, clean, etc.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to update (optional - if not provided, updates business default)"
+                  },
+                  design_id: {
+                    type: "string",
+                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
+                    enum: ["classic", "modern", "clean", "simple"]
+                  },
+                  apply_to_defaults: {
+                    type: "boolean",
+                    description: "Whether to also update business default design (default: false)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Explanation of why this design was chosen (for user feedback)"
+                  }
+                },
+                required: ["design_id"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice_color",
+              description: "Update the accent color for a specific invoice or set new business default color. Use when user wants to change colors, match brand, or requests specific color personality.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to update (optional - if not provided, updates business default)"
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Hex color code (e.g., '#3B82F6')"
+                  },
+                  apply_to_defaults: {
+                    type: "boolean",
+                    description: "Whether to also update business default color (default: false)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Explanation of why this color was chosen (for user feedback)"
+                  }
+                },
+                required: ["accent_color"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_invoice_appearance",
+              description: "Update both design and color for a specific invoice. Use when user wants comprehensive appearance changes or mentions both design and color preferences.",
+              parameters: {
+                type: "object",
+                properties: {
+                  invoice_number: {
+                    type: "string",
+                    description: "Invoice number to update (optional - if not provided, updates business defaults)"
+                  },
+                  design_id: {
+                    type: "string",
+                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
+                    enum: ["classic", "modern", "clean", "simple"]
+                  },
+                  accent_color: {
+                    type: "string",
+                    description: "Hex color code (e.g., '#3B82F6')"
+                  },
+                  apply_to_defaults: {
+                    type: "boolean",
+                    description: "Whether to also update business defaults (default: false)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Explanation of the design and color choices (for user feedback)"
+                  }
+                },
+                required: []
+              }
+            }
+          }
+        ],
         model: "gpt-4o-mini"
       });
       console.log('[Assistants POC] Created new assistant:', assistant.id);
@@ -3186,6 +3550,362 @@ Let me know if you'd like any other changes!`;
           return `Error updating payment methods: ${error.message}`;
         }
       }
+      
+      // Design and Color Control Functions - Implemented directly in edge function
+      if (name === 'get_design_options') {
+        try {
+          return `📐 **Available Invoice Designs**
+
+🏛️ **Classic** - Traditional, professional, trustworthy
+   • Best for: Law firms, accounting, corporate services
+   • Personality: Established, reliable, formal
+
+🌟 **Modern** - Contemporary, clean, forward-thinking  
+   • Best for: Tech startups, creative agencies, modern businesses
+   • Personality: Innovative, fresh, progressive
+
+✨ **Clean** - Minimalist, organized, efficient
+   • Best for: Service businesses, consultants, small businesses
+   • Personality: Clear, straightforward, organized
+
+🎨 **Simple** - Elegant, refined, understated
+   • Best for: Premium services, luxury brands, artistic businesses  
+   • Personality: Sophisticated, minimal, high-end
+
+To change your design, just say something like:
+• "Make it more modern"
+• "Use the clean design" 
+• "I want something more professional"`;
+        } catch (error) {
+          console.error('[get_design_options] Error:', error);
+          return `Error getting design options: ${error.message}`;
+        }
+      }
+      
+      if (name === 'get_color_options') {
+        try {
+          return `🎨 **Available Invoice Colors**
+
+🔵 **Professional Blues**
+   • Navy (#1E40AF) - Authority, trust, corporate
+   • Blue (#2563EB) - Professional, reliable, established
+
+⚫ **Premium Colors**  
+   • Black (#000000) - Luxury, sophisticated, exclusive
+   • Dark Gray (#374151) - Professional, modern, refined
+
+🟢 **Growth & Success**
+   • Green (#10B981) - Prosperity, growth, success
+   • Teal (#14B8A6) - Modern, balanced, fresh
+
+🟣 **Creative Colors**
+   • Purple (#8B5CF6) - Creative, innovative, premium
+   • Violet (#7C3AED) - Artistic, unique, sophisticated
+
+🟠 **Energy & Confidence** 
+   • Orange (#F59E0B) - Energetic, confident, approachable
+   • Amber (#D97706) - Warm, friendly, optimistic
+
+🔴 **Bold & Attention**
+   • Red (#EF4444) - Bold, powerful, urgent
+   • Pink (#EC4899) - Creative, modern, friendly
+
+To change colors, just say:
+• "Make it blue"
+• "Use a more creative color"
+• "I want something professional"`;
+        } catch (error) {
+          console.error('[get_color_options] Error:', error);
+          return `Error getting color options: ${error.message}`;
+        }
+      }
+      
+      if (name === 'update_invoice_design') {
+        const { invoice_number, design_id, apply_to_defaults = false, reasoning } = parsedArgs;
+        
+        try {
+          // Validate design_id
+          const validDesigns = ['classic', 'modern', 'clean', 'simple'];
+          if (!validDesigns.includes(design_id)) {
+            return `Invalid design ID. Valid options are: ${validDesigns.join(', ')}`;
+          }
+          
+          // Update business defaults if requested
+          if (apply_to_defaults) {
+            const { error: settingsError } = await supabase
+              .from('business_settings')
+              .update({ 
+                default_invoice_design: design_id,
+                updated_at: new Date().toISOString()
+              })
+              .eq('user_id', user_id);
+              
+            if (settingsError) {
+              console.error('[update_invoice_design] Settings update error:', settingsError);
+            }
+          }
+          
+          // Update specific invoice if provided
+          if (invoice_number) {
+            // Find the invoice
+            const findResult = await findInvoice(supabase, user_id, invoice_number);
+            if (typeof findResult === 'string') {
+              return findResult;
+            }
+            const targetInvoice = findResult;
+            
+            // Update invoice design
+            const { error: invoiceError } = await supabase
+              .from('invoices')
+              .update({ invoice_design: design_id })
+              .eq('user_id', user_id)
+              .eq('id', targetInvoice.id);
+              
+            if (invoiceError) {
+              console.error('[update_invoice_design] Invoice update error:', invoiceError);
+              return `Error updating invoice design: ${invoiceError.message}`;
+            }
+            
+            // Create updated invoice attachment
+            const { data: updatedInvoice } = await supabase
+              .from('invoices')
+              .select('*')
+              .eq('id', targetInvoice.id)
+              .single();
+              
+            const { data: lineItems } = await supabase
+              .from('invoice_line_items')
+              .select('*')
+              .eq('invoice_id', targetInvoice.id)
+              .order('created_at', { ascending: true });
+              
+            let clientData = null;
+            if (targetInvoice.client_id) {
+              const { data: client } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('id', targetInvoice.client_id)
+                .single();
+              clientData = client;
+            }
+            
+            attachments.push({
+              type: 'invoice',
+              invoice_id: targetInvoice.id,
+              invoice: updatedInvoice || targetInvoice,
+              line_items: lineItems || [],
+              client_id: targetInvoice.client_id,
+              client: clientData
+            });
+            
+            return `✅ Updated invoice ${targetInvoice.invoice_number} to use **${design_id}** design.${reasoning ? `\n\n${reasoning}` : ''}\n\nLet me know if you'd like any other changes!`;
+          } else {
+            return `✅ Set **${design_id}** as your default invoice design.${reasoning ? `\n\n${reasoning}` : ''}\n\nAll new invoices will use this design.`;
+          }
+        } catch (error) {
+          console.error('[update_invoice_design] Error:', error);
+          return `Error updating invoice design: ${error.message}`;
+        }
+      }
+      
+      if (name === 'update_invoice_color') {
+        const { invoice_number, accent_color, apply_to_defaults = false, reasoning } = parsedArgs;
+        
+        try {
+          // Validate hex color format
+          const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+          if (!hexColorRegex.test(accent_color)) {
+            return `Invalid color format. Please use hex color format like #3B82F6`;
+          }
+          
+          // Update business defaults if requested
+          if (apply_to_defaults) {
+            const { error: settingsError } = await supabase
+              .from('business_settings')
+              .update({ 
+                default_accent_color: accent_color,
+                updated_at: new Date().toISOString()
+              })
+              .eq('user_id', user_id);
+              
+            if (settingsError) {
+              console.error('[update_invoice_color] Settings update error:', settingsError);
+            }
+          }
+          
+          // Update specific invoice if provided
+          if (invoice_number) {
+            // Find the invoice
+            const findResult = await findInvoice(supabase, user_id, invoice_number);
+            if (typeof findResult === 'string') {
+              return findResult;
+            }
+            const targetInvoice = findResult;
+            
+            // Update invoice color
+            const { error: invoiceError } = await supabase
+              .from('invoices')
+              .update({ accent_color: accent_color })
+              .eq('user_id', user_id)
+              .eq('id', targetInvoice.id);
+              
+            if (invoiceError) {
+              console.error('[update_invoice_color] Invoice update error:', invoiceError);
+              return `Error updating invoice color: ${invoiceError.message}`;
+            }
+            
+            // Create updated invoice attachment
+            const { data: updatedInvoice } = await supabase
+              .from('invoices')
+              .select('*')
+              .eq('id', targetInvoice.id)
+              .single();
+              
+            const { data: lineItems } = await supabase
+              .from('invoice_line_items')
+              .select('*')
+              .eq('invoice_id', targetInvoice.id)
+              .order('created_at', { ascending: true });
+              
+            let clientData = null;
+            if (targetInvoice.client_id) {
+              const { data: client } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('id', targetInvoice.client_id)
+                .single();
+              clientData = client;
+            }
+            
+            attachments.push({
+              type: 'invoice',
+              invoice_id: targetInvoice.id,
+              invoice: updatedInvoice || targetInvoice,
+              line_items: lineItems || [],
+              client_id: targetInvoice.client_id,
+              client: clientData
+            });
+            
+            return `✅ Updated invoice ${targetInvoice.invoice_number} accent color to **${accent_color}**.${reasoning ? `\n\n${reasoning}` : ''}\n\nLet me know if you'd like any other changes!`;
+          } else {
+            return `✅ Set **${accent_color}** as your default invoice color.${reasoning ? `\n\n${reasoning}` : ''}\n\nAll new invoices will use this color.`;
+          }
+        } catch (error) {
+          console.error('[update_invoice_color] Error:', error);
+          return `Error updating invoice color: ${error.message}`;
+        }
+      }
+      
+      if (name === 'update_invoice_appearance') {
+        const { invoice_number, design_id, accent_color, apply_to_defaults = false, reasoning } = parsedArgs;
+        
+        try {
+          // Validate inputs
+          if (design_id) {
+            const validDesigns = ['classic', 'modern', 'clean', 'simple'];
+            if (!validDesigns.includes(design_id)) {
+              return `Invalid design ID. Valid options are: ${validDesigns.join(', ')}`;
+            }
+          }
+          
+          if (accent_color) {
+            const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+            if (!hexColorRegex.test(accent_color)) {
+              return `Invalid color format. Please use hex color format like #3B82F6`;
+            }
+          }
+          
+          // Update business defaults if requested
+          if (apply_to_defaults && (design_id || accent_color)) {
+            const updateData = { updated_at: new Date().toISOString() };
+            if (design_id) updateData.default_invoice_design = design_id;
+            if (accent_color) updateData.default_accent_color = accent_color;
+            
+            const { error: settingsError } = await supabase
+              .from('business_settings')
+              .update(updateData)
+              .eq('user_id', user_id);
+              
+            if (settingsError) {
+              console.error('[update_invoice_appearance] Settings update error:', settingsError);
+            }
+          }
+          
+          // Update specific invoice if provided
+          if (invoice_number) {
+            // Find the invoice
+            const findResult = await findInvoice(supabase, user_id, invoice_number);
+            if (typeof findResult === 'string') {
+              return findResult;
+            }
+            const targetInvoice = findResult;
+            
+            // Update invoice appearance
+            const updateData = {};
+            if (design_id) updateData.invoice_design = design_id;
+            if (accent_color) updateData.accent_color = accent_color;
+            
+            const { error: invoiceError } = await supabase
+              .from('invoices')
+              .update(updateData)
+              .eq('user_id', user_id)
+              .eq('id', targetInvoice.id);
+              
+            if (invoiceError) {
+              console.error('[update_invoice_appearance] Invoice update error:', invoiceError);
+              return `Error updating invoice appearance: ${invoiceError.message}`;
+            }
+            
+            // Create updated invoice attachment
+            const { data: updatedInvoice } = await supabase
+              .from('invoices')
+              .select('*')
+              .eq('id', targetInvoice.id)
+              .single();
+              
+            const { data: lineItems } = await supabase
+              .from('invoice_line_items')
+              .select('*')
+              .eq('invoice_id', targetInvoice.id)
+              .order('created_at', { ascending: true });
+              
+            let clientData = null;
+            if (targetInvoice.client_id) {
+              const { data: client } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('id', targetInvoice.client_id)
+                .single();
+              clientData = client;
+            }
+            
+            attachments.push({
+              type: 'invoice',
+              invoice_id: targetInvoice.id,
+              invoice: updatedInvoice || targetInvoice,
+              line_items: lineItems || [],
+              client_id: targetInvoice.client_id,
+              client: clientData
+            });
+            
+            const changes = [];
+            if (design_id) changes.push(`**${design_id}** design`);
+            if (accent_color) changes.push(`**${accent_color}** color`);
+            
+            return `✅ Updated invoice ${targetInvoice.invoice_number} with ${changes.join(' and ')}.${reasoning ? `\n\n${reasoning}` : ''}\n\nLet me know if you'd like any other changes!`;
+          } else {
+            const changes = [];
+            if (design_id) changes.push(`**${design_id}** design`);
+            if (accent_color) changes.push(`**${accent_color}** color`);
+            
+            return `✅ Set ${changes.join(' and ')} as your default invoice appearance.${reasoning ? `\n\n${reasoning}` : ''}\n\nAll new invoices will use these settings.`;
+          }
+        } catch (error) {
+          console.error('[update_invoice_appearance] Error:', error);
+          return `Error updating invoice appearance: ${error.message}`;
+        }
+      }
+      
       return `Unknown function: ${name}`;
     };
     // Use streaming response to prevent timeouts
