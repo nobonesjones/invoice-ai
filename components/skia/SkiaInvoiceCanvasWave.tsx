@@ -1010,30 +1010,30 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
           {/* === HEADER SECTION === */}
           
           {/* Left: Business Logo - Adjusted down for wave */}
-          {displaySettings.show_business_logo && (
+          {displaySettings.show_business_logo ? (
             logoImage && business?.business_logo_url ? (
-            <Image 
-              image={logoImage} 
-              x={OFFSET_X + 27} 
-              y={35} // Moved down from 15 to accommodate wave
-              width={55} // Reduced from 65
-              height={55} // Reduced from 65
-              fit="contain"
-            />
-          ) : (
-            <>
-              {/* Fallback logo with dynamic business initials - Adjusted for wave */}
-              <Circle cx={OFFSET_X + 54} cy={62} r={27} color="white" /> {/* Smaller and moved down */}
-              <Text 
-                x={OFFSET_X + (businessInitials.length === 1 ? 47 : 42)} 
-                y={70} 
-                text={businessInitials} 
-                font={businessInitials.length === 1 ? scaledFonts.large : scaledFonts.medium} 
-                color={colors.waveGradientStart} 
+              <Image 
+                image={logoImage} 
+                x={OFFSET_X + 27} 
+                y={35} // Moved down from 15 to accommodate wave
+                width={55} // Reduced from 65
+                height={55} // Reduced from 65
+                fit="contain"
               />
-            </>
+            ) : (
+              <>
+                {/* Fallback logo with dynamic business initials - Adjusted for wave */}
+                <Circle cx={OFFSET_X + 54} cy={62} r={27} color="white" /> {/* Smaller and moved down */}
+                <Text 
+                  x={OFFSET_X + (businessInitials.length === 1 ? 47 : 42)} 
+                  y={70} 
+                  text={businessInitials} 
+                  font={businessInitials.length === 1 ? scaledFonts.large : scaledFonts.medium} 
+                  color={colors.waveGradientStart} 
+                />
+              </>
             )
-          )}
+          ) : null}
           
           {/* Right: Invoice title and RIGHT-ALIGNED details using Paragraph */}
           {rightAlignedParagraphs && (

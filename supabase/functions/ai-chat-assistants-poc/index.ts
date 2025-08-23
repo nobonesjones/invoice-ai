@@ -150,7 +150,34 @@ function detectConversationContext(message, userId) {
     if (invoiceMatch || estimateMatch) {
       return 'update_specific';
     }
-    return 'update_latest';
+    
+    // 🚨 FIX: Only return 'update_latest' for invoice/estimate context
+    // Don't trigger invoice updates when last action was just client creation
+    if (lastAction) {
+      const isInvoiceEstimateContext = lastAction.action && (
+        lastAction.action.includes('invoice') || 
+        lastAction.action.includes('estimate') ||
+        lastAction.action.includes('quote') ||
+        lastAction.action === 'updated_client_info' || // This was updating a client within invoice context
+        lastAction.action === 'added_line_item' ||
+        lastAction.action === 'updated_business_settings'
+      );
+      
+      // If there's explicit context reference OR invoice/estimate action, use update_latest
+      if (hasContextReference || isInvoiceEstimateContext) {
+        return 'update_latest';
+      }
+      
+      // If last action was just creating a client, this is client context only
+      if (lastAction.action === 'created_client') {
+        return 'client_context';
+      }
+    }
+    
+    // Fallback to update_latest if there's explicit context reference
+    if (hasContextReference) {
+      return 'update_latest';
+    }
   }
   return 'general';
 }
@@ -423,9 +450,9 @@ serve(async (req)=>{
     console.log('[Assistants POC] User ID:', user_id);
     console.log('[Assistants POC] Received threadId:', threadId || 'NONE - will create new');
     // Force create new assistant to ensure estimate tools are available
-    const FORCE_NEW_ASSISTANT = true; // Set to true to fix estimate functions
-    // NUCLEAR OPTION: Always create new assistant until estimate functions work
-    const ASSISTANT_ID = null; // This will force creation
+    const FORCE_NEW_ASSISTANT = true; // Set to true to get updated functions
+    // Force new assistant to get latest function definitions
+    const ASSISTANT_ID = null; // Force new assistant with updated payment functions
     console.log('[ASSISTANTS POC] 🚨 FORCE_NEW_ASSISTANT FLAG IS:', FORCE_NEW_ASSISTANT);
     let assistant;
     
@@ -476,6 +503,17 @@ serve(async (req)=>{
         }
         contextString += `• When user says "add", "update", "change" - refer to the most recent item\n`;
       }
+    } else if (conversationContext === 'client_context' && lastAction) {
+      console.log('[Assistants POC] Client context detected - last action was creating/updating client');
+      contextString = `\n\nACTIVE CLIENT CONTEXT:\n`;
+      contextString += `• Last action: ${lastAction.action}\n`;
+      if (lastAction.client_name) {
+        contextString += `• Current client: ${lastAction.client_name}\n`;
+      }
+      contextString += `• Context: Client management (NO active invoice/estimate)\n`;
+      contextString += `• When user says "update", "change" - they likely mean client info OR business settings\n`;
+      contextString += `• Do NOT automatically return invoices/estimates unless explicitly requested\n`;
+      contextString += `• Focus on client operations: create_client, update_business_settings\n`;
     } else {
       console.log('[Assistants POC] General conversation - minimal context');
     }
@@ -533,6 +571,38 @@ Example: "Make invoice for ABC Corp with 5 desks at $100 each"
 Example: "Create quote for XYZ Ltd with consulting services at $500/hour for 10 hours"
 ✅ CORRECT: create_estimate(client_name: "XYZ Ltd", line_items: [{item_name: "Consulting services", quantity: 10, unit_price: 500}])
 ❌ WRONG: create_estimate() then add_estimate_line_item() - causes duplicates!
+
+🚨 INVOICE/ESTIMATE CREATION WITH DESIGN/APPEARANCE - CRITICAL:
+When user asks to CREATE a new invoice/estimate WITH design preferences:
+• Use create_invoice/create_estimate WITH invoice_design and accent_color parameters
+• DO NOT use create function AND THEN update_invoice_design/update_invoice_appearance - that's inefficient!
+
+Example: "Create invoice for ZELL LTD $800 design services, change design to modern, make blue"
+✅ CORRECT: create_invoice(client_name: "ZELL LTD", line_items: [...], invoice_design: "modern", accent_color: "#0000FF")
+❌ WRONG: create_invoice() then update_invoice_appearance() - creates unnecessary operations!
+
+Example: "Make quote for ABC Corp with clean design and green color"
+✅ CORRECT: create_estimate(client_name: "ABC Corp", line_items: [...], estimate_template: "clean", accent_color: "#008000")
+❌ WRONG: create_estimate() then update appearance - inefficient!
+
+DESIGN VALUES: classic, modern, clean, simple, wave
+COLOR VALUES: Use hex codes like #0000FF (blue), #FF0000 (red), #008000 (green), #800080 (purple)
+
+🚨 CRITICAL CREATION WORKFLOW:
+When creating NEW invoices/estimates with styling:
+• ALWAYS use create_invoice/create_estimate with design/color parameters in ONE call
+• NEVER call create function THEN call update_invoice_design/update_invoice_color/update_invoice_appearance
+• The update_invoice_* functions are ONLY for modifying EXISTING invoices, NOT for creation
+• Think: "Everything in ONE creation call" not "Create then update"
+
+Examples of WRONG workflow:
+❌ create_invoice() → update_invoice_appearance() 
+❌ create_invoice() → update_invoice_design() → update_invoice_color()
+❌ create_estimate() → update appearance functions
+
+Examples of CORRECT workflow:
+✅ create_invoice(client_name: "ABC", line_items: [...], invoice_design: "modern", accent_color: "#0000FF")
+✅ create_estimate(client_name: "XYZ", line_items: [...], estimate_template: "elegant", accent_color: "#800080")
 
 🚨 ADDING MULTIPLE ITEMS - CRITICAL:
 When user asks to ADD MULTIPLE items to an existing invoice:
@@ -790,65 +860,69 @@ INVOICE CONTEXT TRACKING RULES:
 PAYMENT METHODS WORKFLOW:
 Payment setup for PayPal and Bank Transfer - MUST follow proper sequence:
 
-FOR PAYPAL SETUP - CRITICAL FLOW:
-Step 1: ALWAYS check current payment options first
-- When user says "add PayPal to this invoice" or "enable PayPal"
-- FIRST call get_payment_options to check if PayPal is already enabled
-- Check if paypal_enabled is true AND paypal_email exists
+🚨 PAYPAL SETUP - CRITICAL WORKFLOW (NEVER SKIP STEP 1!) 🚨
 
-Step 2: Handle based on current state
-IF PayPal already enabled with email (paypal_enabled=true AND paypal_email exists):
-- ✅ CORRECT: Use update_payment_methods(invoice_identifier: "INV-XXX", enable_paypal: true)
-- ❌ WRONG: Do NOT call setup_paypal_payments - that's for global setup only
+**STEP 1 - MANDATORY CHECK (ALWAYS DO THIS FIRST):**
+When user says "add PayPal to this invoice" or "enable PayPal":
+- 🚨 ALWAYS call get_payment_options FIRST - NO EXCEPTIONS!
+- NEVER call update_payment_methods without checking get_payment_options first!
+- Check the response for paypal_enabled and paypal_email values
+
+**STEP 2 - HANDLE BASED ON CURRENT STATE:**
+
+IF PayPal already enabled globally (paypal_enabled=true AND paypal_email exists):
+- ✅ CORRECT: Use update_payment_methods(invoice_identifier: "latest", enable_paypal: true)
 - Show updated invoice with PayPal enabled
+- Example response: "I've enabled PayPal on your invoice using your existing PayPal email: user@example.com"
 
-IF PayPal disabled (paypal_enabled=false) OR no email configured:
-- Ask user for their PayPal email address
-- Example: "I'll add PayPal to your invoice. What's your PayPal email address?"
-- Wait for email, then call setup_paypal_payments(paypal_email: "[email]", invoice_number: "INV-XXX")
-- This sets up PayPal globally AND enables it on the specific invoice
+IF PayPal NOT enabled globally (paypal_enabled=false OR no paypal_email):
+- ❌ DO NOT call update_payment_methods - it will fail!
+- ✅ CORRECT: Ask for PayPal email first
+- Example: "I'll set up PayPal for your invoice. What's your PayPal email address?"
+- Wait for email, then call setup_paypal_payments(paypal_email: "[email]", invoice_number: "latest")
 
-🚨 CRITICAL DISTINCTION:
-- update_payment_methods = Enable payment method on invoice (when already configured globally)
-- setup_paypal_payments = Configure PayPal globally + enable on invoice (when not configured)
+**CRITICAL RULES:**
+- NEVER call update_payment_methods for PayPal without checking get_payment_options first
+- If update_payment_methods says "PayPal not configured", that means you skipped step 1!
+- Always follow: get_payment_options → analyze response → choose correct function
 
-MANDATORY SEQUENCE:
-1. get_payment_options (check current state)
-2A. IF already configured: update_payment_methods(enable_paypal: true) 
-2B. IF not configured: Ask for email → setup_paypal_payments
+**MANDATORY SEQUENCE:**
+1. 🚨 get_payment_options (ALWAYS FIRST - NO EXCEPTIONS!)
+2A. IF paypal_enabled=true: update_payment_methods(enable_paypal: true) 
+2B. IF paypal_enabled=false: Ask for email → setup_paypal_payments  
 3. Always show updated invoice
 
-FOR BANK TRANSFER SETUP - CRITICAL FLOW:
-Step 1: ALWAYS check current payment options first
-- When user says "add bank transfer", "enable bank transfer", "add my bank details" etc.
-- FIRST call get_payment_options to check if bank transfer is already enabled
-- Check if bank_transfer_enabled is true AND bank_details exists
+🚨 BANK TRANSFER SETUP - CRITICAL WORKFLOW (NEVER SKIP STEP 1!) 🚨
 
-Step 2: Handle based on current state and user intent
-IF Bank transfer already enabled with details (bank_transfer_enabled=true AND bank_details exists):
-- DEFAULT ACTION: ✅ Use update_payment_methods(invoice_identifier: "INV-XXX", enable_bank_transfer: true)
-- Response: "I've enabled bank transfer on your invoice using your existing bank details: [show details]"
+**STEP 1 - MANDATORY CHECK (ALWAYS DO THIS FIRST):**
+When user says "add bank transfer", "enable bank transfer", "add my bank details":
+- 🚨 ALWAYS call get_payment_options FIRST - NO EXCEPTIONS!
+- NEVER call update_payment_methods without checking get_payment_options first!
+- Check the response for bank_transfer_enabled and bank_details values
+
+**STEP 2 - HANDLE BASED ON CURRENT STATE:**
+
+IF Bank transfer already enabled globally (bank_transfer_enabled=true AND bank_details exists):
+- ✅ CORRECT: Use update_payment_methods(invoice_identifier: "latest", enable_bank_transfer: true)
+- Show updated invoice with bank transfer enabled
+- Example response: "I've enabled bank transfer on your invoice using your existing bank details"
 - ❌ NEVER ask for new bank details when they already exist
-- ONLY ask to change details if user SPECIFICALLY mentions "change", "update", "new" bank details
 
-IF user explicitly wants to CHANGE existing bank details:
-- Keywords: "change bank details", "update bank account", "new bank details", "different account"
-- Confirm: "You currently have bank details set up. Do you want to replace them with new details?"
-- If confirmed: setup_bank_transfer(bank_details: "[new_details]", invoice_number: "INV-XXX")
+IF Bank transfer NOT enabled globally (bank_transfer_enabled=false OR no bank_details):
+- ❌ DO NOT call update_payment_methods - it will fail!
+- ✅ CORRECT: Ask for bank details first
+- Example: "I'll set up bank transfer for your invoice. What are your bank account details?"
+- Wait for details, then call setup_bank_transfer(bank_details: "[details]", invoice_number: "latest")
 
-IF Bank transfer disabled (bank_transfer_enabled=false) OR no bank details configured:
-- Ask user for their bank details
-- Example: "I'll add bank transfer to your invoice. What are your bank account details?"
-- Wait for details, then call setup_bank_transfer(bank_details: "[details]", invoice_number: "INV-XXX")
+**CRITICAL RULES:**
+- NEVER call update_payment_methods for bank transfer without checking get_payment_options first
+- If update_payment_methods says "Bank transfer not configured", that means you skipped step 1!
+- Always follow: get_payment_options → analyze response → choose correct function
 
-🚨 CRITICAL DISTINCTION:
-- update_payment_methods = Enable payment method on invoice (when already configured globally)
-- setup_bank_transfer = Configure bank transfer globally + enable on invoice (when not configured)
-
-MANDATORY SEQUENCE:
-1. get_payment_options (check current state)
-2A. IF already configured: update_payment_methods(enable_bank_transfer: true) 
-2B. IF not configured: Ask for bank details → setup_bank_transfer
+**MANDATORY SEQUENCE:**
+1. 🚨 get_payment_options (ALWAYS FIRST - NO EXCEPTIONS!)
+2A. IF bank_transfer_enabled=true: update_payment_methods(enable_bank_transfer: true) 
+2B. IF bank_transfer_enabled=false: Ask for details → setup_bank_transfer  
 3. Always show updated invoice
 
 CONVERSATION CONTEXT & INVOICE FLOW:
@@ -997,13 +1071,25 @@ ESTIMATE WORKFLOW:
 • Estimates have validity dates instead of due dates
 • Estimates can be: draft, sent, accepted, declined, expired, converted, cancelled
 
-Always be helpful and create exactly what the user requests.`,
+Always be helpful and create exactly what the user requests.
+
+🚨 MISTAKE CORRECTION - CRITICAL:
+When the user indicates you made an error or corrected you:
+• IMMEDIATELY use correct_mistake function 
+• Keywords: "no", "wrong", "that's not right", "you updated the wrong", "I meant", "fix your mistake"
+• Examples:
+  - User: "No, I said update MY business phone, not the client's tax number" 
+    → correct_mistake(mistake_description: "updated client tax number instead of business phone", correct_action: "update_business_phone", correct_value: "[phone number]", remove_incorrect_from: "client_tax_number")
+  - User: "You put my address in the wrong place"
+    → correct_mistake(mistake_description: "put address in wrong field", correct_action: "update_business_address", correct_value: "[address]", remove_incorrect_from: "[wrong_field]")
+• ALWAYS apologize first, then fix the mistake and return corrected document
+• Never ignore or argue with corrections - immediately fix them`,
         tools: [
           {
             type: "function",
             function: {
               name: "create_invoice",
-              description: "Creates a comprehensive invoice with all options - line items, due dates, payment terms, PayPal setup, notes, tax rates, and more",
+              description: "Creates a comprehensive invoice with ALL options in ONE operation - line items, due dates, payment terms, PayPal setup, notes, tax rates, design template, accent color, and more. Use invoice_design and accent_color parameters for styling during creation.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1131,7 +1217,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_business_settings",
-              description: "Update the user's business information and tax settings that appear on all invoices. Use when user mentions 'my', 'our', 'my business' address/details or wants to adjust tax settings.",
+              description: "Update the user's business information and tax settings that appear on all invoices. Use when user wants to update THEIR business info (not client info). Keywords: 'my phone', 'my mobile', 'my email', 'my website', 'my business phone', 'my business email', 'my address', 'my company', 'our phone', 'business phone', 'business mobile', 'business email', 'business website'.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1145,15 +1231,15 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   business_phone: {
                     type: "string",
-                    description: "Business phone number (optional)"
+                    description: "Business phone/mobile number - use for 'my phone', 'my mobile', 'business phone', 'business mobile' (optional)"
                   },
                   business_email: {
                     type: "string",
-                    description: "Business email address (optional)"
+                    description: "Business email address - use for 'my email', 'business email', 'my business email' (optional)"
                   },
                   business_website: {
                     type: "string",
-                    description: "Business website URL (optional)"
+                    description: "Business website URL - use for 'my website', 'business website', 'my business website' (optional)"
                   },
                   tax_number: {
                     type: "string",
@@ -1615,6 +1701,74 @@ Always be helpful and create exactly what the user requests.`,
           {
             type: "function",
             function: {
+              name: "create_client",
+              description: "Create a new client without creating an invoice. Use when user wants to add a client to their database (not create an invoice). Keywords: 'add client', 'create client', 'new client', 'add customer', 'create customer'.",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client (required)"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Client email address (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Client phone number (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Client address (optional)"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Client tax/VAT number (optional)"
+                  }
+                },
+                required: ["client_name"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "correct_mistake",
+              description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
+              parameters: {
+                type: "object",
+                properties: {
+                  mistake_description: {
+                    type: "string",
+                    description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
+                  },
+                  correct_action: {
+                    type: "string", 
+                    description: "What should have been done instead",
+                    enum: ["update_business_phone", "update_business_address", "update_business_email", "update_client_phone", "update_client_address", "update_client_email", "update_client_tax_number", "remove_incorrect_data"]
+                  },
+                  correct_value: {
+                    type: "string",
+                    description: "The correct value that should be used"
+                  },
+                  remove_incorrect_from: {
+                    type: "string",
+                    description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
+                    enum: ["client_tax_number", "client_phone", "client_email", "client_address", "business_phone", "business_email", "business_address"]
+                  },
+                  invoice_or_estimate_identifier: {
+                    type: "string",
+                    description: "Invoice or estimate number, client name, or 'latest' for most recent document"
+                  }
+                },
+                required: ["mistake_description", "correct_action", "correct_value", "invoice_or_estimate_identifier"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
               name: "update_payment_methods",
               description: "Enable or disable payment methods for an existing invoice. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
               parameters: {
@@ -1646,6 +1800,39 @@ Always be helpful and create exactly what the user requests.`,
           {
             type: "function",
             function: {
+              name: "create_client",
+              description: "Create a new client without creating an invoice. Use when user wants to add a client to their database (not create an invoice). Keywords: 'add client', 'create client', 'new client', 'add customer', 'create customer'.",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client (required)"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Client email address (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Client phone number (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Client address (optional)"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Client tax/VAT number (optional)"
+                  }
+                },
+                required: ["client_name"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
               name: "get_design_options",
               description: "Get available invoice design templates with detailed descriptions, personality traits, and industry recommendations. Use this when user asks about design options or wants to change invoice appearance.",
               parameters: {
@@ -1671,7 +1858,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice_design",
-              description: "Update the design template for a specific invoice or set new business default design. Use when user wants to change invoice appearance, make it more professional, modern, clean, etc.",
+              description: "Update the design template for an EXISTING invoice (NOT during creation). Only use when modifying an already-created invoice's design. For NEW invoice creation with design preferences, use create_invoice with invoice_design parameter instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1681,8 +1868,8 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   design_id: {
                     type: "string",
-                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
-                    enum: ["classic", "modern", "clean", "simple"]
+                    description: "Design template ID: 'classic', 'modern', 'clean', 'simple', or 'wave'",
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   apply_to_defaults: {
                     type: "boolean",
@@ -1701,7 +1888,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice_color",
-              description: "Update the accent color for a specific invoice or set new business default color. Use when user wants to change colors, match brand, or requests specific color personality.",
+              description: "Update the accent color for an EXISTING invoice (NOT during creation). Only use when modifying an already-created invoice's color. For NEW invoice creation with color preferences, use create_invoice with accent_color parameter instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1730,7 +1917,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice_appearance",
-              description: "Update both design and color for a specific invoice. Use when user wants comprehensive appearance changes or mentions both design and color preferences.",
+              description: "Update both design and color for an EXISTING invoice (NOT during creation). Only use when modifying an already-created invoice's appearance. For NEW invoice creation with design preferences, use create_invoice with design parameters instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -1740,8 +1927,8 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   design_id: {
                     type: "string",
-                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
-                    enum: ["classic", "modern", "clean", "simple"]
+                    description: "Design template ID: 'classic', 'modern', 'clean', 'simple', or 'wave'",
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   accent_color: {
                     type: "string",
@@ -1836,8 +2023,8 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   estimate_template: {
                     type: "string",
-                    description: "Design template: 'classic', 'modern', 'minimal', 'bold', 'elegant', 'professional' (optional)",
-                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                    description: "Design template: 'classic', 'modern', 'clean', 'simple', or 'wave' (optional)",
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   discount_type: {
                     type: "string",
@@ -1922,7 +2109,7 @@ Always be helpful and create exactly what the user requests.`,
                   estimate_template: {
                     type: "string",
                     description: "Update estimate design template",
-                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   estimate_number: {
                     type: "string",
@@ -2079,6 +2266,41 @@ Always be helpful and create exactly what the user requests.`,
                 required: ["estimate_identifier"]
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "correct_mistake",
+              description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
+              parameters: {
+                type: "object",
+                properties: {
+                  mistake_description: {
+                    type: "string",
+                    description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
+                  },
+                  correct_action: {
+                    type: "string", 
+                    description: "What should have been done instead",
+                    enum: ["update_business_phone", "update_business_address", "update_business_email", "update_client_phone", "update_client_address", "update_client_email", "update_client_tax_number", "remove_incorrect_data"]
+                  },
+                  correct_value: {
+                    type: "string",
+                    description: "The correct value that should be used"
+                  },
+                  remove_incorrect_from: {
+                    type: "string",
+                    description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
+                    enum: ["client_tax_number", "client_phone", "client_email", "client_address", "business_phone", "business_email", "business_address"]
+                  },
+                  invoice_or_estimate_identifier: {
+                    type: "string",
+                    description: "Invoice or estimate number, client name, or 'latest' for most recent document"
+                  }
+                },
+                required: ["mistake_description", "correct_action", "correct_value", "invoice_or_estimate_identifier"]
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -2129,6 +2351,38 @@ Example: "Make invoice for ABC Corp with 5 desks at $100 each"
 Example: "Create quote for XYZ Ltd with consulting services at $500/hour for 10 hours"
 ✅ CORRECT: create_estimate(client_name: "XYZ Ltd", line_items: [{item_name: "Consulting services", quantity: 10, unit_price: 500}])
 ❌ WRONG: create_estimate() then add_estimate_line_item() - causes duplicates!
+
+🚨 INVOICE/ESTIMATE CREATION WITH DESIGN/APPEARANCE - CRITICAL:
+When user asks to CREATE a new invoice/estimate WITH design preferences:
+• Use create_invoice/create_estimate WITH invoice_design and accent_color parameters
+• DO NOT use create function AND THEN update_invoice_design/update_invoice_appearance - that's inefficient!
+
+Example: "Create invoice for ZELL LTD $800 design services, change design to modern, make blue"
+✅ CORRECT: create_invoice(client_name: "ZELL LTD", line_items: [...], invoice_design: "modern", accent_color: "#0000FF")
+❌ WRONG: create_invoice() then update_invoice_appearance() - creates unnecessary operations!
+
+Example: "Make quote for ABC Corp with clean design and green color"
+✅ CORRECT: create_estimate(client_name: "ABC Corp", line_items: [...], estimate_template: "clean", accent_color: "#008000")
+❌ WRONG: create_estimate() then update appearance - inefficient!
+
+DESIGN VALUES: classic, modern, clean, simple, wave
+COLOR VALUES: Use hex codes like #0000FF (blue), #FF0000 (red), #008000 (green), #800080 (purple)
+
+🚨 CRITICAL CREATION WORKFLOW:
+When creating NEW invoices/estimates with styling:
+• ALWAYS use create_invoice/create_estimate with design/color parameters in ONE call
+• NEVER call create function THEN call update_invoice_design/update_invoice_color/update_invoice_appearance
+• The update_invoice_* functions are ONLY for modifying EXISTING invoices, NOT for creation
+• Think: "Everything in ONE creation call" not "Create then update"
+
+Examples of WRONG workflow:
+❌ create_invoice() → update_invoice_appearance() 
+❌ create_invoice() → update_invoice_design() → update_invoice_color()
+❌ create_estimate() → update appearance functions
+
+Examples of CORRECT workflow:
+✅ create_invoice(client_name: "ABC", line_items: [...], invoice_design: "modern", accent_color: "#0000FF")
+✅ create_estimate(client_name: "XYZ", line_items: [...], estimate_template: "elegant", accent_color: "#800080")
 
 🚨 ADDING MULTIPLE ITEMS - CRITICAL:
 When user asks to ADD MULTIPLE items to an existing invoice:
@@ -2334,7 +2588,19 @@ ESTIMATE WORKFLOW:
 • Estimates have validity dates instead of due dates
 • Estimates can be: draft, sent, accepted, declined, expired, converted, cancelled
 
-Always be helpful and create exactly what the user requests.`,
+Always be helpful and create exactly what the user requests.
+
+🚨 MISTAKE CORRECTION - CRITICAL:
+When the user indicates you made an error or corrected you:
+• IMMEDIATELY use correct_mistake function 
+• Keywords: "no", "wrong", "that's not right", "you updated the wrong", "I meant", "fix your mistake"
+• Examples:
+  - User: "No, I said update MY business phone, not the client's tax number" 
+    → correct_mistake(mistake_description: "updated client tax number instead of business phone", correct_action: "update_business_phone", correct_value: "[phone number]", remove_incorrect_from: "client_tax_number")
+  - User: "You put my address in the wrong place"
+    → correct_mistake(mistake_description: "put address in wrong field", correct_action: "update_business_address", correct_value: "[address]", remove_incorrect_from: "[wrong_field]")
+• ALWAYS apologize first, then fix the mistake and return corrected document
+• Never ignore or argue with corrections - immediately fix them`,
         tools: [
           {
             type: "function",
@@ -2467,6 +2733,88 @@ Always be helpful and create exactly what the user requests.`,
           {
             type: "function",
             function: {
+              name: "update_business_settings",
+              description: "Update the user's business information and tax settings that appear on all invoices. Use when user wants to update THEIR business info (not client info). Keywords: 'my phone', 'my mobile', 'my email', 'my website', 'my business phone', 'my business email', 'my address', 'my company', 'our phone', 'business phone', 'business mobile', 'business email', 'business website'.",
+              parameters: {
+                type: "object",
+                properties: {
+                  business_name: {
+                    type: "string",
+                    description: "Business name (optional)"
+                  },
+                  business_address: {
+                    type: "string",
+                    description: "Business address (optional)"
+                  },
+                  business_phone: {
+                    type: "string",
+                    description: "Business phone/mobile number - use for 'my phone', 'my mobile', 'business phone', 'business mobile' (optional)"
+                  },
+                  business_email: {
+                    type: "string",
+                    description: "Business email address - use for 'my email', 'business email', 'my business email' (optional)"
+                  },
+                  business_website: {
+                    type: "string",
+                    description: "Business website URL - use for 'my website', 'business website', 'my business website' (optional)"
+                  },
+                  tax_number: {
+                    type: "string",
+                    description: "Business tax/VAT number (optional)"
+                  },
+                  tax_name: {
+                    type: "string",
+                    description: "Tax label name (e.g., 'VAT', 'Tax', 'GST') (optional)"
+                  },
+                  default_tax_rate: {
+                    type: "number",
+                    description: "Default tax rate percentage (optional)"
+                  },
+                  auto_apply_tax: {
+                    type: "boolean",
+                    description: "Whether to automatically apply tax to new invoices (optional)"
+                  }
+                },
+                required: []
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "create_client",
+              description: "Create a new client without creating an invoice. Use when user wants to add a client to their database (not create an invoice). Keywords: 'add client', 'create client', 'new client', 'add customer', 'create customer'.",
+              parameters: {
+                type: "object",
+                properties: {
+                  client_name: {
+                    type: "string",
+                    description: "Name of the client (required)"
+                  },
+                  client_email: {
+                    type: "string",
+                    description: "Client email address (optional)"
+                  },
+                  client_phone: {
+                    type: "string",
+                    description: "Client phone number (optional)"
+                  },
+                  client_address: {
+                    type: "string",
+                    description: "Client address (optional)"
+                  },
+                  client_tax_number: {
+                    type: "string",
+                    description: "Client tax/VAT number (optional)"
+                  }
+                },
+                required: ["client_name"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
               name: "get_design_options",
               description: "Get available invoice design templates with detailed descriptions, personality traits, and industry recommendations. Use this when user asks about design options or wants to change invoice appearance.",
               parameters: {
@@ -2492,7 +2840,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice_design",
-              description: "Update the design template for a specific invoice or set new business default design. Use when user wants to change invoice appearance, make it more professional, modern, clean, etc.",
+              description: "Update the design template for an EXISTING invoice (NOT during creation). Only use when modifying an already-created invoice's design. For NEW invoice creation with design preferences, use create_invoice with invoice_design parameter instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -2502,8 +2850,8 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   design_id: {
                     type: "string",
-                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
-                    enum: ["classic", "modern", "clean", "simple"]
+                    description: "Design template ID: 'classic', 'modern', 'clean', 'simple', or 'wave'",
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   apply_to_defaults: {
                     type: "boolean",
@@ -2522,7 +2870,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice_color",
-              description: "Update the accent color for a specific invoice or set new business default color. Use when user wants to change colors, match brand, or requests specific color personality.",
+              description: "Update the accent color for an EXISTING invoice (NOT during creation). Only use when modifying an already-created invoice's color. For NEW invoice creation with color preferences, use create_invoice with accent_color parameter instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -2551,7 +2899,7 @@ Always be helpful and create exactly what the user requests.`,
             type: "function",
             function: {
               name: "update_invoice_appearance",
-              description: "Update both design and color for a specific invoice. Use when user wants comprehensive appearance changes or mentions both design and color preferences.",
+              description: "Update both design and color for an EXISTING invoice (NOT during creation). Only use when modifying an already-created invoice's appearance. For NEW invoice creation with design preferences, use create_invoice with design parameters instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -2561,8 +2909,8 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   design_id: {
                     type: "string",
-                    description: "Design template ID: 'classic', 'modern', 'clean', or 'simple'",
-                    enum: ["classic", "modern", "clean", "simple"]
+                    description: "Design template ID: 'classic', 'modern', 'clean', 'simple', or 'wave'",
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   accent_color: {
                     type: "string",
@@ -2657,8 +3005,8 @@ Always be helpful and create exactly what the user requests.`,
                   },
                   estimate_template: {
                     type: "string",
-                    description: "Design template: 'classic', 'modern', 'minimal', 'bold', 'elegant', 'professional' (optional)",
-                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                    description: "Design template: 'classic', 'modern', 'clean', 'simple', or 'wave' (optional)",
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   discount_type: {
                     type: "string",
@@ -2743,7 +3091,7 @@ Always be helpful and create exactly what the user requests.`,
                   estimate_template: {
                     type: "string",
                     description: "Update estimate design template",
-                    enum: ["classic", "modern", "minimal", "bold", "elegant", "professional"]
+                    enum: ["classic", "modern", "clean", "simple", "wave"]
                   },
                   estimate_number: {
                     type: "string",
@@ -2900,6 +3248,41 @@ Always be helpful and create exactly what the user requests.`,
                 required: ["estimate_identifier"]
               }
             }
+          },
+          {
+            type: "function",
+            function: {
+              name: "correct_mistake",
+              description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
+              parameters: {
+                type: "object",
+                properties: {
+                  mistake_description: {
+                    type: "string",
+                    description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
+                  },
+                  correct_action: {
+                    type: "string", 
+                    description: "What should have been done instead",
+                    enum: ["update_business_phone", "update_business_address", "update_business_email", "update_client_phone", "update_client_address", "update_client_email", "update_client_tax_number", "remove_incorrect_data"]
+                  },
+                  correct_value: {
+                    type: "string",
+                    description: "The correct value that should be used"
+                  },
+                  remove_incorrect_from: {
+                    type: "string",
+                    description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
+                    enum: ["client_tax_number", "client_phone", "client_email", "client_address", "business_phone", "business_email", "business_address"]
+                  },
+                  invoice_or_estimate_identifier: {
+                    type: "string",
+                    description: "Invoice or estimate number, client name, or 'latest' for most recent document"
+                  }
+                },
+                required: ["mistake_description", "correct_action", "correct_value", "invoice_or_estimate_identifier"]
+              }
+            }
           }
         ],
         model: "gpt-4o-mini"
@@ -2951,8 +3334,10 @@ Always be helpful and create exactly what the user requests.`,
       assistant_id: assistant.id
     });
     console.log('[Assistants POC] Started run:', run.id, threadReused ? '(reused thread)' : '(new thread)');
-    // Shared attachments array for tool calls
+    // 🚪 ATTACHMENT GATE: Only return the last invoice/estimate to prevent duplicates
     let attachments = [];
+    let lastInvoiceAttachment = null; // "Last Invoice Wins" pattern
+    let lastEstimateAttachment = null; // "Last Estimate Wins" pattern
     // Function to handle tool calls
     const handleToolCall = async (toolCall)=>{
       const { name, arguments: args } = toolCall.function;
@@ -2987,6 +3372,17 @@ Always be helpful and create exactly what the user requests.`,
             client: clientData
           };
         }
+      };
+      
+      // 🚪 ATTACHMENT GATE: Set the latest invoice/estimate (replaces push pattern)
+      const setLatestInvoice = (invoiceAttachment) => {
+        console.log('[Invoice Gate] Setting latest invoice:', invoiceAttachment?.invoice?.invoice_number || 'unknown');
+        lastInvoiceAttachment = invoiceAttachment;
+      };
+      
+      const setLatestEstimate = (estimateAttachment) => {
+        console.log('[Estimate Gate] Setting latest estimate:', estimateAttachment?.estimate?.estimate_number || 'unknown');
+        lastEstimateAttachment = estimateAttachment;
       };
       
       // Helper function to create complete estimate attachment with all required data
@@ -3164,14 +3560,14 @@ Always be helpful and create exactly what the user requests.`,
         // Fetch the full client data if we have a clientId
         let clientData = null;
         if (clientId) {
-          const { data: fullClient } = await supabase.from('clients').select('*').eq('id', clientId).single();
+          const { data: fullClient } = await supabase.from('clients').select('*').eq('id', clientId).eq('user_id', user_id).single();
           if (fullClient) {
             clientData = fullClient;
           }
         }
         // Store attachment for UI with full client data
         const invoiceAttachment = await createInvoiceAttachment(invoice, createdLineItems, clientData);
-        attachments.push(invoiceAttachment);
+        setLatestInvoice(invoiceAttachment);
         // 🚨 CONVERSATION MEMORY - Track that we just created this invoice
         ConversationMemory.setLastAction(user_id, 'created_invoice', {
           invoice_number: invoice_number,
@@ -3224,6 +3620,58 @@ Let me know if you'd like any changes?`;
         if (tax_name) successMessage += `\n• Tax label: ${tax_name}`;
         if (default_tax_rate !== undefined) successMessage += `\n• Default tax rate: ${default_tax_rate}%`;
         if (auto_apply_tax !== undefined) successMessage += `\n• Auto-apply tax: ${auto_apply_tax ? 'Enabled' : 'Disabled'}`;
+        
+        // 🔥 CRITICAL: Show updated invoice/estimate with new business settings
+        const lastAction = ConversationMemory.getLastAction(user_id);
+        console.log('[update_business_settings] Last action:', lastAction);
+        
+        // 🚨 FIX: Only show documents if we're NOT in client-only context
+        const currentContext = detectConversationContext(message, user_id);
+        console.log('[update_business_settings] Current context:', currentContext);
+        
+        // Only return documents if we have invoice/estimate context (not client_context)
+        if (currentContext !== 'client_context' && (lastAction?.type === 'created_invoice' || lastAction?.type === 'updated_invoice')) {
+          // Get the most recent invoice
+          const { data: recentInvoice } = await supabase
+            .from('invoices')
+            .select('*, client:clients(*)')
+            .eq('user_id', user_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+            
+          if (recentInvoice) {
+            const { data: lineItems } = await supabase
+              .from('invoice_line_items')
+              .select('*')
+              .eq('invoice_id', recentInvoice.id);
+              
+            const invoiceAttachment = await createInvoiceAttachment(recentInvoice, lineItems || [], recentInvoice.client);
+            setLatestInvoice(invoiceAttachment);
+            return successMessage + '\n\nHere\'s your invoice with the updated business information:';
+          }
+        } else if (currentContext !== 'client_context' && (lastAction?.type === 'created_estimate' || lastAction?.type === 'updated_estimate')) {
+          // Get the most recent estimate
+          const { data: recentEstimate } = await supabase
+            .from('estimates')
+            .select('*, client:clients(*)')
+            .eq('user_id', user_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+            
+          if (recentEstimate) {
+            const { data: lineItems } = await supabase
+              .from('estimate_line_items')
+              .select('*')
+              .eq('estimate_id', recentEstimate.id);
+              
+            const estimateAttachment = await createEstimateAttachment(recentEstimate, lineItems || [], recentEstimate.client);
+            setLatestEstimate(estimateAttachment);
+            return successMessage + '\n\nHere\'s your estimate with the updated business information:';
+          }
+        }
+        
         return successMessage;
       }
       if (name === 'enable_payment_methods') {
@@ -3299,9 +3747,9 @@ Let me know if you'd like any changes?`;
         }
         if (!paymentOptions) {
           return `⚙️ **Payment Options Status:**
-• Stripe: Not configured (enable in Settings > Payment Options)
-• PayPal: Not configured
-• Bank Transfer: Not configured
+• Stripe: ❌ Not configured (enable in Settings > Payment Options)
+• PayPal: ❌ Not configured
+• Bank Transfer: ❌ Not configured (enable in Settings > Payment Options)
 
 To accept payments, configure at least one payment method.`;
         }
@@ -3312,6 +3760,11 @@ To accept payments, configure at least one payment method.`;
         if (paymentOptions.bank_transfer_enabled && paymentOptions.bank_details) {
           status += `\n\n**Bank Details:**\n${paymentOptions.bank_details}`;
         }
+        console.log('[get_payment_options] Payment status:', {
+          stripe: paymentOptions.stripe_enabled,
+          paypal: paymentOptions.paypal_enabled,
+          bank: paymentOptions.bank_transfer_enabled
+        });
         return status;
       }
       if (name === 'setup_paypal_payments') {
@@ -3409,7 +3862,7 @@ To accept payments, configure at least one payment method.`;
               // Get client data for attachment
               let clientData = null;
               if (updatedInvoice && updatedInvoice.client_id) {
-                const { data: client, error: clientError } = await supabase.from('clients').select('*').eq('id', updatedInvoice.client_id).single();
+                const { data: client, error: clientError } = await supabase.from('clients').select('*').eq('id', updatedInvoice.client_id).eq('user_id', user_id).single();
                 if (!clientError) {
                   clientData = client;
                 }
@@ -3418,7 +3871,7 @@ To accept payments, configure at least one payment method.`;
               // Create complete attachment for updated invoice
               if (updatedInvoice) {
                 const invoiceAttachment = await createInvoiceAttachment(updatedInvoice, lineItems || [], clientData);
-                attachments.push(invoiceAttachment);
+                setLatestInvoice(invoiceAttachment);
                 console.log('[setup_bank_transfer] Success - created complete invoice attachment with payment options');
               }
             }
@@ -3451,6 +3904,288 @@ To accept payments, configure at least one payment method.`;
         
         return `✅ Successfully synced bank details to business settings:\n\n${paymentOptions.bank_details}`;
       }
+      
+      if (name === 'create_client') {
+        const { client_name, client_email, client_phone, client_address, client_tax_number } = parsedArgs;
+        
+        try {
+          console.log('[create_client] Creating new client:', { client_name, client_email, client_phone, client_address, client_tax_number });
+          
+          // Check if client already exists (case-insensitive search)
+          const { data: existingClient, error: searchError } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('user_id', user_id)
+            .ilike('name', client_name.trim())
+            .maybeSingle();
+            
+          if (searchError) {
+            console.error('[create_client] Error searching for existing client:', searchError);
+            return `Error searching for existing client: ${searchError.message}`;
+          }
+          
+          let clientData;
+          
+          if (existingClient) {
+            // Client exists, update with new information if provided
+            const updateData = {};
+            if (client_email) updateData.email = client_email;
+            if (client_phone) updateData.phone = client_phone;
+            if (client_address) updateData.address_client = client_address;
+            if (client_tax_number) updateData.tax_number = client_tax_number;
+            
+            if (Object.keys(updateData).length > 0) {
+              const { data: updatedClient, error: updateError } = await supabase
+                .from('clients')
+                .update(updateData)
+                .eq('id', existingClient.id)
+                .select()
+                .single();
+                
+              if (updateError) {
+                console.error('[create_client] Error updating existing client:', updateError);
+                return `Error updating existing client: ${updateError.message}`;
+              }
+              
+              clientData = updatedClient;
+              console.log('[create_client] Updated existing client:', clientData.id);
+            } else {
+              clientData = existingClient;
+              console.log('[create_client] Found existing client (no updates needed):', clientData.id);
+            }
+          } else {
+            // Create new client
+            const { data: newClient, error: createError } = await supabase
+              .from('clients')
+              .insert({
+                user_id: user_id,
+                name: client_name.trim(),
+                email: client_email || null,
+                phone: client_phone || null,
+                address_client: client_address || null,
+                tax_number: client_tax_number || null
+              })
+              .select()
+              .single();
+              
+            if (createError) {
+              console.error('[create_client] Error creating new client:', createError);
+              return `Error creating client: ${createError.message}`;
+            }
+            
+            clientData = newClient;
+            console.log('[create_client] Created new client:', clientData.id);
+          }
+          
+          // Create client attachment for preview
+          const clientAttachment = {
+            type: 'client',
+            client_id: clientData.id,
+            client: {
+              id: clientData.id,
+              name: clientData.name,
+              email: clientData.email,
+              phone: clientData.phone,
+              address_client: clientData.address_client,
+              tax_number: clientData.tax_number
+            }
+          };
+          
+          // Add to attachments (not using Last Wins pattern for clients)
+          attachments.push(clientAttachment);
+          
+          // Track in conversation memory
+          ConversationMemory.setLastAction(user_id, 'created_client', {
+            client_name: clientData.name,
+            client_id: clientData.id
+          });
+          
+          let response = existingClient 
+            ? `✅ Updated client information for **${clientData.name}**` 
+            : `✅ Created new client **${clientData.name}**`;
+            
+          if (client_email) response += `\n• Email: ${client_email}`;
+          if (client_phone) response += `\n• Phone: ${client_phone}`;
+          if (client_address) response += `\n• Address: ${client_address}`;
+          if (client_tax_number) response += `\n• Tax number: ${client_tax_number}`;
+          
+          response += `\n\n${clientData.name} has been added to your client database. You can now create invoices or estimates for them.`;
+          
+          return response;
+          
+        } catch (error) {
+          console.error('[create_client] Error:', error);
+          return `Error creating client: ${error.message}`;
+        }
+      }
+      
+      if (name === 'correct_mistake') {
+        const { mistake_description, correct_action, correct_value, remove_incorrect_from, invoice_or_estimate_identifier } = parsedArgs;
+        
+        try {
+          console.log('[correct_mistake] Starting correction:', { mistake_description, correct_action, correct_value, remove_incorrect_from, invoice_or_estimate_identifier });
+          
+          // Start with an apology
+          let response = `🙏 I apologize for the mistake! You're absolutely right - ${mistake_description}.\n\nLet me fix that immediately:\n\n`;
+          
+          // Find the document (invoice or estimate)
+          let targetDocument = null;
+          let documentType = null;
+          let documentIdField = null;
+          
+          // First try to find as invoice
+          const invoiceResult = await findInvoice(supabase, user_id, invoice_or_estimate_identifier);
+          if (typeof invoiceResult !== 'string') {
+            targetDocument = invoiceResult;
+            documentType = 'invoice';
+            documentIdField = 'id';
+          } else {
+            // Try to find as estimate
+            const estimateResult = await findEstimate(supabase, user_id, invoice_or_estimate_identifier);
+            if (typeof estimateResult !== 'string') {
+              targetDocument = estimateResult;
+              documentType = 'estimate';
+              documentIdField = 'id';
+            } else {
+              return `❌ Could not find invoice or estimate: ${invoice_or_estimate_identifier}`;
+            }
+          }
+          
+          console.log('[correct_mistake] Found document:', documentType, targetDocument[documentType === 'invoice' ? 'invoice_number' : 'estimate_number']);
+          
+          // Step 1: Remove incorrect data if specified
+          if (remove_incorrect_from) {
+            const removeUpdates = {};
+            
+            if (remove_incorrect_from.startsWith('client_')) {
+              // Remove from client table
+              const clientField = remove_incorrect_from.replace('client_', '');
+              if (clientField === 'tax_number') {
+                removeUpdates.tax_number = null;
+              } else {
+                removeUpdates[clientField] = null;
+              }
+              
+              if (targetDocument.client_id) {
+                const { error: removeError } = await supabase
+                  .from('clients')
+                  .update(removeUpdates)
+                  .eq('id', targetDocument.client_id);
+                  
+                if (removeError) {
+                  console.error('[correct_mistake] Remove error:', removeError);
+                } else {
+                  response += `✅ Removed incorrect value from client ${clientField}\n`;
+                }
+              }
+            } else if (remove_incorrect_from.startsWith('business_')) {
+              // Remove from business settings
+              const businessField = remove_incorrect_from.replace('business_', '');
+              removeUpdates[businessField] = null;
+              
+              const { error: removeError } = await supabase
+                .from('business_settings')
+                .update(removeUpdates)
+                .eq('user_id', user_id);
+                
+              if (removeError) {
+                console.error('[correct_mistake] Remove error:', removeError);
+              } else {
+                response += `✅ Removed incorrect value from business ${businessField}\n`;
+              }
+            }
+          }
+          
+          // Step 2: Apply correct action
+          const correctUpdates = {};
+          
+          if (correct_action.startsWith('update_client_')) {
+            // Update client table
+            const clientField = correct_action.replace('update_client_', '');
+            if (clientField === 'tax_number') {
+              correctUpdates.tax_number = correct_value;
+            } else {
+              correctUpdates[clientField] = correct_value;
+            }
+            
+            if (targetDocument.client_id) {
+              const { error: updateError } = await supabase
+                .from('clients')
+                .update(correctUpdates)
+                .eq('id', targetDocument.client_id);
+                
+              if (updateError) {
+                console.error('[correct_mistake] Update error:', updateError);
+                return `❌ Error updating client information: ${updateError.message}`;
+              } else {
+                response += `✅ Updated client ${clientField} to: ${correct_value}\n`;
+              }
+            }
+          } else if (correct_action.startsWith('update_business_')) {
+            // Update business settings
+            const businessField = correct_action.replace('update_business_', '');
+            correctUpdates[businessField] = correct_value;
+            
+            const { error: updateError } = await supabase
+              .from('business_settings')
+              .update(correctUpdates)
+              .eq('user_id', user_id);
+              
+            if (updateError) {
+              console.error('[correct_mistake] Update error:', updateError);
+              return `❌ Error updating business information: ${updateError.message}`;
+            } else {
+              response += `✅ Updated business ${businessField} to: ${correct_value}\n`;
+            }
+          }
+          
+          // Step 3: Return the corrected document
+          response += `\nHere's your corrected ${documentType}:`;
+          
+          if (documentType === 'invoice') {
+            // Get updated invoice data
+            const { data: updatedInvoice } = await supabase.from('invoices').select('*').eq('id', targetDocument.id).single();
+            const { data: lineItems } = await supabase.from('invoice_line_items').select('*').eq('invoice_id', targetDocument.id).order('created_at', { ascending: true });
+            
+            let clientData = null;
+            if (targetDocument.client_id) {
+              const { data: client } = await supabase.from('clients').select('*').eq('id', targetDocument.client_id).single();
+              clientData = client;
+            }
+            
+            const invoiceAttachment = {
+              type: 'invoice',
+              invoice_id: targetDocument.id,
+              invoice: updatedInvoice || targetDocument,
+              line_items: lineItems || [],
+              client_id: targetDocument.client_id,
+              client: clientData
+            };
+            setLatestInvoice(invoiceAttachment);
+          } else {
+            // Get updated estimate data
+            const { data: updatedEstimate } = await supabase.from('estimates').select('*').eq('id', targetDocument.id).single();
+            const { data: lineItems } = await supabase.from('estimate_line_items').select('*').eq('estimate_id', targetDocument.id).order('created_at', { ascending: true });
+            
+            let clientData = null;
+            if (targetDocument.client_id) {
+              const { data: client } = await supabase.from('clients').select('*').eq('id', targetDocument.client_id).single();
+              clientData = client;
+            }
+            
+            const estimateAttachment = await createEstimateAttachment(updatedEstimate || targetDocument, lineItems || [], clientData);
+            setLatestEstimate(estimateAttachment);
+          }
+          
+          response += `\n\n✅ All fixed! Thank you for catching my mistake - I'll be more careful next time.`;
+          return response;
+          
+        } catch (error) {
+          console.error('[correct_mistake] Error:', error);
+          return `❌ Error correcting mistake: ${error.message}`;
+        }
+      }
+      
       if (name === 'find_invoice') {
         const { invoice_number, client_name, search_term, get_latest, limit = 5 } = parsedArgs;
         console.log('[Assistants POC] Finding invoice with:', {
@@ -4234,7 +4969,7 @@ Let me know if you'd like any other changes!`;
           // Get updated client data for attachment
           let updatedClientData = null;
           if (targetInvoice.client_id) {
-            const { data: client, error: clientError } = await supabase.from('clients').select('id, name, email, phone, address_client, notes, tax_number, created_at, updated_at').eq('id', targetInvoice.client_id).single();
+            const { data: client, error: clientError } = await supabase.from('clients').select('id, name, email, phone, address_client, notes, tax_number, created_at, updated_at').eq('id', targetInvoice.client_id).eq('user_id', user_id).single();
             if (!clientError) {
               updatedClientData = client;
             }
@@ -4290,21 +5025,30 @@ Let me know if you'd like any other changes!`;
           const targetInvoice = findResult;
           console.log('[update_payment_methods] Found invoice:', targetInvoice.id, targetInvoice.invoice_number);
           // Get payment options to check what's actually enabled (NOT business_settings)
-          const { data: paymentOptions, error: paymentOptionsError } = await supabase.from('payment_options').select('stripe_enabled, paypal_enabled, bank_transfer_enabled').eq('user_id', user_id).single();
+          const { data: paymentOptions, error: paymentOptionsError } = await supabase.from('payment_options').select('stripe_enabled, paypal_enabled, bank_transfer_enabled, paypal_email, bank_details').eq('user_id', user_id).maybeSingle();
           if (paymentOptionsError) {
             console.error('[update_payment_methods] Payment options fetch error:', paymentOptionsError);
             return 'Error: Could not fetch payment options to validate payment methods';
           }
-          console.log('[update_payment_methods] Payment options:', paymentOptions);
+          
+          // If no payment options exist, treat all as disabled
+          const actualPaymentOptions = paymentOptions || {
+            stripe_enabled: false,
+            paypal_enabled: false,
+            bank_transfer_enabled: false,
+            paypal_email: null,
+            bank_details: null
+          };
+          console.log('[update_payment_methods] Payment options:', actualPaymentOptions);
           let paymentUpdates = {};
           let message = `Updated payment methods for invoice ${targetInvoice.invoice_number}:`;
           let skippedMethods = [];
           // Check each payment method - use correct column names from payment_options
           if (enable_stripe !== undefined) {
-            if (enable_stripe && paymentOptions.stripe_enabled) {
+            if (enable_stripe && actualPaymentOptions.stripe_enabled) {
               paymentUpdates.stripe_active = true;
               message += `\n- ✅ Stripe payments enabled`;
-            } else if (enable_stripe && !paymentOptions.stripe_enabled) {
+            } else if (enable_stripe && !actualPaymentOptions.stripe_enabled) {
               skippedMethods.push('Stripe (not configured in payment options)');
             } else {
               paymentUpdates.stripe_active = false;
@@ -4312,10 +5056,10 @@ Let me know if you'd like any other changes!`;
             }
           }
           if (enable_paypal !== undefined) {
-            if (enable_paypal && paymentOptions.paypal_enabled) {
+            if (enable_paypal && actualPaymentOptions.paypal_enabled) {
               paymentUpdates.paypal_active = true;
               message += `\n- ✅ PayPal payments enabled`;
-            } else if (enable_paypal && !paymentOptions.paypal_enabled) {
+            } else if (enable_paypal && !actualPaymentOptions.paypal_enabled) {
               skippedMethods.push('PayPal (not configured in payment options)');
             } else {
               paymentUpdates.paypal_active = false;
@@ -4323,10 +5067,10 @@ Let me know if you'd like any other changes!`;
             }
           }
           if (enable_bank_transfer !== undefined) {
-            if (enable_bank_transfer && paymentOptions.bank_transfer_enabled) {
+            if (enable_bank_transfer && actualPaymentOptions.bank_transfer_enabled) {
               paymentUpdates.bank_account_active = true;
               message += `\n- ✅ Bank transfer enabled`;
-            } else if (enable_bank_transfer && !paymentOptions.bank_transfer_enabled) {
+            } else if (enable_bank_transfer && !actualPaymentOptions.bank_transfer_enabled) {
               skippedMethods.push('Bank transfer (not configured in payment options)');
             } else {
               paymentUpdates.bank_account_active = false;
@@ -4403,6 +5147,11 @@ Let me know if you'd like any other changes!`;
    • Best for: Premium services, luxury brands, artistic businesses  
    • Personality: Sophisticated, minimal, high-end
 
+🌊 **Wave** - Modern, creative, distinctive
+   • Best for: Creative agencies, design studios, innovative businesses
+   • Personality: Dynamic, artistic, contemporary
+   • Features: Curved wave header with purple gradient and rounded corners
+
 To change your design, just say something like:
 • "Make it more modern"
 • "Use the clean design" 
@@ -4456,7 +5205,7 @@ To change colors, just say:
         
         try {
           // Validate design_id
-          const validDesigns = ['classic', 'modern', 'clean', 'simple'];
+          const validDesigns = ['classic', 'modern', 'clean', 'simple', 'wave'];
           if (!validDesigns.includes(design_id)) {
             return `Invalid design ID. Valid options are: ${validDesigns.join(', ')}`;
           }
@@ -4520,14 +5269,16 @@ To change colors, just say:
               clientData = client;
             }
             
-            attachments.push({
+            // 🚪 INVOICE GATE: Use "Last Invoice Wins" pattern
+            const invoiceAttachment = {
               type: 'invoice',
               invoice_id: targetInvoice.id,
               invoice: updatedInvoice || targetInvoice,
               line_items: lineItems || [],
               client_id: targetInvoice.client_id,
               client: clientData
-            });
+            };
+            setLatestInvoice(invoiceAttachment);
             
             return `✅ Updated invoice ${targetInvoice.invoice_number} to use **${design_id}** design.${reasoning ? `\n\n${reasoning}` : ''}\n\nLet me know if you'd like any other changes!`;
           } else {
@@ -4608,14 +5359,16 @@ To change colors, just say:
               clientData = client;
             }
             
-            attachments.push({
+            // 🚪 INVOICE GATE: Use "Last Invoice Wins" pattern
+            const invoiceAttachment = {
               type: 'invoice',
               invoice_id: targetInvoice.id,
               invoice: updatedInvoice || targetInvoice,
               line_items: lineItems || [],
               client_id: targetInvoice.client_id,
               client: clientData
-            });
+            };
+            setLatestInvoice(invoiceAttachment);
             
             return `✅ Updated invoice ${targetInvoice.invoice_number} accent color to **${accent_color}**.${reasoning ? `\n\n${reasoning}` : ''}\n\nLet me know if you'd like any other changes!`;
           } else {
@@ -4633,7 +5386,7 @@ To change colors, just say:
         try {
           // Validate inputs
           if (design_id) {
-            const validDesigns = ['classic', 'modern', 'clean', 'simple'];
+            const validDesigns = ['classic', 'modern', 'clean', 'simple', 'wave'];
             if (!validDesigns.includes(design_id)) {
               return `Invalid design ID. Valid options are: ${validDesigns.join(', ')}`;
             }
@@ -4710,14 +5463,16 @@ To change colors, just say:
               clientData = client;
             }
             
-            attachments.push({
+            // 🚪 INVOICE GATE: Use "Last Invoice Wins" pattern
+            const invoiceAttachment = {
               type: 'invoice',
               invoice_id: targetInvoice.id,
               invoice: updatedInvoice || targetInvoice,
               line_items: lineItems || [],
               client_id: targetInvoice.client_id,
               client: clientData
-            });
+            };
+            setLatestInvoice(invoiceAttachment);
             
             const changes = [];
             if (design_id) changes.push(`**${design_id}** design`);
@@ -4951,7 +5706,7 @@ To change colors, just say:
         
         // Store attachment for UI with complete data (like invoices)
         const estimateAttachment = await createEstimateAttachment(estimate, createdLineItems, clientData);
-        attachments.push(estimateAttachment);
+        setLatestEstimate(estimateAttachment);
         
         // 🚨 CONVERSATION MEMORY - Track that we just created this estimate
         ConversationMemory.setLastAction(user_id, 'created_estimate', {
@@ -5194,7 +5949,7 @@ To change colors, just say:
             allEstimateLineItems || [], 
             clientData
           );
-          attachments.push(estimateAttachment);
+          setLatestEstimate(estimateAttachment);
           
           // 🚨 CONVERSATION MEMORY - Track that we just updated this estimate
           ConversationMemory.setLastAction(user_id, 'updated_estimate', {
@@ -5334,7 +6089,7 @@ To change colors, just say:
             allEstimateLineItems || [],
             clientData
           );
-          attachments.push(estimateAttachment);
+          setLatestEstimate(estimateAttachment);
           
           // 🚨 CONVERSATION MEMORY - Track that we just added an item to this estimate
           ConversationMemory.setLastAction(user_id, 'added_estimate_line_item', {
@@ -5428,10 +6183,18 @@ To change colors, just say:
               discount_type: targetEstimate.discount_type,
               discount_value: targetEstimate.discount_value,
               tax_percentage: targetEstimate.tax_percentage,
+              invoice_tax_label: targetEstimate.estimate_tax_label || targetEstimate.tax_label, // Handle different column names
               total_amount: targetEstimate.total_amount,
               notes: finalNotes,
               status: 'draft',
               invoice_design: targetEstimate.estimate_template, // Use same design
+              // 🔥 PRESERVE ALL SETTINGS from estimate  
+              paypal_active: targetEstimate.paypal_active,
+              stripe_active: targetEstimate.stripe_active,
+              bank_account_active: targetEstimate.bank_account_active,
+              accent_color: targetEstimate.accent_color,
+              po_number: targetEstimate.po_number,
+              custom_headline: targetEstimate.custom_headline,
               created_at: new Date().toISOString()
             })
             .select()
@@ -5494,7 +6257,7 @@ To change colors, just say:
             ...item,
             invoice_id: invoice.id
           })), clientData);
-          attachments.push(invoiceAttachment);
+          setLatestInvoice(invoiceAttachment);
           
           return `I've successfully converted ${terminology} ${targetEstimate.estimate_number} to invoice ${invoice_number}.\n\nThe invoice is ready to send to your client.`;
         } catch (error) {
@@ -5767,7 +6530,7 @@ To change colors, just say:
             allEstimateLineItems || [],
             clientData
           );
-          attachments.push(estimateAttachment);
+          setLatestEstimate(estimateAttachment);
           
           // Track action in conversation memory
           ConversationMemory.setLastAction(user_id, 'updated_estimate_payments', {
@@ -5786,179 +6549,251 @@ To change colors, just say:
       
       return `Unknown function: ${name}`;
     };
-    // 🚨 TIMEOUT FIX: Enhanced streaming response with longer timeouts for multi-step operations
-    const stream = new ReadableStream({
-      async start (controller) {
-        try {
-          let runStatus = run;
-          let attempts = 0;
-          const maxAttempts = 150; // 2.5 minutes max for complex operations
-          const pollInterval = 1000; // 1 second polling
+    // 🚨 TIMEOUT FIX: Enhanced polling with longer timeouts for multi-step operations
+    let runStatus = run;
+    let attempts = 0;
+    const maxAttempts = 150; // 2.5 minutes max for complex operations
+    
+    while(attempts < maxAttempts){
+      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      console.log('[Assistants POC] Run status:', runStatus.status, `(attempt ${attempts + 1}/${maxAttempts})`);
+      
+      if (runStatus.status === 'completed') {
+        // Get final messages
+        const messages = await openai.beta.threads.messages.list(thread.id);
+        const assistantMessage = messages.data.filter((msg)=>msg.role === 'assistant').map((msg)=>{
+          const textContent = msg.content.find((c)=>c.type === 'text');
+          return textContent ? textContent.text.value : '';
+        })[0] || 'No response generated';
+        
+        // Clean up request tracking
+        if (globalThis.processingRequests) {
+          globalThis.processingRequests.delete(deduplicationKey);
+          console.log('[Assistants POC] 🧹 Cleaned up successful request:', deduplicationKey);
+        }
+
+        // 🚨 ATTACHMENT DEDUPLICATION SYSTEM
+        // Remove duplicate invoice/estimate attachments when multiple functions modify the same item
+        const deduplicateAttachments = (attachments) => {
+          if (!attachments || attachments.length === 0) return attachments;
           
-          // Send initial response to keep connection alive
-          const keepAlive = JSON.stringify({ type: 'status', message: 'Processing...' });
-          controller.enqueue(new TextEncoder().encode(`data: ${keepAlive}\n\n`));
+          const seenItems = new Map(); // Map of "type:id" -> attachment
+          const deduplicated = [];
           
-          while(attempts < maxAttempts){
-            runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-            console.log('[Assistants POC] Run status:', runStatus.status, `(attempt ${attempts + 1}/${maxAttempts})`);
-            
-            // Send periodic keepalive for long operations
-            if (attempts % 10 === 0 && attempts > 0) {
-              const keepAliveMsg = JSON.stringify({ type: 'keepalive', message: 'Still processing...' });
-              controller.enqueue(new TextEncoder().encode(`data: ${keepAliveMsg}\n\n`));
-            }
-            
-            if (runStatus.status === 'completed') {
-              // Get final messages
-              const messages = await openai.beta.threads.messages.list(thread.id);
-              const assistantMessage = messages.data.filter((msg)=>msg.role === 'assistant').map((msg)=>{
-                const textContent = msg.content.find((c)=>c.type === 'text');
-                return textContent ? textContent.text.value : '';
-              })[0] || 'No response generated';
-              // Return JSON response compatible with current app
-              const response = JSON.stringify({
-                success: true,
-                content: assistantMessage,
-                attachments: attachments,
-                messages: [
-                  {
-                    id: `user-${Date.now()}`,
-                    role: 'user',
-                    content: message,
-                    created_at: new Date().toISOString()
-                  },
-                  {
-                    id: `assistant-${Date.now()}`,
-                    role: 'assistant',
-                    content: assistantMessage,
-                    attachments: attachments,
-                    created_at: new Date(Date.now() + 5000).toISOString()
-                  }
-                ],
-                thread: {
-                  id: thread.id,
-                  user_id: user_id
-                }
-              });
-              controller.enqueue(new TextEncoder().encode(response));
-              controller.close();
-              
-              // Clean up request tracking
-              if (globalThis.processingRequests) {
-                globalThis.processingRequests.delete(deduplicationKey);
-                console.log('[Assistants POC] 🧹 Cleaned up successful request:', deduplicationKey);
-              }
-              break;
-            }
-            if (runStatus.status === 'requires_action') {
-              console.log('[Assistants POC] Requires action - handling tool calls');
-              const toolCalls = runStatus.required_action?.submit_tool_outputs?.tool_calls || [];
-              const toolOutputs = [];
-              for (const toolCall of toolCalls){
-                const output = await handleToolCall(toolCall);
-                toolOutputs.push({
-                  tool_call_id: toolCall.id,
-                  output: output
-                });
-              }
-              console.log('[Assistants POC] Submitting tool outputs:', toolOutputs.length);
-              await openai.beta.threads.runs.submitToolOutputs(thread.id, run.id, {
-                tool_outputs: toolOutputs
-              });
+          for (const attachment of attachments) {
+            if (!attachment.data) {
+              // Keep non-data attachments as-is
+              deduplicated.push(attachment);
               continue;
             }
-            if (runStatus.status === 'failed') {
-              throw new Error(`Run failed: ${runStatus.last_error?.message || 'Unknown error'}`);
-            }
-            if (runStatus.status === 'cancelled') {
-              throw new Error('Run was cancelled');
-            }
-            // Optimized polling with exponential backoff
-            const delays = [
-              100,
-              200,
-              500,
-              1000,
-              1000
-            ] // Start fast, then slow
-            ;
-            const attempt = Math.min(attempts, delays.length - 1);
-            await new Promise((resolve)=>setTimeout(resolve, delays[attempt] || 1000));
-            attempts++;
-          }
-          
-          // 🚨 TIMEOUT HANDLING: If we've exhausted all attempts without completion
-          if (attempts >= maxAttempts) {
-            console.error('[Assistants POC] Request timed out after', maxAttempts, 'attempts (2.5 minutes)');
             
-            // Try to get any partial response that might exist
-            try {
-              const messages = await openai.beta.threads.messages.list(thread.id);
-              const assistantMessage = messages.data.filter((msg)=>msg.role === 'assistant').map((msg)=>{
-                const textContent = msg.content.find((c)=>c.type === 'text');
-                return textContent ? textContent.text.value : '';
-              })[0];
-              
-              if (assistantMessage) {
-                // Return partial response with timeout warning
-                const timeoutResponse = JSON.stringify({
-                  success: true,
-                  content: `${assistantMessage}\n\n⚠️ Note: This operation took longer than expected and may have been partially completed.`,
-                  attachments: attachments,
-                  timeout: true,
-                  messages: [
-                    {
-                      id: `user-${Date.now()}`,
-                      role: 'user',
-                      content: message,
-                      created_at: new Date().toISOString()
-                    },
-                    {
-                      id: `assistant-${Date.now()}`,
-                      role: 'assistant',
-                      content: assistantMessage,
-                      attachments: attachments,
-                      created_at: new Date(Date.now() + 5000).toISOString()
-                    }
-                  ],
-                  thread: {
-                    id: thread.id,
-                    user_id: user_id
-                  }
-                });
-                controller.enqueue(new TextEncoder().encode(timeoutResponse));
-                controller.close();
-                return;
-              }
-            } catch (partialError) {
-              console.error('[Assistants POC] Error retrieving partial response:', partialError);
+            // Create unique key for invoices and estimates
+            let uniqueKey = null;
+            if (attachment.data.invoice_number) {
+              uniqueKey = `invoice:${attachment.data.id}`;
+            } else if (attachment.data.estimate_number) {
+              uniqueKey = `estimate:${attachment.data.id}`;
             }
             
-            // No partial response available - return timeout error
-            throw new Error(`Request timed out after 2.5 minutes. The operation may still be processing in the background.`);
-          }
-        } catch (error) {
-          console.error('[Assistants POC] Stream error:', error);
-          
-          // Clean up request tracking on error
-          if (globalThis.processingRequests) {
-            globalThis.processingRequests.delete(deduplicationKey);
-            console.log('[Assistants POC] 🧹 Cleaned up failed request:', deduplicationKey);
+            if (uniqueKey) {
+              // Track the latest version of each invoice/estimate
+              seenItems.set(uniqueKey, attachment);
+            } else {
+              // Keep other attachment types as-is
+              deduplicated.push(attachment);
+            }
           }
           
-          controller.error(error);
+          // Add all unique invoice/estimate attachments
+          for (const attachment of seenItems.values()) {
+            deduplicated.push(attachment);
+          }
+          
+          const duplicatesRemoved = attachments.length - deduplicated.length;
+          if (duplicatesRemoved > 0) {
+            console.log(`[Attachment Deduplication] Removed ${duplicatesRemoved} duplicate attachments`);
+          }
+          
+          return deduplicated;
+        };
+        
+        // 🚪 ATTACHMENT GATE: Return only the last invoice OR estimate (never both)
+        const finalAttachments = [];
+        if (lastInvoiceAttachment && lastEstimateAttachment) {
+          // Both exist - prefer invoice (more recent action usually)
+          finalAttachments.push(lastInvoiceAttachment);
+          console.log('[Attachment Gate] Returning invoice over estimate:', lastInvoiceAttachment.invoice?.invoice_number || 'unknown');
+        } else if (lastInvoiceAttachment) {
+          finalAttachments.push(lastInvoiceAttachment);
+          console.log('[Attachment Gate] Returning single invoice:', lastInvoiceAttachment.invoice?.invoice_number || 'unknown');
+        } else if (lastEstimateAttachment) {
+          finalAttachments.push(lastEstimateAttachment);
+          console.log('[Attachment Gate] Returning single estimate:', lastEstimateAttachment.estimate?.estimate_number || 'unknown');
+        } else {
+          console.log('[Attachment Gate] No invoice or estimate to return');
         }
+        
+        // Return JSON response compatible with current app
+        return new Response(JSON.stringify({
+          success: true,
+          content: assistantMessage,
+          attachments: finalAttachments,
+          messages: [
+            {
+              id: `user-${Date.now()}`,
+              role: 'user',
+              content: message,
+              created_at: new Date().toISOString()
+            },
+            {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: assistantMessage,
+              attachments: finalAttachments,
+              created_at: new Date(Date.now() + 5000).toISOString()
+            }
+          ],
+          thread: {
+            id: thread.id,
+            user_id: user_id
+          }
+        }), {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        });
       }
-    });
-    return new Response(stream, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache'
+      if (runStatus.status === 'requires_action') {
+        console.log('[Assistants POC] Requires action - handling tool calls');
+        const toolCalls = runStatus.required_action?.submit_tool_outputs?.tool_calls || [];
+        const toolOutputs = [];
+        for (const toolCall of toolCalls){
+          const output = await handleToolCall(toolCall);
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: output
+          });
+        }
+        console.log('[Assistants POC] Submitting tool outputs:', toolOutputs.length);
+        await openai.beta.threads.runs.submitToolOutputs(thread.id, run.id, {
+          tool_outputs: toolOutputs
+        });
+        attempts++; // Count this as an attempt
+        continue;
       }
-    });
+      if (runStatus.status === 'failed') {
+        throw new Error(`Run failed: ${runStatus.last_error?.message || 'Unknown error'}`);
+      }
+      if (runStatus.status === 'cancelled') {
+        throw new Error('Run was cancelled');
+      }
+      
+      // Optimized polling with exponential backoff
+      const delays = [100, 200, 500, 1000, 1000]; // Start fast, then slow
+      const delayIndex = Math.min(attempts, delays.length - 1);
+      await new Promise((resolve)=>setTimeout(resolve, delays[delayIndex] || 1000));
+      attempts++;
+    }
+    
+    // 🚨 TIMEOUT HANDLING: If we've exhausted all attempts without completion
+    console.error('[Assistants POC] Request timed out after', maxAttempts, 'attempts (2.5 minutes)');
+    
+    // Try to get any partial response that might exist
+    try {
+      const messages = await openai.beta.threads.messages.list(thread.id);
+      const assistantMessage = messages.data.filter((msg)=>msg.role === 'assistant').map((msg)=>{
+        const textContent = msg.content.find((c)=>c.type === 'text');
+        return textContent ? textContent.text.value : '';
+      })[0];
+      
+      if (assistantMessage) {
+        // Clean up request tracking
+        if (globalThis.processingRequests) {
+          globalThis.processingRequests.delete(deduplicationKey);
+          console.log('[Assistants POC] 🧹 Cleaned up timeout request with partial response:', deduplicationKey);
+        }
+        
+        // Apply same deduplication for timeout responses
+        const deduplicateAttachments = (attachments) => {
+          if (!attachments || attachments.length === 0) return attachments;
+          
+          const seenItems = new Map();
+          const deduplicated = [];
+          
+          for (const attachment of attachments) {
+            if (!attachment.data) {
+              deduplicated.push(attachment);
+              continue;
+            }
+            
+            let uniqueKey = null;
+            if (attachment.data.invoice_number) {
+              uniqueKey = `invoice:${attachment.data.id}`;
+            } else if (attachment.data.estimate_number) {
+              uniqueKey = `estimate:${attachment.data.id}`;
+            }
+            
+            if (uniqueKey) {
+              seenItems.set(uniqueKey, attachment);
+            } else {
+              deduplicated.push(attachment);
+            }
+          }
+          
+          for (const attachment of seenItems.values()) {
+            deduplicated.push(attachment);
+          }
+          
+          return deduplicated;
+        };
+        
+        // 🚪 ATTACHMENT GATE: Apply "Last Wins" for timeout scenario too
+        const timeoutFinalAttachments = [];
+        if (lastInvoiceAttachment) {
+          timeoutFinalAttachments.push(lastInvoiceAttachment);
+        } else if (lastEstimateAttachment) {
+          timeoutFinalAttachments.push(lastEstimateAttachment);
+        }
+        
+        // Return partial response with timeout warning
+        return new Response(JSON.stringify({
+          success: true,
+          content: `${assistantMessage}\n\n⚠️ Note: This operation took longer than expected and may have been partially completed.`,
+          attachments: timeoutFinalAttachments,
+          timeout: true,
+          messages: [
+            {
+              id: `user-${Date.now()}`,
+              role: 'user',
+              content: message,
+              created_at: new Date().toISOString()
+            },
+            {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: assistantMessage,
+              attachments: timeoutFinalAttachments,
+              created_at: new Date(Date.now() + 5000).toISOString()
+            }
+          ],
+          thread: {
+            id: thread.id,
+            user_id: user_id
+          }
+        }), {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+    } catch (partialError) {
+      console.error('[Assistants POC] Error retrieving partial response:', partialError);
+    }
+    
+    // No partial response available - return timeout error
+    throw new Error(`Request timed out after 2.5 minutes. The operation may still be processing in the background.`);
   } catch (error) {
     console.error('[Assistants POC] Error:', error);
     
