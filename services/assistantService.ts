@@ -73,9 +73,11 @@ export class AssistantService {
         }
       };
       
-      // Use POC Assistants endpoint for testing
-      const endpoint = 'ai-chat-assistants-poc';
-      console.log(`[AssistantService] Using ${endpoint} endpoint (POC Testing)`);
+      // Toggle between stable and experimental via environment variable
+      const endpoint = process.env.EXPO_PUBLIC_USE_EXPERIMENTAL_AI === 'true' 
+        ? 'ai-chat-assistants-new' 
+        : 'ai-chat-assistants-poc';
+      console.log(`[AssistantService] Using ${endpoint} endpoint (${process.env.EXPO_PUBLIC_USE_EXPERIMENTAL_AI === 'true' ? 'EXPERIMENTAL' : 'STABLE'})`);
       
       const url = `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/${endpoint}`;
       const init: RequestInit = {
@@ -207,14 +209,11 @@ export class AssistantService {
     if (this.isInitialized) return;
 
     try {
-      // Initializing assistant
-      const startTime = Date.now();
-      
-      // Try to get existing assistant or create new one
-      this.assistantId = await this.getOrCreateAssistant();
+      // Skip assistant initialization - the edge function handles everything
+      console.log('[AssistantService] Skipping assistant creation - using edge function');
       this.isInitialized = true;
       
-      // Assistant initialized successfully
+      // Assistant service initialized (edge function will handle assistant)
     } catch (error) {
       // Failed to initialize
       throw error;
@@ -223,38 +222,16 @@ export class AssistantService {
 
   // Create or get existing assistant
   private static async getOrCreateAssistant(): Promise<string> {
-    // Force recreation for debugging
-    if (this.FORCE_RECREATE) {
-      // Forcing assistant recreation for debugging
-      this.assistantPromise = null;
-      this.FORCE_RECREATE = false; // Reset after first use
-    }
-    
-    // Use cached promise to avoid duplicate initialization
-    if (this.assistantPromise) {
-      return this.assistantPromise;
-    }
-
-    this.assistantPromise = this.createAssistant();
-    return this.assistantPromise;
+    // DISABLED: Assistant creation is now managed externally
+    console.warn('[AssistantService] Assistant creation is disabled. Use scripts/update-assistant.js to create/update assistants.');
+    throw new Error('Assistant creation is disabled. The edge function handles all AI operations.');
   }
 
   // Create new assistant (separated for caching)
   private static async createAssistant(): Promise<string> {
-    // Creating new assistant
-    
-    const assistant = await openai.beta.assistants.create({
-      name: "Invoice AI Assistant",
-      instructions: await this.getSystemInstructions(), // Use base instructions for assistant creation
-      model: "gpt-4o-mini", // Keep original model for Assistants API
-      tools: this.convertFunctionsToTools()
-      // Note: We explicitly only provide our custom tools - no code_interpreter or file_search
-    });
-    
-    // Assistant tools configured
-
-    // Assistant created successfully
-    return assistant.id;
+    // DISABLED: Assistant creation is now managed externally via scripts/update-assistant.js
+    console.error('[AssistantService] createAssistant() called but assistant creation is disabled!');
+    throw new Error('Assistant creation is disabled. Use scripts/update-assistant.js to create/update assistants.');
   }
 
   // Convert invoice functions to OpenAI Assistant tools format
