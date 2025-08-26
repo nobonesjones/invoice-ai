@@ -5,6 +5,28 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
+
+// Status message helper for streaming UX
+function createStatusMessage(status, emoji = '🤔') {
+  return {
+    type: 'status',
+    content: `${emoji} ${status}...`,
+    timestamp: new Date().toISOString()
+  };
+}
+
+// Stream status updates back to client
+async function sendStatusUpdate(status, emoji = '🤔') {
+  console.log(`[STATUS] ${emoji} ${status}...`);
+  // Store status updates for frontend to display
+  if (!globalThis.statusUpdates) {
+    globalThis.statusUpdates = [];
+  }
+  globalThis.statusUpdates.push({
+    status: `${emoji} ${status}...`,
+    timestamp: new Date().toISOString()
+  });
+}
 // Function to find invoice by identifier
 async function findInvoice(supabase, user_id, invoice_identifier) {
   try {
@@ -397,6 +419,9 @@ serve(async (req)=>{
     const threadId = payload.threadId;
     const userContext = payload.userContext;
     const requestId = payload.requestId;
+    // Initialize status updates for this request
+    globalThis.statusUpdates = [];
+    
     // Create deduplication key for this request
     const deduplicationKey1 = requestId || `${user_id}-${message?.substring(0, 50)}-${Date.now()}`;
     // Simple in-memory deduplication (resets on cold start but prevents immediate duplicates)
@@ -3456,6 +3481,10 @@ When the user indicates you made an error or corrected you:
       });
       console.log('[Assistants POC] ✅ Created NEW thread (no threadId provided):', thread.id);
     }
+    
+    // Send initial thinking status
+    await sendStatusUpdate('Thinking', '🤔');
+    
     // Create run with assistant  
     const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id
@@ -3538,6 +3567,7 @@ When the user indicates you made an error or corrected you:
         }
       };
       if (name === 'create_invoice') {
+        await sendStatusUpdate('Creating invoice', '📄');
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, due_date, invoice_date, tax_percentage, notes, payment_terms, enable_paypal, paypal_email, enable_stripe, enable_bank_transfer, invoice_design, accent_color, discount_type, discount_value } = parsedArgs;
         // Calculate subtotal
         const subtotal_amount = line_items.reduce((sum, item)=>sum + item.unit_price * (item.quantity || 1), 0);
@@ -3705,6 +3735,7 @@ Let me know if you'd like any changes?`;
         return `✅ PayPal payments have been enabled. Clients can now pay via PayPal.`;
       }
       if (name === 'update_business_settings') {
+        await sendStatusUpdate('Updating business settings', '⚙️');
         const { business_name, business_address, business_phone, business_email, business_website, tax_number, tax_name, default_tax_rate, auto_apply_tax } = parsedArgs;
         console.log('[Assistants POC] Updating business settings:', parsedArgs);
         // Build update object with only provided fields - using correct column names from business_settings table
@@ -4566,6 +4597,7 @@ Let me know if you'd like any other changes?`;
         }
       }
       if (name === 'add_line_items') {
+        await sendStatusUpdate('Adding line items', '➕');
         const { invoice_identifier, line_items } = parsedArgs;
         if (!line_items || !Array.isArray(line_items) || line_items.length === 0) {
           return 'Error: line_items array is required and must contain at least one item';
@@ -4869,6 +4901,7 @@ Let me know if you'd like any other changes!`;
         }
       }
       if (name === 'update_client_info') {
+        await sendStatusUpdate('Updating client info', '👤');
         const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number } = parsedArgs;
         console.log('[update_client_info] Starting with:', {
           invoice_identifier,
@@ -4992,6 +5025,7 @@ Let me know if you'd like any other changes!`;
         }
       }
       if (name === 'update_payment_methods') {
+        await sendStatusUpdate('Setting up payments', '💳');
         const { invoice_identifier, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs;
         console.log('[update_payment_methods] Starting with:', {
           invoice_identifier,
@@ -5397,6 +5431,7 @@ To change colors, just say:
       }
       // Estimate/Quote Functions
       if (name === 'create_estimate') {
+        await sendStatusUpdate('Creating estimate', '📄');
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, valid_until_date, estimate_date, tax_percentage, notes, acceptance_terms, estimate_template, discount_type, discount_value } = parsedArgs;
         // Get user's terminology preference
         const { data: businessSettings } = await supabase.from('business_settings').select('estimate_terminology, default_estimate_template').eq('user_id', user_id).single();
@@ -5929,6 +5964,7 @@ To change colors, just say:
         }
       }
       if (name === 'search_estimates') {
+        await sendStatusUpdate('Searching documents', '🔍');
         const { client_name, status, date_from, date_to, limit = 10 } = parsedArgs;
         // Get terminology
         const { data: businessSettings } = await supabase.from('business_settings').select('estimate_terminology').eq('user_id', user_id).single();
@@ -6185,11 +6221,16 @@ To change colors, just say:
         } else {
           console.log('[Attachment Gate] No invoice or estimate to return');
         }
+        
+        // Add final completion status
+        await sendStatusUpdate('Done', '✅');
+        
         // Return JSON response compatible with current app
         return new Response(JSON.stringify({
           success: true,
           content: assistantMessage,
           attachments: finalAttachments,
+          statusUpdates: globalThis.statusUpdates || [],
           messages: [
             {
               id: `user-${Date.now()}`,
@@ -6301,11 +6342,15 @@ To change colors, just say:
         } else if (lastEstimateAttachment) {
           timeoutFinalAttachments.push(lastEstimateAttachment);
         }
+        // Add timeout status
+        await sendStatusUpdate('Timeout - operation incomplete', '⚠️');
+        
         // Return partial response with timeout warning
         return new Response(JSON.stringify({
           success: true,
           content: `${assistantMessage}\n\n⚠️ Note: This operation took longer than expected and may have been partially completed.`,
           attachments: timeoutFinalAttachments,
+          statusUpdates: globalThis.statusUpdates || [],
           timeout: true,
           messages: [
             {
@@ -6340,13 +6385,17 @@ To change colors, just say:
     throw new Error(`Request timed out after 2.5 minutes. The operation may still be processing in the background.`);
   } catch (error) {
     console.error('[Assistants POC] Error:', error);
+    // Add error status
+    await sendStatusUpdate('Error occurred', '❌');
+    
     // Clean up request tracking on error
     if (globalThis.processingRequests) {
       globalThis.processingRequests.delete(deduplicationKey);
       console.log('[Assistants POC] 🧹 Cleaned up error request:', deduplicationKey);
     }
     return new Response(JSON.stringify({
-      error: error.message
+      error: error.message,
+      statusUpdates: globalThis.statusUpdates || []
     }), {
       status: 500,
       headers: {

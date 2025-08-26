@@ -1115,6 +1115,16 @@ Use tools to take action. Reference previous conversation naturally.`;
           throw new Error(result.error || 'AI request failed');
         }
 
+        // Process status updates from backend if they exist
+        if (result.statusUpdates && Array.isArray(result.statusUpdates)) {
+          console.log('[AssistantService] Received status updates:', result.statusUpdates.length);
+          for (const statusUpdate of result.statusUpdates) {
+            statusCallback?.(statusUpdate.status);
+            // Small delay between status updates for better UX
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+
         // Pass through messages/thread and ensure thread_id is present on each message
         const threadId = result.thread?.id;
         const messages = Array.isArray(result.messages)

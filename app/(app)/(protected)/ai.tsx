@@ -6,6 +6,7 @@ import { Send, Mic, RefreshCw, FileText, Calendar, DollarSign, User, Mail, Phone
 import TranscribeButton, { TranscribeButtonRef } from "@/components/TranscribeButton";
 import VoiceChatButton from "@/components/VoiceChatButton";
 import { VoiceModal } from "@/components/VoiceModal";
+import { StatusBox } from "@/components/StatusBox";
 import { useRouter, useFocusEffect } from 'expo-router';
 
 import { SafeAreaView } from "@/components/safe-area-view";
@@ -1153,6 +1154,7 @@ export default function AiScreen() {
 	const [showSetupMessage, setShowSetupMessage] = useState(false);
 	const [currentAudioLevel, setCurrentAudioLevel] = useState(0);
 	const [userContext, setUserContext] = useState<any>(null);
+	const [statusBoxes, setStatusBoxes] = useState<Array<{id: string, message: string, timestamp: number}>>([]);
 
 	// Animated values for waveform
 	const waveformAnims = useRef([
@@ -1178,6 +1180,33 @@ export default function AiScreen() {
 		error: aiError, 
 		clearError: aiClearError 
 	} = useAIChat();
+
+	// Handle status message updates - add them as status boxes
+	useEffect(() => {
+		if (statusMessage && aiIsLoading) {
+			const newStatusBox = {
+				id: `status-${Date.now()}-${Math.random()}`,
+				message: statusMessage,
+				timestamp: Date.now()
+			};
+			setStatusBoxes(prev => [...prev, newStatusBox]);
+			
+			// Remove status box after 3 seconds or when loading is complete
+			setTimeout(() => {
+				setStatusBoxes(prev => prev.filter(box => box.id !== newStatusBox.id));
+			}, 3000);
+		}
+	}, [statusMessage, aiIsLoading]);
+
+	// Clear status boxes when loading stops
+	useEffect(() => {
+		if (!aiIsLoading) {
+			// Keep status boxes visible briefly after loading stops
+			setTimeout(() => {
+				setStatusBoxes([]);
+			}, 1000);
+		}
+	}, [aiIsLoading]);
 
 	// Load user context for first invoice detection and currency
 	const loadUserContext = async () => {
@@ -1846,8 +1875,21 @@ or '${example2}'`,
 						</View>
 					))}
 
-					{/* Loading indicator - dynamic thinking stages */}
-					{aiIsLoading && (
+					{/* Status Boxes - AI Action Streaming */}
+					{statusBoxes.length > 0 && (
+						<View className="items-start mb-4">
+							{statusBoxes.map((statusBox) => (
+								<StatusBox 
+									key={statusBox.id}
+									message={statusBox.message}
+									theme={theme}
+								/>
+							))}
+						</View>
+					)}
+
+					{/* Fallback loading indicator if no status boxes */}
+					{aiIsLoading && statusBoxes.length === 0 && (
 						<View className="items-start mb-4">
 							<View
 								style={{
@@ -1857,15 +1899,15 @@ or '${example2}'`,
 									borderRadius: 16,
 									borderBottomLeftRadius: 4,
 									borderWidth: 1,
-									borderColor: theme.primary + '20', // Subtle primary color border
+									borderColor: theme.primary + '20',
 								}}
 							>
 								<Text style={{ 
-									color: theme.primary, // Use primary color for thinking text
+									color: theme.primary,
 									fontSize: 16,
 									fontWeight: '500'
 								}}>
-									{getEnhancedStatusText()}
+									🤔 SuperAI is thinking...
 								</Text>
 							</View>
 						</View>
