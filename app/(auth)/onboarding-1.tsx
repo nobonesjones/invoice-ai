@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
+import * as WebBrowser from "expo-web-browser";
 import {
   View,
   Text,
@@ -11,18 +12,28 @@ import {
   StatusBar,
   Dimensions,
   Image,
+  Alert,
 } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { AuthModal } from "@/components/auth/auth-modal";
+import { SignUpModal } from "@/components/auth/sign-up-modal";
 import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarousel";
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from "@/config/supabase";
+import { useOnboarding } from "@/context/onboarding-provider";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function OnboardingScreen1() {
   const router = useRouter();
   const { theme } = useTheme();
+  const { saveOnboardingData } = useOnboarding();
   const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'auth' | 'signup' | 'signin'>('auth');
+  const [signUpModalVisible, setSignUpModalVisible] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -39,13 +50,114 @@ export default function OnboardingScreen1() {
 
   const handleSignIn = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setAuthModalMode('signin');
     setAuthModalVisible(true);
+  };
+
+  const handleGoogleAuth = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsGoogleLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          skipBrowserRedirect: true,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        console.error("Google Auth Error:", error.message);
+        Alert.alert(
+          "Authentication Error",
+          error.message || "An unexpected error occurred.",
+        );
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      if (data?.url) {
+        console.log("OAuth URL from Supabase:", data.url);
+        
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          "superinvoice://oauth/callback",
+        );
+        
+        console.log("WebBrowser result:", result);
+        
+        if (result.type === "success" && result.url && result.url.includes("access_token")) {
+          console.log("Got auth tokens from redirect URL:", result.url);
+          
+          const urlParts = result.url.includes('#') ? result.url.split("#") : result.url.split("?");
+          const tokenString = urlParts[1] || urlParts[0];
+          const params = new URLSearchParams(tokenString);
+          
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+          if (access_token && refresh_token) {
+            const { error: setError } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (setError) {
+              console.error("Error setting session manually:", setError);
+              Alert.alert("Session Error", "Could not set user session.");
+            } else {
+              const { data: sessionData } = await supabase.auth.getSession();
+              if (sessionData?.session?.user?.id) {
+                try {
+                  await saveOnboardingData(sessionData.session.user.id);
+                  console.log('[Onboarding] Onboarding data saved after Google auth');
+                } catch (error) {
+                  console.error('[Onboarding] Error saving onboarding data:', error);
+                }
+              }
+              // Navigate to onboarding-2 to continue the signup flow
+              console.log('[Onboarding] Navigating to onboarding-2 after Google signup');
+              router.push("/(auth)/onboarding-2");
+            }
+          } else {
+            Alert.alert(
+              "Authentication Error",
+              "Could not process authentication response.",
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      Alert.alert("Error", "An unexpected error occurred.");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleEmailAuth = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSignUpModalVisible(true);
+  };
+
+  const handleAppleAuth = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert("Coming Soon", "Apple sign in will be available soon!");
   };
 
   const handleAuthSuccess = () => {
     setAuthModalVisible(false);
-    // User signed in successfully - navigate to the main app
-    router.replace("/(app)/(protected)");
+    setSignUpModalVisible(false);
+    if (authModalMode === 'signin') {
+      // Existing user signing in - go directly to app
+      router.replace("/(app)/(protected)");
+    } else {
+      // New user signing up - continue through onboarding
+      console.log('[Onboarding] Navigating to onboarding-2 after email signup');
+      router.push("/(auth)/onboarding-2");
+    }
   };
 
   const styles = getStyles(theme);
@@ -79,7 +191,7 @@ export default function OnboardingScreen1() {
             <View style={styles.buttonContainer}>
               {/* Apple Sign In - Disabled for now */}
               <Pressable
-                onPress={() => {}}
+                onPress={handleAppleAuth}
                 style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
               >
                 <View style={styles.appleIconContainer}>
@@ -90,7 +202,7 @@ export default function OnboardingScreen1() {
 
               {/* Google Sign In */}
               <Pressable
-                onPress={() => {}}
+                onPress={handleGoogleAuth}
                 style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
               >
                 <View style={styles.googleIconContainer}>
@@ -104,7 +216,7 @@ export default function OnboardingScreen1() {
 
               {/* Email Sign In */}
               <Pressable
-                onPress={() => {}}
+                onPress={handleEmailAuth}
                 style={[styles.authButton, styles.emailButton, { backgroundColor: theme.primary }]}
               >
                 <View style={styles.emailIcon}>
@@ -127,9 +239,23 @@ export default function OnboardingScreen1() {
       <AuthModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
-        initialMode="signin"
+        initialMode={authModalMode}
         plan="free"
         onSuccess={handleAuthSuccess}
+        onNavigateToSignUp={() => setAuthModalVisible(false)}
+      />
+      
+      {/* Email Sign Up Modal */}
+      <SignUpModal
+        visible={signUpModalVisible}
+        onClose={() => setSignUpModalVisible(false)}
+        onSwitchToSignIn={() => {
+          setSignUpModalVisible(false);
+          setAuthModalMode('signin');
+          setAuthModalVisible(true);
+        }}
+        onSuccess={handleAuthSuccess}
+        plan="free"
       />
     </View>
   );

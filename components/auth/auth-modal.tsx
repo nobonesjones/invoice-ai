@@ -32,20 +32,24 @@ interface AuthModalProps {
   onClose: () => void;
   plan?: 'free' | 'paid';
   onSuccess?: () => void;
+  initialMode?: 'auth' | 'signup' | 'signin';
+  onNavigateToSignUp?: () => void;
 }
 
 export function AuthModal({ 
   visible, 
   onClose, 
   plan = 'free',
-  onSuccess 
+  onSuccess,
+  initialMode = 'auth',
+  onNavigateToSignUp
 }: AuthModalProps) {
   const { theme } = useTheme();
   const { session } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
   
-  const [showSignUp, setShowSignUp] = useState(false);
-  const [showSignIn, setShowSignIn] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(initialMode === 'signup');
+  const [showSignIn, setShowSignIn] = useState(initialMode === 'signin');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // Initialize video player
@@ -156,7 +160,7 @@ export function AuthModal({
   const handleContinueWithEmail = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
-    setShowSignUp(true);
+    setShowSignIn(true);
   };
 
   const handleSignInPress = () => {
@@ -187,9 +191,14 @@ export function AuthModal({
             <View style={styles.overlay}>
               
               <View style={styles.headerContent}>
-                <Text style={styles.title}>Create Account</Text>
+                <Text style={styles.title}>
+                  {initialMode === 'signin' ? 'Sign In' : 'Create Account'}
+                </Text>
                 <Text style={styles.subtitle}>
-                  Join thousands of business owners who trust SupaInvoice.
+                  {initialMode === 'signin' 
+                    ? 'Welcome back! Sign in to your account.'
+                    : 'Join thousands of business owners who trust SupaInvoice.'
+                  }
                 </Text>
               </View>
             </View>
@@ -206,6 +215,15 @@ export function AuthModal({
                   </View>
                 )}
                 <Button
+                  onPress={() => Alert.alert("Coming Soon", "Apple sign in will be available soon!")}
+                  style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                >
+                  <Ionicons name="logo-apple" size={24} color="#000000" style={styles.appleIcon} />
+                  <Text style={[styles.appleButtonText, { color: "#000000" }]}>
+                    Sign In With Apple
+                  </Text>
+                </Button>
+                <Button
                   onPress={handleGoogleAuth}
                   style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
                   disabled={isGoogleLoading}
@@ -218,8 +236,8 @@ export function AuthModal({
                         source={require('@/assets/google.png')} 
                         style={styles.googleIcon} 
                       />
-                      <Text style={[styles.choiceButtonText, { color: theme.foreground }]}>
-                        Sign Up With Google
+                      <Text style={[styles.googleButtonText, { color: theme.foreground }]}>
+                        Sign In With Google
                       </Text>
                     </>
                   )}
@@ -229,15 +247,23 @@ export function AuthModal({
                   style={[styles.choiceButton, styles.emailButton, { backgroundColor: theme.primary }]}                  
                 >
                   <Ionicons name="mail" size={20} color={theme.primaryForeground} style={styles.emailIcon} />
-                  <Text style={[styles.choiceButtonText, { color: theme.primaryForeground }]}>
-                    Sign Up With Email
+                  <Text style={[styles.emailButtonText, { color: theme.primaryForeground }]}>
+                    Sign In With Email
                   </Text>
                 </Button>
               </View>
-              <TouchableOpacity onPress={handleSignInPress} style={styles.signInLink}>
+              <TouchableOpacity onPress={initialMode === 'signin' ? () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onClose();
+              } : handleSignInPress} style={styles.signInLink}>
                 <Text style={[styles.signInText, { color: theme.mutedForeground }]}>
-                  Already have an account?{" "}
-                  <Text style={[styles.signInHighlight, { color: theme.primary }]}>Sign In</Text>
+                  {initialMode === 'signin' 
+                    ? "Don't have an account? "
+                    : "Already have an account? "
+                  }
+                  <Text style={[styles.signInHighlight, { color: theme.primary }]}>
+                    {initialMode === 'signin' ? 'Sign Up' : 'Sign In'}
+                  </Text>
                 </Text>
               </TouchableOpacity>
             </View>
@@ -263,7 +289,11 @@ export function AuthModal({
         onClose={() => setShowSignIn(false)}
         onSwitchToSignUp={() => {
           setShowSignIn(false);
-          setShowSignUp(true);
+          if (onNavigateToSignUp) {
+            onNavigateToSignUp();
+          } else {
+            setShowSignUp(true);
+          }
         }}
         plan={plan}
         onSuccess={onSuccess}
@@ -369,10 +399,11 @@ const getStyles = (theme: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 12,
+    minHeight: 56,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -388,6 +419,9 @@ const getStyles = (theme: any) => StyleSheet.create({
   emailButton: {
     borderWidth: 0,
   },
+  appleIcon: {
+    marginRight: 12,
+  },
   googleIcon: {
     width: 20,
     height: 20,
@@ -400,6 +434,21 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     transform: [{ translateY: -2 }],
+  },
+  appleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    transform: [{ translateY: -7 }],
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    transform: [{ translateY: -5 }],
+  },
+  emailButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    transform: [{ translateY: -5 }],
   },
   signInLink: {
     alignItems: 'center',

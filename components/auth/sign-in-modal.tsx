@@ -58,7 +58,6 @@ export function SignInModal({
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [generalError, setGeneralError] = useState("");
 
   const scrollViewRef = useRef<ScrollView>(null);
@@ -296,36 +295,6 @@ export function SignInModal({
             </View>
           ) : null}
 
-          {/* Google Sign In Button */}
-          <Button
-            onPress={handleGoogleSignIn}
-            disabled={isGoogleLoading || isLoading}
-            style={[styles.googleButton, { 
-              backgroundColor: theme.card, 
-              borderColor: theme.border 
-            }]}
-          >
-            {isGoogleLoading ? (
-              <ActivityIndicator size="small" color={theme.foreground} />
-            ) : (
-              <>
-                <Image
-                  source={require("@/assets/google.png")}
-                  style={styles.googleIcon}
-                />
-                <Text style={[styles.googleButtonText, { color: theme.foreground }]}>
-                  Continue with Google
-                </Text>
-              </>
-            )}
-          </Button>
-
-          {/* Divider */}
-          <View style={styles.dividerContainer}>
-            <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-            <Text style={[styles.dividerText, { color: theme.mutedForeground }]}>or</Text>
-            <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-          </View>
 
           {/* Email Input */}
           <View style={styles.inputContainer} ref={emailInputRef}>
@@ -395,7 +364,7 @@ export function SignInModal({
           <Button
             onPress={handleSignIn}
             style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-            disabled={isLoading || isGoogleLoading}
+            disabled={isLoading}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color={theme.primaryForeground} />

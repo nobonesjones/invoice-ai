@@ -89,6 +89,7 @@ function RootLayoutNav() {
     // console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
 
 		if (session && 
+        !inAuthGroup &&
         !inAppProtectedRoute && 
         !isAccountDetailsScreen &&
         !isBusinessInformationScreen &&
