@@ -10,12 +10,14 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  Image,
 } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarousel";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function OnboardingScreen1() {
   const router = useRouter();
@@ -75,12 +77,41 @@ export default function OnboardingScreen1() {
 
             {/* Buttons */}
             <View style={styles.buttonContainer}>
-              <Button
-                onPress={handleGetStarted}
-                style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+              {/* Apple Sign In - Disabled for now */}
+              <Pressable
+                onPress={() => {}}
+                style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
               >
-                <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Get started</Text>
-              </Button>
+                <View style={styles.appleIconContainer}>
+                  <Ionicons name="logo-apple" size={24} color="#000000" />
+                </View>
+                <Text style={[styles.authButtonText, { color: "#000000" }]}>Continue with Apple</Text>
+              </Pressable>
+
+              {/* Google Sign In */}
+              <Pressable
+                onPress={() => {}}
+                style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+              >
+                <View style={styles.googleIconContainer}>
+                  <Image 
+                    source={require('@/assets/google.png')} 
+                    style={styles.googleIconImage} 
+                  />
+                </View>
+                <Text style={[styles.authButtonText, { color: theme.foreground }]}>Continue with Google</Text>
+              </Pressable>
+
+              {/* Email Sign In */}
+              <Pressable
+                onPress={() => {}}
+                style={[styles.authButton, styles.emailButton, { backgroundColor: theme.primary }]}
+              >
+                <View style={styles.emailIcon}>
+                  <Ionicons name="mail" size={20} color={theme.primaryForeground} />
+                </View>
+                <Text style={[styles.authButtonText, { color: theme.primaryForeground }]}>Continue with Email</Text>
+              </Pressable>
 
               <Pressable onPress={handleSignIn} style={styles.secondaryButton}>
                 <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>
@@ -147,7 +178,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   logoSection: {
     alignItems: 'center',
-    marginTop: 55,
+    marginTop: 15, // Moved up by 10px more (was 25)
   },
   appLogoContainer: {
     marginBottom: 16,
@@ -178,6 +209,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   buttonContainer: {
     width: '100%',
+    marginTop: 30,
   },
   primaryButton: {
     paddingVertical: 16,
@@ -207,5 +239,60 @@ const getStyles = (theme: any) => StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  authButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+    minHeight: 56,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  emailButton: {
+    borderWidth: 0,
+  },
+  authButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 20, // Explicit line height to prevent clipping
+    textAlignVertical: 'center', // Center text vertically (Android)
+  },
+  appleIconContainer: {
+    marginRight: 10,
+    position: 'relative',
+    left: -3,
+    top: -3,
+  },
+  googleIconContainer: {
+    marginRight: 10,
+    marginTop: 4,
+    position: 'relative',
+    left: -2,
+    top: -2,
+  },
+  googleIconImage: {
+    width: 20,
+    height: 20,
+  },
+  emailIcon: {
+    marginRight: 10,
+    marginTop: 4,
+    position: 'relative',
+    left: -5,
+    top: -3,
   },
 });

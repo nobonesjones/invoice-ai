@@ -17,6 +17,7 @@ import { useTheme } from "@/context/theme-provider";
 import { ChatService } from "@/services/chatService";
 // OpenAI service removed - now using secure edge functions
 import { useAIChat } from "@/hooks/useAIChat";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import { ChatMessage } from "@/services/chatService";
 import UserContextService from "@/services/userContextService";
 import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
@@ -1139,6 +1140,7 @@ export default function AiScreen() {
 	const router = useRouter();
 	const scrollViewRef = useRef<ScrollView>(null);
 	const transcribeButtonRef = useRef<TranscribeButtonRef>(null);
+	const analytics = useAnalytics();
 	
 	// State
 	const [inputText, setInputText] = useState('');
@@ -1154,7 +1156,8 @@ export default function AiScreen() {
 	const [showSetupMessage, setShowSetupMessage] = useState(false);
 	const [currentAudioLevel, setCurrentAudioLevel] = useState(0);
 	const [userContext, setUserContext] = useState<any>(null);
-	const [statusBoxes, setStatusBoxes] = useState<Array<{id: string, message: string, timestamp: number}>>([]);
+	const [statusBoxes, setStatusBoxes] = useState<Array<{id: string, message: string, timestamp: number, isInitial?: boolean}>>([]);
+	const [hasReceivedBackendUpdates, setHasReceivedBackendUpdates] = useState(false);
 
 	// Animated values for waveform
 	const waveformAnims = useRef([
@@ -1181,32 +1184,77 @@ export default function AiScreen() {
 		clearError: aiClearError 
 	} = useAIChat();
 
+	// 🧪 TEST: Track when AI screen is opened (remove after testing)
+	useEffect(() => {
+		if (user) {
+			console.log('[Analytics TEST] AI Screen opened - tracking test event');
+			analytics.trackEvent('AI Screen Opened', {
+				user_id: user.id,
+				timestamp: new Date().toISOString()
+			});
+		}
+	}, [user]);
+
 	// Handle status message updates - add them as status boxes
 	useEffect(() => {
 		if (statusMessage && aiIsLoading) {
+			console.log('[AI Screen] Received status message:', statusMessage);
+			
+			// Handle sequential status updates: Thinking → Action → Done (done is handled separately)
+			
+			// If this is a new action status (not thinking), replace the thinking status
+			const isActionStatus = statusMessage.includes('📄') || statusMessage.includes('📊') || 
+								   statusMessage.includes('✏️') || statusMessage.includes('👤');
+			
+			if (isActionStatus && statusBoxes.some(box => box.message.includes('🤔 Thinking'))) {
+				console.log('[AI Screen] Replacing thinking with action status');
+				setStatusBoxes(prev => prev.filter(box => !box.message.includes('🤔 Thinking')));
+			}
+			
+			const isInitialFrontendStatus = !hasReceivedBackendUpdates; // All statuses are from frontend now
+			
 			const newStatusBox = {
 				id: `status-${Date.now()}-${Math.random()}`,
 				message: statusMessage,
-				timestamp: Date.now()
+				timestamp: Date.now(),
+				isInitial: isInitialFrontendStatus
 			};
-			setStatusBoxes(prev => [...prev, newStatusBox]);
 			
-			// Remove status box after 3 seconds or when loading is complete
-			setTimeout(() => {
-				setStatusBoxes(prev => prev.filter(box => box.id !== newStatusBox.id));
-			}, 3000);
+			setStatusBoxes(prev => {
+				console.log('[AI Screen] Adding status box, total will be:', prev.length + 1);
+				
+				// Auto-scroll to show the new status box
+				setTimeout(() => {
+					scrollViewRef.current?.scrollToEnd({ animated: true });
+				}, 50); // Small delay to ensure status box is rendered
+				
+				return [...prev, newStatusBox];
+			});
+			
+			// Status boxes are cleared by seamless transition when AI response arrives
+			// No need for timeout-based removal
 		}
-	}, [statusMessage, aiIsLoading]);
+	}, [statusMessage, aiIsLoading, hasReceivedBackendUpdates]);
 
-	// Clear status boxes when loading stops
+	// Progress through thinking → action → done flow
 	useEffect(() => {
-		if (!aiIsLoading) {
-			// Keep status boxes visible briefly after loading stops
+		// Check if latest message has attachments (invoice/estimate) - this means we're done
+		const lastMessage = aiMessages[aiMessages.length - 1];
+		if (lastMessage?.role === 'assistant' && lastMessage?.attachments?.length > 0) {
+			console.log('[AI Screen] Invoice/estimate arrived - clearing status boxes immediately for clean transition');
+			
+			// Clear status boxes immediately - the invoice itself shows completion
+			setStatusBoxes([]);
+			setHasReceivedBackendUpdates(false);
+			
+		} else if (!aiIsLoading) {
+			// Fallback: Clear after delay if no attachments
 			setTimeout(() => {
 				setStatusBoxes([]);
+				setHasReceivedBackendUpdates(false); // Reset for next request
 			}, 1000);
 		}
-	}, [aiIsLoading]);
+	}, [aiMessages, aiIsLoading]);
 
 	// Load user context for first invoice detection and currency
 	const loadUserContext = async () => {
@@ -1482,6 +1530,16 @@ or '${example2}'`,
 		setInputText('');
 
 		try {
+			// 📊 Track AI chat usage - Your planned event #3
+			const startTime = Date.now();
+			
+			// Simple intent detection
+			const lowerMessage = messageToSend.toLowerCase();
+			let detectedIntent = 'general_query';
+			if (lowerMessage.includes('invoice')) detectedIntent = 'create_invoice';
+			else if (lowerMessage.includes('estimate') || lowerMessage.includes('quote')) detectedIntent = 'create_estimate';
+			else if (lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('discount')) detectedIntent = 'update_document';
+			
 			// console.log('[AI Screen] Sending message via useAIChat...');
 			
 			// Prepare user context if loaded
@@ -1493,6 +1551,16 @@ or '${example2}'`,
 			} : undefined;
 
 			await sendMessage(messageToSend, contextForMessage);
+			
+			// 📊 Track successful AI chat usage
+			const responseTime = Date.now() - startTime;
+			analytics.trackAIChatUsage({
+				message_count_in_session: aiMessages.length + 1,
+				intent_detected: detectedIntent as any,
+				response_time_ms: responseTime,
+				user_satisfied: true, // Assume satisfied if no error
+				conversation_length_minutes: Math.round((Date.now() - (conversation?.created_at ? new Date(conversation.created_at).getTime() : Date.now())) / 60000)
+			});
 			
 			// console.log('[AI Screen] Message sent successfully');
 		} catch (error) {
@@ -1839,7 +1907,7 @@ or '${example2}'`,
 						</View>
 					))}
 
-					{/* Status Boxes - AI Action Streaming */}
+					{/* Status Boxes - AI Action Streaming - Always appears at the end */}
 					{statusBoxes.length > 0 && (
 						<View className="items-start mb-4">
 							{statusBoxes.map((statusBox) => (
@@ -1852,30 +1920,6 @@ or '${example2}'`,
 						</View>
 					)}
 
-					{/* Fallback loading indicator if no status boxes */}
-					{aiIsLoading && statusBoxes.length === 0 && (
-						<View className="items-start mb-4">
-							<View
-								style={{
-									backgroundColor: theme.card,
-									paddingHorizontal: 16,
-									paddingVertical: 12,
-									borderRadius: 16,
-									borderBottomLeftRadius: 4,
-									borderWidth: 1,
-									borderColor: theme.primary + '20',
-								}}
-							>
-								<Text style={{ 
-									color: theme.primary,
-									fontSize: 16,
-									fontWeight: '500'
-								}}>
-									🤔 SuperAI is thinking...
-								</Text>
-							</View>
-						</View>
-					)}
 				</ScrollView>
 
 				{/* Input Area */}

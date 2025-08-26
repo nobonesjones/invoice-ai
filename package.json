@@ -54,6 +54,7 @@
     "expo-video": "~2.2.2",
     "expo-web-browser": "~14.2.0",
     "lucide-react-native": "^0.511.0",
+    "mixpanel-react-native": "^3.1.2",
     "moti": "^0.30.0",
     "nativewind": "^4.1.23",
     "openai": "^4.95.1",

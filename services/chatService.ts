@@ -78,6 +78,23 @@ export class ChatService {
     }
   }
 
+  // Intent detection - determine what action to show after thinking
+  private static detectUserIntent(message: string): { status: string } {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('invoice') || lowerMessage.includes('bill')) {
+      return { status: '📄 Creating invoice...' };
+    } else if (lowerMessage.includes('estimate') || lowerMessage.includes('quote')) {
+      return { status: '📊 Creating estimate...' };
+    } else if (lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('edit')) {
+      return { status: '✏️ Updating...' };
+    } else if (lowerMessage.includes('client') || lowerMessage.includes('customer')) {
+      return { status: '👤 Managing client...' };
+    } else {
+      return { status: '🤔 Thinking...' }; // Keep thinking for general messages
+    }
+  }
+
   // Main entry point - routes to appropriate service
   static async processUserMessage(
     userId: string,
@@ -126,7 +143,23 @@ export class ChatService {
         throw new Error('AI service is not configured. Please check your API key settings.');
       }
 
-      statusCallback?.('Processing...');
+      // Small delay to ensure user message renders first, then show thinking
+      setTimeout(() => {
+        statusCallback?.('🤔 Thinking...');
+        console.log('[ChatService] Showing initial thinking status');
+      }, 100);
+      
+      // After brief thinking, show the detected action (if different from thinking)
+      setTimeout(() => {
+        const intent = this.detectUserIntent(userMessage);
+        console.log('[ChatService] Detected intent:', intent.status);
+        
+        // Only send new status if it's different from thinking
+        if (intent.status !== '🤔 Thinking...') {
+          console.log('[ChatService] Transitioning to action status:', intent.status);
+          statusCallback?.(intent.status);
+        }
+      }, 900); // Brief thinking phase (800 + 100)
 
       // Reuse existing active thread if available
       const existingThread = await AssistantService.getCurrentThread(userId);

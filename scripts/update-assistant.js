@@ -72,6 +72,42 @@ FUNCTION CALLING:
 • Example: "create invoice" → call create_invoice function immediately
 • Example: "create quote" → call create_estimate function immediately
 
+🚨 CONTEXT-AWARE UPDATES - CRITICAL:
+When user mentions updates WITHOUT specifying which invoice/estimate:
+• ALWAYS use the most recently created/discussed document from the conversation
+• Look at the conversation history to identify what was just created
+• Use update_invoice for invoices, update_estimate for estimates
+• NEVER create a new document when the user clearly wants to update the existing one
+
+Examples:
+• User: "Create invoice for Emily 100 cakes at $4 each"
+• AI: Creates INV-079
+• User: "Add a discount 10%"
+• ✅ CORRECT: update_invoice(invoice_identifier: "INV-079", discount_type: "percentage", discount_value: 10)
+• ❌ WRONG: create_invoice with discount (creates duplicate)
+• ❌ WRONG: update_estimate on invoice (wrong function)
+• ❌ WRONG: update_invoice_appearance for discount (wrong function)
+• ❌ WRONG: update_client_info for discount (wrong function)
+
+🚨 DISCOUNT UPDATE EXAMPLES - CRITICAL:
+When user requests discounts, ALWAYS use update_invoice:
+• User: "Add 10% discount" → update_invoice(discount_type: "percentage", discount_value: 10)
+• User: "Apply $50 off" → update_invoice(discount_type: "fixed", discount_value: 50)
+• User: "Give them 20% discount" → update_invoice(discount_type: "percentage", discount_value: 20)
+• User: "Add a $100 discount" → update_invoice(discount_type: "fixed", discount_value: 100)
+• User: "Make it 15% off" → update_invoice(discount_type: "percentage", discount_value: 15)
+NEVER use update_invoice_appearance, update_client_info, or create_invoice for discounts!
+
+🚨 ESTIMATE DISCOUNT EXAMPLES - CRITICAL:
+When user requests discounts for estimates/quotes, ALWAYS use update_estimate:
+• User: "Add 10% discount to quote" → update_estimate(discount_type: "percentage", discount_value: 10)
+• User: "Apply $50 off estimate" → update_estimate(discount_type: "fixed", discount_value: 50)
+• User: "Give them 20% discount on quote" → update_estimate(discount_type: "percentage", discount_value: 20)
+• User: "Add a $100 discount to estimate" → update_estimate(discount_type: "fixed", discount_value: 100)
+• User: "Make the quote 15% off" → update_estimate(discount_type: "percentage", discount_value: 15)
+• User: "Apply discount to EST-123" → update_estimate(estimate_identifier: "EST-123", discount_type: "percentage", discount_value: X)
+NEVER use update_estimate_payment_methods, create_estimate, or invoice functions for estimate discounts!
+
 🚨 PARALLEL OPERATIONS - MAXIMIZE SPEED:
 DEFAULT TO PARALLEL: Execute multiple operations simultaneously unless one depends on another's output.
 
@@ -939,6 +975,165 @@ When the user indicates you made an error or corrected you:
             }
           },
           required: ["estimate_identifier"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "update_invoice",
+        description: "🚨 INVOICES ONLY: Update any aspect of an existing invoice - DISCOUNTS, amounts, dates, client info, line items, payment status, etc. Use this for discount updates ('add 10% discount'). NEVER use for estimates (EST- numbers). For estimate updates, use update_estimate instead.",
+        parameters: {
+          type: "object",
+          properties: {
+            invoice_identifier: {
+              type: "string",
+              description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+            },
+            client_name: {
+              type: "string",
+              description: "Update client name"
+            },
+            client_email: {
+              type: "string",
+              description: "Update client email"
+            },
+            client_phone: {
+              type: "string",
+              description: "Update client phone number"
+            },
+            client_address: {
+              type: "string",
+              description: "Update client address"
+            },
+            client_tax_number: {
+              type: "string",
+              description: "Update client tax number"
+            },
+            invoice_date: {
+              type: "string",
+              description: "Update invoice date (YYYY-MM-DD format)"
+            },
+            due_date: {
+              type: "string",
+              description: "Update due date (YYYY-MM-DD format)"
+            },
+            payment_terms_days: {
+              type: "number",
+              description: "Update payment terms in days"
+            },
+            notes: {
+              type: "string",
+              description: "Update invoice notes"
+            },
+            status: {
+              type: "string",
+              description: "Update invoice status",
+              enum: ["draft", "sent", "paid", "partial", "overdue", "cancelled"]
+            },
+            tax_rate: {
+              type: "number",
+              description: "Update tax rate percentage"
+            },
+            discount_type: {
+              type: "string",
+              description: "DISCOUNT: Set discount type - 'percentage' for % discounts, 'fixed' for dollar amounts",
+              enum: ["percentage", "fixed"]
+            },
+            discount_value: {
+              type: "number",
+              description: "DISCOUNT: Set discount amount (10 for 10% or dollar amount for fixed)"
+            },
+            invoice_design: {
+              type: "string",
+              description: "Update invoice design template",
+              enum: ["classic", "modern", "clean", "simple", "wave"]
+            },
+            accent_color: {
+              type: "string",
+              description: "Update invoice accent color (hex code like #0000FF)"
+            },
+            enable_stripe: {
+              type: "boolean",
+              description: "Enable/disable Stripe payments"
+            },
+            enable_paypal: {
+              type: "boolean",
+              description: "Enable/disable PayPal payments"
+            },
+            enable_bank_transfer: {
+              type: "boolean",
+              description: "Enable/disable bank transfer payments"
+            },
+            invoice_number: {
+              type: "string",
+              description: "Update invoice reference number"
+            },
+            paid_amount: {
+              type: "number",
+              description: "Update paid amount for payment tracking"
+            },
+            payment_date: {
+              type: "string",
+              description: "Update payment date (YYYY-MM-DD format)"
+            },
+            payment_notes: {
+              type: "string",
+              description: "Update payment notes"
+            },
+            line_items: {
+              type: "array",
+              description: "Replace all line items with new ones",
+              items: {
+                type: "object",
+                properties: {
+                  item_name: {
+                    type: "string"
+                  },
+                  item_description: {
+                    type: "string"
+                  },
+                  unit_price: {
+                    type: "number"
+                  },
+                  quantity: {
+                    type: "number"
+                  }
+                },
+                required: ["item_name", "unit_price"]
+              }
+            }
+          },
+          required: ["invoice_identifier"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "update_payment_methods",
+        description: "🚨 INVOICES ONLY: Enable or disable payment methods for an existing invoice (INV- numbers) - Stripe, PayPal, Bank Transfer. IMPORTANT: Can only enable methods that are already configured in the business payment options. If a payment method isn't set up at business level, it will be skipped. NEVER use for estimates. For estimate payment methods, use update_estimate_payment_methods instead.",
+        parameters: {
+          type: "object",
+          properties: {
+            invoice_identifier: {
+              type: "string",
+              description: "Invoice number (e.g., 'INV-004'), client name, or 'latest' for most recent invoice"
+            },
+            enable_stripe: {
+              type: "boolean",
+              description: "Enable/disable Stripe payments for this invoice (only works if Stripe is configured in business payment options)"
+            },
+            enable_paypal: {
+              type: "boolean", 
+              description: "Enable/disable PayPal payments for this invoice (only works if PayPal is configured in business payment options)"
+            },
+            enable_bank_transfer: {
+              type: "boolean",
+              description: "Enable/disable bank transfer payments for this invoice (only works if bank transfer is configured in business payment options)"
+            }
+          },
+          required: ["invoice_identifier"]
         }
       }
     },

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Animated } from 'react-native';
 import { Text } from './ui/text';
 
@@ -10,6 +10,7 @@ interface StatusBoxProps {
 export const StatusBox: React.FC<StatusBoxProps> = ({ message, theme }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const [animatedMessage, setAnimatedMessage] = useState(message);
 
   useEffect(() => {
     // Animate in
@@ -27,6 +28,31 @@ export const StatusBox: React.FC<StatusBoxProps> = ({ message, theme }) => {
       })
     ]).start();
   }, []);
+
+  // Animate dots for all active status messages (not "Done")
+  useEffect(() => {
+    const isActiveStatus = message.includes('Thinking') || 
+                          message.includes('Creating') || 
+                          message.includes('Updating') || 
+                          message.includes('Managing');
+    
+    if (isActiveStatus && !message.includes('Done')) {
+      let dotCount = 1;
+      const interval = setInterval(() => {
+        const dots = '.'.repeat(dotCount);
+        const spaces = '\u00A0'.repeat(3 - dotCount); // Non-breaking spaces to maintain width
+        
+        // Extract the base message without existing dots
+        const baseMessage = message.replace(/\.+$/, '');
+        setAnimatedMessage(`${baseMessage}${dots}${spaces}`);
+        dotCount = dotCount >= 3 ? 1 : dotCount + 1;
+      }, 500);
+
+      return () => clearInterval(interval);
+    } else {
+      setAnimatedMessage(message);
+    }
+  }, [message]);
 
   return (
     <Animated.View
@@ -55,7 +81,7 @@ export const StatusBox: React.FC<StatusBoxProps> = ({ message, theme }) => {
           textAlign: 'center',
         }}
       >
-        {message}
+        {animatedMessage}
       </Text>
     </Animated.View>
   );

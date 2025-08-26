@@ -575,6 +575,21 @@ FUNCTION CALLING:
 • Example: "create invoice" → call create_invoice function immediately
 • Example: "create quote" → call create_estimate function immediately
 
+🚨 CONTEXT-AWARE UPDATES - CRITICAL:
+When user mentions updates WITHOUT specifying which invoice/estimate:
+• ALWAYS use the most recently created/discussed document from the conversation
+• Look at the conversation history to identify what was just created
+• Use update_invoice for invoices, update_estimate for estimates
+• NEVER create a new document when the user clearly wants to update the existing one
+
+Examples:
+• User: "Create invoice for Emily 100 cakes at $4 each"
+• AI: Creates INV-079
+• User: "Add a discount 10%"
+• ✅ CORRECT: update_invoice(invoice_identifier: "INV-079", discount_type: "percentage", discount_value: 10)
+• ❌ WRONG: create_invoice with discount (creates duplicate)
+• ❌ WRONG: update_estimate on invoice (wrong function)
+
 🚨 INVOICE/ESTIMATE CREATION WITH ITEMS - CRITICAL:
 When user asks to CREATE a new invoice/estimate/quote WITH items:
 • Use create_invoice/create_estimate WITH line_items array - this adds all items at once
@@ -2485,6 +2500,21 @@ FUNCTION CALLING:
 • Example: "create invoice" → call create_invoice function immediately
 • Example: "create quote" → call create_estimate function immediately
 
+🚨 CONTEXT-AWARE UPDATES - CRITICAL:
+When user mentions updates WITHOUT specifying which invoice/estimate:
+• ALWAYS use the most recently created/discussed document from the conversation
+• Look at the conversation history to identify what was just created
+• Use update_invoice for invoices, update_estimate for estimates
+• NEVER create a new document when the user clearly wants to update the existing one
+
+Examples:
+• User: "Create invoice for Emily 100 cakes at $4 each"
+• AI: Creates INV-079
+• User: "Add a discount 10%"
+• ✅ CORRECT: update_invoice(invoice_identifier: "INV-079", discount_type: "percentage", discount_value: 10)
+• ❌ WRONG: create_invoice with discount (creates duplicate)
+• ❌ WRONG: update_estimate on invoice (wrong function)
+
 🚨 INVOICE/ESTIMATE CREATION WITH ITEMS - CRITICAL:
 When user asks to CREATE a new invoice/estimate/quote WITH items:
 • Use create_invoice/create_estimate WITH line_items array - this adds all items at once
@@ -3482,8 +3512,7 @@ When the user indicates you made an error or corrected you:
       console.log('[Assistants POC] ✅ Created NEW thread (no threadId provided):', thread.id);
     }
     
-    // Send initial thinking status
-    await sendStatusUpdate('Thinking', '🤔');
+    // Frontend handles immediate status - no need for backend status
     
     // Create run with assistant  
     const run = await openai.beta.threads.runs.create(thread.id, {
@@ -3567,7 +3596,7 @@ When the user indicates you made an error or corrected you:
         }
       };
       if (name === 'create_invoice') {
-        await sendStatusUpdate('Creating invoice', '📄');
+        // Status already sent - no duplicate needed
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, due_date, invoice_date, tax_percentage, notes, payment_terms, enable_paypal, paypal_email, enable_stripe, enable_bank_transfer, invoice_design, accent_color, discount_type, discount_value } = parsedArgs;
         // Calculate subtotal
         const subtotal_amount = line_items.reduce((sum, item)=>sum + item.unit_price * (item.quantity || 1), 0);
@@ -6157,6 +6186,9 @@ To change colors, just say:
     while(attempts < maxAttempts){
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
       console.log('[Assistants POC] Run status:', runStatus.status, `(attempt ${attempts + 1}/${maxAttempts})`);
+      
+      // No intermediate status updates - keep it clean
+      
       if (runStatus.status === 'completed') {
         // Get final messages
         const messages = await openai.beta.threads.messages.list(thread.id);
@@ -6222,8 +6254,11 @@ To change colors, just say:
           console.log('[Attachment Gate] No invoice or estimate to return');
         }
         
-        // Add final completion status
-        await sendStatusUpdate('Done', '✅');
+        // Frontend handles seamless transition to result - no final status needed
+        
+        // DEBUG: Log what statusUpdates we're about to send
+        console.log('[DEBUG] Final statusUpdates being sent:', globalThis.statusUpdates);
+        console.log('[DEBUG] StatusUpdates length:', (globalThis.statusUpdates || []).length);
         
         // Return JSON response compatible with current app
         return new Response(JSON.stringify({
@@ -6259,6 +6294,7 @@ To change colors, just say:
       }
       if (runStatus.status === 'requires_action') {
         console.log('[Assistants POC] Requires action - handling tool calls');
+        // Frontend handles immediate status detection - no backend status needed
         const toolCalls = runStatus.required_action?.submit_tool_outputs?.tool_calls || [];
         const toolOutputs = [];
         for (const toolCall of toolCalls){

@@ -15,12 +15,16 @@ import { UsageProvider } from "@/context/usage-provider";
 import { OnboardingProvider } from "@/context/onboarding-provider";
 import { PaywallProvider } from "@/context/paywall-provider";
 import { SuperwallProvider } from "expo-superwall";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 // Inner component to access theme and supabase context
 function RootLayoutNav() {
 	const { session, initialized } = useSupabase();
 	const segments = useSegments();
 	const router = useRouter();
+	
+	// Initialize analytics
+	const analytics = useAnalytics();
 
 	useEffect(() => {
 		if (!initialized) return; // Wait until supabase is initialized
