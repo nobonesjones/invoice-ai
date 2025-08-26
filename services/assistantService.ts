@@ -1091,11 +1091,8 @@ Use tools to take action. Reference previous conversation naturally.`;
       const requestId = `${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       console.log('[AssistantService] Request ID:', requestId);
       
-      statusCallback?.('SuperAI is initializing...');
-      
       // Use optimized edge function if enabled
       if (this.USE_OPTIMIZED_AI) {
-        statusCallback?.('SuperAI is processing your message...');
         
         // 🚨 DEBUG: Log thread ID being sent
         console.log('[AssistantService] Sending message with threadId:', currentThreadId || 'NEW THREAD');
@@ -1148,7 +1145,6 @@ Use tools to take action. Reference previous conversation naturally.`;
       }
 
       // Fallback to original implementation
-      statusCallback?.('SuperAI is connecting...');
       
       // Ensure assistant is initialized
       await this.initialize();
@@ -1161,8 +1157,6 @@ Use tools to take action. Reference previous conversation naturally.`;
           status: 'failed'
         };
       }
-
-      statusCallback?.('SuperAI is connecting...');
 
       // Get or create thread
       let threadId = await this.getOrCreateThread(userId);
@@ -1206,7 +1200,6 @@ Use tools to take action. Reference previous conversation naturally.`;
         threadId = await this.createNewThread(userId);
       }
 
-      statusCallback?.('SuperAI is processing your message...');
 
       // Add user message to thread
       await openai.beta.threads.messages.create(threadId, {
@@ -1217,7 +1210,6 @@ Use tools to take action. Reference previous conversation naturally.`;
       // Save message to our database for UI display
       await this.saveMessageToDatabase(userId, threadId, 'user', message);
 
-      statusCallback?.('SuperAI is generating response...');
 
       // Create and run the assistant with currency context if provided
       const runOptions: any = {
@@ -1392,15 +1384,10 @@ Use tools to take action. Reference previous conversation naturally.`;
       if (toolCalls.length > 0) {
         const functionName = toolCalls[0].function.name;
         if (functionName.includes('create_invoice')) {
-          statusCallback?.('SuperAI is creating invoice...');
         } else if (functionName.includes('search')) {
-          statusCallback?.('SuperAI is searching...');
         } else if (functionName.includes('update')) {
-          statusCallback?.('SuperAI is updating...');
         } else if (functionName.includes('client')) {
-          statusCallback?.('SuperAI is processing client data...');
         } else {
-          statusCallback?.('SuperAI is executing action...');
         }
       }
       
@@ -1465,7 +1452,6 @@ Use tools to take action. Reference previous conversation naturally.`;
         collectedAttachments = [];
       }
 
-      statusCallback?.('SuperAI is completing response...');
 
       try {
         // Submit tool outputs

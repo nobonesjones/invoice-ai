@@ -1574,42 +1574,6 @@ or '${example2}'`,
 		return "Type or speak your message...";
 	};
 
-	// Enhance real AI status messages with emojis and visual flair
-	const getEnhancedStatusText = () => {
-		if (!statusMessage) return "🤔 SuperAI is thinking...";
-		
-		const message = statusMessage.toLowerCase();
-		
-		// Map different status messages to appropriate emojis
-		if (message.includes('initializing')) {
-			return `🚀 ${statusMessage}`;
-		} else if (message.includes('connecting')) {
-			return `🔗 ${statusMessage}`;
-		} else if (message.includes('thinking') || message.includes('analyzing')) {
-			return `🤔 ${statusMessage}`;
-		} else if (message.includes('processing') || message.includes('working')) {
-			return `⚡ ${statusMessage}`;
-		} else if (message.includes('creating') || message.includes('generating')) {
-			return `✨ ${statusMessage}`;
-		} else if (message.includes('searching') || message.includes('finding')) {
-			return `🔍 ${statusMessage}`;
-		} else if (message.includes('updating') || message.includes('modifying')) {
-			return `🔄 ${statusMessage}`;
-		} else if (message.includes('executing') || message.includes('action')) {
-			return `⚙️ ${statusMessage}`;
-		} else if (message.includes('completing') || message.includes('finishing')) {
-			return `🎯 ${statusMessage}`;
-		} else if (message.includes('client')) {
-			return `👤 ${statusMessage}`;
-		} else if (message.includes('invoice')) {
-			return `📄 ${statusMessage}`;
-		} else if (message.includes('estimate')) {
-			return `📋 ${statusMessage}`;
-		} else {
-			// Default emoji for any other status
-			return `🔄 ${statusMessage}`;
-		}
-	};
 
 	// Function to render text with bold formatting
 	const renderFormattedText = (text: string, textColor: string) => {

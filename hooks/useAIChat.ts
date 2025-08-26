@@ -49,7 +49,6 @@ export function useAIChat(): UseAIChatReturn {
     try {
       setIsLoading(true);
       setError(null);
-      updateStatus('Loading conversation...');
 
       if (isUsingAssistants) {
         // Load messages from Assistants API
@@ -123,13 +122,7 @@ export function useAIChat(): UseAIChatReturn {
       setIsLoading(true);
       setError(null);
 
-      // Progressive status updates
-      updateStatus('SuperAI is thinking...');
-      
-      // Add small delay to show the first status
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      updateStatus('SuperAI is analyzing your request...');
+      // Status updates now come from backend - no need for frontend status calls
 
       // Processing message...
       
@@ -186,7 +179,6 @@ export function useAIChat(): UseAIChatReturn {
     try {
       setIsLoading(true);
       setError(null);
-      updateStatus('Clearing conversation...');
 
       if (isUsingAssistants) {
         // For Assistants API, properly clear the current thread
