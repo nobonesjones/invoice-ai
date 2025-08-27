@@ -7,13 +7,23 @@ import { useEffect, useRef } from 'react';
 import analytics from '@/services/analyticsService';
 
 export const useAnalytics = () => {
+  console.log('[useAnalytics] 🎯 Hook called/instantiated');
   const isInitialized = useRef(false);
 
   useEffect(() => {
     // Initialize analytics service once
+    console.log('[useAnalytics] Hook useEffect called, isInitialized.current:', isInitialized.current);
     if (!isInitialized.current) {
-      analytics.initialize();
+      console.log('[useAnalytics] 🚀 Calling analytics.initialize()...');
+      analytics.initialize().then(() => {
+        console.log('[useAnalytics] ✅ analytics.initialize() completed successfully');
+      }).catch((error) => {
+        console.error('[useAnalytics] ❌ analytics.initialize() failed:', error);
+      });
       isInitialized.current = true;
+      console.log('[useAnalytics] ✅ analytics.initialize() called, isInitialized.current now:', isInitialized.current);
+    } else {
+      console.log('[useAnalytics] ⚠️ Already initialized, skipping');
     }
   }, []);
 
@@ -39,5 +49,11 @@ export const useAnalytics = () => {
     setUserProperties: analytics.setUserProperties.bind(analytics),
     incrementUserProperty: analytics.incrementUserProperty.bind(analytics),
     setSuperProperties: analytics.setSuperProperties.bind(analytics),
+    
+    // Manual flush for debugging
+    flush: analytics.flush.bind(analytics),
+    
+    // Emergency debug test
+    emergencyDebugTest: analytics.emergencyDebugTest.bind(analytics),
   };
 };

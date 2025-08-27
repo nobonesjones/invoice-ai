@@ -374,17 +374,10 @@ export default function CreateInvoiceScreen() {
 
   // Edit mode detection and logging
   useEffect(() => {
-    console.log('[CreateInvoiceScreen] Mode detection:');
-    console.log('  - isEditMode:', isEditMode);
-    console.log('  - editInvoiceId:', editInvoiceId);
-    console.log('  - params?.id:', params?.id);
-    console.log('  - params?.invoiceId:', params?.invoiceId);
     
     if (isEditMode && editInvoiceId) {
-      console.log('[CreateInvoiceScreen] Edit mode detected - will load invoice:', editInvoiceId);
       loadInvoiceForEdit(editInvoiceId);
     } else {
-      console.log('[CreateInvoiceScreen] Create mode - starting with empty form');
     }
   }, [isEditMode, editInvoiceId, params?.id, params?.invoiceId]);
 
@@ -395,7 +388,6 @@ export default function CreateInvoiceScreen() {
       return;
     }
 
-    console.log('[loadInvoiceForEdit] Starting to load invoice:', invoiceId);
     setIsLoadingInvoice(true);
     setLoadingError(null);
 
@@ -424,7 +416,6 @@ export default function CreateInvoiceScreen() {
         return;
       }
 
-      console.log('[loadInvoiceForEdit] Invoice data loaded:', invoiceData);
       
       // Transform and populate form data
       await populateFormWithInvoiceData(invoiceData);
@@ -448,44 +439,33 @@ export default function CreateInvoiceScreen() {
 
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
-      console.log('[CreateInvoiceScreen] Focus event: Hiding tab bar');
       setIsTabBarVisible(false);
       
       // Reload invoice data if in edit mode and we have an invoice ID
       if (isEditMode && editInvoiceId && !isLoadingInvoice) {
-        console.log('[CreateInvoiceScreen] Focus in edit mode - reloading invoice data');
         loadInvoiceForEdit(editInvoiceId);
       }
     });
 
     const unsubscribeBlur = navigation.addListener('blur', () => {
-      console.log('[CreateInvoiceScreen] Blur event: Showing tab bar');
       setIsTabBarVisible(true);
     });
 
     // Handle back button press for unsaved changes
     const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
-      console.log('[beforeRemove] Navigation attempt detected');
-      console.log('[beforeRemove] hasUnsavedChanges:', hasUnsavedChanges);
-      console.log('[beforeRemove] isSavingInvoice:', isSavingInvoice);
-      console.log('[beforeRemove] isAutoSaving:', isAutoSaving);
-      console.log('[beforeRemove] isEditMode:', isEditMode);
       
       // For edit mode, allow natural navigation - don't intercept
       if (isEditMode) {
-        console.log('[beforeRemove] Edit mode - allowing natural navigation');
         return;
       }
       
       // Don't intercept navigation if we're currently saving or if no unsaved changes
       if (!hasUnsavedChanges || isSavingInvoice || isAutoSaving) {
-        console.log('[beforeRemove] Allowing navigation - no unsaved changes or currently saving');
         return;
       }
 
       // Always prevent default behavior IMMEDIATELY
       e.preventDefault();
-      console.log('[beforeRemove] Navigation PREVENTED - showing dialog');
 
       // Use setTimeout to ensure the prevention takes effect before showing dialog
       setTimeout(() => {
@@ -498,7 +478,6 @@ export default function CreateInvoiceScreen() {
               text: "Don't Save", 
               style: 'destructive', 
               onPress: () => {
-                console.log('[beforeRemove] User chose: Don\'t Save');
                 // Clear unsaved changes flag
                 setHasUnsavedChanges(false);
                 // Navigate to invoice dashboard instead of back to previewer
@@ -506,12 +485,10 @@ export default function CreateInvoiceScreen() {
               }
             },
             { text: 'Cancel', style: 'cancel', onPress: () => {
-              console.log('[beforeRemove] User chose: Cancel');
             } },
             {
               text: 'Save Draft',
               onPress: async () => {
-                console.log('[beforeRemove] User chose: Save Draft');
                 const savedId = await autoSaveAsDraft();
                 if (savedId) {
                   setHasUnsavedChanges(false);
@@ -529,12 +506,10 @@ export default function CreateInvoiceScreen() {
 
     // Initial hide if screen is focused on mount
     if (navigation.isFocused()) {
-        console.log('[CreateInvoiceScreen] Initial focus: Hiding tab bar');
         setIsTabBarVisible(false);
     }
 
     return () => {
-      console.log('[CreateInvoiceScreen] Unmounting: Ensuring tab bar is visible');
       unsubscribeFocus();
       unsubscribeBlur();
       unsubscribeBeforeRemove();
@@ -555,7 +530,6 @@ export default function CreateInvoiceScreen() {
   }, []);
 
   const handleSheetChanges = useCallback((index: number) => {
-    console.log('handleSheetChanges', index);
     // Clear item form when modal is fully closed
     if (index === -1) {
       setItemName('');
@@ -583,7 +557,6 @@ export default function CreateInvoiceScreen() {
     setValue('client_id', client.id, { shouldValidate: true });
     setSelectedClient(client);
     // You might want to trigger form validation or other actions here
-    console.log('Selected client:', client);
     newClientSheetRef.current?.dismiss(); // Dismiss the sheet after selection
   }, [setValue]);
 
@@ -607,15 +580,12 @@ export default function CreateInvoiceScreen() {
     setIsSavingInvoice(true);
 
     try {
-      console.log(`[handleSaveInvoice] ${isEditMode ? 'UPDATE' : 'CREATE'} mode - Processing invoice`);
 
       // Check usage limits for new invoice creation (not for edits)
       if (!isEditMode) {
-        console.log('[handleSaveInvoice] Checking usage limits for new invoice');
         const limitCheck = await UsageService.checkInvoiceLimit(user.id);
         
         if (!limitCheck.canCreate) {
-          console.log('[handleSaveInvoice] Usage limit reached, showing paywall');
           Alert.alert(
             'Upgrade Required',
             `You've reached your limit of ${limitCheck.remaining === 0 ? limitCheck.total : 'free'} invoices! Upgrade to create unlimited invoices and unlock premium features.`,
@@ -637,19 +607,13 @@ export default function CreateInvoiceScreen() {
           return;
         }
 
-        console.log(`[handleSaveInvoice] Usage check passed. Remaining: ${limitCheck.remaining}`);
       }
 
-      console.log('[handleSaveInvoice] formData.invoice_number:', formData.invoice_number);
-      console.log('[handleSaveInvoice] formData.invoice_date:', formData.invoice_date);
-      console.log('[handleSaveInvoice] formData.due_date:', formData.due_date);
-      console.log('[handleSaveInvoice] formData.due_date_option:', formData.due_date_option);
 
       // Get default design and color from business settings for new invoices
       let defaultDesign = DEFAULT_DESIGN_ID; // Use correct default ('clean') instead of hardcoded 'classic'
       let defaultAccentColor = '#14B8A6';
       
-      console.log('[handleSaveInvoice] 🎨 Initial default design:', defaultDesign, '(should be clean)');
       
       if (!isEditMode) {
         try {
@@ -662,12 +626,9 @@ export default function CreateInvoiceScreen() {
           if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
             defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
-            console.log('[handleSaveInvoice] 🎨 Business settings loaded - design:', defaultDesign, 'from DB:', businessSettings.default_invoice_design, 'fallback:', DEFAULT_DESIGN_ID);
           } else {
-            console.log('[handleSaveInvoice] 🎨 No business settings found, using fallback design:', defaultDesign);
           }
         } catch (error) {
-          console.log('[handleSaveInvoice] Could not load business settings, using defaults');
         }
       }
 
@@ -686,11 +647,6 @@ export default function CreateInvoiceScreen() {
         invoiceStatus = INVOICE_STATUSES.PAID;
       }
       
-      console.log('[handleSaveInvoice] Payment calculation:');
-      console.log('[handleSaveInvoice] - Total paid:', currentTotalPaid);
-      console.log('[handleSaveInvoice] - Invoice total:', invoiceTotal);
-      console.log('[handleSaveInvoice] - Is marked as paid:', isMarkedAsPaid);
-      console.log('[handleSaveInvoice] - Calculated status:', invoiceStatus);
       
       const invoiceData = {
         user_id: user.id,
@@ -727,7 +683,6 @@ export default function CreateInvoiceScreen() {
 
       if (isEditMode && editInvoiceId) {
         // UPDATE existing invoice
-        console.log('[handleSaveInvoice] Updating existing invoice:', editInvoiceId);
         const { data: updatedInvoice, error: invoiceError } = await supabase
           .from('invoices')
           .update(invoiceData)
@@ -744,11 +699,9 @@ export default function CreateInvoiceScreen() {
         }
 
         savedInvoice = updatedInvoice;
-        console.log('[handleSaveInvoice] Invoice updated successfully');
 
       } else {
         // CREATE new invoice
-        console.log('[handleSaveInvoice] Creating new invoice');
       const { data: newInvoice, error: invoiceError } = await supabase
         .from('invoices')
           .insert(invoiceData)
@@ -763,12 +716,10 @@ export default function CreateInvoiceScreen() {
       }
 
         savedInvoice = newInvoice;
-        console.log('[handleSaveInvoice] Invoice created successfully');
 
         // Increment usage count for new invoices only
         try {
           await UsageService.incrementInvoiceCount(user.id);
-          console.log('[handleSaveInvoice] Usage count incremented');
         } catch (usageError) {
           console.error('Error incrementing usage count:', usageError);
           // Don't fail the invoice creation for this, just log it
@@ -786,7 +737,6 @@ export default function CreateInvoiceScreen() {
 
       // 3. Success - Navigate to viewer
       const successMessage = isEditMode ? 'Invoice updated successfully!' : 'Invoice created successfully!';
-      console.log(`[handleSaveInvoice] ${successMessage} Navigating to viewer with ID:`, savedInvoice.id);
       
       // Log the activity
       if (isEditMode) {
@@ -808,11 +758,9 @@ export default function CreateInvoiceScreen() {
       // Navigation logic: different behavior for edit vs create
       if (isEditMode) {
         // For edit mode: go back to the existing invoice viewer (don't create a new one)
-        console.log('[handleSaveInvoice] Edit mode: going back to existing invoice viewer');
         router.back();
       } else {
         // For new invoice creation: navigate to new invoice viewer
-        console.log('[handleSaveInvoice] Create mode: navigating to new invoice viewer');
         router.replace({
           pathname: '/(app)/(protected)/invoices/invoice-viewer',
           params: { id: savedInvoice.id, from: 'save' },
@@ -833,13 +781,10 @@ export default function CreateInvoiceScreen() {
   const handleLineItemsUpdate = async (invoiceId: string, items: InvoiceLineItem[]) => {
     if (!supabase || !user) return;
 
-    console.log('[handleLineItemsUpdate] Processing line items for invoice:', invoiceId);
-    console.log('[handleLineItemsUpdate] Items count:', items.length);
 
     if (isEditMode) {
       // In edit mode: delete all existing items and insert new ones
       // This is a simple approach - more sophisticated would be to track changes
-      console.log('[handleLineItemsUpdate] Edit mode: replacing all line items');
       
       // 1. Delete existing line items
       const { error: deleteError } = await supabase
@@ -853,7 +798,6 @@ export default function CreateInvoiceScreen() {
         throw new Error(`Failed to update line items: ${deleteError.message}`);
       }
 
-      console.log('[handleLineItemsUpdate] Existing line items deleted');
     }
 
     // 2. Insert new/updated line items (for both create and edit modes)
@@ -871,7 +815,6 @@ export default function CreateInvoiceScreen() {
           item_image_url: item.item_image_url || null,
         }));
 
-      console.log('[handleLineItemsUpdate] Inserting line items:', lineItemsData.length);
 
       const { error: insertError } = await supabase
           .from('invoice_line_items')
@@ -882,9 +825,7 @@ export default function CreateInvoiceScreen() {
         throw new Error(`Failed to save line items: ${insertError.message}`);
       }
 
-      console.log('[handleLineItemsUpdate] Line items saved successfully');
     } else {
-      console.log('[handleLineItemsUpdate] No line items to save');
     }
   };
 
@@ -895,7 +836,6 @@ export default function CreateInvoiceScreen() {
       return null;
     }
 
-    console.log('[autoSaveAsDraft] Auto-saving invoice as draft for preview');
     setIsAutoSaving(true);
 
     try {
@@ -929,7 +869,6 @@ export default function CreateInvoiceScreen() {
       if (currentInvoiceId || editInvoiceId) {
         // Update existing draft or invoice
         const idToUpdate = currentInvoiceId || editInvoiceId;
-        console.log('[autoSaveAsDraft] Updating existing invoice/draft:', idToUpdate);
         const { data: updatedInvoice, error: invoiceError } = await supabase
           .from('invoices')
           .update(invoiceData)
@@ -950,7 +889,6 @@ export default function CreateInvoiceScreen() {
         }
       } else {
         // Create new draft
-        console.log('[autoSaveAsDraft] Creating new draft');
         const { data: newInvoice, error: invoiceError } = await supabase
           .from('invoices')
           .insert(invoiceData)
@@ -968,7 +906,6 @@ export default function CreateInvoiceScreen() {
       // Save line items
       await handleLineItemsUpdate(savedInvoice.id, formData.items || []);
       
-      console.log('[autoSaveAsDraft] Draft saved successfully with ID:', savedInvoice.id);
       return savedInvoice.id;
 
     } catch (error: any) {
@@ -987,7 +924,6 @@ export default function CreateInvoiceScreen() {
   } | null>(null);
 
   const handlePreviewInvoice = async () => {
-    console.log('[handlePreviewInvoice] Preview requested');
     
     // Get current form data without saving to database
     const formData = getValues();
@@ -1000,7 +936,6 @@ export default function CreateInvoiceScreen() {
     
     try {
       // Fetch actual business settings from database
-      console.log('[handlePreviewInvoice] Fetching business settings for preview');
       let businessSettingsForPreview = {
         business_name: '',
         business_address: '',
@@ -1016,7 +951,6 @@ export default function CreateInvoiceScreen() {
       // Fetch client data if client is selected
       let clientData = null;
       if (formData.client_id && supabase && user) {
-        console.log('[handlePreviewInvoice] Fetching client data for:', formData.client_id);
         const { data: client, error: clientError } = await supabase
           .from('clients')
           .select('*')
@@ -1027,12 +961,10 @@ export default function CreateInvoiceScreen() {
         if (clientError) {
           console.warn('[handlePreviewInvoice] Could not fetch client:', clientError.message);
         } else if (client) {
-          console.log('[handlePreviewInvoice] Client data loaded:', client);
           clientData = client;
         }
       } else if (selectedClient) {
         // Use selectedClient state as fallback
-        console.log('[handlePreviewInvoice] Using selectedClient state:', selectedClient);
         clientData = selectedClient;
       }
 
@@ -1047,7 +979,6 @@ export default function CreateInvoiceScreen() {
           console.warn('[handlePreviewInvoice] Could not fetch business settings:', businessError.message);
           // Continue with default settings
         } else if (businessData) {
-          console.log('[handlePreviewInvoice] Business settings loaded:', businessData);
           businessSettingsForPreview = {
             business_name: businessData.business_name || '',
             business_address: businessData.business_address || '',
@@ -1086,15 +1017,11 @@ export default function CreateInvoiceScreen() {
       };
       
       // Set preview data and open modal
-      console.log('[handlePreviewInvoice] Opening preview modal with data');
-      console.log('[handlePreviewInvoice] Client data:', clientData);
-      console.log('[handlePreviewInvoice] Totals - Subtotal:', displaySubtotal, 'Total:', displayInvoiceTotal);
       setPreviewData({
         invoiceData: enhancedFormData,
         businessSettings: businessSettingsForPreview,
         clientData: clientData,
       });
-      console.log('[handlePreviewInvoice] Calling present() on modal ref');
       invoicePreviewModalRef.current?.present();
     } catch (error: any) {
       console.error('[handlePreviewInvoice] Error preparing preview:', error);
@@ -1137,10 +1064,8 @@ export default function CreateInvoiceScreen() {
   const [currentInvoiceLineItems, setCurrentInvoiceLineItems] = useState<InvoiceLineItem[]>([]);
 
   useEffect(() => {
-    console.log('[useEffect for items] watchedItems:', watchedItems);
     const itemsFromForm = (watchedItems || []) as InvoiceLineItem[];
     setCurrentInvoiceLineItems(itemsFromForm);
-    console.log('[useEffect for items] setCurrentInvoiceLineItems to:', itemsFromForm);
   }, [watchedItems]);
 
   // Track unsaved changes - Smart detection of meaningful content
@@ -1162,16 +1087,6 @@ export default function CreateInvoiceScreen() {
       const hasPONumber = Boolean(poNumber && poNumber.trim());
       const hasNotes = Boolean(notes && notes.trim());
       
-      console.log('[hasSignificantContent] Check:', {
-        hasItems,
-        hasClient,
-        hasCustomInvoiceNumber,
-        hasCustomHeadline,
-        hasPONumber,
-        hasNotes,
-        itemsCount: currentItems.length
-      });
-      
       return hasItems || hasClient || hasCustomInvoiceNumber || hasCustomHeadline || hasPONumber || hasNotes;
     };
 
@@ -1179,7 +1094,6 @@ export default function CreateInvoiceScreen() {
     const subscription = watch((value, { name, type }) => {
       if (type === 'change') {
         const hasContent = hasSignificantContent();
-        console.log('[unsaved changes tracker] Form changed:', name, 'hasContent:', hasContent);
         setHasUnsavedChanges(hasContent);
       }
     });
@@ -1188,7 +1102,6 @@ export default function CreateInvoiceScreen() {
     if (isEditMode || currentInvoiceId) {
       // For edit mode, check if there's content to determine initial state
       const hasContent = hasSignificantContent();
-      console.log('[unsaved changes tracker] Edit mode initial check - hasContent:', hasContent);
       setHasUnsavedChanges(hasContent);
     }
 
@@ -1202,8 +1115,6 @@ export default function CreateInvoiceScreen() {
 
   const handleSaveDetailsFromModal = (updatedDetails: any) => {
     // This function will be called when the modal's save button is pressed
-    console.log('[CreateInvoiceScreen] handleSaveDetailsFromModal - Received updatedDetails:', updatedDetails);
-    console.log('[CreateInvoiceScreen] handleSaveDetailsFromModal - updatedDetails.dueDateDisplayLabel:', updatedDetails?.dueDateDisplayLabel);
     setInvoiceDetails(updatedDetails); // Update the local state for UI display
 
     // Update react-hook-form state as well for consistency and submission
@@ -1228,21 +1139,17 @@ export default function CreateInvoiceScreen() {
   };
 
   React.useEffect(() => {
-    console.log('[CreateInvoiceScreen] useEffect - invoiceDetails.dueDateDisplayLabel changed to:', invoiceDetails?.dueDateDisplayLabel);
   }, [invoiceDetails?.dueDateDisplayLabel]);
 
   const openEditInvoiceDetailsModal = () => {
-    console.log('Attempting to open Edit Invoice Details Modal...');
     editInvoiceDetailsSheetRef.current?.present();
   };
 
   // Ref for the new EditInvoiceDetailsSheet modal
   const editInvoiceDetailsSheetRef = useRef<EditInvoiceDetailsSheetRef>(null);
 
-  console.log("[CreateInvoiceScreen] RENDERING, dueDateDisplayLabel:", invoiceDetails?.dueDateDisplayLabel); // Added render log
 
   const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
-    console.log('Item data received in create.tsx:', itemDataFromSheet);
     
     // Get current items from react-hook-form state
     const currentFormItems = getValues('items') || [];
@@ -1255,7 +1162,6 @@ export default function CreateInvoiceScreen() {
       
       if (existingItemIndex !== -1) {
         // Item already exists, increment quantity
-        console.log('Found existing saved item, incrementing quantity');
         const updatedItems = [...currentFormItems];
         const existingItem = updatedItems[existingItemIndex];
         
@@ -1391,7 +1297,6 @@ export default function CreateInvoiceScreen() {
         if (error) {
           console.error('Error fetching business_settings:', error);
         } else if (data) {
-          console.log('Fetched business_settings:', data);
           setGlobalTaxName(data.tax_name || null);
           // Ensure default_tax_rate is treated as a number
           const rate = data.default_tax_rate;
@@ -1437,7 +1342,6 @@ export default function CreateInvoiceScreen() {
   };
 
   const handleApplyDiscountFromSheet = (data: DiscountData) => {
-    console.log('Apply Discount from sheet:', data);
     // Update form values with data from discount sheet
     const numericDiscountValue = data.discountValue ? parseFloat(data.discountValue.replace(',', '.')) : null;
 
@@ -1447,7 +1351,6 @@ export default function CreateInvoiceScreen() {
   };
 
   const handleSelectDiscountTypeSheetClose = () => {
-    console.log("SelectDiscountTypeSheet has been closed.");
     // Add any other logic needed when the discount sheet is closed by the user
   };
 
@@ -1467,7 +1370,6 @@ export default function CreateInvoiceScreen() {
   };
 
   const handleMakePaymentSheetSave = async (data: PaymentData) => {
-    console.log('MakePaymentSheet Save:', data);
     const newPayment: RecordedPayment = {
       id: `payment_${new Date().toISOString()}_${Math.random().toString(36).substring(2, 9)}`,
       amount: parseFloat(data.paymentAmount),
@@ -1483,16 +1385,11 @@ export default function CreateInvoiceScreen() {
     const newTotalPaid = updatedPayments.reduce((sum, payment) => sum + payment.amount, 0);
     const invoiceTotal = getValues('totalAmount') || 0;
     
-    console.log('[handleMakePaymentSheetSave] Payment added:', newPayment.amount);
-    console.log('[handleMakePaymentSheetSave] New total paid:', newTotalPaid);
-    console.log('[handleMakePaymentSheetSave] Invoice total:', invoiceTotal);
     
     // Update paid status if fully paid
     if (newTotalPaid >= invoiceTotal && invoiceTotal > 0) {
-      console.log('[handleMakePaymentSheetSave] Invoice is now fully paid - updating status');
       setIsMarkedAsPaid(true);
     } else if (newTotalPaid > 0 && newTotalPaid < invoiceTotal) {
-      console.log('[handleMakePaymentSheetSave] Invoice is partially paid');
       setIsMarkedAsPaid(false);
     }
     
@@ -1512,12 +1409,10 @@ export default function CreateInvoiceScreen() {
   };
 
   const handleMakePaymentSheetClose = () => {
-    console.log('Closing Make Payment Sheet');
   };
 
   // Function to open the payment sheet with current totals
   const handleOpenPaymentSheet = () => {
-    console.log('[handleOpenPaymentSheet] Opening payment sheet with total:', displayInvoiceTotal, 'paid:', totalPaidAmount);
     makePaymentSheetRef.current?.present(displayInvoiceTotal, totalPaidAmount);
   };
 
@@ -1526,13 +1421,9 @@ export default function CreateInvoiceScreen() {
   const displayTaxRatePercent = taxPercentage !== null ? taxPercentage : globalTaxRatePercent;
 
   const handleRemoveItem = (itemId: string) => {
-    console.log('[handleRemoveItem] Attempting to remove itemId:', itemId);
     const currentItems = getValues('items') || [];
-    console.log('[handleRemoveItem] currentItems from getValues:', JSON.stringify(currentItems));
     const updatedItems = currentItems.filter(item => item.id !== itemId);
-    console.log('[handleRemoveItem] updatedItems after filter:', JSON.stringify(updatedItems));
     setValue('items', updatedItems, { shouldValidate: true, shouldDirty: true });
-    console.log('[handleRemoveItem] Called setValue with updatedItems.');
   };
 
   // Render function for the visible part of the list item
@@ -1566,7 +1457,6 @@ export default function CreateInvoiceScreen() {
         <TouchableOpacity
           style={[styles.backRightBtn, styles.backRightBtnRight]}
           onPress={() => {
-            console.log('[renderHiddenItem] Remove button pressed for item:', item.id);
             handleRemoveItem(item.id);
             // Optionally close the row
             if (rowMap[item.id]) {
@@ -1584,9 +1474,6 @@ export default function CreateInvoiceScreen() {
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
   const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
-    console.log(`[handlePaymentMethodToggle] ${methodKey} toggle attempt:`, newValue);
-    console.log(`[handlePaymentMethodToggle] Loading state:`, paymentOptionsLoading);
-    console.log(`[handlePaymentMethodToggle] Payment options data:`, paymentOptionsData);
     
     // Block all toggles if payment options are still loading
     if (paymentOptionsLoading) {
@@ -1601,7 +1488,6 @@ export default function CreateInvoiceScreen() {
     // If payment options data is not available, only block when enabling (allow disabling)
     if (!paymentOptionsData && newValue === true) {
       // User hasn't set up payment options yet, allow them to continue but warn them
-      console.log(`[handlePaymentMethodToggle] No payment options configured yet, will validate individual method`);
     }
     
     // Only validate when toggling ON (allowing OFF always)
@@ -1620,7 +1506,6 @@ export default function CreateInvoiceScreen() {
         settingName = 'Bank Transfer';
       }
       
-      console.log(`[handlePaymentMethodToggle] ${methodKey} enabled in settings:`, isEnabledInSettings);
       
       if (!isEnabledInSettings) {
         Alert.alert(
@@ -1641,7 +1526,6 @@ export default function CreateInvoiceScreen() {
     // Update react-hook-form state directly - validation passed or toggling OFF
     const formKey = `${methodKey}_active_on_invoice` as keyof InvoiceFormData;
     setValue(formKey, newValue, { shouldValidate: true, shouldDirty: true });
-    console.log(`[handlePaymentMethodToggle] ${methodKey} successfully set to:`, newValue);
 
     // // Original code that updated local state, now replaced by setValue above
     // setInvoiceDetails((prev: InvoiceFormData) => ({
@@ -1695,7 +1579,6 @@ export default function CreateInvoiceScreen() {
 
   // Function to populate form with loaded invoice data
   const populateFormWithInvoiceData = async (invoiceData: any) => {
-    console.log('[populateFormWithInvoiceData] Starting data population');
     
     try {
       // 1. Populate basic invoice fields
@@ -1728,7 +1611,6 @@ export default function CreateInvoiceScreen() {
         };
         setSelectedClient(clientInfo);
         setValue('client_id', clientInfo.id);
-        console.log('[populateFormWithInvoiceData] Client set:', clientInfo);
       }
       
       // 5. Transform and populate line items
@@ -1747,7 +1629,6 @@ export default function CreateInvoiceScreen() {
         }));
         
         setValue('items', transformedLineItems);
-        console.log('[populateFormWithInvoiceData] Line items populated:', transformedLineItems.length);
       }
       
       // 6. Update invoice details state for UI display
@@ -1775,10 +1656,8 @@ export default function CreateInvoiceScreen() {
           date: invoiceData.payment_date ? new Date(invoiceData.payment_date) : new Date()
         };
         setRecordedPayments([existingPayment]);
-        console.log('[populateFormWithInvoiceData] Populated existing payment:', existingPayment);
       }
       
-      console.log('[populateFormWithInvoiceData] Form population completed successfully');
       
     } catch (error: any) {
       console.error('[populateFormWithInvoiceData] Error populating form:', error);
@@ -2120,7 +1999,7 @@ export default function CreateInvoiceScreen() {
           <FormSection title="OTHER SETTINGS" themeColors={themeColors}>
             <ActionRow
               label="Add images & PDFs (0)"
-              onPress={() => console.log('Add Attachments pressed')} 
+              onPress={() => {}} 
               icon={Paperclip}
               themeColors={themeColors} 
               showChevron={false} // This is more of an action button
@@ -2159,7 +2038,7 @@ export default function CreateInvoiceScreen() {
         <NewClientSelectionSheet
           ref={newClientSheetRef}
           onClientSelect={handleClientSelect}
-          onClose={() => console.log('New client sheet closed')}
+          onClose={() => {}}
         />
 
         <DateTimePickerModal
@@ -2193,7 +2072,7 @@ export default function CreateInvoiceScreen() {
         <EditInvoiceTaxSheet 
           ref={editInvoiceTaxSheetRef}
           onSave={handleEditTaxSheetSave} // Placeholder save handler
-          onClose={() => console.log('Edit invoice tax sheet closed')}
+          onClose={() => {}}
         />
 
         <MakePaymentSheet 
@@ -2212,7 +2091,6 @@ export default function CreateInvoiceScreen() {
           clientData={previewData?.clientData}
           invoiceId={currentInvoiceId || undefined}
           onClose={() => {
-            console.log('[CreateInvoice] Manual close - setting previewData to null');
             setPreviewData(null);
           }}
         />

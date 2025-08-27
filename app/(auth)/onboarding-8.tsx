@@ -14,10 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 export default function OnboardingScreen8() {
   const router = useRouter();
   const { theme } = useTheme();
+  const analytics = useAnalytics();
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -34,6 +36,13 @@ export default function OnboardingScreen8() {
 
   const handleStartTutorial = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Track onboarding completion - key funnel event!
+    analytics.trackEvent('Completed onboarding', {
+      final_step: 8,
+      step_name: 'ready_to_start',
+      timestamp: new Date().toISOString()
+    });
     
     try {
       // Request notification permissions

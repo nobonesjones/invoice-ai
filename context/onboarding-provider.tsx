@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/config/supabase';
 
 interface OnboardingData {
@@ -11,17 +10,49 @@ interface OnboardingData {
 
 interface OnboardingContextType {
   onboardingData: OnboardingData;
-  updateBusinessInfo: (businessInfo: { businessName: string, selectedRegion: string }) => void;
-  updateIndustry: (selectedIndustry: string) => void;
-  updateLogo: (logoUri: string | null) => void;
+  updateBusinessInfo: (businessInfo: { businessName: string, selectedRegion: string }) => Promise<void>;
+  updateIndustry: (selectedIndustry: string) => Promise<void>;
+  updateLogo: (logoUri: string | null) => Promise<void>;
   saveOnboardingData: (userId?: string) => Promise<void>;
   clearOnboardingData: () => Promise<void>;
-  loadOnboardingData: () => Promise<void>;
+  loadOnboardingData: (userId?: string) => Promise<void>;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-const ONBOARDING_STORAGE_KEY = '@onboarding_data';
+// Helper function to get or create business settings record
+const getOrCreateBusinessSettings = async (userId: string) => {
+  const { data: existing, error: fetchError } = await supabase
+    .from('business_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+    
+  if (fetchError && fetchError.code !== 'PGRST116') {
+    throw fetchError;
+  }
+  
+  if (existing) {
+    return existing;
+  }
+  
+  // Create new record if it doesn't exist
+  const { data: created, error: createError } = await supabase
+    .from('business_settings')
+    .insert({
+      user_id: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+    
+  if (createError) {
+    throw createError;
+  }
+  
+  return created;
+};
 
 // Region to currency and tax mapping
 const REGION_CURRENCY_TAX_MAP: Record<string, { currency: string; taxName: string; defaultTaxRate: number }> = {
@@ -122,51 +153,250 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     logoUri: null,
   });
 
-  // Load onboarding data from AsyncStorage when provider initializes
+  // Load onboarding data from database when provider initializes
   useEffect(() => {
-    loadOnboardingData();
+    const loadData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        await loadOnboardingData(session.user.id);
+      }
+    };
+    loadData();
   }, []);
 
-  const updateBusinessInfo = ({ businessName, selectedRegion }: { businessName: string, selectedRegion: string }) => {
-    const newData = { ...onboardingData, businessName, selectedRegion };
-    console.log('[OnboardingProvider] updateBusinessInfo called with:', { businessName, selectedRegion });
-    console.log('[OnboardingProvider] Current data before update:', onboardingData);
-    console.log('[OnboardingProvider] New data after update:', newData);
-    setOnboardingData(newData);
-    // Also save to AsyncStorage for persistence
-    AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(newData));
-    console.log('[OnboardingProvider] Saved to AsyncStorage');
+  // Monitor session changes and load user-specific data
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        // Clear state when user signs out
+        setOnboardingData({
+          businessName: '',
+          selectedRegion: '',
+          selectedIndustry: '',
+          logoUri: null,
+        });
+        console.log('[OnboardingProvider] User signed out, cleared onboarding state');
+      } else if (event === 'SIGNED_IN' && session?.user?.id) {
+        // Load user-specific data when user signs in
+        await loadOnboardingData(session.user.id);
+        console.log('[OnboardingProvider] User signed in, loaded their onboarding data');
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  const updateBusinessInfo = async ({ businessName, selectedRegion }: { businessName: string, selectedRegion: string }) => {
+    try {
+      console.log('[OnboardingProvider] updateBusinessInfo called with:', { businessName, selectedRegion });
+      
+      // Update local state
+      const newData = { ...onboardingData, businessName, selectedRegion };
+      setOnboardingData(newData);
+      
+      // Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        console.log('[OnboardingProvider] No authenticated user, skipping database save');
+        return;
+      }
+      
+      // Get regional settings
+      const regionalSettings = REGION_CURRENCY_TAX_MAP[selectedRegion] || {
+        currency: 'USD',
+        taxName: 'Tax',
+        defaultTaxRate: 0
+      };
+      
+      // Save to database immediately
+      const { error } = await supabase
+        .from('business_settings')
+        .upsert({
+          user_id: session.user.id,
+          business_name: businessName,
+          region: selectedRegion,
+          currency_code: regionalSettings.currency,
+          tax_name: regionalSettings.taxName,
+          default_tax_rate: regionalSettings.defaultTaxRate,
+          auto_apply_tax: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+        
+      if (error) {
+        console.error('[OnboardingProvider] Error saving business info:', error);
+      } else {
+        console.log('[OnboardingProvider] Business info saved to database successfully');
+      }
+    } catch (error) {
+      console.error('[OnboardingProvider] updateBusinessInfo error:', error);
+    }
   };
 
-  const updateIndustry = (selectedIndustry: string) => {
-    const newData = { ...onboardingData, selectedIndustry };
-    console.log('[OnboardingProvider] updateIndustry called with:', selectedIndustry);
-    console.log('[OnboardingProvider] Current data before update:', onboardingData);
-    console.log('[OnboardingProvider] New data after update:', newData);
-    setOnboardingData(newData);
-    AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(newData));
-    console.log('[OnboardingProvider] Saved to AsyncStorage');
+  const updateIndustry = async (selectedIndustry: string) => {
+    try {
+      console.log('[OnboardingProvider] updateIndustry called with:', selectedIndustry);
+      
+      // Update local state
+      const newData = { ...onboardingData, selectedIndustry };
+      setOnboardingData(newData);
+      
+      // Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        console.log('[OnboardingProvider] No authenticated user, skipping database save');
+        return;
+      }
+      
+      // Save industry to profiles table
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: session.user.id,
+          industry: selectedIndustry,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+        
+      if (error) {
+        console.error('[OnboardingProvider] Error saving industry:', error);
+      } else {
+        console.log('[OnboardingProvider] Industry saved to database successfully');
+      }
+    } catch (error) {
+      console.error('[OnboardingProvider] updateIndustry error:', error);
+    }
   };
 
-  const updateLogo = (logoUri: string | null) => {
-    const newData = { ...onboardingData, logoUri };
-    console.log('[OnboardingProvider] updateLogo called with:', logoUri);
-    console.log('[OnboardingProvider] Current data before update:', onboardingData);
-    console.log('[OnboardingProvider] New data after update:', newData);
-    setOnboardingData(newData);
-    AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(newData));
-    console.log('[OnboardingProvider] Saved to AsyncStorage');
+  const updateLogo = async (logoUri: string | null) => {
+    try {
+      console.log('[OnboardingProvider] updateLogo called with:', logoUri);
+      
+      // Update local state
+      const newData = { ...onboardingData, logoUri };
+      setOnboardingData(newData);
+      
+      // Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        console.log('[OnboardingProvider] No authenticated user, skipping database save');
+        return;
+      }
+      
+      if (!logoUri) {
+        console.log('[OnboardingProvider] No logo to save');
+        return;
+      }
+      
+      // If it's a local file, upload it immediately
+      let logoUrl = logoUri;
+      if (logoUri.startsWith('file://') || logoUri.startsWith('ph://')) {
+        console.log('[OnboardingProvider] Uploading logo file to storage...');
+        
+        try {
+          // Convert image to base64 for upload
+          const base64Response = await fetch(logoUri);
+          const blob = await base64Response.blob();
+          
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64String = reader.result as string;
+              const base64Data = base64String.split(',')[1];
+              resolve(base64Data);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          
+          // Upload via edge function
+          const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
+          const apiKey = process.env.EXPO_PUBLIC_ANON_KEY;
+          
+          if (!supabaseUrl || !apiKey) {
+            throw new Error('Missing Supabase configuration');
+          }
+          
+          const response = await fetch(`${supabaseUrl}/functions/v1/upload-logo`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': apiKey,
+            },
+            body: JSON.stringify({
+              fileName: `onboarding_logo_${Date.now()}.jpg`,
+              fileType: 'image/jpeg',
+              base64: base64,
+            }),
+          });
+          
+          const result = await response.json();
+          
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          
+          logoUrl = result.url;
+          console.log('[OnboardingProvider] Logo uploaded successfully:', logoUrl);
+          
+        } catch (uploadError) {
+          console.error('[OnboardingProvider] Logo upload failed:', uploadError);
+          return; // Don't save if upload failed
+        }
+      }
+      
+      // Save logo URL to database
+      const { error } = await supabase
+        .from('business_settings')
+        .upsert({
+          user_id: session.user.id,
+          business_logo_url: logoUrl,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+        
+      if (error) {
+        console.error('[OnboardingProvider] Error saving logo URL:', error);
+      } else {
+        console.log('[OnboardingProvider] Logo URL saved to database successfully');
+        // Update local state with the final URL
+        setOnboardingData(prev => ({ ...prev, logoUri: logoUrl }));
+      }
+    } catch (error) {
+      console.error('[OnboardingProvider] updateLogo error:', error);
+    }
   };
 
   const saveOnboardingData = async (userId?: string): Promise<void> => {
     try {
+      console.log('[OnboardingProvider] 🚨 SAVE ONBOARDING DEBUG - Start');
+      console.log('[OnboardingProvider] Provided userId:', userId);
+      
       if (!userId) {
-        console.log('[OnboardingProvider] No userId provided, skipping save');
-        return;
+        console.error('[OnboardingProvider] 🚨 CRITICAL: No userId provided!');
+        
+        // Try to get from current session as fallback
+        const { data: { session } } = await supabase.auth.getSession();
+        userId = session?.user?.id;
+        console.log('[OnboardingProvider] Fallback - got userId from session:', userId);
+        
+        if (!userId) {
+          console.error('[OnboardingProvider] 🚨 CRITICAL: No userId available from session either!');
+          return;
+        }
       }
 
+      // 🚨 DEBUG: Current session info
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      console.log('[OnboardingProvider] 🔍 SESSION DEBUG:');
+      console.log('  - Current session user:', currentSession?.user?.id);
+      console.log('  - Current session email:', currentSession?.user?.email);
+      console.log('  - userId we will save with:', userId);
+      console.log('  - Are they the same?', currentSession?.user?.id === userId);
+
       // Load fresh data from AsyncStorage to make sure we have the latest
-      const storedData = await AsyncStorage.getItem(ONBOARDING_STORAGE_KEY);
+      const storageKey = getOnboardingStorageKey(userId);
+      const storedData = await AsyncStorage.getItem(storageKey);
       let dataToSave = onboardingData;
       
       if (storedData) {
@@ -233,8 +463,79 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 
       // Add logo if provided
       if (dataToSave.logoUri) {
-        businessSettingsData.business_logo_url = dataToSave.logoUri;
-        console.log('[OnboardingProvider] Adding logo URL:', dataToSave.logoUri);
+        console.log('[OnboardingProvider] Processing logo upload:', dataToSave.logoUri);
+        
+        // Check if it's a local file URI that needs uploading
+        if (dataToSave.logoUri.startsWith('file://') || dataToSave.logoUri.startsWith('ph://')) {
+          try {
+            console.log('[OnboardingProvider] Uploading local logo file to storage...');
+            
+            // Convert image to base64
+            const base64Response = await fetch(dataToSave.logoUri);
+            const blob = await base64Response.blob();
+            
+            // Convert blob to base64
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64String = reader.result as string;
+                const base64Data = base64String.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+                resolve(base64Data);
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+
+            // Get session for auth
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+              throw new Error('No session found for logo upload');
+            }
+
+            // Upload via edge function
+            const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
+            const apiKey = process.env.EXPO_PUBLIC_ANON_KEY;
+            
+            if (!supabaseUrl || !apiKey) {
+              throw new Error('Missing Supabase configuration');
+            }
+            
+            const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload-logo`;
+            const response = await fetch(edgeFunctionUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': apiKey,
+              },
+              body: JSON.stringify({
+                fileName: `onboarding_logo_${Date.now()}.jpg`,
+                fileType: 'image/jpeg',
+                base64: base64,
+              }),
+            });
+
+            const result = await response.json();
+            console.log('[OnboardingProvider] Logo upload response:', result);
+
+            if (result.error) {
+              throw new Error(result.error);
+            }
+
+            // Use the uploaded URL
+            businessSettingsData.business_logo_url = result.url;
+            console.log('[OnboardingProvider] Logo uploaded successfully:', result.url);
+            
+          } catch (error) {
+            console.error('[OnboardingProvider] Logo upload failed:', error);
+            // Don't fail the entire onboarding, just skip the logo
+            console.warn('[OnboardingProvider] Continuing onboarding without logo');
+          }
+        } else {
+          // It's already a public URL, use as-is
+          businessSettingsData.business_logo_url = dataToSave.logoUri;
+          console.log('[OnboardingProvider] Using existing logo URL:', dataToSave.logoUri);
+        }
       }
 
       console.log('[OnboardingProvider] Final business settings data:', businessSettingsData);
@@ -273,7 +574,7 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
       console.log('[OnboardingProvider] Successfully saved all onboarding data to database');
       
       // Clear from storage after successful save
-      await clearOnboardingData();
+      await clearOnboardingData(userId);
       console.log('[OnboardingProvider] Cleared onboarding data from AsyncStorage');
     } catch (error) {
       console.error('[OnboardingProvider] Error saving onboarding data:', error);
@@ -281,22 +582,64 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const clearOnboardingData = async (): Promise<void> => {
+  const clearOnboardingData = async (userId?: string): Promise<void> => {
+    // Clear local state
     setOnboardingData({
       businessName: '',
       selectedRegion: '',
       selectedIndustry: '',
       logoUri: null,
     });
-    await AsyncStorage.removeItem(ONBOARDING_STORAGE_KEY);
+    
+    console.log('[OnboardingProvider] Onboarding data cleared from state');
   };
 
-  const loadOnboardingData = async (): Promise<void> => {
+  const loadOnboardingData = async (userId?: string): Promise<void> => {
     try {
-      const storedData = await AsyncStorage.getItem(ONBOARDING_STORAGE_KEY);
-      if (storedData) {
-        setOnboardingData(JSON.parse(storedData));
+      if (!userId) {
+        console.log('[OnboardingProvider] No userId provided for loading');
+        return;
       }
+      
+      console.log('[OnboardingProvider] Loading onboarding data for user:', userId);
+      
+      // Load business settings
+      const { data: businessData, error: businessError } = await supabase
+        .from('business_settings')
+        .select('business_name, region, business_logo_url')
+        .eq('user_id', userId)
+        .maybeSingle();
+        
+      // Load industry from profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('industry')
+        .eq('id', userId)
+        .maybeSingle();
+        
+      if (businessError && businessError.code !== 'PGRST116') {
+        console.error('[OnboardingProvider] Error loading business settings:', businessError);
+      }
+      
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('[OnboardingProvider] Error loading profile:', profileError);
+      }
+      
+      // Update local state with loaded data
+      setOnboardingData({
+        businessName: businessData?.business_name || '',
+        selectedRegion: businessData?.region || '',
+        selectedIndustry: profileData?.industry || '',
+        logoUri: businessData?.business_logo_url || null,
+      });
+      
+      console.log('[OnboardingProvider] Loaded onboarding data:', {
+        businessName: businessData?.business_name,
+        region: businessData?.region,
+        industry: profileData?.industry,
+        hasLogo: !!businessData?.business_logo_url
+      });
+      
     } catch (error) {
       console.error('[OnboardingProvider] Error loading onboarding data:', error);
     }

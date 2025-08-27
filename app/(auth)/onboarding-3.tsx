@@ -101,7 +101,7 @@ export default function OnboardingScreen3() {
 
   const isFormValid = businessName.trim().length > 0 && selectedRegion.length > 0;
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!isFormValid) {
       Alert.alert('Required Fields', 'Please fill in all required fields to continue.');
       return;
@@ -109,11 +109,16 @@ export default function OnboardingScreen3() {
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // Store the business info using the onboarding context
-    console.log('[Onboarding3] Saving business info:', { businessName, selectedRegion });
-    updateBusinessInfo({ businessName, selectedRegion });
-    
-    router.push("/(auth)/onboarding-4");
+    try {
+      // Store the business info using the onboarding context
+      console.log('[Onboarding3] Saving business info:', { businessName, selectedRegion });
+      await updateBusinessInfo({ businessName, selectedRegion });
+      
+      router.push("/(auth)/onboarding-4");
+    } catch (error) {
+      console.error('[Onboarding3] Error saving business info:', error);
+      Alert.alert('Error', 'Failed to save business information. Please try again.');
+    }
   };
 
   const handleRegionPress = () => {

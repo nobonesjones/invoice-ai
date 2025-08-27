@@ -175,12 +175,23 @@ export default function BusinessInformationScreen() {
   const fetchBusinessInfo = useCallback(async (): Promise<void> => {
     if (!session || !supabase) return;
     setInitialLoading(true);
+    
+    console.log('[BusinessInfo] 🚨 FETCH DEBUG - Start');
+    console.log('[BusinessInfo] Session user ID:', session.user.id);
+    console.log('[BusinessInfo] Session user email:', session.user.email);
+    
     try {
       const { data, error } = await supabase
         .from('business_settings')
         .select('*')
         .eq('user_id', session.user.id)
-        .maybeSingle(); 
+        .maybeSingle();
+
+      console.log('[BusinessInfo] 🔍 QUERY RESULT:');
+      console.log('  - Data found:', !!data);
+      console.log('  - Business name:', data?.business_name);
+      console.log('  - Logo URL:', data?.business_logo_url);
+      console.log('  - Data user_id:', data?.user_id); 
 
       if (error && error.code !== 'PGRST116') { 
         throw error;

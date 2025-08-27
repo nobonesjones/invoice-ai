@@ -8,28 +8,65 @@ import { Mixpanel } from 'mixpanel-react-native';
 class AnalyticsService {
   private mixpanel: Mixpanel | null = null;
   private isInitialized = false;
+  private isInitializing = false;
   private eventQueue: Array<{ eventName: string; properties?: any }> = [];
 
-  // Your Mixpanel project token
+  // Your Mixpanel project token - VERIFY THIS IS CORRECT IN MIXPANEL DASHBOARD!
   private readonly PROJECT_TOKEN = '16d86d8fa0dd77452a8f81d7a256e527';
 
   async initialize() {
+    if (this.isInitialized) {
+      console.log('[Analytics] ⚠️ Already initialized, skipping duplicate initialization');
+      return;
+    }
+
     try {
-      console.log('[Analytics] Initializing Mixpanel...');
+      console.log('[Analytics] 🚀 Initializing Mixpanel with token:', this.PROJECT_TOKEN);
       
-      // Initialize Mixpanel
+      // Initialize Mixpanel with proper serverURL configuration
       const trackAutomaticEvents = false; // We'll track manually for more control
-      this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents);
+      const useNative = true; // Native mode for React Native
+      const serverURL = 'https://api.mixpanel.com'; // US data residency (change if EU/India)
+      
+      console.log('[Analytics] 🌍 Using serverURL:', serverURL);
+      this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents, useNative, serverURL);
+      
+      console.log('[Analytics] 🔄 Calling mixpanel.init()...');
       await this.mixpanel.init();
       
+      // Enable debug logging to see what's happening
+      this.mixpanel.setLoggingEnabled(true);
+      console.log('[Analytics] 🔍 Debug logging enabled');
+      
       this.isInitialized = true;
-      console.log('[Analytics] ✅ Mixpanel initialized successfully');
+      console.log('[Analytics] ✅ Mixpanel initialized successfully!');
+      
+      // Send a simple test event to verify connection
+      console.log('[Analytics] 🧪 Sending test event...');
+      console.log('[Analytics] 🧪 Token verification - First 8 chars:', this.PROJECT_TOKEN.substring(0, 8));
+      
+      this.mixpanel.track('Debug Test Event', {
+        timestamp: new Date().toISOString(),
+        test_event: true,
+        sdk_version: 'mixpanel-react-native@3.1.2',
+        platform: 'ios',
+        environment: 'development'
+      });
+      
+      // Force flush the test event immediately
+      console.log('[Analytics] 🧪 Flushing test event...');
+      this.mixpanel.flush();
+      console.log('[Analytics] 🧪 Test event sent and flushed - check Mixpanel Live View!');
 
       // Process any queued events
       this.processEventQueue();
       
     } catch (error) {
       console.error('[Analytics] ❌ Failed to initialize Mixpanel:', error);
+      console.error('[Analytics] ❌ Error details:', error.message);
+      console.error('[Analytics] ❌ Error stack:', error.stack);
+      console.error('[Analytics] ❌ Check: 1) Project token correct? 2) Data residency (US/EU/India)? 3) Network connection?');
+      this.isInitialized = false; // Reset flag on failure
     }
   }
 
@@ -53,9 +90,12 @@ class AnalyticsService {
    */
   trackEvent(eventName: string, properties?: any, allowQueue = true) {
     try {
+      console.log(`[Analytics] 🎯 trackEvent called: "${eventName}"`);
+      console.log(`[Analytics] 🔍 isInitialized: ${this.isInitialized}, mixpanel exists: ${!!this.mixpanel}`);
+      
       if (!this.isInitialized && allowQueue) {
         // Queue event for when Mixpanel is ready
-        console.log(`[Analytics] 📝 Queueing event: ${eventName}`);
+        console.log(`[Analytics] 📝 Queueing event: ${eventName} (Mixpanel not ready)`);
         this.eventQueue.push({ eventName, properties });
         return;
       }
@@ -73,11 +113,20 @@ class AnalyticsService {
         platform: 'mobile'
       };
 
-      console.log(`[Analytics] 📊 Tracking: ${eventName}`, enrichedProperties);
+      console.log(`[Analytics] 📊 Sending to Mixpanel: ${eventName}`);
+      console.log(`[Analytics] 📊 Properties:`, enrichedProperties);
+      console.log(`[Analytics] 📊 Using token: ${this.PROJECT_TOKEN.substring(0, 8)}...`);
+      
       this.mixpanel.track(eventName, enrichedProperties);
+      
+      // Force flush for critical events to ensure they're sent immediately
+      console.log(`[Analytics] 🚽 Flushing event: ${eventName}`);
+      this.mixpanel.flush();
+      console.log(`[Analytics] ✅ Event sent and flushed: ${eventName} - Check Mixpanel Live View!`);
       
     } catch (error) {
       console.error(`[Analytics] ❌ Failed to track event ${eventName}:`, error);
+      console.error(`[Analytics] ❌ Error stack:`, error.stack);
     }
   }
 
@@ -154,6 +203,77 @@ class AnalyticsService {
       
     } catch (error) {
       console.error('[Analytics] ❌ Failed to set super properties:', error);
+    }
+  }
+
+  /**
+   * Manually flush events (for debugging)
+   */
+  flush() {
+    try {
+      if (!this.mixpanel) {
+        console.warn('[Analytics] ⚠️ Cannot flush - Mixpanel not initialized');
+        return;
+      }
+
+      console.log('[Analytics] 🚽 Manually flushing events...');
+      this.mixpanel.flush();
+      console.log('[Analytics] ✅ Events flushed - Check Mixpanel Live View now!');
+      
+    } catch (error) {
+      console.error('[Analytics] ❌ Failed to flush events:', error);
+    }
+  }
+
+  /**
+   * Emergency debug test - try different approaches
+   */
+  emergencyDebugTest() {
+    console.log('🚨 ===== EMERGENCY MIXPANEL DEBUG =====');
+    console.log('🔍 Current state:');
+    console.log('  - isInitialized:', this.isInitialized);
+    console.log('  - mixpanel exists:', !!this.mixpanel);
+    console.log('  - Project token:', this.PROJECT_TOKEN);
+    
+    if (!this.mixpanel) {
+      console.error('❌ Mixpanel not initialized! Call analytics.initialize() first');
+      return;
+    }
+
+    console.log('📤 Sending multiple test events with different approaches...');
+    
+    // Test 1: Minimal event
+    this.mixpanel.track('Emergency Test 1', { test: true });
+    this.mixpanel.flush();
+    
+    // Test 2: With distinct_id
+    this.mixpanel.track('Emergency Test 2', { 
+      test: true,
+      distinct_id: 'debug_user_123',
+      timestamp: new Date().toISOString()
+    });
+    this.mixpanel.flush();
+    
+    console.log('🚨 Emergency tests sent - check Mixpanel Live View!');
+    console.log('🔍 If no events appear, the project token is likely wrong');
+  }
+
+  /**
+   * Force flush all queued events
+   */
+  flush() {
+    try {
+      if (!this.mixpanel) {
+        console.warn('[Analytics] ⚠️ Cannot flush - Mixpanel not initialized');
+        return;
+      }
+
+      console.log('[Analytics] 🔄 Flushing queued events...');
+      this.mixpanel.flush();
+      console.log('[Analytics] ✅ Events flushed');
+      
+    } catch (error) {
+      console.error('[Analytics] ❌ Failed to flush events:', error);
     }
   }
 
@@ -295,4 +415,8 @@ class AnalyticsService {
 
 // Export singleton instance
 export const analytics = new AnalyticsService();
+
+// Note: Initialization now handled by useAnalytics hook to prevent race conditions
+// No auto-initialization to avoid double initialization with useAnalytics hook
+
 export default analytics;

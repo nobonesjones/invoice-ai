@@ -43,6 +43,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
+import { useAnalytics } from '@/hooks/useAnalytics';
 import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft, Palette } from 'lucide-react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -308,6 +309,7 @@ const calculateGrandTotal = (
 
 export default function CreateEstimateScreen() {
   const { isLightMode } = useTheme();
+  const analytics = useAnalytics();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const router = useRouter();
   const navigation = useNavigation();
@@ -411,7 +413,6 @@ export default function CreateEstimateScreen() {
         if (error) {
           console.error('Error fetching business_settings:', error);
         } else if (data) {
-          console.log('Fetched business_settings:', data);
           setGlobalTaxName(data.tax_name || null);
           // Ensure default_tax_rate is treated as a number
           const rate = data.default_tax_rate;
@@ -460,7 +461,6 @@ export default function CreateEstimateScreen() {
         setIsLoadingEstimateNumber(true);
         const newEstimateNumber = await generateEstimateNumber();
         setValue('estimate_number', newEstimateNumber);
-        console.log('[initializeEstimateNumber] Set estimate number to:', newEstimateNumber);
         setIsLoadingEstimateNumber(false);
       } else {
         // For edit mode, number is already loaded, no need to generate
@@ -503,7 +503,6 @@ export default function CreateEstimateScreen() {
           }
         }
       } catch (error) {
-        console.log('[fetchBusinessSettings] Error fetching settings:', error);
       }
     };
 
@@ -596,7 +595,6 @@ export default function CreateEstimateScreen() {
       }
 
       try {
-        console.log('[loadEstimateForEditing] Loading estimate:', editEstimateId);
 
         // Fetch estimate with client and line items
         const { data: estimateData, error: estimateError } = await supabase
@@ -623,7 +621,6 @@ export default function CreateEstimateScreen() {
           return;
         }
 
-        console.log('[loadEstimateForEditing] Estimate data loaded:', estimateData);
 
         // Set the selected client
         if (estimateData.clients) {
@@ -678,7 +675,6 @@ export default function CreateEstimateScreen() {
           setCurrentAccentColor(estimateData.accent_color);
         }
 
-        console.log('[loadEstimateForEditing] Form populated with estimate data');
 
       } catch (error) {
         console.error('[loadEstimateForEditing] Unexpected error:', error);
@@ -696,7 +692,6 @@ export default function CreateEstimateScreen() {
   // Sync form items with currentEstimateLineItems for UI display
   useEffect(() => {
     if (watchedItems) {
-      console.log('[useEffect for items] watchedItems:', watchedItems);
       setCurrentEstimateLineItems(watchedItems as EstimateLineItem[]);
     }
   }, [watchedItems]);
@@ -707,7 +702,6 @@ export default function CreateEstimateScreen() {
       return;
     }
 
-    console.log('[handleSaveEstimate] Starting save process...');
     setIsSavingEstimate(true);
 
     try {
@@ -723,14 +717,10 @@ export default function CreateEstimateScreen() {
       // Check and generate estimate number if missing
       let estimateNumber = formData.estimate_number?.trim();
       if (!estimateNumber) {
-        console.log('[handleSaveEstimate] Estimate number is missing, generating new one...');
         estimateNumber = await generateEstimateNumber();
         setValue('estimate_number', estimateNumber, { shouldValidate: true, shouldDirty: true });
-        console.log('[handleSaveEstimate] Generated new estimate number:', estimateNumber);
       }
 
-      console.log('[handleSaveEstimate] Using estimate number:', estimateNumber);
-      console.log('[handleSaveEstimate] formData.valid_until_option:', formData.valid_until_option);
 
       // Get default design and color from business settings for new estimates
       let defaultDesign = 'classic';
@@ -747,10 +737,8 @@ export default function CreateEstimateScreen() {
           if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
             defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
-            console.log('[handleSaveEstimate] Using default design:', defaultDesign, 'color:', defaultAccentColor);
           }
         } catch (error) {
-          console.log('[handleSaveEstimate] Could not load business settings, using defaults');
         }
       }
 
@@ -790,7 +778,6 @@ export default function CreateEstimateScreen() {
       
       if (existingEstimateId) {
         // This is an update to an existing estimate
-        console.log('[handleSaveEstimate] Updating existing estimate:', existingEstimateId);
         
         const updateData = {
           client_id: formData.client_id,
@@ -825,7 +812,6 @@ export default function CreateEstimateScreen() {
         // Update line items separately
         await handleLineItemsUpdate(existingEstimateId, currentEstimateLineItems);
 
-        console.log('[handleSaveEstimate] Successfully updated estimate');
         Alert.alert('Success', 'Estimate updated successfully!');
         setIsSavingEstimate(false);
         router.back();
@@ -833,7 +819,6 @@ export default function CreateEstimateScreen() {
       }
 
       // This is a new estimate - proceed with creation logic
-      console.log('[handleSaveEstimate] Creating new estimate');
 
       // 3. Prepare main estimate data
       const estimateData = {
@@ -864,7 +849,6 @@ export default function CreateEstimateScreen() {
 
       if (isEditMode && editEstimateId) {
         // UPDATE existing estimate
-        console.log('[handleSaveEstimate] Updating existing estimate:', editEstimateId);
         const { data: updatedEstimate, error: estimateError } = await supabase
           .from('estimates')
           .update(estimateData)
@@ -881,12 +865,10 @@ export default function CreateEstimateScreen() {
         }
 
         savedEstimate = updatedEstimate;
-        console.log('[handleSaveEstimate] Estimate updated successfully');
 
       } else {
         // CREATE new estimate
-        console.log('[handleSaveEstimate] Creating new estimate');
-        const { data: newEstimate, error: estimateError } = await supabase
+          const { data: newEstimate, error: estimateError } = await supabase
           .from('estimates')
           .insert(estimateData)
           .select()
@@ -900,12 +882,12 @@ export default function CreateEstimateScreen() {
         }
 
         savedEstimate = newEstimate;
-        console.log('[handleSaveEstimate] Estimate created successfully');
+
+        // Analytics removed for App Store build
 
         // Increment usage count for new estimates only
         try {
           await UsageService.incrementInvoiceCount(user.id);
-          console.log('[handleSaveEstimate] Usage count incremented');
         } catch (usageError) {
           console.error('Error incrementing usage count:', usageError);
           // Don't fail the estimate creation for this, just log it
@@ -935,7 +917,6 @@ export default function CreateEstimateScreen() {
 
       // 6. Success - Navigate to viewer
       const successMessage = isEditMode ? 'Estimate updated successfully!' : 'Estimate created successfully!';
-      console.log(`[handleSaveEstimate] ${successMessage} Navigating to viewer with ID:`, savedEstimate.id);
       
       // Update local state
       setCurrentEstimateId(savedEstimate.id);
@@ -950,11 +931,9 @@ export default function CreateEstimateScreen() {
       // Navigation logic: different behavior for edit vs create
       if (isEditMode) {
         // For edit mode: go back to the existing estimate viewer (don't create a new one)
-        console.log('[handleSaveEstimate] Edit mode: going back to existing estimate viewer');
         router.back();
       } else {
         // For new estimate creation: navigate to new estimate viewer
-        console.log('[handleSaveEstimate] Create mode: navigating to new estimate viewer');
         router.replace({
           pathname: '/(app)/(protected)/estimates/estimate-viewer',
           params: { id: savedEstimate.id, from: 'save' },
@@ -976,7 +955,6 @@ export default function CreateEstimateScreen() {
       throw new Error('User authentication required');
     }
 
-    console.log('[handleLineItemsUpdate] Starting line items update for estimate:', estimateId);
 
     // 1. Delete existing line items (for both create and edit modes)
     // This ensures clean state and simplifies the logic
@@ -991,7 +969,6 @@ export default function CreateEstimateScreen() {
       throw new Error(`Failed to delete existing line items: ${deleteError.message}`);
     }
 
-    console.log('[handleLineItemsUpdate] Existing line items deleted');
 
     // 2. Insert new/updated line items (for both create and edit modes)
     if (items && items.length > 0) {
@@ -1008,7 +985,6 @@ export default function CreateEstimateScreen() {
         item_image_url: item.item_image_url || null,
       }));
 
-      console.log('[handleLineItemsUpdate] Inserting line items:', lineItemsData.length);
 
       const { error: insertError } = await supabase
         .from('estimate_line_items')
@@ -1019,9 +995,7 @@ export default function CreateEstimateScreen() {
         throw new Error(`Failed to save line items: ${insertError.message}`);
       }
 
-      console.log('[handleLineItemsUpdate] Line items saved successfully');
     } else {
-      console.log('[handleLineItemsUpdate] No line items to save');
     }
   };
 
@@ -1039,9 +1013,6 @@ export default function CreateEstimateScreen() {
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
   const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
-    console.log(`[handlePaymentMethodToggle] ${methodKey} toggle attempt:`, newValue);
-    console.log(`[handlePaymentMethodToggle] Loading state:`, paymentOptionsLoading);
-    console.log(`[handlePaymentMethodToggle] Payment options data:`, paymentOptionsData);
     
     // Block all toggles if payment options are still loading
     if (paymentOptionsLoading) {
@@ -1056,7 +1027,6 @@ export default function CreateEstimateScreen() {
     // If payment options data is not available, only block when enabling (allow disabling)
     if (!paymentOptionsData && newValue === true) {
       // User hasn't set up payment options yet, allow them to continue but warn them
-      console.log(`[handlePaymentMethodToggle] No payment options configured yet, will validate individual method`);
     }
     
     // Only validate when toggling ON
@@ -1075,7 +1045,6 @@ export default function CreateEstimateScreen() {
         settingName = 'Bank Transfer';
       }
       
-      console.log(`[handlePaymentMethodToggle] ${methodKey} enabled in settings:`, isEnabledInSettings);
       
       if (!isEnabledInSettings) {
         Alert.alert(
@@ -1096,12 +1065,10 @@ export default function CreateEstimateScreen() {
     // Update react-hook-form state directly - validation passed or toggling OFF
     const formKey = `${methodKey}_active` as keyof EstimateFormData;
     setValue(formKey, newValue, { shouldValidate: true, shouldDirty: true });
-    console.log(`[handlePaymentMethodToggle] ${methodKey} successfully set to:`, newValue);
   };
 
   // Modal callback handlers
   const handleItemFromFormSaved = (itemData: NewItemData) => {
-    console.log('Item data received in estimates create.tsx:', itemData);
     
     // Get current items from react-hook-form state
     const currentFormItems = getValues('items') || [];
@@ -1114,7 +1081,6 @@ export default function CreateEstimateScreen() {
       
       if (existingItemIndex !== -1) {
         // Item already exists, increment quantity
-        console.log('Found existing saved item, incrementing quantity');
         const updatedItems = [...currentFormItems];
         const existingItem = updatedItems[existingItemIndex];
         
@@ -1181,7 +1147,6 @@ export default function CreateEstimateScreen() {
   };
 
   const handleDiscountSave = (discountData: DiscountData) => {
-    console.log('Apply Discount from sheet:', discountData);
     // Update form values with data from discount sheet
     const numericDiscountValue = discountData.discountValue ? parseFloat(discountData.discountValue.replace(',', '.')) : null;
 
@@ -1192,7 +1157,6 @@ export default function CreateEstimateScreen() {
   };
 
   const handleSelectDiscountTypeSheetClose = () => {
-    console.log("SelectDiscountTypeSheet has been closed.");
     // Add any other logic needed when the discount sheet is closed by the user
   };
 
@@ -1203,7 +1167,6 @@ export default function CreateEstimateScreen() {
   };
 
   const handleEstimateDetailsSave = (detailsData: EstimateDetailsData) => {
-    console.log('[handleEstimateDetailsSave] Received data:', detailsData);
     
     // Validate that we have a valid estimate number
     if (!detailsData.estimateNumber || !detailsData.estimateNumber.trim()) {
@@ -1226,12 +1189,10 @@ export default function CreateEstimateScreen() {
     
     // Add a small delay to ensure the form processes the changes
     setTimeout(() => {
-      console.log('[handleEstimateDetailsSave] Form values updated successfully');
     }, 100);
   };
 
   const handleChangeDesign = async () => {
-    console.log('[handleChangeDesign] Design change requested');
     
     // Get current form data without saving to database
     const formData = getValues();
@@ -1244,7 +1205,6 @@ export default function CreateEstimateScreen() {
     
     try {
       // Fetch actual business settings from database
-      console.log('[handleChangeDesign] Fetching business settings for design preview');
       let businessSettingsForPreview = {
         business_name: '',
         business_address: '',
@@ -1260,7 +1220,6 @@ export default function CreateEstimateScreen() {
       // Fetch client data if client is selected
       let clientData = null;
       if (formData.client_id && supabase && user) {
-        console.log('[handleChangeDesign] Fetching client data for:', formData.client_id);
         const { data: client, error: clientError } = await supabase
           .from('clients')
           .select('*')
@@ -1270,12 +1229,10 @@ export default function CreateEstimateScreen() {
         if (clientError) {
           console.warn('[handleChangeDesign] Could not fetch client:', clientError.message);
         } else if (client) {
-          console.log('[handleChangeDesign] Client data loaded:', client);
           clientData = client;
         }
       } else if (selectedClient) {
         // Use selectedClient state as fallback
-        console.log('[handleChangeDesign] Using selectedClient state:', selectedClient);
         clientData = selectedClient;
       }
       
@@ -1289,7 +1246,6 @@ export default function CreateEstimateScreen() {
           console.warn('[handleChangeDesign] Could not fetch business settings:', businessError.message);
           // Continue with default settings
         } else if (businessData) {
-          console.log('[handleChangeDesign] Business settings loaded:', businessData);
           businessSettingsForPreview = {
             business_name: businessData.business_name || '',
             business_address: businessData.business_address || '',
@@ -1328,7 +1284,6 @@ export default function CreateEstimateScreen() {
       };
       
       // Set preview data and open modal in settings mode (design change only)
-      console.log('[handleChangeDesign] Opening design modal with data');
       setPreviewData({
         estimateData: enhancedFormData,
         businessSettings: businessSettingsForPreview,
@@ -1342,7 +1297,6 @@ export default function CreateEstimateScreen() {
   };
 
   const handleDesignSaved = (designId: string, accentColor: string) => {
-    console.log('[handleDesignSaved] Design saved:', designId, 'Color:', accentColor);
     setCurrentDesign(designId);
     setCurrentAccentColor(accentColor);
   };
@@ -1354,7 +1308,6 @@ export default function CreateEstimateScreen() {
     }
 
     try {
-      console.log('[handlePreviewEstimate] Creating preview data...');
       
       // Get current form data
       const formData = getValues();
@@ -1413,9 +1366,6 @@ export default function CreateEstimateScreen() {
         estimate_terminology: estimateTerminology,
       };
 
-      console.log('[handlePreviewEstimate] Enhanced form data:', enhancedFormData);
-      console.log('[handlePreviewEstimate] Business settings:', businessSettingsForPreview);
-      console.log('[handlePreviewEstimate] Client data:', selectedClient);
 
       // Set preview data and open modal
       setPreviewData({
@@ -1434,14 +1384,11 @@ export default function CreateEstimateScreen() {
 
   // Function to handle removing items
   const handleRemoveItem = (itemId: string) => {
-    console.log('[handleRemoveItem] Removing item:', itemId);
     
     // Get current items from form to ensure we have the latest state
     const currentFormItems = getValues('items') || [];
     const updatedItems = currentFormItems.filter(item => item.id !== itemId);
     
-    console.log('[handleRemoveItem] Current items count:', currentFormItems.length);
-    console.log('[handleRemoveItem] Updated items count:', updatedItems.length);
     
     // Update form state first, then local state will be synced via useEffect
     setValue('items', updatedItems, { shouldValidate: false, shouldDirty: false });
@@ -1480,7 +1427,6 @@ export default function CreateEstimateScreen() {
         <TouchableOpacity
           style={[styles.backRightBtn, styles.backRightBtnRight, { backgroundColor: safeThemeColors.destructive }]}
           onPress={() => {
-            console.log('[renderHiddenItem] Remove button pressed for item:', item.id);
             handleRemoveItem(item.id);
             if (rowMap[item.id]) {
               rowMap[item.id].closeRow();
@@ -1763,7 +1709,7 @@ export default function CreateEstimateScreen() {
             <FormSection title="OTHER SETTINGS" themeColors={safeThemeColors}>
               <ActionRow
                 label="Add images & PDFs (0)"
-                onPress={() => console.log('Add Attachments pressed - Coming soon!')}
+                onPress={() => {}}
                 icon={Paperclip}
                 themeColors={safeThemeColors}
                 showChevron={false}
@@ -1801,7 +1747,7 @@ export default function CreateEstimateScreen() {
           <NewClientSelectionSheet
             ref={newClientSheetRef}
             onClientSelect={handleClientSelect}
-            onClose={() => console.log('New client sheet closed')}
+            onClose={() => {}}
           />
 
           {/* Add Item Sheet */}
@@ -1854,7 +1800,6 @@ export default function CreateEstimateScreen() {
             onDesignSaved={handleDesignSaved}
             documentType="estimate"
             onClose={() => {
-              console.log('[EstimateDesign] Modal closed');
               setPreviewData(null); // Clear preview data when modal closes
             }}
           />

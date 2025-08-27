@@ -35,14 +35,19 @@ export default function OnboardingScreen5() {
     };
   }, []);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // Store the logo using the onboarding context
-    console.log('[Onboarding5] Saving logo:', logoUri);
-    updateLogo(logoUri);
-    
-    router.push("/(auth)/onboarding-6");
+    try {
+      // Store the logo using the onboarding context
+      console.log('[Onboarding5] Saving logo:', logoUri);
+      await updateLogo(logoUri);
+      
+      router.push("/(auth)/onboarding-6");
+    } catch (error) {
+      console.error('[Onboarding5] Error saving logo:', error);
+      Alert.alert('Error', 'Failed to save logo. Please try again.');
+    }
   };
 
   const requestCameraPermission = async () => {

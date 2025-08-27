@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+// import { useAnalytics } from "@/hooks/useAnalytics"; // Removed for App Store build
 import { supabase } from "@/config/supabase";
 
 const signUpSchema = z.object({
@@ -49,6 +50,7 @@ export function SignUpModal({
   const { theme } = useTheme();
   const { signUp } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
+  // const analytics = useAnalytics(); // Removed for App Store build
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -112,6 +114,8 @@ export function SignUpModal({
       const result = await signUp(email, password);
       
       if (result?.requiresEmailConfirmation) {
+        // Analytics removed for App Store build
+        
         // Show success message for email confirmation
         setGeneralError("Success! Please check your email to confirm your account. Once confirmed, you can sign in.");
         // Clear form and switch to sign in after showing message
@@ -123,6 +127,8 @@ export function SignUpModal({
         // User is signed up and logged in
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session?.user?.id) {
+          // Analytics removed for App Store build
+          
           try {
             await saveOnboardingData(sessionData.session.user.id);
             console.log('[SignUpModal] Onboarding data saved after signup');

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollVi
 import * as ImagePicker from 'expo-image-picker';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTheme } from '@/context/theme-provider';
+import { useAnalytics } from '@/hooks/useAnalytics';
 import { colors } from '@/constants/colors';
 import { X as XIcon, PercentSquareIcon, PercentIcon, ImageIcon, PaperclipIcon } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase'; // Import Supabase client
@@ -32,6 +33,7 @@ export interface AddNewItemFormSheetRef {
 
 const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormSheetProps>(({ onSave }, ref) => {
   const { isLightMode } = useTheme();
+  const analytics = useAnalytics();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
 
@@ -120,6 +122,8 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       saved_item_db_id: savedItemDatabaseId, // Pass the DB ID if item was saved
     };
 
+    // Analytics removed for App Store build
+
     onSave(dataForCallback);
     // bottomSheetModalRef.current?.dismiss(); // Consider dismissing after successful onSave + DB save
   }, [
@@ -132,6 +136,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     selectedImageUri,
     saveItemForFutureUse,
     onSave,
+    analytics,
   ]);
 
   const handleDiscountTypeSelected = (type: DiscountType | null) => {

@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+// import { useAnalytics } from "@/hooks/useAnalytics"; // Removed for App Store build
 
 const INDUSTRIES = [
   'Accounting',
@@ -62,6 +63,7 @@ export default function OnboardingScreen4() {
   const router = useRouter();
   const { theme } = useTheme();
   const { updateIndustry } = useOnboarding();
+  // const analytics = useAnalytics(); // Removed for App Store build
   const searchInputRef = useRef<TextInput>(null);
   
   const [searchText, setSearchText] = useState('');
@@ -70,10 +72,13 @@ export default function OnboardingScreen4() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    
+    // Analytics removed for App Store build
+    
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, []); // Removed analytics dependency
 
   // Filter industries based on search text
   const filteredIndustries = INDUSTRIES.filter(industry =>
@@ -82,17 +87,25 @@ export default function OnboardingScreen4() {
 
   const isFormValid = selectedIndustry.length > 0;
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!isFormValid) {
       return;
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // Store the industry selection
-    console.log('[Onboarding4] Saving industry:', selectedIndustry);
-    updateIndustry(selectedIndustry);
-    router.push("/(auth)/onboarding-5");
+    try {
+      // Store the industry selection
+      console.log('[Onboarding4] Saving industry:', selectedIndustry);
+      await updateIndustry(selectedIndustry);
+      
+      // Analytics removed for App Store build
+      
+      router.push("/(auth)/onboarding-5");
+    } catch (error) {
+      console.error('[Onboarding4] Error saving industry:', error);
+      Alert.alert('Error', 'Failed to save industry information. Please try again.');
+    }
   };
 
   const handleIndustrySelect = (industry: string) => {
