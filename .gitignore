@@ -2,6 +2,10 @@ node_modules/
 .expo/
 dist/
 npm-debug.*
+
+# Environment files with sensitive credentials
+.env.development
+.env.backup
 *.jks
 *.p8
 *.p12

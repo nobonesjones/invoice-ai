@@ -60,7 +60,7 @@
     <key>NSFaceIDUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone to record meetings</string>
+    <string>Allow $(PRODUCT_NAME) to access your microphone to use voice commands for creating invoices and entering information</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>The app accesses your photos to allow you to choose a logo for your business.</string>
     <key>NSUserActivityTypes</key>

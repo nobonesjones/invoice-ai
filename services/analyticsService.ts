@@ -16,7 +16,6 @@ class AnalyticsService {
 
   async initialize() {
     if (this.isInitialized) {
-      console.log('[Analytics] ⚠️ Already initialized, skipping duplicate initialization');
       return;
     }
 
@@ -27,29 +26,17 @@ class AnalyticsService {
     }
 
     try {
-      console.log('[Analytics] 🚀 Initializing Mixpanel with token:', this.PROJECT_TOKEN);
-      
       // Initialize Mixpanel with proper serverURL configuration
       const trackAutomaticEvents = false; // We'll track manually for more control
       const useNative = true; // Native mode for React Native
       const serverURL = 'https://api.mixpanel.com'; // US data residency (change if EU/India)
       
-      console.log('[Analytics] 🌍 Using serverURL:', serverURL);
       this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents, useNative, serverURL);
-      
-      console.log('[Analytics] 🔄 Calling mixpanel.init()...');
       await this.mixpanel.init();
       
-      // Enable debug logging to see what's happening
-      this.mixpanel.setLoggingEnabled(true);
-      console.log('[Analytics] 🔍 Debug logging enabled');
-      
+      // Disable debug logging for production
+      this.mixpanel.setLoggingEnabled(false);
       this.isInitialized = true;
-      console.log('[Analytics] ✅ Mixpanel initialized successfully!');
-      
-      // Send a simple test event to verify connection
-      console.log('[Analytics] 🧪 Sending test event...');
-      console.log('[Analytics] 🧪 Token verification - First 8 chars:', this.PROJECT_TOKEN.substring(0, 8));
       
       this.mixpanel.track('Debug Test Event', {
         timestamp: new Date().toISOString(),
@@ -60,9 +47,7 @@ class AnalyticsService {
       });
       
       // Force flush the test event immediately
-      console.log('[Analytics] 🧪 Flushing test event...');
       this.mixpanel.flush();
-      console.log('[Analytics] 🧪 Test event sent and flushed - check Mixpanel Live View!');
 
       // Process any queued events
       this.processEventQueue();
@@ -81,8 +66,6 @@ class AnalyticsService {
    */
   private processEventQueue() {
     if (this.eventQueue.length > 0) {
-      console.log(`[Analytics] Processing ${this.eventQueue.length} queued events`);
-      
       this.eventQueue.forEach(({ eventName, properties }) => {
         this.trackEvent(eventName, properties, false); // Don't queue again
       });
@@ -96,9 +79,6 @@ class AnalyticsService {
    */
   trackEvent(eventName: string, properties?: any, allowQueue = true) {
     try {
-      console.log(`[Analytics] 🎯 trackEvent called: "${eventName}"`);
-      console.log(`[Analytics] 🔍 isInitialized: ${this.isInitialized}, mixpanel exists: ${!!this.mixpanel}`);
-      
       if (!this.isInitialized) {
         // If no token was provided, silently skip tracking
         if (!process.env.EXPO_PUBLIC_MIXPANEL_TOKEN) {
@@ -107,7 +87,6 @@ class AnalyticsService {
         
         // Otherwise queue event for when Mixpanel is ready
         if (allowQueue) {
-          console.log(`[Analytics] 📝 Queueing event: ${eventName} (Mixpanel not ready)`);
           this.eventQueue.push({ eventName, properties });
         }
         return;
@@ -126,16 +105,10 @@ class AnalyticsService {
         platform: 'mobile'
       };
 
-      console.log(`[Analytics] 📊 Sending to Mixpanel: ${eventName}`);
-      console.log(`[Analytics] 📊 Properties:`, enrichedProperties);
-      console.log(`[Analytics] 📊 Using token: ${this.PROJECT_TOKEN.substring(0, 8)}...`);
-      
       this.mixpanel.track(eventName, enrichedProperties);
       
       // Force flush for critical events to ensure they're sent immediately
-      console.log(`[Analytics] 🚽 Flushing event: ${eventName}`);
       this.mixpanel.flush();
-      console.log(`[Analytics] ✅ Event sent and flushed: ${eventName} - Check Mixpanel Live View!`);
       
     } catch (error) {
       console.error(`[Analytics] ❌ Failed to track event ${eventName}:`, error);
@@ -153,7 +126,6 @@ class AnalyticsService {
         return;
       }
 
-      console.log(`[Analytics] 👤 Identifying user: ${userId}`);
       this.mixpanel.identify(userId);
 
       if (userProperties) {

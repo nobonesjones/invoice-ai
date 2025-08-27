@@ -1,4 +1,4 @@
-package com.indianabones.meetings
+package com.indianabones.ExpoSupabaseStarter
 
 import android.os.Build
 import android.os.Bundle

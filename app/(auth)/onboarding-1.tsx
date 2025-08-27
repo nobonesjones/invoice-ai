@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from 'expo-apple-authentication';
 import {
   View,
   Text,
@@ -13,6 +14,7 @@ import {
   Dimensions,
   Image,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ export default function OnboardingScreen1() {
   const [authModalMode, setAuthModalMode] = useState<'auth' | 'signup' | 'signin'>('auth');
   const [signUpModalVisible, setSignUpModalVisible] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -142,9 +145,51 @@ export default function OnboardingScreen1() {
     setSignUpModalVisible(true);
   };
 
-  const handleAppleAuth = () => {
+  const handleAppleAuth = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert("Coming Soon", "Apple sign in will be available soon!");
+    setIsAppleLoading(true);
+    
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+          nonce: credential.nonce,
+        });
+
+        if (error) {
+          console.error('Apple Sign In Error:', error.message);
+          Alert.alert('Authentication Error', error.message);
+          return;
+        }
+
+        console.log('Apple Sign In successful:', data);
+        
+        if (data.session) {
+          router.push('/onboarding-2');
+        }
+        
+      } else {
+        throw new Error('No identity token received from Apple');
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        console.log('Apple Sign In was canceled by user');
+        return;
+      }
+      
+      console.error('Apple Auth Error:', error);
+      Alert.alert('Authentication Error', error.message || 'An unexpected error occurred');
+    } finally {
+      setIsAppleLoading(false);
+    }
   };
 
   const handleAuthSuccess = () => {
@@ -189,15 +234,32 @@ export default function OnboardingScreen1() {
 
             {/* Buttons */}
             <View style={styles.buttonContainer}>
-              {/* Apple Sign In - Disabled for now */}
+              {/* Apple Sign In */}
               <Pressable
                 onPress={handleAppleAuth}
-                style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                style={[
+                  styles.authButton, 
+                  { 
+                    backgroundColor: theme.card, 
+                    borderColor: theme.border,
+                    opacity: isAppleLoading ? 0.6 : 1
+                  }
+                ]}
+                disabled={isAppleLoading}
               >
-                <View style={styles.appleIconContainer}>
-                  <Ionicons name="logo-apple" size={24} color="#000000" />
-                </View>
-                <Text style={[styles.authButtonText, { color: "#000000" }]}>Continue with Apple</Text>
+                {isAppleLoading ? (
+                  <>
+                    <ActivityIndicator color="#000000" />
+                    <Text style={[styles.authButtonText, { color: "#000000", marginLeft: 12 }]}>Signing in...</Text>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.appleIconContainer}>
+                      <Ionicons name="logo-apple" size={24} color="#000000" />
+                    </View>
+                    <Text style={[styles.authButtonText, { color: "#000000" }]}>Continue with Apple</Text>
+                  </>
+                )}
               </Pressable>
 
               {/* Google Sign In */}

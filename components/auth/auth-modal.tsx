@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -51,6 +52,7 @@ export function AuthModal({
   const [showSignUp, setShowSignUp] = useState(initialMode === 'signup');
   const [showSignIn, setShowSignIn] = useState(initialMode === 'signin');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
@@ -152,6 +154,54 @@ export function AuthModal({
     }
   };
 
+  const handleAppleAuth = async () => {
+    setIsAppleLoading(true);
+    
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+          nonce: credential.nonce,
+        });
+
+        if (error) {
+          console.error('Apple Sign In Error:', error.message);
+          Alert.alert('Authentication Error', error.message);
+          return;
+        }
+
+        console.log('Apple Sign In successful:', data);
+        
+        // Save onboarding data for the new user
+        if (data.session?.user?.id) {
+          await saveOnboardingData(data.session.user.id);
+        }
+        
+      } else {
+        throw new Error('No identity token received from Apple');
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        // User canceled the sign-in request
+        console.log('Apple Sign In was canceled by user');
+        return;
+      }
+      
+      console.error('Apple Auth Error:', error);
+      Alert.alert('Authentication Error', error.message || 'An unexpected error occurred');
+    } finally {
+      setIsAppleLoading(false);
+    }
+  };
+
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
@@ -215,13 +265,20 @@ export function AuthModal({
                   </View>
                 )}
                 <Button
-                  onPress={() => Alert.alert("Coming Soon", "Apple sign in will be available soon!")}
+                  onPress={handleAppleAuth}
                   style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                  disabled={isAppleLoading}
                 >
-                  <Ionicons name="logo-apple" size={24} color="#000000" style={styles.appleIcon} />
-                  <Text style={[styles.appleButtonText, { color: "#000000" }]}>
-                    Sign In With Apple
-                  </Text>
+                  {isAppleLoading ? (
+                    <ActivityIndicator color="#000000" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-apple" size={24} color="#000000" style={styles.appleIcon} />
+                      <Text style={[styles.appleButtonText, { color: "#000000" }]}>
+                        Sign In With Apple
+                      </Text>
+                    </>
+                  )}
                 </Button>
                 <Button
                   onPress={handleGoogleAuth}
