@@ -1,4 +1,4 @@
-DO NOT CHANGE THIS CODE - ADDED 25TH AUGUST;
+do not change this code ever! 
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -7,6 +7,26 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
+// Status message helper for streaming UX
+function createStatusMessage(status, emoji = '🤔') {
+  return {
+    type: 'status',
+    content: `${emoji} ${status}...`,
+    timestamp: new Date().toISOString()
+  };
+}
+// Stream status updates back to client
+async function sendStatusUpdate(status, emoji = '🤔') {
+  console.log(`[STATUS] ${emoji} ${status}...`);
+  // Store status updates for frontend to display
+  if (!globalThis.statusUpdates) {
+    globalThis.statusUpdates = [];
+  }
+  globalThis.statusUpdates.push({
+    status: `${emoji} ${status}...`,
+    timestamp: new Date().toISOString()
+  });
+}
 // Function to find invoice by identifier
 async function findInvoice(supabase, user_id, invoice_identifier) {
   try {
@@ -176,6 +196,58 @@ function detectConversationContext(message, userId) {
 // Function to detect if user wants to create invoice/estimate  
 function detectInvoiceCreationIntent(message, userId = '') {
   return detectConversationContext(message, userId) === 'create';
+}
+// Function to check if user can create more items (usage limits)
+async function checkCanCreateItem(supabase, userId) {
+  try {
+    // One efficient query - get everything we need
+    const { data: profile, error: profileError } = await supabase.from('user_profiles').select('subscription_tier').eq('id', userId).maybeSingle();
+    if (profileError) {
+      console.error('[checkCanCreateItem] Error fetching profile:', profileError);
+      // Fail open to avoid blocking legitimate users
+      return {
+        allowed: true
+      };
+    }
+    // Premium/paid users - always allow
+    if (profile?.subscription_tier && profile.subscription_tier !== 'free') {
+      console.log(`[checkCanCreateItem] User ${userId} is ${profile.subscription_tier} - no limits`);
+      return {
+        allowed: true
+      };
+    }
+    // Free users - check count using RPC function
+    const { count, error: countError } = await supabase.rpc('count_user_items', {
+      user_id: userId
+    });
+    if (countError) {
+      console.error('[checkCanCreateItem] Error counting items:', countError);
+      // Fail open to avoid blocking legitimate users
+      return {
+        allowed: true
+      };
+    }
+    console.log(`[checkCanCreateItem] Free user ${userId} has ${count}/3 items`);
+    if (count >= 3) {
+      return {
+        allowed: false,
+        success: false,
+        message: "You've reached your free plan limit of 3 items (invoices + estimates). Upgrade to create unlimited invoices and estimates!",
+        showPaywall: true,
+        currentCount: count,
+        limit: 3
+      };
+    }
+    return {
+      allowed: true
+    };
+  } catch (error) {
+    console.error('[checkCanCreateItem] Unexpected error:', error);
+    // Fail open to avoid blocking legitimate users  
+    return {
+      allowed: true
+    };
+  }
 }
 // Optimized function to get user context for invoice/estimate creation
 async function getInvoiceCreationContext(supabase, userId) {
@@ -399,6 +471,8 @@ serve(async (req)=>{
     const threadId = payload.threadId;
     const userContext = payload.userContext;
     const requestId = payload.requestId;
+    // Initialize status updates for this request
+    globalThis.statusUpdates = [];
     // Create deduplication key for this request
     const deduplicationKey1 = requestId || `${user_id}-${message?.substring(0, 50)}-${Date.now()}`;
     // Simple in-memory deduplication (resets on cold start but prevents immediate duplicates)
@@ -440,8 +514,11 @@ serve(async (req)=>{
     const FORCE_NEW_ASSISTANT = false; // FIXED: Use existing assistant to maintain context
     const ALLOW_ASSISTANT_UPDATE = false; // Set to true temporarily when you need to update the assistant
     // Force new assistant to get latest function definitions
-    const ASSISTANT_ID = "asst_U3mCSffTmk79xS43fSgMPwDe"; // Updated stable assistant ID
+    // Get assistant ID from database
+    const { data: assistantConfig } = await supabase.from('system_config').select('value').eq('key', 'assistant_id').single();
+    const ASSISTANT_ID = assistantConfig?.value || "asst_U3mCSffTmk79xS43fSgMPwDe"; // Fallback to stable ID
     console.log('[ASSISTANTS POC] 🚨 FORCE_NEW_ASSISTANT FLAG IS:', FORCE_NEW_ASSISTANT);
+    console.log('[ASSISTANTS POC] Using assistant ID:', ASSISTANT_ID);
     let assistant;
     // ENHANCED CONVERSATION CONTEXT DETECTION
     const conversationContext = detectConversationContext(message, user_id);
@@ -502,6 +579,54 @@ serve(async (req)=>{
     } else {
       console.log('[Assistants POC] General conversation - minimal context');
     }
+    // Add subscription context for all requests
+    try {
+      const { data: profile } = await supabase.from('profiles').select('subscription_tier').eq('id', user_id).maybeSingle();
+      const tier = profile?.subscription_tier || 'free';
+      if (tier === 'free') {
+        // For free users, get their current usage
+        const { count } = await supabase.rpc('count_user_items', {
+          user_id
+        });
+        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
+• User is on FREE plan (3 item limit)
+• Items created: ${count || 0} of 3
+• Can create more: ${(count || 0) < 3 ? 'Yes' : 'No - limit reached'}
+${(count || 0) >= 3 ? '• Politely mention upgrade benefits when relevant' : ''}
+
+USAGE LIMITS - CRITICAL:
+• Free users can ONLY create 3 items total (invoices + estimates combined)
+• When limit is reached, the create functions will automatically block and show upgrade message
+• Do NOT attempt to bypass or work around these limits
+• If user asks about limits, explain they can upgrade for unlimited access
+
+🚨🚨 PAYMENT WORKFLOWS - MANDATORY FOR ALL PAYMENT UPDATES 🚨🚨
+**WHEN USER SAYS "MARK AS PAID" OR "SET TO PAID":**
+- NEVER just update status alone!
+- ALWAYS call update_invoice with ALL payment fields:
+  * status: "paid"
+  * paid_amount: [FULL total_amount from invoice]
+  * payment_date: [current date YYYY-MM-DD]
+  * payment_notes: "Marked as paid via AI assistant"
+- Example: update_invoice(invoice_identifier="latest", status="paid", paid_amount=1500.00, payment_date="2024-12-27", payment_notes="Marked as paid via AI assistant")
+
+**FOR PARTIAL PAYMENTS:**
+- paid_amount: [exact amount paid]
+- payment_date: [current date]
+- payment_notes: "Payment recorded: $XXX.XX"
+- Do NOT set status (let function auto-calculate)
+
+**CRITICAL RULE: Status changes without payment amounts will show incorrect totals on invoice documents!**`;
+      } else {
+        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
+• User is on ${tier.toUpperCase()} plan
+• Unlimited items allowed
+• No usage restrictions`;
+      }
+    } catch (error) {
+      console.error('[Assistants POC] Error fetching subscription context:', error);
+    // Continue without subscription context rather than failing
+    }
     if (FORCE_NEW_ASSISTANT) {
       console.log('[Assistants POC] 🚨 FORCE_NEW_ASSISTANT = TRUE - Creating new assistant with estimate functions...');
       // Skip to creation
@@ -543,6 +668,21 @@ FUNCTION CALLING:
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
 • Example: "create quote" → call create_estimate function immediately
+
+🚨 CONTEXT-AWARE UPDATES - CRITICAL:
+When user mentions updates WITHOUT specifying which invoice/estimate:
+• ALWAYS use the most recently created/discussed document from the conversation
+• Look at the conversation history to identify what was just created
+• Use update_invoice for invoices, update_estimate for estimates
+• NEVER create a new document when the user clearly wants to update the existing one
+
+Examples:
+• User: "Create invoice for Emily 100 cakes at $4 each"
+• AI: Creates INV-079
+• User: "Add a discount 10%"
+• ✅ CORRECT: update_invoice(invoice_identifier: "INV-079", discount_type: "percentage", discount_value: 10)
+• ❌ WRONG: create_invoice with discount (creates duplicate)
+• ❌ WRONG: update_estimate on invoice (wrong function)
 
 🚨 INVOICE/ESTIMATE CREATION WITH ITEMS - CRITICAL:
 When user asks to CREATE a new invoice/estimate/quote WITH items:
@@ -1532,7 +1672,7 @@ When the user indicates you made an error or corrected you:
                 type: "function",
                 function: {
                   name: "add_line_items",
-                  description: "Add multiple line items to an existing invoice in a single operation (prevents duplicates)",
+                  description: "🚨 INVOICES ONLY: Add multiple line items to an existing invoice (INV- numbers) in a single operation. NEVER use for estimates. For estimate line items, use add_estimate_line_item instead.",
                   parameters: {
                     type: "object",
                     properties: {
@@ -1645,7 +1785,7 @@ When the user indicates you made an error or corrected you:
                 type: "function",
                 function: {
                   name: "update_client_info",
-                  description: "Update client information for an existing invoice and save to client profile",
+                  description: "🚨 INVOICES ONLY: Update client information for an existing invoice (INV- numbers) and save to client profile. NEVER use for estimates. For estimate client updates, use update_estimate instead.",
                   parameters: {
                     type: "object",
                     properties: {
@@ -2095,7 +2235,7 @@ When the user indicates you made an error or corrected you:
                 type: "function",
                 function: {
                   name: "update_estimate",
-                  description: "Update any aspect of an existing estimate/quote - client info, line items, validity dates, status, etc.",
+                  description: "🚨 ESTIMATES/QUOTES ONLY: Update any aspect of an existing estimate/quote - client info, line items, validity dates, status, etc. NEVER use for invoices (INV- numbers). For invoice client updates, use update_client_info instead.",
                   parameters: {
                     type: "object",
                     properties: {
@@ -2218,7 +2358,7 @@ When the user indicates you made an error or corrected you:
                 type: "function",
                 function: {
                   name: "add_estimate_line_item",
-                  description: "Add a new line item to an existing estimate/quote",
+                  description: "🚨 ESTIMATES/QUOTES ONLY: Add a new line item to an existing estimate/quote (EST- or Q- numbers). NEVER use for invoices. For invoice line items, use add_line_items instead.",
                   parameters: {
                     type: "object",
                     properties: {
@@ -2328,7 +2468,7 @@ When the user indicates you made an error or corrected you:
                 type: "function",
                 function: {
                   name: "update_estimate_payment_methods",
-                  description: "Enable or disable payment methods for an existing estimate/quote. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
+                  description: "🚨 ESTIMATES/QUOTES ONLY: Enable or disable payment methods for an existing estimate/quote (EST- or Q- numbers). NEVER use for invoices. For invoice payment methods, use update_payment_methods instead.",
                   parameters: {
                     type: "object",
                     properties: {
@@ -2453,6 +2593,21 @@ FUNCTION CALLING:
 • Do NOT just describe what you would do - actually DO IT by calling functions
 • Example: "create invoice" → call create_invoice function immediately
 • Example: "create quote" → call create_estimate function immediately
+
+🚨 CONTEXT-AWARE UPDATES - CRITICAL:
+When user mentions updates WITHOUT specifying which invoice/estimate:
+• ALWAYS use the most recently created/discussed document from the conversation
+• Look at the conversation history to identify what was just created
+• Use update_invoice for invoices, update_estimate for estimates
+• NEVER create a new document when the user clearly wants to update the existing one
+
+Examples:
+• User: "Create invoice for Emily 100 cakes at $4 each"
+• AI: Creates INV-079
+• User: "Add a discount 10%"
+• ✅ CORRECT: update_invoice(invoice_identifier: "INV-079", discount_type: "percentage", discount_value: 10)
+• ❌ WRONG: create_invoice with discount (creates duplicate)
+• ❌ WRONG: update_estimate on invoice (wrong function)
 
 🚨 INVOICE/ESTIMATE CREATION WITH ITEMS - CRITICAL:
 When user asks to CREATE a new invoice/estimate/quote WITH items:
@@ -2809,7 +2964,7 @@ When the user indicates you made an error or corrected you:
             type: "function",
             function: {
               name: "add_line_items",
-              description: "Add multiple line items to an existing invoice in a single operation (prevents duplicates)",
+              description: "🚨 INVOICES ONLY: Add multiple line items to an existing invoice (INV- numbers) in a single operation. NEVER use for estimates. For estimate line items, use add_estimate_line_item instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -3147,7 +3302,7 @@ When the user indicates you made an error or corrected you:
             type: "function",
             function: {
               name: "update_estimate",
-              description: "Update any aspect of an existing estimate/quote - client info, line items, validity dates, status, etc.",
+              description: "🚨 ESTIMATES/QUOTES ONLY: Update any aspect of an existing estimate/quote - client info, line items, validity dates, status, etc. NEVER use for invoices (INV- numbers). For invoice client updates, use update_client_info instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -3249,7 +3404,7 @@ When the user indicates you made an error or corrected you:
             type: "function",
             function: {
               name: "add_estimate_line_item",
-              description: "Add a new line item to an existing estimate/quote",
+              description: "🚨 ESTIMATES/QUOTES ONLY: Add a new line item to an existing estimate/quote (EST- or Q- numbers). NEVER use for invoices. For invoice line items, use add_line_items instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -3345,7 +3500,7 @@ When the user indicates you made an error or corrected you:
             type: "function",
             function: {
               name: "update_estimate_payment_methods",
-              description: "Enable or disable payment methods for an existing estimate/quote. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
+              description: "🚨 ESTIMATES/QUOTES ONLY: Enable or disable payment methods for an existing estimate/quote (EST- or Q- numbers). NEVER use for invoices. For invoice payment methods, use update_payment_methods instead.",
               parameters: {
                 type: "object",
                 properties: {
@@ -3450,6 +3605,7 @@ When the user indicates you made an error or corrected you:
       });
       console.log('[Assistants POC] ✅ Created NEW thread (no threadId provided):', thread.id);
     }
+    // Frontend handles immediate status - no need for backend status
     // Create run with assistant  
     const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id
@@ -3532,6 +3688,13 @@ When the user indicates you made an error or corrected you:
         }
       };
       if (name === 'create_invoice') {
+        // Check usage limits first
+        const permission = await checkCanCreateItem(supabase, user_id);
+        if (!permission.allowed) {
+          await sendStatusUpdate('Free plan limit reached', '🔒');
+          return JSON.stringify(permission);
+        }
+        // Status already sent - no duplicate needed
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, due_date, invoice_date, tax_percentage, notes, payment_terms, enable_paypal, paypal_email, enable_stripe, enable_bank_transfer, invoice_design, accent_color, discount_type, discount_value } = parsedArgs;
         // Calculate subtotal
         const subtotal_amount = line_items.reduce((sum, item)=>sum + item.unit_price * (item.quantity || 1), 0);
@@ -3699,6 +3862,7 @@ Let me know if you'd like any changes?`;
         return `✅ PayPal payments have been enabled. Clients can now pay via PayPal.`;
       }
       if (name === 'update_business_settings') {
+        await sendStatusUpdate('Updating business settings', '⚙️');
         const { business_name, business_address, business_phone, business_email, business_website, tax_number, tax_name, default_tax_rate, auto_apply_tax } = parsedArgs;
         console.log('[Assistants POC] Updating business settings:', parsedArgs);
         // Build update object with only provided fields - using correct column names from business_settings table
@@ -3887,11 +4051,18 @@ To accept payments, configure at least one payment method.`;
               // Return updated invoice
               const { data: updatedInvoice } = await supabase.from('invoices').select('*').eq('id', invoice.id).single();
               if (updatedInvoice) {
-                attachments.push({
-                  type: 'invoice',
-                  invoice_id: invoice.id,
-                  invoice: updatedInvoice
+                // Get line items and client data for complete attachment
+                const { data: lineItems } = await supabase.from('invoice_line_items').select('*').eq('invoice_id', invoice.id).order('created_at', {
+                  ascending: true
                 });
+                let clientData = null;
+                if (updatedInvoice.client_id) {
+                  const { data: client } = await supabase.from('clients').select('*').eq('id', updatedInvoice.client_id).single();
+                  clientData = client;
+                }
+                // Use proper helper and gate pattern
+                const invoiceAttachment = await createInvoiceAttachment(updatedInvoice, lineItems || [], clientData);
+                setLatestInvoice(invoiceAttachment);
               }
             }
           }
@@ -4180,14 +4351,7 @@ To accept payments, configure at least one payment method.`;
               const { data: client } = await supabase.from('clients').select('*').eq('id', targetDocument.client_id).single();
               clientData = client;
             }
-            const invoiceAttachment = {
-              type: 'invoice',
-              invoice_id: targetDocument.id,
-              invoice: updatedInvoice || targetDocument,
-              line_items: lineItems || [],
-              client_id: targetDocument.client_id,
-              client: clientData
-            };
+            const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetDocument, lineItems || [], clientData);
             setLatestInvoice(invoiceAttachment);
           } else {
             // Get updated estimate data
@@ -4427,15 +4591,9 @@ To accept payments, configure at least one payment method.`;
               clientData = client;
             }
           }
-          // Create attachment for updated invoice
-          attachments.push({
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: allLineItems || [],
-            client_id: targetInvoice.client_id,
-            client: clientData
-          });
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, allLineItems || [], clientData);
+          setLatestInvoice(invoiceAttachment);
           console.log('[update_invoice] Success - created attachment');
           // Enhanced response with payment details if payment was updated
           let response = `I've updated invoice ${targetInvoice.invoice_number}.`;
@@ -4523,15 +4681,9 @@ To accept payments, configure at least one payment method.`;
             const { data: client } = await supabase.from('clients').select('*').eq('id', targetInvoice.client_id).single();
             clientData = client;
           }
-          // Create attachment for updated invoice
-          attachments.push({
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: allLineItems,
-            client_id: targetInvoice.client_id,
-            client: clientData
-          });
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, allLineItems, clientData);
+          setLatestInvoice(invoiceAttachment);
           // 🚨 CONVERSATION MEMORY - Track that we just updated this invoice
           ConversationMemory.setLastAction(user_id, 'added_line_item', {
             invoice_number: targetInvoice.invoice_number,
@@ -4550,6 +4702,7 @@ Let me know if you'd like any other changes?`;
         }
       }
       if (name === 'add_line_items') {
+        await sendStatusUpdate('Adding line items', '➕');
         const { invoice_identifier, line_items } = parsedArgs;
         if (!line_items || !Array.isArray(line_items) || line_items.length === 0) {
           return 'Error: line_items array is required and must contain at least one item';
@@ -4613,15 +4766,9 @@ Let me know if you'd like any other changes?`;
             const { data: client } = await supabase.from('clients').select('*').eq('id', targetInvoice.client_id).single();
             clientData = client;
           }
-          // Create attachment for updated invoice
-          attachments.push({
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: allLineItems,
-            client_id: targetInvoice.client_id,
-            client: clientData
-          });
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, allLineItems, clientData);
+          setLatestInvoice(invoiceAttachment);
           // Track in conversation memory
           ConversationMemory.setLastAction(user_id, 'added_multiple_line_items', {
             invoice_number: targetInvoice.invoice_number,
@@ -4716,15 +4863,9 @@ Let me know if you'd like any other changes!`;
             const { data: client } = await supabase.from('clients').select('*').eq('id', targetInvoice.client_id).single();
             clientData = client;
           }
-          // Create attachment for updated invoice
-          attachments.push({
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: remainingItems,
-            client_id: targetInvoice.client_id,
-            client: clientData
-          });
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, remainingItems, clientData);
+          setLatestInvoice(invoiceAttachment);
           return `Removed line item "${itemToRemove.item_name}" from invoice ${targetInvoice.invoice_number}.
 
 Total updated to $${total.toFixed(2)}.
@@ -4837,15 +4978,9 @@ Let me know if you'd like any other changes?`;
               clientData = client;
             }
           }
-          // Create attachment for updated invoice
-          attachments.push({
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: allLineItems,
-            client_id: targetInvoice.client_id,
-            client: clientData
-          });
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, allLineItems, clientData);
+          setLatestInvoice(invoiceAttachment);
           console.log('[update_line_item] Success - created attachment');
           const updatedItemName = item_name !== undefined ? item_name : targetLineItem.item_name;
           return `Updated line item "${updatedItemName}" in invoice ${targetInvoice.invoice_number}.
@@ -4859,6 +4994,7 @@ Let me know if you'd like any other changes!`;
         }
       }
       if (name === 'update_client_info') {
+        await sendStatusUpdate('Updating client info', '👤');
         const { invoice_identifier, client_name, client_email, client_phone, client_address, client_tax_number } = parsedArgs;
         console.log('[update_client_info] Starting with:', {
           invoice_identifier,
@@ -4950,26 +5086,19 @@ Let me know if you'd like any other changes!`;
               updatedClientData = client;
             }
           }
-          // Create attachment for updated invoice
-          const attachmentData = {
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: lineItems || [],
-            client_id: targetInvoice.client_id,
-            client: updatedClientData
-          };
-          attachments.push(attachmentData);
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, lineItems || [], updatedClientData);
+          setLatestInvoice(invoiceAttachment);
           console.log('[update_client_info] Success - created attachment:', {
-            type: attachmentData.type,
-            invoice_id: attachmentData.invoice_id,
-            has_invoice: !!attachmentData.invoice,
-            has_line_items: !!attachmentData.line_items,
-            line_items_count: attachmentData.line_items?.length || 0,
-            client_id: attachmentData.client_id,
-            has_client: !!attachmentData.client
+            type: invoiceAttachment.type,
+            invoice_id: invoiceAttachment.invoice_id,
+            has_invoice: !!invoiceAttachment.invoice,
+            has_line_items: !!invoiceAttachment.line_items,
+            line_items_count: invoiceAttachment.line_items?.length || 0,
+            client_id: invoiceAttachment.client_id,
+            has_client: !!invoiceAttachment.client
           });
-          console.log('[update_client_info] Total attachments:', attachments.length);
+          console.log('[update_client_info] Using setLatestInvoice for proper attachment gate');
           // 🚨 CONVERSATION MEMORY - Track that we just updated this invoice's client
           ConversationMemory.setLastAction(user_id, 'updated_client_info', {
             invoice_number: targetInvoice.invoice_number,
@@ -4985,6 +5114,7 @@ Let me know if you'd like any other changes!`;
         }
       }
       if (name === 'update_payment_methods') {
+        await sendStatusUpdate('Setting up payments', '💳');
         const { invoice_identifier, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs;
         console.log('[update_payment_methods] Starting with:', {
           invoice_identifier,
@@ -5083,15 +5213,9 @@ Let me know if you'd like any other changes!`;
               clientData = client;
             }
           }
-          // Create attachment for updated invoice
-          attachments.push({
-            type: 'invoice',
-            invoice_id: targetInvoice.id,
-            invoice: updatedInvoice || targetInvoice,
-            line_items: lineItems || [],
-            client_id: targetInvoice.client_id,
-            client: clientData
-          });
+          // Create attachment for updated invoice using the proper helper and gate pattern
+          const invoiceAttachment = await createInvoiceAttachment(updatedInvoice || targetInvoice, lineItems || [], clientData);
+          setLatestInvoice(invoiceAttachment);
           console.log('[update_payment_methods] Success - created attachment');
           message += `\n\nLet me know if you'd like any other changes!`;
           return message;
@@ -5392,6 +5516,13 @@ To change colors, just say:
       }
       // Estimate/Quote Functions
       if (name === 'create_estimate') {
+        // Check usage limits first
+        const permission = await checkCanCreateItem(supabase, user_id);
+        if (!permission.allowed) {
+          await sendStatusUpdate('Free plan limit reached', '🔒');
+          return JSON.stringify(permission);
+        }
+        await sendStatusUpdate('Creating estimate', '📄');
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, valid_until_date, estimate_date, tax_percentage, notes, acceptance_terms, estimate_template, discount_type, discount_value } = parsedArgs;
         // Get user's terminology preference
         const { data: businessSettings } = await supabase.from('business_settings').select('estimate_terminology, default_estimate_template').eq('user_id', user_id).single();
@@ -5924,6 +6055,7 @@ To change colors, just say:
         }
       }
       if (name === 'search_estimates') {
+        await sendStatusUpdate('Searching documents', '🔍');
         const { client_name, status, date_from, date_to, limit = 10 } = parsedArgs;
         // Get terminology
         const { data: businessSettings } = await supabase.from('business_settings').select('estimate_terminology').eq('user_id', user_id).single();
@@ -6116,6 +6248,7 @@ To change colors, just say:
     while(attempts < maxAttempts){
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
       console.log('[Assistants POC] Run status:', runStatus.status, `(attempt ${attempts + 1}/${maxAttempts})`);
+      // No intermediate status updates - keep it clean
       if (runStatus.status === 'completed') {
         // Get final messages
         const messages = await openai.beta.threads.messages.list(thread.id);
@@ -6180,11 +6313,16 @@ To change colors, just say:
         } else {
           console.log('[Attachment Gate] No invoice or estimate to return');
         }
+        // Frontend handles seamless transition to result - no final status needed
+        // DEBUG: Log what statusUpdates we're about to send
+        console.log('[DEBUG] Final statusUpdates being sent:', globalThis.statusUpdates);
+        console.log('[DEBUG] StatusUpdates length:', (globalThis.statusUpdates || []).length);
         // Return JSON response compatible with current app
         return new Response(JSON.stringify({
           success: true,
           content: assistantMessage,
           attachments: finalAttachments,
+          statusUpdates: globalThis.statusUpdates || [],
           messages: [
             {
               id: `user-${Date.now()}`,
@@ -6213,6 +6351,7 @@ To change colors, just say:
       }
       if (runStatus.status === 'requires_action') {
         console.log('[Assistants POC] Requires action - handling tool calls');
+        // Frontend handles immediate status detection - no backend status needed
         const toolCalls = runStatus.required_action?.submit_tool_outputs?.tool_calls || [];
         const toolOutputs = [];
         for (const toolCall of toolCalls){
@@ -6296,11 +6435,14 @@ To change colors, just say:
         } else if (lastEstimateAttachment) {
           timeoutFinalAttachments.push(lastEstimateAttachment);
         }
+        // Add timeout status
+        await sendStatusUpdate('Timeout - operation incomplete', '⚠️');
         // Return partial response with timeout warning
         return new Response(JSON.stringify({
           success: true,
           content: `${assistantMessage}\n\n⚠️ Note: This operation took longer than expected and may have been partially completed.`,
           attachments: timeoutFinalAttachments,
+          statusUpdates: globalThis.statusUpdates || [],
           timeout: true,
           messages: [
             {
@@ -6335,13 +6477,16 @@ To change colors, just say:
     throw new Error(`Request timed out after 2.5 minutes. The operation may still be processing in the background.`);
   } catch (error) {
     console.error('[Assistants POC] Error:', error);
+    // Add error status
+    await sendStatusUpdate('Error occurred', '❌');
     // Clean up request tracking on error
     if (globalThis.processingRequests) {
       globalThis.processingRequests.delete(deduplicationKey);
       console.log('[Assistants POC] 🧹 Cleaned up error request:', deduplicationKey);
     }
     return new Response(JSON.stringify({
-      error: error.message
+      error: error.message,
+      statusUpdates: globalThis.statusUpdates || []
     }), {
       status: 500,
       headers: {

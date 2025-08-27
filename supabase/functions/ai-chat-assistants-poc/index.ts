@@ -202,10 +202,10 @@ async function checkCanCreateItem(supabase, userId) {
   try {
     // One efficient query - get everything we need
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .select('subscription_tier')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     
     if (profileError) {
       console.error('[checkCanCreateItem] Error fetching profile:', profileError);
@@ -220,7 +220,7 @@ async function checkCanCreateItem(supabase, userId) {
     }
     
     // Free users - check count using RPC function
-    const { count, error: countError } = await supabase
+    const { data: count, error: countError } = await supabase
       .rpc('count_user_items', { user_id: userId });
       
     if (countError) {
@@ -593,7 +593,7 @@ serve(async (req)=>{
         .from('profiles')
         .select('subscription_tier')
         .eq('id', user_id)
-        .single();
+        .maybeSingle();
       
       const tier = profile?.subscription_tier || 'free';
       
@@ -612,7 +612,25 @@ USAGE LIMITS - CRITICAL:
 • Free users can ONLY create 3 items total (invoices + estimates combined)
 • When limit is reached, the create functions will automatically block and show upgrade message
 • Do NOT attempt to bypass or work around these limits
-• If user asks about limits, explain they can upgrade for unlimited access`;
+• If user asks about limits, explain they can upgrade for unlimited access
+
+🚨🚨 PAYMENT WORKFLOWS - MANDATORY FOR ALL PAYMENT UPDATES 🚨🚨
+**WHEN USER SAYS "MARK AS PAID" OR "SET TO PAID":**
+- NEVER just update status alone!
+- ALWAYS call update_invoice with ALL payment fields:
+  * status: "paid"
+  * paid_amount: [FULL total_amount from invoice]
+  * payment_date: [current date YYYY-MM-DD]
+  * payment_notes: "Marked as paid via AI assistant"
+- Example: update_invoice(invoice_identifier="latest", status="paid", paid_amount=1500.00, payment_date="2024-12-27", payment_notes="Marked as paid via AI assistant")
+
+**FOR PARTIAL PAYMENTS:**
+- paid_amount: [exact amount paid]
+- payment_date: [current date]
+- payment_notes: "Payment recorded: $XXX.XX"
+- Do NOT set status (let function auto-calculate)
+
+**CRITICAL RULE: Status changes without payment amounts will show incorrect totals on invoice documents!**`;
       } else {
         contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
 • User is on ${tier.toUpperCase()} plan
