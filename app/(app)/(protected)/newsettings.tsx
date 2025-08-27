@@ -237,13 +237,14 @@ export default function NewSettingsScreen() {
           ),
           searchTerms: ['dark', 'light', 'mode', 'theme', 'appearance']
         },
-        {
-          id: 'language',
-          icon: <Languages color={theme.foreground} size={24} />,
-          label: 'App Language',
-          onPress: handleAppLanguagePress,
-          searchTerms: ['language', 'app', 'translation', 'locale']
-        }
+        // Commenting out App Language setting
+        // {
+        //   id: 'language',
+        //   icon: <Languages color={theme.foreground} size={24} />,
+        //   label: 'App Language',
+        //   onPress: handleAppLanguagePress,
+        //   searchTerms: ['language', 'app', 'translation', 'locale']
+        // }
       ]
     },
     {

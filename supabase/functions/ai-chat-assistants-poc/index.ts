@@ -197,6 +197,59 @@ function detectConversationContext(message, userId) {
 function detectInvoiceCreationIntent(message, userId = '') {
   return detectConversationContext(message, userId) === 'create';
 }
+// Function to check if user can create more items (usage limits)
+async function checkCanCreateItem(supabase, userId) {
+  try {
+    // One efficient query - get everything we need
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('subscription_tier')
+      .eq('id', userId)
+      .single();
+    
+    if (profileError) {
+      console.error('[checkCanCreateItem] Error fetching profile:', profileError);
+      // Fail open to avoid blocking legitimate users
+      return { allowed: true };
+    }
+    
+    // Premium/paid users - always allow
+    if (profile?.subscription_tier && profile.subscription_tier !== 'free') {
+      console.log(`[checkCanCreateItem] User ${userId} is ${profile.subscription_tier} - no limits`);
+      return { allowed: true };
+    }
+    
+    // Free users - check count using RPC function
+    const { count, error: countError } = await supabase
+      .rpc('count_user_items', { user_id: userId });
+      
+    if (countError) {
+      console.error('[checkCanCreateItem] Error counting items:', countError);
+      // Fail open to avoid blocking legitimate users
+      return { allowed: true };
+    }
+    
+    console.log(`[checkCanCreateItem] Free user ${userId} has ${count}/3 items`);
+    
+    if (count >= 3) {
+      return {
+        allowed: false,
+        success: false,
+        message: "You've reached your free plan limit of 3 items (invoices + estimates). Upgrade to create unlimited invoices and estimates!",
+        showPaywall: true,
+        currentCount: count,
+        limit: 3
+      };
+    }
+    
+    return { allowed: true };
+  } catch (error) {
+    console.error('[checkCanCreateItem] Unexpected error:', error);
+    // Fail open to avoid blocking legitimate users  
+    return { allowed: true };
+  }
+}
+
 // Optimized function to get user context for invoice/estimate creation
 async function getInvoiceCreationContext(supabase, userId) {
   try {
@@ -532,6 +585,43 @@ serve(async (req)=>{
       contextString += `• Focus on client operations: create_client, update_business_settings\n`;
     } else {
       console.log('[Assistants POC] General conversation - minimal context');
+    }
+    
+    // Add subscription context for all requests
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('id', user_id)
+        .single();
+      
+      const tier = profile?.subscription_tier || 'free';
+      
+      if (tier === 'free') {
+        // For free users, get their current usage
+        const { count } = await supabase
+          .rpc('count_user_items', { user_id });
+        
+        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
+• User is on FREE plan (3 item limit)
+• Items created: ${count || 0} of 3
+• Can create more: ${(count || 0) < 3 ? 'Yes' : 'No - limit reached'}
+${(count || 0) >= 3 ? '• Politely mention upgrade benefits when relevant' : ''}
+
+USAGE LIMITS - CRITICAL:
+• Free users can ONLY create 3 items total (invoices + estimates combined)
+• When limit is reached, the create functions will automatically block and show upgrade message
+• Do NOT attempt to bypass or work around these limits
+• If user asks about limits, explain they can upgrade for unlimited access`;
+      } else {
+        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
+• User is on ${tier.toUpperCase()} plan
+• Unlimited items allowed
+• No usage restrictions`;
+      }
+    } catch (error) {
+      console.error('[Assistants POC] Error fetching subscription context:', error);
+      // Continue without subscription context rather than failing
     }
     if (FORCE_NEW_ASSISTANT) {
       console.log('[Assistants POC] 🚨 FORCE_NEW_ASSISTANT = TRUE - Creating new assistant with estimate functions...');
@@ -3596,6 +3686,13 @@ When the user indicates you made an error or corrected you:
         }
       };
       if (name === 'create_invoice') {
+        // Check usage limits first
+        const permission = await checkCanCreateItem(supabase, user_id);
+        if (!permission.allowed) {
+          await sendStatusUpdate('Free plan limit reached', '🔒');
+          return JSON.stringify(permission);
+        }
+        
         // Status already sent - no duplicate needed
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, due_date, invoice_date, tax_percentage, notes, payment_terms, enable_paypal, paypal_email, enable_stripe, enable_bank_transfer, invoice_design, accent_color, discount_type, discount_value } = parsedArgs;
         // Calculate subtotal
@@ -5460,6 +5557,13 @@ To change colors, just say:
       }
       // Estimate/Quote Functions
       if (name === 'create_estimate') {
+        // Check usage limits first
+        const permission = await checkCanCreateItem(supabase, user_id);
+        if (!permission.allowed) {
+          await sendStatusUpdate('Free plan limit reached', '🔒');
+          return JSON.stringify(permission);
+        }
+        
         await sendStatusUpdate('Creating estimate', '📄');
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, valid_until_date, estimate_date, tax_percentage, notes, acceptance_terms, estimate_template, discount_type, discount_value } = parsedArgs;
         // Get user's terminology preference
