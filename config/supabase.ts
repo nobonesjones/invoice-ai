@@ -4,19 +4,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import { AppState } from "react-native";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_API_URL || 'https://wzpuzqzsjdizmpiobsuo.supabase.co';
-const supabaseKey = process.env.EXPO_PUBLIC_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cHV6cXpzamRpem1waW9ic3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MjE3OTIsImV4cCI6MjA2MjE5Nzc5Mn0._XypJP5hEZT06UfA1uuHY5-TvsKzj5JnwjGa3LMKnyI';
+// Both env vars are now required - no hardcoded fallbacks
+const supabaseUrl = process.env.EXPO_PUBLIC_API_URL;
+const supabaseKey = process.env.EXPO_PUBLIC_ANON_KEY;
 
-console.log('Supabase Config Debug:');
-console.log('EXPO_PUBLIC_API_URL:', supabaseUrl);
-console.log('EXPO_PUBLIC_ANON_KEY:', supabaseKey ? 'SET' : 'NOT SET');
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing environment variables:');
-  console.error('EXPO_PUBLIC_API_URL:', supabaseUrl);
-  console.error('EXPO_PUBLIC_ANON_KEY:', supabaseKey);
-  throw new Error("Missing Supabase URL or Key. Check your .env file and restart Expo.");
+// Add safety checks
+if (!supabaseUrl) {
+  throw new Error("EXPO_PUBLIC_API_URL is not set. Please check your .env file.");
 }
+
+if (!supabaseKey) {
+  throw new Error("EXPO_PUBLIC_ANON_KEY is not set. Please check your .env file.");
+}
+
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
 	auth: {

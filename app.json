@@ -37,7 +37,7 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record meetings",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to use voice commands for creating invoices and entering information",
         "NSContactsUsageDescription": "The app accesses your contacts to allow you to quickly add clients from your address book.",
         "UIBackgroundModes": [
           "audio"

@@ -11,12 +11,18 @@ class AnalyticsService {
   private isInitializing = false;
   private eventQueue: Array<{ eventName: string; properties?: any }> = [];
 
-  // Your Mixpanel project token - VERIFY THIS IS CORRECT IN MIXPANEL DASHBOARD!
-  private readonly PROJECT_TOKEN = '16d86d8fa0dd77452a8f81d7a256e527';
+  // Mixpanel project token from environment variable
+  private readonly PROJECT_TOKEN = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN!;
 
   async initialize() {
     if (this.isInitialized) {
       console.log('[Analytics] ⚠️ Already initialized, skipping duplicate initialization');
+      return;
+    }
+
+    // Check if Mixpanel token is available
+    if (!process.env.EXPO_PUBLIC_MIXPANEL_TOKEN) {
+      console.warn('[Analytics] ⚠️ EXPO_PUBLIC_MIXPANEL_TOKEN not set. Analytics disabled.');
       return;
     }
 
@@ -93,10 +99,17 @@ class AnalyticsService {
       console.log(`[Analytics] 🎯 trackEvent called: "${eventName}"`);
       console.log(`[Analytics] 🔍 isInitialized: ${this.isInitialized}, mixpanel exists: ${!!this.mixpanel}`);
       
-      if (!this.isInitialized && allowQueue) {
-        // Queue event for when Mixpanel is ready
-        console.log(`[Analytics] 📝 Queueing event: ${eventName} (Mixpanel not ready)`);
-        this.eventQueue.push({ eventName, properties });
+      if (!this.isInitialized) {
+        // If no token was provided, silently skip tracking
+        if (!process.env.EXPO_PUBLIC_MIXPANEL_TOKEN) {
+          return;
+        }
+        
+        // Otherwise queue event for when Mixpanel is ready
+        if (allowQueue) {
+          console.log(`[Analytics] 📝 Queueing event: ${eventName} (Mixpanel not ready)`);
+          this.eventQueue.push({ eventName, properties });
+        }
         return;
       }
 
