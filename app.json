@@ -17,6 +17,7 @@
       "expo-av",
       "expo-video",
       "expo-web-browser",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {

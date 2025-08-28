@@ -185,6 +185,9 @@ export function AuthModal({
           await saveOnboardingData(data.session.user.id);
         }
         
+        // Call success callback to handle navigation
+        onSuccess?.();
+        
       } else {
         throw new Error('No identity token received from Apple');
       }

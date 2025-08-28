@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/config/supabase';
 
 interface OnboardingData {
@@ -19,6 +20,11 @@ interface OnboardingContextType {
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+
+// Helper function to generate storage key for user's onboarding data
+const getOnboardingStorageKey = (userId: string): string => {
+  return `onboarding_data_${userId}`;
+};
 
 // Helper function to get or create business settings record
 const getOrCreateBusinessSettings = async (userId: string) => {
@@ -249,9 +255,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
       
-      // Save industry to profiles table
+      // Save industry to user_profiles table
       const { error } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .upsert({
           id: session.user.id,
           industry: selectedIndustry,
@@ -610,9 +616,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         .eq('user_id', userId)
         .maybeSingle();
         
-      // Load industry from profiles
+      // Load industry from user_profiles
       const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('industry')
         .eq('id', userId)
         .maybeSingle();

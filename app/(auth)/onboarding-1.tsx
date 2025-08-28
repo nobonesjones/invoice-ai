@@ -172,8 +172,28 @@ export default function OnboardingScreen1() {
 
         console.log('Apple Sign In successful:', data);
         
-        if (data.session) {
-          router.push('/onboarding-2');
+        if (data.session?.user?.id) {
+          try {
+            await saveOnboardingData(data.session.user.id);
+            console.log('[Onboarding] Onboarding data saved after Apple auth');
+          } catch (error) {
+            console.error('[Onboarding] Error saving onboarding data:', error);
+          }
+          
+          // Check if user has completed onboarding to set correct mode
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('onboarding_completed')
+            .eq('id', data.session.user.id)
+            .maybeSingle();
+          
+          if (profile?.onboarding_completed) {
+            // Existing user - set mode to signin
+            setAuthModalMode('signin');
+          }
+          
+          // Use the same success handler as email authentication
+          handleAuthSuccess();
         }
         
       } else {
