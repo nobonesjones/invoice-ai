@@ -36,6 +36,26 @@ try {
   console.log('[Entry] Before url-polyfill. typeof Promise:', typeof Promise);
   require('react-native-url-polyfill/auto');
 
+  // Hydrate process.env from expo-config extras in production
+  try {
+    const Constants = require('expo-constants').default;
+    const extra = (Constants?.expoConfig?.extra) || (Constants?.manifest?.extra) || {};
+    if (extra && typeof extra === 'object') {
+      // Ensure process.env exists
+      if (typeof process === 'object') {
+        process.env = process.env || {};
+        for (const [k, v] of Object.entries(extra)) {
+          if (k.startsWith('EXPO_PUBLIC_') && process.env[k] == null && v != null) {
+            process.env[k] = String(v);
+          }
+        }
+      }
+    }
+    console.log('[Entry] Env hydration complete. Has ANON?', !!process.env?.EXPO_PUBLIC_ANON_KEY);
+  } catch (e) {
+    console.error('[Entry] Env hydration error:', e?.message || String(e));
+  }
+
   // Global fatal error handler to surface early exceptions
   if (global.ErrorUtils && typeof global.ErrorUtils.setGlobalHandler === 'function') {
     const prev = global.ErrorUtils.getGlobalHandler?.();
@@ -57,4 +77,3 @@ try {
   } catch {}
   throw e;
 }
-
