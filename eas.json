@@ -18,7 +18,11 @@
     },
     "production": {
       "distribution": "store",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "ios": {
+        "image": "latest",
+        "cocoapods": "1.14.3"
+      }
     }
   },
   "submit": {
