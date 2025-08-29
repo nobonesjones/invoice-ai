@@ -1,7 +1,7 @@
 {
   "name": "expo-supabase-starter",
   "version": "1.0.0",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
     "web": "expo start --web",
