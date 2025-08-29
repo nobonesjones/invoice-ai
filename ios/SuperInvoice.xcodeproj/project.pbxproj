@@ -8,24 +8,24 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		3223858CAFF2A8AEBDD86571 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0B1343255BD149C7E604B96D /* PrivacyInfo.xcprivacy */; };
+		3D23CBF2D9DD633AB88988C3 /* libPods-SuperInvoice.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5640E0C4DF4E1564A7755BC3 /* libPods-SuperInvoice.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		46DFA2C0C7E6B4C084AEF547 /* libPods-SuperInvoice.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 65BE544C6D6040032B4F2EF0 /* libPods-SuperInvoice.a */; };
-		63D0F9F5A3E44E5A2952DF1E /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F583C9D106F21C25A05F6CA /* ExpoModulesProvider.swift */; };
-		B4777430741AE9AD499A6540 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA72192C6E4F8ECD319C66FB /* PrivacyInfo.xcprivacy */; };
+		4CCA2501BAA234664F1C1085 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B42C705FA25B4C14CBAEC73 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0B1343255BD149C7E604B96D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = SuperInvoice/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* SuperInvoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuperInvoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = SuperInvoice/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = SuperInvoice/Info.plist; sourceTree = "<group>"; };
-		65BE544C6D6040032B4F2EF0 /* libPods-SuperInvoice.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-SuperInvoice.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		6F583C9D106F21C25A05F6CA /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-SuperInvoice/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		7CD6DB3CF8002130E01A7B35 /* Pods-SuperInvoice.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SuperInvoice.release.xcconfig"; path = "Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice.release.xcconfig"; sourceTree = "<group>"; };
-		A2F29FC1103D4663DC99E122 /* Pods-SuperInvoice.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SuperInvoice.debug.xcconfig"; path = "Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice.debug.xcconfig"; sourceTree = "<group>"; };
+		5640E0C4DF4E1564A7755BC3 /* libPods-SuperInvoice.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-SuperInvoice.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B42C705FA25B4C14CBAEC73 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-SuperInvoice/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		9CA17EC2759DF0B73A45B7D8 /* Pods-SuperInvoice.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SuperInvoice.release.xcconfig"; path = "Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice.release.xcconfig"; sourceTree = "<group>"; };
+		A63932C381085EAA14E4DD5E /* Pods-SuperInvoice.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SuperInvoice.debug.xcconfig"; path = "Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice.debug.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = SuperInvoice/SplashScreen.storyboard; sourceTree = "<group>"; };
-		AA72192C6E4F8ECD319C66FB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = SuperInvoice/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = SuperInvoice/AppDelegate.swift; sourceTree = "<group>"; };
@@ -37,13 +37,21 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				46DFA2C0C7E6B4C084AEF547 /* libPods-SuperInvoice.a in Frameworks */,
+				3D23CBF2D9DD633AB88988C3 /* libPods-SuperInvoice.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		037E10F7D192092242EFB818 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				9D46EECC17E5DB03D41E895E /* SuperInvoice */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
 		13B07FAE1A68108700A75B9A /* SuperInvoice */ = {
 			isa = PBXGroup;
 			children = (
@@ -53,36 +61,18 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				AA72192C6E4F8ECD319C66FB /* PrivacyInfo.xcprivacy */,
+				0B1343255BD149C7E604B96D /* PrivacyInfo.xcprivacy */,
 			);
 			name = SuperInvoice;
-			sourceTree = "<group>";
-		};
-		26DD43F278D29218239B2907 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				A2F29FC1103D4663DC99E122 /* Pods-SuperInvoice.debug.xcconfig */,
-				7CD6DB3CF8002130E01A7B35 /* Pods-SuperInvoice.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				65BE544C6D6040032B4F2EF0 /* libPods-SuperInvoice.a */,
+				5640E0C4DF4E1564A7755BC3 /* libPods-SuperInvoice.a */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		33E56BE48DAA8A21920F5CAD /* SuperInvoice */ = {
-			isa = PBXGroup;
-			children = (
-				6F583C9D106F21C25A05F6CA /* ExpoModulesProvider.swift */,
-			);
-			name = SuperInvoice;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -99,8 +89,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				26DD43F278D29218239B2907 /* Pods */,
-				9562C04E3263A9F5AB889667 /* ExpoModulesProviders */,
+				E69396400DB89166019EA2AD /* Pods */,
+				037E10F7D192092242EFB818 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -115,12 +105,12 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		9562C04E3263A9F5AB889667 /* ExpoModulesProviders */ = {
+		9D46EECC17E5DB03D41E895E /* SuperInvoice */ = {
 			isa = PBXGroup;
 			children = (
-				33E56BE48DAA8A21920F5CAD /* SuperInvoice */,
+				6B42C705FA25B4C14CBAEC73 /* ExpoModulesProvider.swift */,
 			);
-			name = ExpoModulesProviders;
+			name = SuperInvoice;
 			sourceTree = "<group>";
 		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
@@ -132,6 +122,16 @@
 			path = SuperInvoice/Supporting;
 			sourceTree = "<group>";
 		};
+		E69396400DB89166019EA2AD /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				A63932C381085EAA14E4DD5E /* Pods-SuperInvoice.debug.xcconfig */,
+				9CA17EC2759DF0B73A45B7D8 /* Pods-SuperInvoice.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -140,13 +140,12 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "SuperInvoice" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				5A4758479940850FCF78B015 /* [Expo] Configure project */,
+				AF36236A277B32877FED9844 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				7E44D2AC65CB670D064CA01F /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -167,6 +166,8 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1250;
+						DevelopmentTeam = "UU77CLD3VD";
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -196,7 +197,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				B4777430741AE9AD499A6540 /* PrivacyInfo.xcprivacy in Resources */,
+				3223858CAFF2A8AEBDD86571 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,43 +239,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		5A4758479940850FCF78B015 /* [Expo] Configure project */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-SuperInvoice/expo-configure-project.sh\"\n";
-		};
-		7E44D2AC65CB670D064CA01F /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
@@ -333,6 +297,25 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-SuperInvoice/Pods-SuperInvoice-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		AF36236A277B32877FED9844 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-SuperInvoice/expo-configure-project.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -341,7 +324,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				63D0F9F5A3E44E5A2952DF1E /* ExpoModulesProvider.swift in Sources */,
+				4CCA2501BAA234664F1C1085 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -350,7 +333,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A2F29FC1103D4663DC99E122 /* Pods-SuperInvoice.debug.xcconfig */;
+			baseConfigurationReference = A63932C381085EAA14E4DD5E /* Pods-SuperInvoice.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -381,12 +364,15 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+				DEVELOPMENT_TEAM = "UU77CLD3VD";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Debug;
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 7CD6DB3CF8002130E01A7B35 /* Pods-SuperInvoice.release.xcconfig */;
+			baseConfigurationReference = 9CA17EC2759DF0B73A45B7D8 /* Pods-SuperInvoice.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -411,6 +397,9 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+				DEVELOPMENT_TEAM = "UU77CLD3VD";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Release;
 		};
@@ -476,7 +465,7 @@
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
-				USE_HERMES = true;
+				USE_HERMES = false;
 			};
 			name = Debug;
 		};
@@ -533,7 +522,7 @@
 				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
-				USE_HERMES = true;
+				USE_HERMES = false;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;

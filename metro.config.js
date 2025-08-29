@@ -19,7 +19,6 @@ config.resolver = {
 		url: require.resolve("url"),
 		zlib: require.resolve("browserify-zlib"),
 		util: require.resolve("util"),
-		assert: require.resolve("assert"),
 		querystring: require.resolve("qs"),
 		path: require.resolve("path-browserify"),
 		fs: require.resolve("browserify-fs"),
