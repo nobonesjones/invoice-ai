@@ -22,6 +22,14 @@
       "ios": {
         "image": "latest",
         "cocoapods": "1.16.2"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://wzpuzqzsjdizmpiobsuo.supabase.co",
+        "EXPO_PUBLIC_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cHV6cXpzamRpem1waW9ic3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MjE3OTIsImV4cCI6MjA2MjE5Nzc5Mn0._XypJP5hEZT06UfA1uuHY5-TvsKzj5JnwjGa3LMKnyI",
+        "EXPO_PUBLIC_SUPERWALL_API_KEY": "pk_57b3949f3785014c8f2af659df558639acee2d619760c670",
+        "EXPO_PUBLIC_REVENUECAT_API_KEY": "appl_DevgLcaSBEDodXrOyZRJDCMzPdB",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "16d86d8fa0dd77452a8f81d7a256e527",
+        "EXPO_PUBLIC_USE_EXPERIMENTAL_AI": "false"
       }
     }
   },
