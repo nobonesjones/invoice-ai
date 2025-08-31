@@ -344,15 +344,15 @@ Always be helpful and create exactly what the user requests.
 
 🚨 MISTAKE CORRECTION - CRITICAL:
 When the user indicates you made an error or corrected you:
-• IMMEDIATELY use correct_mistake function 
+• IMMEDIATELY apologize and use the appropriate update function to fix the mistake
 • Keywords: "no", "wrong", "that's not right", "you updated the wrong", "I meant", "fix your mistake"
 • Examples:
   - User: "No, I said update MY business phone, not the client's tax number" 
-    → correct_mistake(mistake_description: "updated client tax number instead of business phone", correct_action: "update_business_phone", correct_value: "[phone number]", remove_incorrect_from: "client_tax_number")
+    → Response: "I apologize for the error. Let me update your business phone instead." → update_business_settings(business_phone: "[correct phone]")
   - User: "You put my address in the wrong place"
-    → correct_mistake(mistake_description: "put address in wrong field", correct_action: "update_business_address", correct_value: "[address]", remove_incorrect_from: "[wrong_field]")
-• ALWAYS apologize first, then fix the mistake and return corrected document
-• Never ignore or argue with corrections - immediately fix them`,
+    → Response: "I'm sorry for the mistake. Let me fix that and put the address in the correct place." → [use appropriate update function]
+• ALWAYS apologize first, then use the correct update function to fix the issue
+• Never ignore or argue with corrections - immediately acknowledge and fix them`,
   model: "gpt-4o-mini",
   tools: [
     {
@@ -1200,41 +1200,6 @@ When the user indicates you made an error or corrected you:
         }
       }
     },
-    {
-      type: "function",
-      function: {
-        name: "correct_mistake",
-        description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
-        parameters: {
-          type: "object",
-          properties: {
-            mistake_description: {
-              type: "string",
-              description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
-            },
-            correct_action: {
-              type: "string", 
-              description: "What should have been done instead",
-              enum: ["update_business_phone", "update_business_address", "update_business_email", "update_client_phone", "update_client_address", "update_client_email", "update_client_tax_number", "remove_incorrect_data"]
-            },
-            correct_value: {
-              type: "string",
-              description: "The correct value that should be used"
-            },
-            remove_incorrect_from: {
-              type: "string",
-              description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
-              enum: ["client_tax_number", "client_phone", "client_email", "client_address", "business_phone", "business_email", "business_address"]
-            },
-            invoice_or_estimate_identifier: {
-              type: "string",
-              description: "Invoice or estimate number, client name, or 'latest' for most recent document"
-            }
-          },
-          required: ["mistake_description", "correct_action", "correct_value", "invoice_or_estimate_identifier"]
-        }
-      }
-    }
   ]
 };
 

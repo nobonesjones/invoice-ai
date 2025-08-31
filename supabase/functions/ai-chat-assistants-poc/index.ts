@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
+// Generate unique instance ID for this edge function instance
+const INSTANCE_ID = Math.random().toString(36).substring(7);
+
 // Status message helper for streaming UX
 function createStatusMessage(status, emoji = '🤔') {
   return {
@@ -483,7 +486,7 @@ serve(async (req)=>{
     }
     // Check if we're already processing this exact request
     if (globalThis.processingRequests.has(deduplicationKey1)) {
-      console.log('[Assistants POC] 🚫 Duplicate request detected, ignoring:', deduplicationKey1);
+      console.log(`[Instance ${INSTANCE_ID}] 🚫 Duplicate request detected, ignoring:`, deduplicationKey1);
       return new Response(JSON.stringify({
         error: 'Duplicate request - processing in parallel instance'
       }), {
@@ -496,7 +499,7 @@ serve(async (req)=>{
     }
     // Mark this request as being processed
     globalThis.processingRequests.set(deduplicationKey1, Date.now());
-    console.log('[Assistants POC] ✅ Processing request:', deduplicationKey1);
+    console.log(`[Instance ${INSTANCE_ID}] ✅ Processing request:`, deduplicationKey1);
     if (!message || !user_id) {
       globalThis.processingRequests.delete(deduplicationKey1);
       return new Response(JSON.stringify({
@@ -1220,15 +1223,15 @@ Always be helpful and create exactly what the user requests.
 
 🚨 MISTAKE CORRECTION - CRITICAL:
 When the user indicates you made an error or corrected you:
-• IMMEDIATELY use correct_mistake function 
+• IMMEDIATELY apologize and use the appropriate update function to fix the mistake
 • Keywords: "no", "wrong", "that's not right", "you updated the wrong", "I meant", "fix your mistake"
 • Examples:
   - User: "No, I said update MY business phone, not the client's tax number" 
-    → correct_mistake(mistake_description: "updated client tax number instead of business phone", correct_action: "update_business_phone", correct_value: "[phone number]", remove_incorrect_from: "client_tax_number")
+    → Response: "I apologize for the error. Let me update your business phone instead." → update_business_info(phone: "[correct phone]")
   - User: "You put my address in the wrong place"
-    → correct_mistake(mistake_description: "put address in wrong field", correct_action: "update_business_address", correct_value: "[address]", remove_incorrect_from: "[wrong_field]")
-• ALWAYS apologize first, then fix the mistake and return corrected document
-• Never ignore or argue with corrections - immediately fix them`,
+    → Response: "I'm sorry for the mistake. Let me fix that and put the address in the correct place." → [use appropriate update function]
+• ALWAYS apologize first, then use the correct update function to fix the issue
+• Never ignore or argue with corrections - immediately acknowledge and fix them`,
             tools: [
               {
                 type: "function",
@@ -1884,63 +1887,6 @@ When the user indicates you made an error or corrected you:
               {
                 type: "function",
                 function: {
-                  name: "correct_mistake",
-                  description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      mistake_description: {
-                        type: "string",
-                        description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
-                      },
-                      correct_action: {
-                        type: "string",
-                        description: "What should have been done instead",
-                        enum: [
-                          "update_business_phone",
-                          "update_business_address",
-                          "update_business_email",
-                          "update_client_phone",
-                          "update_client_address",
-                          "update_client_email",
-                          "update_client_tax_number",
-                          "remove_incorrect_data"
-                        ]
-                      },
-                      correct_value: {
-                        type: "string",
-                        description: "The correct value that should be used"
-                      },
-                      remove_incorrect_from: {
-                        type: "string",
-                        description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
-                        enum: [
-                          "client_tax_number",
-                          "client_phone",
-                          "client_email",
-                          "client_address",
-                          "business_phone",
-                          "business_email",
-                          "business_address"
-                        ]
-                      },
-                      invoice_or_estimate_identifier: {
-                        type: "string",
-                        description: "Invoice or estimate number, client name, or 'latest' for most recent document"
-                      }
-                    },
-                    required: [
-                      "mistake_description",
-                      "correct_action",
-                      "correct_value",
-                      "invoice_or_estimate_identifier"
-                    ]
-                  }
-                }
-              },
-              {
-                type: "function",
-                function: {
                   name: "update_payment_methods",
                   description: "Enable or disable payment methods for an existing invoice. When enabling, only works if methods are enabled in business settings. When disabling, always works.",
                   parameters: {
@@ -2509,63 +2455,6 @@ When the user indicates you made an error or corrected you:
                   }
                 }
               },
-              {
-                type: "function",
-                function: {
-                  name: "correct_mistake",
-                  description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      mistake_description: {
-                        type: "string",
-                        description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
-                      },
-                      correct_action: {
-                        type: "string",
-                        description: "What should have been done instead",
-                        enum: [
-                          "update_business_phone",
-                          "update_business_address",
-                          "update_business_email",
-                          "update_client_phone",
-                          "update_client_address",
-                          "update_client_email",
-                          "update_client_tax_number",
-                          "remove_incorrect_data"
-                        ]
-                      },
-                      correct_value: {
-                        type: "string",
-                        description: "The correct value that should be used"
-                      },
-                      remove_incorrect_from: {
-                        type: "string",
-                        description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
-                        enum: [
-                          "client_tax_number",
-                          "client_phone",
-                          "client_email",
-                          "client_address",
-                          "business_phone",
-                          "business_email",
-                          "business_address"
-                        ]
-                      },
-                      invoice_or_estimate_identifier: {
-                        type: "string",
-                        description: "Invoice or estimate number, client name, or 'latest' for most recent document"
-                      }
-                    },
-                    required: [
-                      "mistake_description",
-                      "correct_action",
-                      "correct_value",
-                      "invoice_or_estimate_identifier"
-                    ]
-                  }
-                }
-              }
             ],
             model: "gpt-4o-mini"
           });
@@ -2882,15 +2771,15 @@ Always be helpful and create exactly what the user requests.
 
 🚨 MISTAKE CORRECTION - CRITICAL:
 When the user indicates you made an error or corrected you:
-• IMMEDIATELY use correct_mistake function 
+• IMMEDIATELY apologize and use the appropriate update function to fix the mistake
 • Keywords: "no", "wrong", "that's not right", "you updated the wrong", "I meant", "fix your mistake"
 • Examples:
   - User: "No, I said update MY business phone, not the client's tax number" 
-    → correct_mistake(mistake_description: "updated client tax number instead of business phone", correct_action: "update_business_phone", correct_value: "[phone number]", remove_incorrect_from: "client_tax_number")
+    → Response: "I apologize for the error. Let me update your business phone instead." → update_business_info(phone: "[correct phone]")
   - User: "You put my address in the wrong place"
-    → correct_mistake(mistake_description: "put address in wrong field", correct_action: "update_business_address", correct_value: "[address]", remove_incorrect_from: "[wrong_field]")
-• ALWAYS apologize first, then fix the mistake and return corrected document
-• Never ignore or argue with corrections - immediately fix them`,
+    → Response: "I'm sorry for the mistake. Let me fix that and put the address in the correct place." → [use appropriate update function]
+• ALWAYS apologize first, then use the correct update function to fix the issue
+• Never ignore or argue with corrections - immediately acknowledge and fix them`,
         tools: [
           {
             type: "function",
@@ -3539,41 +3428,6 @@ When the user indicates you made an error or corrected you:
               }
             }
           },
-          {
-            type: "function",
-            function: {
-              name: "correct_mistake",
-              description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
-              parameters: {
-                type: "object",
-                properties: {
-                  mistake_description: {
-                    type: "string",
-                    description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
-                  },
-                  correct_action: {
-                    type: "string", 
-                    description: "What should have been done instead",
-                    enum: ["update_business_phone", "update_business_address", "update_business_email", "update_client_phone", "update_client_address", "update_client_email", "update_client_tax_number", "remove_incorrect_data"]
-                  },
-                  correct_value: {
-                    type: "string",
-                    description: "The correct value that should be used"
-                  },
-                  remove_incorrect_from: {
-                    type: "string",
-                    description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
-                    enum: ["client_tax_number", "client_phone", "client_email", "client_address", "business_phone", "business_email", "business_address"]
-                  },
-                  invoice_or_estimate_identifier: {
-                    type: "string",
-                    description: "Invoice or estimate number, client name, or 'latest' for most recent document"
-                  }
-                },
-                required: ["mistake_description", "correct_action", "correct_value", "invoice_or_estimate_identifier"]
-              }
-            }
-          }
         ],
         model: "gpt-4o-mini"
       });
@@ -3807,11 +3661,12 @@ When the user indicates you made an error or corrected you:
           user_id: user_id,
           client_id: clientId,
           invoice_number,
+          request_id: deduplicationKey1,
           invoice_date: invoiceDate,
           due_date: invoiceDueDate,
           subtotal_amount: subtotal_amount,
           discount_type: discount_type || null,
-          discount_value: discount_amount || 0,
+          discount_value: discount_value || 0,
           tax_percentage: tax_rate,
           total_amount,
           notes: finalNotes || null,
@@ -3824,6 +3679,68 @@ When the user indicates you made an error or corrected you:
           created_at: new Date().toISOString()
         }).select().single();
         if (invoiceError) {
+          // Check if this is a duplicate request error
+          if (invoiceError.code === '23505' && invoiceError.message.includes('idx_invoices_request_id')) {
+            console.log(`[Instance ${INSTANCE_ID}] Duplicate request detected via database constraint, fetching existing invoice:`, deduplicationKey1);
+            // Fetch the existing invoice created by the other instance
+            const { data: existingInvoice, error: fetchError } = await supabase
+              .from('invoices')
+              .select('*')
+              .eq('request_id', deduplicationKey1)
+              .single();
+            
+            if (fetchError) {
+              console.error('[Assistants POC] Error fetching existing invoice:', fetchError);
+              return `Error fetching existing invoice: ${fetchError.message}`;
+            }
+            
+            // Get the line items for the existing invoice
+            const { data: existingLineItems } = await supabase
+              .from('invoice_line_items')
+              .select('*')
+              .eq('invoice_id', existingInvoice.id)
+              .order('created_at', { ascending: true });
+            
+            // Get client data
+            let clientData = null;
+            if (existingInvoice.client_id) {
+              const { data: client } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('id', existingInvoice.client_id)
+                .single();
+              clientData = client;
+            }
+            
+            console.log(`[Instance ${INSTANCE_ID}] Returning existing invoice ${existingInvoice.invoice_number} from duplicate request`);
+            
+            // Return the existing invoice in the same format as a successful creation
+            await sendStatusUpdate('Invoice ready', '✅');
+            ConversationMemory.setLastAction(user_id, 'created_invoice', {
+              invoice_number: existingInvoice.invoice_number,
+              client_name: clientData?.name || client_name,
+              invoice_id: existingInvoice.id,
+              client_id: existingInvoice.client_id
+            });
+            
+            InvoiceGate.setLatestInvoice(existingInvoice.invoice_number);
+            
+            return JSON.stringify({
+              success: true,
+              invoice_number: existingInvoice.invoice_number,
+              total_amount: existingInvoice.total_amount,
+              message: `✅ Invoice ${existingInvoice.invoice_number} ready`,
+              attachments: [{
+                type: 'invoice',
+                data: {
+                  ...existingInvoice,
+                  line_items: existingLineItems || [],
+                  client: clientData
+                }
+              }]
+            });
+          }
+          
           console.error('[Assistants POC] Invoice creation error:', invoiceError);
           return `Error creating invoice: ${invoiceError.message}`;
         }
@@ -4267,142 +4184,6 @@ To accept payments, configure at least one payment method.`;
         } catch (error) {
           console.error('[create_client] Error:', error);
           return `Error creating client: ${error.message}`;
-        }
-      }
-      if (name === 'correct_mistake') {
-        const { mistake_description, correct_action, correct_value, remove_incorrect_from, invoice_or_estimate_identifier } = parsedArgs;
-        try {
-          console.log('[correct_mistake] Starting correction:', {
-            mistake_description,
-            correct_action,
-            correct_value,
-            remove_incorrect_from,
-            invoice_or_estimate_identifier
-          });
-          // Start with an apology
-          let response = `🙏 I apologize for the mistake! You're absolutely right - ${mistake_description}.\n\nLet me fix that immediately:\n\n`;
-          // Find the document (invoice or estimate)
-          let targetDocument = null;
-          let documentType = null;
-          let documentIdField = null;
-          // First try to find as invoice
-          const invoiceResult = await findInvoice(supabase, user_id, invoice_or_estimate_identifier);
-          if (typeof invoiceResult !== 'string') {
-            targetDocument = invoiceResult;
-            documentType = 'invoice';
-            documentIdField = 'id';
-          } else {
-            // Try to find as estimate
-            const estimateResult = await findEstimate(supabase, user_id, invoice_or_estimate_identifier);
-            if (typeof estimateResult !== 'string') {
-              targetDocument = estimateResult;
-              documentType = 'estimate';
-              documentIdField = 'id';
-            } else {
-              return `❌ Could not find invoice or estimate: ${invoice_or_estimate_identifier}`;
-            }
-          }
-          console.log('[correct_mistake] Found document:', documentType, targetDocument[documentType === 'invoice' ? 'invoice_number' : 'estimate_number']);
-          // Step 1: Remove incorrect data if specified
-          if (remove_incorrect_from) {
-            const removeUpdates = {};
-            if (remove_incorrect_from.startsWith('client_')) {
-              // Remove from client table
-              const clientField = remove_incorrect_from.replace('client_', '');
-              if (clientField === 'tax_number') {
-                removeUpdates.tax_number = null;
-              } else {
-                removeUpdates[clientField] = null;
-              }
-              if (targetDocument.client_id) {
-                const { error: removeError } = await supabase.from('clients').update(removeUpdates).eq('id', targetDocument.client_id);
-                if (removeError) {
-                  console.error('[correct_mistake] Remove error:', removeError);
-                } else {
-                  response += `✅ Removed incorrect value from client ${clientField}\n`;
-                }
-              }
-            } else if (remove_incorrect_from.startsWith('business_')) {
-              // Remove from business settings
-              const businessField = remove_incorrect_from.replace('business_', '');
-              removeUpdates[businessField] = null;
-              const { error: removeError } = await supabase.from('business_settings').update(removeUpdates).eq('user_id', user_id);
-              if (removeError) {
-                console.error('[correct_mistake] Remove error:', removeError);
-              } else {
-                response += `✅ Removed incorrect value from business ${businessField}\n`;
-              }
-            }
-          }
-          // Step 2: Apply correct action
-          const correctUpdates = {};
-          if (correct_action.startsWith('update_client_')) {
-            // Update client table
-            const clientField = correct_action.replace('update_client_', '');
-            if (clientField === 'tax_number') {
-              correctUpdates.tax_number = correct_value;
-            } else {
-              correctUpdates[clientField] = correct_value;
-            }
-            if (targetDocument.client_id) {
-              const { error: updateError } = await supabase.from('clients').update(correctUpdates).eq('id', targetDocument.client_id);
-              if (updateError) {
-                console.error('[correct_mistake] Update error:', updateError);
-                return `❌ Error updating client information: ${updateError.message}`;
-              } else {
-                response += `✅ Updated client ${clientField} to: ${correct_value}\n`;
-              }
-            }
-          } else if (correct_action.startsWith('update_business_')) {
-            // Update business settings
-            const businessField = correct_action.replace('update_business_', '');
-            correctUpdates[businessField] = correct_value;
-            const { error: updateError } = await supabase.from('business_settings').update(correctUpdates).eq('user_id', user_id);
-            if (updateError) {
-              console.error('[correct_mistake] Update error:', updateError);
-              return `❌ Error updating business information: ${updateError.message}`;
-            } else {
-              response += `✅ Updated business ${businessField} to: ${correct_value}\n`;
-            }
-          }
-          // Step 3: Return the corrected document
-          response += `\nHere's your corrected ${documentType}:`;
-          if (documentType === 'invoice') {
-            // Get updated invoice data
-            const { data: updatedInvoice } = await supabase.from('invoices').select('*').eq('id', targetDocument.id).single();
-            const { data: lineItems } = await supabase.from('invoice_line_items').select('*').eq('invoice_id', targetDocument.id).order('created_at', {
-              ascending: true
-            });
-            let clientData = null;
-            if (targetDocument.client_id) {
-              const { data: client } = await supabase.from('clients').select('*').eq('id', targetDocument.client_id).single();
-              clientData = client;
-            }
-            const invoiceAttachment = await createInvoiceAttachment(
-              updatedInvoice || targetDocument,
-              lineItems || [],
-              clientData
-            );
-            setLatestInvoice(invoiceAttachment);
-          } else {
-            // Get updated estimate data
-            const { data: updatedEstimate } = await supabase.from('estimates').select('*').eq('id', targetDocument.id).single();
-            const { data: lineItems } = await supabase.from('estimate_line_items').select('*').eq('estimate_id', targetDocument.id).order('created_at', {
-              ascending: true
-            });
-            let clientData = null;
-            if (targetDocument.client_id) {
-              const { data: client } = await supabase.from('clients').select('*').eq('id', targetDocument.client_id).single();
-              clientData = client;
-            }
-            const estimateAttachment = await createEstimateAttachment(updatedEstimate || targetDocument, lineItems || [], clientData);
-            setLatestEstimate(estimateAttachment);
-          }
-          response += `\n\n✅ All fixed! Thank you for catching my mistake - I'll be more careful next time.`;
-          return response;
-        } catch (error) {
-          console.error('[correct_mistake] Error:', error);
-          return `❌ Error correcting mistake: ${error.message}`;
         }
       }
       if (name === 'find_invoice') {
@@ -5693,7 +5474,7 @@ To change colors, just say:
           valid_until_date: validUntilDate,
           subtotal_amount: subtotal_amount,
           discount_type: discount_type || null,
-          discount_value: discount_amount || 0,
+          discount_value: discount_value || 0,
           tax_percentage: tax_rate,
           total_amount,
           notes: notes || null,
@@ -6047,6 +5828,7 @@ To change colors, just say:
             user_id: user_id,
             client_id: targetEstimate.client_id,
             invoice_number,
+            request_id: deduplicationKey1,
             invoice_date: invoiceDate,
             due_date: invoiceDueDate,
             subtotal_amount: targetEstimate.subtotal_amount,
@@ -6321,7 +6103,7 @@ To change colors, just say:
         // Clean up request tracking
         if (globalThis.processingRequests) {
           globalThis.processingRequests.delete(deduplicationKey1);
-          console.log('[Assistants POC] 🧹 Cleaned up successful request:', deduplicationKey1);
+          console.log(`[Instance ${INSTANCE_ID}] 🧹 Cleaned up successful request:`, deduplicationKey1);
         }
         // 🚨 ATTACHMENT DEDUPLICATION SYSTEM
         // Remove duplicate invoice/estimate attachments when multiple functions modify the same item

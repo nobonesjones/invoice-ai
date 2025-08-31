@@ -1,5 +1,3 @@
-do not change this code ever! 
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import OpenAI from "https://esm.sh/openai@4.69.0";
@@ -7,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
+// Generate unique instance ID for this edge function instance
+const INSTANCE_ID = Math.random().toString(36).substring(7);
 // Status message helper for streaming UX
 function createStatusMessage(status, emoji = '🤔') {
   return {
@@ -217,7 +217,7 @@ async function checkCanCreateItem(supabase, userId) {
       };
     }
     // Free users - check count using RPC function
-    const { count, error: countError } = await supabase.rpc('count_user_items', {
+    const { data: count, error: countError } = await supabase.rpc('count_user_items', {
       user_id: userId
     });
     if (countError) {
@@ -481,7 +481,7 @@ serve(async (req)=>{
     }
     // Check if we're already processing this exact request
     if (globalThis.processingRequests.has(deduplicationKey1)) {
-      console.log('[Assistants POC] 🚫 Duplicate request detected, ignoring:', deduplicationKey1);
+      console.log(`[Instance ${INSTANCE_ID}] 🚫 Duplicate request detected, ignoring:`, deduplicationKey1);
       return new Response(JSON.stringify({
         error: 'Duplicate request - processing in parallel instance'
       }), {
@@ -494,7 +494,7 @@ serve(async (req)=>{
     }
     // Mark this request as being processed
     globalThis.processingRequests.set(deduplicationKey1, Date.now());
-    console.log('[Assistants POC] ✅ Processing request:', deduplicationKey1);
+    console.log(`[Instance ${INSTANCE_ID}] ✅ Processing request:`, deduplicationKey1);
     if (!message || !user_id) {
       globalThis.processingRequests.delete(deduplicationKey1);
       return new Response(JSON.stringify({
@@ -6259,7 +6259,7 @@ To change colors, just say:
         // Clean up request tracking
         if (globalThis.processingRequests) {
           globalThis.processingRequests.delete(deduplicationKey1);
-          console.log('[Assistants POC] 🧹 Cleaned up successful request:', deduplicationKey1);
+          console.log(`[Instance ${INSTANCE_ID}] 🧹 Cleaned up successful request:`, deduplicationKey1);
         }
         // 🚨 ATTACHMENT DEDUPLICATION SYSTEM
         // Remove duplicate invoice/estimate attachments when multiple functions modify the same item
