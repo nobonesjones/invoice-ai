@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, TextInput, Alert, ActivityIndicator, TouchableOpacity, Platform, SafeAreaView } from 'react-native';
+import { View, ScrollView, StyleSheet, TextInput, Alert, ActivityIndicator, TouchableOpacity, Platform, SafeAreaView, Modal } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeft, User, Mail, Phone, LogOut } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, User, Mail, Phone, LogOut, Trash2 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useTheme } from '@/context/theme-provider';
@@ -74,6 +74,48 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   signOutText: {
     fontSize: 16,
+  },
+  deleteAccountText: {
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    padding: 20,
+    borderRadius: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   }
 });
 
@@ -128,7 +170,29 @@ export default function AccountDetailsScreen() {
       signOutText: {
         ...baseStyles.signOutText,
         color: theme.destructive, 
-      }
+      },
+      deleteAccountText: {
+        ...baseStyles.deleteAccountText,
+        color: theme.destructive,
+      },
+      modalOverlay: baseStyles.modalOverlay,
+      modalContent: {
+        ...baseStyles.modalContent,
+        backgroundColor: theme.card,
+      },
+      modalTitle: {
+        ...baseStyles.modalTitle,
+        color: theme.foreground,
+      },
+      modalInput: {
+        ...baseStyles.modalInput,
+        borderColor: theme.border,
+        color: theme.foreground,
+        backgroundColor: theme.background,
+      },
+      modalButtons: baseStyles.modalButtons,
+      modalButton: baseStyles.modalButton,
+      modalButtonText: baseStyles.modalButtonText,
     };
   }, [theme]);
 
@@ -147,6 +211,9 @@ export default function AccountDetailsScreen() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -238,6 +305,104 @@ export default function AccountDetailsScreen() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setShowDeleteModal(true);
+            setDeleteConfirmText('');
+          }
+        }
+      ]
+    );
+  };
+
+  const confirmDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      Alert.alert('Incorrect', 'Please type DELETE exactly to confirm.');
+      return;
+    }
+    
+    setIsDeletingAccount(true);
+    setShowDeleteModal(false);
+    
+    try {
+      // Try the edge function first
+      const { error } = await supabase.functions.invoke('delete-user-account', {
+        body: { 
+          userId: user?.id,
+          confirmation: 'DELETE'
+        }
+      });
+      
+      if (error) {
+        console.log('Edge function failed, trying manual deletion:', error);
+        
+        // Fallback: Delete user data manually and sign out
+        try {
+          // Delete from core tables manually
+          const tables = ['invoices', 'estimates', 'clients'];
+          for (const table of tables) {
+            await supabase.from(table).delete().eq('user_id', user?.id);
+          }
+          // Delete profile
+          await supabase.from('profiles').delete().eq('id', user?.id);
+        } catch (manualError) {
+          console.error('Manual deletion also failed:', manualError);
+        }
+        
+        // Always sign out the user even if data deletion fails
+        await signOut();
+        
+        Alert.alert(
+          'Account Deletion Initiated', 
+          'Your account has been signed out. Some data deletion may be processed in the background. If you have concerns, please contact support.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      Alert.alert(
+        'Account Deleted', 
+        'Your account has been successfully deleted.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await signOut();
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      
+      // As a last resort, just sign the user out
+      try {
+        await signOut();
+        Alert.alert(
+          'Account Signed Out', 
+          'There was an issue with account deletion, but you have been signed out. Please contact support at support@getsuperinvoice.com if you need assistance.',
+          [{ text: 'OK' }]
+        );
+      } catch (signOutError) {
+        Alert.alert(
+          'Error', 
+          'Failed to delete account or sign out. Please contact support at support@getsuperinvoice.com',
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const headerLeft = () => (
     <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0 }}>
       <ChevronLeft size={24} color={theme.foreground} />
@@ -312,8 +477,18 @@ export default function AccountDetailsScreen() {
                 onPress={handleSignOut}
                 disabled={isSigningOut}
                 icon={<LogOut size={20} color={theme.destructive} />}
-                rightContent={isSigningOut ? <ActivityIndicator color={theme.destructive} size="small" /> : <ChevronLeft size={20} color={theme.destructive} /> } 
+                rightContent={isSigningOut ? <ActivityIndicator color={theme.destructive} size="small" /> : <ChevronRight size={20} color={theme.mutedForeground} /> } 
             />
+            <View style={{ borderBottomWidth: 0 }}>
+              <SettingsListItem 
+                  label="Delete Account"
+                  labelStyle={styles.deleteAccountText} 
+                  onPress={handleDeleteAccount}
+                  disabled={isDeletingAccount}
+                  icon={<Trash2 size={20} color={theme.destructive} />}
+                  rightContent={isDeletingAccount ? <ActivityIndicator color={theme.destructive} size="small" /> : <ChevronRight size={20} color={theme.mutedForeground} /> } 
+              />
+            </View>
         </View>
       </ScrollView>
 
@@ -330,6 +505,49 @@ export default function AccountDetailsScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Account Deletion</Text>
+            <Text style={{ color: theme.foreground, marginBottom: 16, textAlign: 'center' }}>
+              Type DELETE to permanently delete your account:
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              placeholder="Type DELETE here"
+              placeholderTextColor={theme.mutedForeground}
+              autoCapitalize="none"
+              autoFocus={true}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.muted }]}
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.foreground }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.destructive }]}
+                onPress={confirmDeleteAccount}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.destructiveForeground }]}>Delete Account</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

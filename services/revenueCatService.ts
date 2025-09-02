@@ -74,11 +74,34 @@ class RevenueCatService {
 
   async purchasePackage(packageToPurchase: PurchasesPackage): Promise<PurchasesCustomerInfo> {
     try {
+      console.log('[RevenueCat] Starting purchase for package:', packageToPurchase.identifier);
+      
       const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
-      console.log('[RevenueCat] Purchase successful:', customerInfo);
+      
+      console.log('[RevenueCat] Purchase successful:', {
+        originalAppUserId: customerInfo.originalAppUserId,
+        activeSubscriptions: Object.keys(customerInfo.activeSubscriptions),
+        entitlements: Object.keys(customerInfo.entitlements.active),
+        latestExpirationDate: customerInfo.latestExpirationDate,
+      });
+      
       return customerInfo;
-    } catch (error) {
-      console.error('[RevenueCat] Purchase failed:', error);
+    } catch (error: any) {
+      console.error('[RevenueCat] Purchase failed:', {
+        error: error.message,
+        code: error.code,
+        underlyingErrorMessage: error.underlyingErrorMessage,
+        domain: error.domain
+      });
+      
+      // Handle specific iPad/receipt validation errors
+      if (error.code === 'PURCHASE_INVALID_ERROR' || 
+          error.code === 'RECEIPT_ALREADY_IN_USE_ERROR' ||
+          error.underlyingErrorMessage?.includes('sandbox')) {
+        console.log('[RevenueCat] Possible sandbox/production receipt mismatch on iPad');
+        throw new Error('Purchase failed due to receipt validation. This may be a temporary issue. Please try again or contact support.');
+      }
+      
       throw error;
     }
   }

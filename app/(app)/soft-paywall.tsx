@@ -5,6 +5,7 @@ import { usePlacement, useSuperwall } from 'expo-superwall';
 import { useTheme } from '@/context/theme-provider';
 import { useSupabase } from '@/context/supabase-provider';
 import PaywallService from '@/services/paywallService';
+import { SubscriptionPricing } from '@/components/SubscriptionPricing';
 
 export default function SoftPaywallScreen() {
   console.log('[SoftPaywall] Screen component mounted');
@@ -159,9 +160,14 @@ export default function SoftPaywallScreen() {
         {isPaywallPresented ? 'Ready to upgrade?' : 'Preparing your experience...'}
       </Text>
       {!isPaywallPresented && (
-        <Text style={[styles.subtext, { color: theme.mutedForeground }]}>
-          Setting up your premium options
-        </Text>
+        <>
+          <Text style={[styles.subtext, { color: theme.mutedForeground }]}>
+            Setting up your premium options
+          </Text>
+          <View style={{ marginTop: 20 }}>
+            <SubscriptionPricing compact={true} />
+          </View>
+        </>
       )}
     </View>
   );
