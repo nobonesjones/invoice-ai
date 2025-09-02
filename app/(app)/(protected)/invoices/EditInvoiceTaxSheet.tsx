@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
@@ -32,11 +32,16 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
   
   React.useImperativeHandle(ref, () => ({
     present: (initialName?: string | null, initialRate?: number | string | null) => {
+      console.log('[EditInvoiceTaxSheet] 🚀 PRESENT CALLED - Name:', initialName, 'Rate:', initialRate);
       setTaxName(initialName || '');
       setTaxRate(initialRate !== null && initialRate !== undefined ? String(initialRate) : '');
+      
+      console.log('[EditInvoiceTaxSheet] 🎯 About to call bottomSheetModalRef.current?.present()');
       bottomSheetModalRef.current?.present();
+      console.log('[EditInvoiceTaxSheet] ✅ bottomSheetModalRef.present() called');
     },
     dismiss: () => {
+      console.log('[EditInvoiceTaxSheet] 🔽 DISMISS CALLED');
       bottomSheetModalRef.current?.dismiss();
     },
   }));
@@ -53,10 +58,21 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
     []
   );
 
+  const snapPoints = useMemo(() => ['60%'], []);
+
   const handleSheetDismissed = () => {
+    console.log('[EditInvoiceTaxSheet] 📤 MODAL DISMISSED');
     if (props.onClose) {
       props.onClose(); 
     }
+  };
+
+  const handleSheetAnimate = (fromIndex: number, toIndex: number) => {
+    console.log('[EditInvoiceTaxSheet] 🎭 ANIMATE - From:', fromIndex, 'To:', toIndex);
+  };
+
+  const handleSheetChange = (index: number) => {
+    console.log('[EditInvoiceTaxSheet] 🔄 INDEX CHANGED TO:', index);
   };
 
   const handleInternalSave = () => {
@@ -172,9 +188,11 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
     <BottomSheetModal
       ref={bottomSheetModalRef}
       index={0} 
-      enableDynamicSizing={true}
+      snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
-      onDismiss={handleSheetDismissed} 
+      onDismiss={handleSheetDismissed}
+      onAnimate={handleSheetAnimate}
+      onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       enablePanDownToClose={true} 

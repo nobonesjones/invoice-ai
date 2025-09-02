@@ -1,62 +1,61 @@
-import React, { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
-import {
-  BottomSheetModal,
-  BottomSheetBackdrop,
-  BottomSheetScrollView,
-  BottomSheetTextInput,
-} from '@gorhom/bottom-sheet';
+import React, { forwardRef, useCallback, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { X as XIcon, Percent, DollarSign } from 'lucide-react-native'; // Changed MinusCircle to DollarSign
+import { X as XIcon, Percent, DollarSign } from 'lucide-react-native'; 
 
 export interface DiscountData {
   discountType: 'percentage' | 'fixed' | null;
-  discountValue: string; // Keep as string for input, convert on apply
+  discountValue: string;
 }
 
 export interface SelectDiscountTypeSheetProps {
   onApply: (data: DiscountData) => void;
-  onClose?: () => void; // Optional: called when sheet is dismissed without applying
-  initialDiscountType?: 'percentage' | 'fixed' | null;
-  initialDiscountValue?: number | string | null;
+  onClose: () => void;
 }
 
 export interface SelectDiscountTypeSheetRef {
-  present: (
-    initialDiscountType?: 'percentage' | 'fixed' | null,
-    initialDiscountValue?: number | string | null
-  ) => void;
+  present: (initialDiscountType?: 'percentage' | 'fixed' | null, initialDiscountValue?: number | string | null) => void;
   dismiss: () => void;
 }
 
-const SelectDiscountTypeSheet = forwardRef<
-  SelectDiscountTypeSheetRef,
-  SelectDiscountTypeSheetProps
->((props, ref) => {
+const SelectDiscountTypeSheet = forwardRef<SelectDiscountTypeSheetRef, SelectDiscountTypeSheetProps>((props, ref) => {
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const lastPresentTime = useRef<number>(0);
 
-  const [selectedType, setSelectedType] = useState<'percentage' | 'fixed' | null>(
-    null
-  );
+  const [selectedType, setSelectedType] = useState<'percentage' | 'fixed' | null>(null);
   const [inputValue, setInputValue] = useState<string>('');
-
+  
   React.useImperativeHandle(ref, () => ({
-    present: (
-      initialType?: 'percentage' | 'fixed' | null,
-      initialValue?: number | string | null
-    ) => {
+    present: (initialType?: 'percentage' | 'fixed' | null, initialValue?: number | string | null) => {
+      // Prevent multiple rapid opens (debounce 500ms)
+      const now = Date.now();
+      if (now - lastPresentTime.current < 500) {
+        console.log('[SelectDiscountTypeSheet] 🚫 Blocked rapid open');
+        return;
+      }
+      lastPresentTime.current = now;
+      
+      console.log('[SelectDiscountTypeSheet] 🚀 PRESENT CALLED - Type:', initialType, 'Value:', initialValue);
+      console.log('[SelectDiscountTypeSheet] 📊 Current State - selectedType:', selectedType, 'inputValue:', inputValue);
+      
+      // Reset state before presenting
       setSelectedType(initialType || null);
       setInputValue(
         initialValue !== null && initialValue !== undefined
           ? String(initialValue)
           : ''
       );
+      
+      console.log('[SelectDiscountTypeSheet] 🎯 About to call bottomSheetModalRef.current?.present()');
       bottomSheetModalRef.current?.present();
+      console.log('[SelectDiscountTypeSheet] ✅ bottomSheetModalRef.present() called');
     },
     dismiss: () => {
+      console.log('[SelectDiscountTypeSheet] 🔽 DISMISS CALLED');
       bottomSheetModalRef.current?.dismiss();
     },
   }));
@@ -74,12 +73,18 @@ const SelectDiscountTypeSheet = forwardRef<
   );
 
   const handleSheetDismissed = () => {
+    console.log('[SelectDiscountTypeSheet] 📤 MODAL DISMISSED');
     if (props.onClose) {
-      props.onClose();
+      props.onClose(); 
     }
-    // Reset state if needed when dismissed without saving, or rely on present to re-init
-    // setSelectedType(null);
-    // setInputValue('');
+  };
+
+  const handleSheetAnimate = (fromIndex: number, toIndex: number) => {
+    console.log('[SelectDiscountTypeSheet] 🎭 ANIMATE - From:', fromIndex, 'To:', toIndex);
+  };
+
+  const handleSheetChange = (index: number) => {
+    console.log('[SelectDiscountTypeSheet] 🔄 INDEX CHANGED TO:', index);
   };
 
   const handleInternalApply = () => {
@@ -94,23 +99,23 @@ const SelectDiscountTypeSheet = forwardRef<
       return;
     }
     if (selectedType === 'percentage' && numericValue > 100) {
-        Alert.alert('Invalid Percentage', 'Percentage discount cannot exceed 100%.');
-        return;
+      Alert.alert('Invalid Percentage', 'Percentage discount cannot exceed 100%.');
+      return;
     }
 
     const applyData: DiscountData = {
       discountType: selectedType,
-      discountValue: String(numericValue), // Return as string, consistent with state
+      discountValue: String(numericValue),
     };
 
     props.onApply(applyData);
-    bottomSheetModalRef.current?.dismiss();
+    bottomSheetModalRef.current?.dismiss(); 
   };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: themeColors.background,
+      backgroundColor: themeColors.background, 
     },
     headerContainer: {
       flexDirection: 'row',
@@ -118,7 +123,7 @@ const SelectDiscountTypeSheet = forwardRef<
       alignItems: 'center',
       paddingHorizontal: 16,
       paddingTop: Platform.OS === 'ios' ? 20 : 15,
-      paddingBottom: 10,
+      paddingBottom: 10, 
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: themeColors.border,
     },
@@ -128,24 +133,21 @@ const SelectDiscountTypeSheet = forwardRef<
       color: themeColors.foreground,
     },
     closeButton: {
-      padding: 5,
+      padding: 5, 
     },
     contentContainer: {
       paddingHorizontal: 20,
-      paddingTop: 10,
-      paddingBottom: Platform.OS === 'ios' ? 95 : 85, // Space for save button
-      flexGrow: 1,
-      justifyContent: 'space-between',
+      paddingTop: 10, 
+      paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+      minHeight: 400,
     },
     card: {
       backgroundColor: themeColors.card,
       borderRadius: 10,
-      marginVertical: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 2.5,
-      elevation: 3,
+      marginVertical: 20, 
+      // Remove shadow to prevent rendering issues
+      borderWidth: 1,
+      borderColor: themeColors.border,
     },
     typeSelectionContainer: {
       flexDirection: 'row',
@@ -169,51 +171,51 @@ const SelectDiscountTypeSheet = forwardRef<
       fontSize: 15,
       marginLeft: 8,
       color: themeColors.foreground,
-      fontWeight: 'bold', // Added bold font weight
+      fontWeight: 'bold',
     },
     typeButtonTextSelected: {
       color: themeColors.primary,
-      fontWeight: 'bold', // Ensure selected text is also bold
+      fontWeight: 'bold',
     },
     inputRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: Platform.OS === 'ios' ? 16 : 14,
+      paddingVertical: Platform.OS === 'ios' ? 16 : 14, 
       paddingHorizontal: 16,
     },
     inputLabel: {
       fontSize: 16,
       color: themeColors.foreground,
-      fontWeight: '500',
-      marginRight: 16,
+      fontWeight: 'bold',
+      marginRight: 16, 
     },
     textInput: {
       fontSize: 16,
       color: themeColors.foreground,
       textAlign: 'right',
-      flex: 1,
+      flex: 1, 
       paddingVertical: 0, 
     },
     separator: {
       height: StyleSheet.hairlineWidth,
       backgroundColor: themeColors.border,
-      marginLeft: 16,
+      marginLeft: 16, 
     },
     handleIndicator: {
       backgroundColor: themeColors.mutedForeground,
     },
     modalBackground: {
-      backgroundColor: themeColors.background,
+      backgroundColor: themeColors.background, 
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
     },
     applyButton: {
       backgroundColor: themeColors.primary,
-      paddingVertical: 16,
-      borderRadius: 10,
+      paddingVertical: 16, 
+      borderRadius: 10, 
       alignItems: 'center',
-      marginTop: 30,
+      marginTop: 30, 
     },
     applyButtonText: {
       color: themeColors.primaryForeground,
@@ -221,126 +223,120 @@ const SelectDiscountTypeSheet = forwardRef<
       fontWeight: 'bold',
     },
     disabledApplyButton: {
-        backgroundColor: themeColors.muted,
+      backgroundColor: themeColors.muted,
     }
   });
-
-  const snapPoints = useMemo(() => ['60%'], []); // Adjusted snap point
 
   return (
     <BottomSheetModal
       ref={bottomSheetModalRef}
-      index={0}
-      // snapPoints={snapPoints} // Using enableDynamicSizing instead
+      index={0} 
       enableDynamicSizing={true}
       backdropComponent={renderBackdrop}
-      onDismiss={handleSheetDismissed}
+      onDismiss={handleSheetDismissed} 
+      onAnimate={handleSheetAnimate}
+      onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       enablePanDownToClose={true}
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>
-          <View style={{ width: 24 + 10 }} />{/* Spacer for alignment */}
+          <View style={{width: 24 + 10}} /> 
           <Text style={styles.title}>Add Discount</Text>
-          <TouchableOpacity
-            onPress={() => bottomSheetModalRef.current?.dismiss()}
-            style={styles.closeButton}
-          >
+          <TouchableOpacity onPress={() => bottomSheetModalRef.current?.dismiss()} style={styles.closeButton}>
             <XIcon size={24} color={themeColors.foreground} />
           </TouchableOpacity>
         </View>
 
-        <BottomSheetScrollView
+        <BottomSheetScrollView 
           contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="handled" 
         >
-          <View> {/* Wrapper for content above button */}
-            <View style={styles.card}>
-              <View style={styles.typeSelectionContainer}>
-                <TouchableOpacity
+          <View style={styles.card}>
+            <View style={styles.typeSelectionContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  selectedType === 'percentage' && styles.typeButtonSelected,
+                ]}
+                onPress={() => setSelectedType('percentage')}
+              >
+                <Percent
+                  size={18}
+                  color={
+                    selectedType === 'percentage'
+                      ? themeColors.primary
+                      : themeColors.mutedForeground
+                  }
+                />
+                <Text
                   style={[
-                    styles.typeButton,
-                    selectedType === 'percentage' && styles.typeButtonSelected,
+                    styles.typeButtonText,
+                    selectedType === 'percentage' &&
+                      styles.typeButtonTextSelected,
                   ]}
-                  onPress={() => setSelectedType('percentage')}
                 >
-                  <Percent
-                    size={18}
-                    color={
-                      selectedType === 'percentage'
-                        ? themeColors.primary
-                        : themeColors.mutedForeground
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.typeButtonText,
-                      selectedType === 'percentage' &&
-                        styles.typeButtonTextSelected,
-                    ]}
-                  >
-                    Percentage
-                  </Text>
-                </TouchableOpacity>
+                  Percentage
+                </Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
+              <TouchableOpacity
+                style={[
+                  styles.typeButton,
+                  selectedType === 'fixed' && styles.typeButtonSelected,
+                ]}
+                onPress={() => setSelectedType('fixed')}
+              >
+                <DollarSign
+                  size={18}
+                  color={
+                    selectedType === 'fixed'
+                      ? themeColors.primary
+                      : themeColors.mutedForeground
+                  }
+                />
+                <Text
                   style={[
-                    styles.typeButton,
-                    selectedType === 'fixed' && styles.typeButtonSelected,
+                    styles.typeButtonText,
+                    selectedType === 'fixed' && styles.typeButtonTextSelected,
                   ]}
-                  onPress={() => setSelectedType('fixed')}
                 >
-                  <DollarSign // Changed icon to DollarSign
-                    size={18}
-                    color={
-                      selectedType === 'fixed'
-                        ? themeColors.primary
-                        : themeColors.mutedForeground
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.typeButtonText,
-                      selectedType === 'fixed' && styles.typeButtonTextSelected,
-                    ]}
-                  >
-                    Fixed Amount
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {selectedType && (
-                <>
-                  <View style={styles.separator} />
-                  <View style={styles.inputRow}>
-                    <Text style={styles.inputLabel}>
-                      {selectedType === 'percentage'
-                        ? 'Discount (%)'
-                        : 'Discount Amount'}
-                    </Text>
-                    <BottomSheetTextInput
-                      style={styles.textInput}
-                      value={inputValue}
-                      onChangeText={setInputValue}
-                      placeholder={
-                        selectedType === 'percentage' ? 'e.g. 10' : 'e.g. 5.00'
-                      }
-                      placeholderTextColor={themeColors.mutedForeground}
-                      keyboardType="number-pad"
-                      returnKeyType="none"
-                      autoFocus={true}
-                    />
-                  </View>
-                </>
-              )}
+                  Fixed Amount
+                </Text>
+              </TouchableOpacity>
             </View>
+
+            {selectedType && (
+              <>
+                <View style={styles.separator} />
+                <View style={styles.inputRow}>
+                  <Text style={styles.inputLabel}>
+                    {selectedType === 'percentage'
+                      ? 'Discount (%)'
+                      : 'Discount Amount'}
+                  </Text>
+                  <BottomSheetTextInput
+                    style={styles.textInput}
+                    value={inputValue}
+                    onChangeText={setInputValue}
+                    placeholder={
+                      selectedType === 'percentage' ? 'e.g. 10' : 'e.g. 5.00'
+                    }
+                    placeholderTextColor={themeColors.mutedForeground}
+                    keyboardType="numeric"
+                    returnKeyType="none"
+                    autoFocus={true}
+                  />
+                </View>
+              </>
+            )}
           </View>
 
           <TouchableOpacity
             style={[
-                styles.applyButton,
-                !selectedType || !inputValue ? styles.disabledApplyButton : {}
+              styles.applyButton,
+              !selectedType || !inputValue ? styles.disabledApplyButton : {}
             ]}
             onPress={handleInternalApply}
             disabled={!selectedType || !inputValue}

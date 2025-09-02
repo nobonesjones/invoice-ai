@@ -51,12 +51,12 @@ import {
   ViewStyle, // Explicitly import ViewStyle
   Alert // Re-added import for Alert
 } from 'react-native';
-import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2, Landmark, Palette } from 'lucide-react-native'; // Added Trash2, Landmark, and Palette
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
+import NewClientSelectionSheet, { Client as ClientType, NewClientSelectionSheetRef } from './NewClientSelectionSheet';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; // Added import
 import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
@@ -64,7 +64,8 @@ import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoi
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
 import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
-import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import new sheet
+import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import working discount modal
+
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData } from './EditInvoiceTaxSheet'; // Changed TaxData to InvoiceTaxData to avoid naming conflict if TaxData is used elsewhere
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
@@ -551,7 +552,7 @@ export default function CreateInvoiceScreen() {
   );
 
   // --- Client Selection Modal --- //
-  const newClientSheetRef = useRef<BottomSheetModal>(null);
+  const newClientSheetRef = useRef<NewClientSelectionSheetRef>(null);
 
   const handleClientSelect = useCallback((client: ClientType) => {
     setValue('client_id', client.id, { shouldValidate: true });
@@ -1326,19 +1327,15 @@ export default function CreateInvoiceScreen() {
     setValue('taxPercentage', numericRateToApply, { shouldValidate: true, shouldDirty: true });
   }, [taxPercentage, globalTaxRatePercent, setValue]);
 
-  const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for new sheet
+  const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for working discount modal
   const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
   const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null); // Ref for new sheet
   const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null); // Ref for preview modal
 
   const handlePresentSelectDiscountTypeSheet = () => {
-    // Pass current discount values to pre-fill the modal if needed
     const currentDiscountType = getValues('discountType');
     const currentDiscountValue = getValues('discountValue');
-    selectDiscountTypeSheetRef.current?.present(
-      currentDiscountType,
-      currentDiscountValue
-    );
+    selectDiscountTypeSheetRef.current?.present(currentDiscountType, currentDiscountValue);
   };
 
   const handleApplyDiscountFromSheet = (data: DiscountData) => {
@@ -1349,6 +1346,7 @@ export default function CreateInvoiceScreen() {
     setValue('discountValue', numericDiscountValue, { shouldValidate: true, shouldDirty: true }); // Use parsed numeric value
     // The useEffect for total calculation will pick up these changes
   };
+
 
   const handleSelectDiscountTypeSheetClose = () => {
     // Add any other logic needed when the discount sheet is closed by the user

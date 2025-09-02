@@ -47,10 +47,17 @@ interface NewClientSelectionSheetProps {
 	onClose?: () => void;
 }
 
+export interface NewClientSelectionSheetRef {
+	present: () => void;
+	dismiss: () => void;
+}
+
 const NewClientSelectionSheet = forwardRef<
-	BottomSheetModal,
+	NewClientSelectionSheetRef,
 	NewClientSelectionSheetProps
 >(({ onClientSelect, onClose }, ref) => {
+	const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+	const lastPresentTime = useRef<number>(0);
 	const createNewClientSheetRef = useRef<CreateNewClientSheetRef>(null);
 	const { isLightMode } = useTheme();
 	const { user } = useSupabase();
@@ -63,7 +70,32 @@ const NewClientSelectionSheet = forwardRef<
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const snapPoints = useMemo(() => ["90%", "85%"], []);
+	const snapPoints = useMemo(() => ["75%"], []);
+
+	React.useImperativeHandle(ref, () => ({
+		present: () => {
+			// Prevent multiple rapid opens (debounce 500ms)
+			const now = Date.now();
+			if (now - lastPresentTime.current < 500) {
+				console.log('[NewClientSelectionSheet] 🚫 Blocked rapid open');
+				return;
+			}
+			lastPresentTime.current = now;
+			
+			console.log('[NewClientSelectionSheet] 🚀 PRESENT CALLED');
+			
+			// Reset search when opening
+			setSearchTerm("");
+			
+			console.log('[NewClientSelectionSheet] 🎯 About to call bottomSheetModalRef.current?.present()');
+			bottomSheetModalRef.current?.present();
+			console.log('[NewClientSelectionSheet] ✅ bottomSheetModalRef.present() called');
+		},
+		dismiss: () => {
+			console.log('[NewClientSelectionSheet] 🔽 DISMISS CALLED');
+			bottomSheetModalRef.current?.dismiss();
+		},
+	}));
 
 	const handleAddFromContacts = async () => {
 		try {
@@ -218,7 +250,7 @@ const NewClientSelectionSheet = forwardRef<
 
 	const handleSelectClient = (client: Client) => {
 		onClientSelect(client);
-		(ref as React.RefObject<BottomSheetModal>)?.current?.dismiss();
+		bottomSheetModalRef.current?.dismiss();
 	};
 
 	const renderClientItem = ({ item }: { item: Client }) => (
@@ -242,7 +274,7 @@ const NewClientSelectionSheet = forwardRef<
 			<Text style={styles.title}>Select Client</Text>
 			<TouchableOpacity
 				onPress={() =>
-					(ref as React.RefObject<BottomSheetModal>)?.current?.dismiss()
+					bottomSheetModalRef.current?.dismiss()
 				}
 				style={styles.closeButton}
 			>
@@ -276,11 +308,20 @@ const NewClientSelectionSheet = forwardRef<
 
 	return (
 		<BottomSheetModal
-			ref={ref}
+			ref={bottomSheetModalRef}
 			index={0}
 			snapPoints={snapPoints}
 			backdropComponent={renderBackdrop}
-			onDismiss={onClose}
+			onDismiss={() => {
+				console.log('[NewClientSelectionSheet] 📤 MODAL DISMISSED');
+				if (onClose) onClose();
+			}}
+			onAnimate={(fromIndex: number, toIndex: number) => {
+				console.log('[NewClientSelectionSheet] 🎭 ANIMATE - From:', fromIndex, 'To:', toIndex);
+			}}
+			onChange={(index: number) => {
+				console.log('[NewClientSelectionSheet] 🔄 INDEX CHANGED TO:', index);
+			}}
 			handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
 			backgroundStyle={{ backgroundColor: themeColors.card }}
 		>

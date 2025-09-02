@@ -47,10 +47,16 @@ interface NewClientSelectionSheetProps {
 	onClose?: () => void;
 }
 
+export interface NewClientSelectionSheetRef {
+	present: () => void;
+	dismiss: () => void;
+}
+
 const NewClientSelectionSheet = forwardRef<
-	BottomSheetModal,
+	NewClientSelectionSheetRef,
 	NewClientSelectionSheetProps
 >(({ onClientSelect, onClose }, ref) => {
+	const bottomSheetModalRef = useRef<BottomSheetModal>(null);
 	const createNewClientSheetRef = useRef<CreateNewClientSheetRef>(null);
 	const { isLightMode } = useTheme();
 	const { user } = useSupabase();
@@ -63,7 +69,18 @@ const NewClientSelectionSheet = forwardRef<
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const snapPoints = useMemo(() => ["90%", "85%"], []);
+	const snapPoints = useMemo(() => ['60%', '90%'], []);
+
+	React.useImperativeHandle(ref, () => ({
+		present: () => {
+			console.log('[NewClientSelectionSheet] 🚀 PRESENT CALLED');
+			bottomSheetModalRef.current?.present();
+		},
+		dismiss: () => {
+			console.log('[NewClientSelectionSheet] 🔽 DISMISS CALLED');
+			bottomSheetModalRef.current?.dismiss();
+		},
+	}));
 
 	const handleAddFromContacts = async () => {
 		try {
@@ -276,16 +293,26 @@ const NewClientSelectionSheet = forwardRef<
 
 	return (
 		<BottomSheetModal
-			ref={ref}
+			ref={bottomSheetModalRef}
 			index={0}
 			snapPoints={snapPoints}
 			backdropComponent={renderBackdrop}
-			onDismiss={onClose}
+			enableDynamicSizing={false}
+			onDismiss={() => {
+				console.log('[NewClientSelectionSheet] 📤 MODAL DISMISSED');
+				if (onClose) onClose();
+			}}
+			onAnimate={(fromIndex: number, toIndex: number) => {
+				console.log('[NewClientSelectionSheet] 🎭 ANIMATE - From:', fromIndex, 'To:', toIndex);
+			}}
+			onChange={(index: number) => {
+				console.log('[NewClientSelectionSheet] 🔄 INDEX CHANGED TO:', index);
+			}}
 			handleIndicatorStyle={{ backgroundColor: themeColors.mutedForeground }}
 			backgroundStyle={{ backgroundColor: themeColors.card }}
 		>
 			{renderHeader()}
-			<View style={styles.searchContainer}>
+				<View style={styles.searchContainer}>
 				<Search
 					size={20}
 					color={themeColors.mutedForeground}

@@ -61,7 +61,7 @@ import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivity
 import { ReferenceNumberService } from '@/services/referenceNumberService';
 
 // Import estimate-specific components and modals
-import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
+import NewClientSelectionSheet, { Client as ClientType, NewClientSelectionSheetRef } from './NewClientSelectionSheet';
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet';
 import { NewItemData } from './AddNewItemFormSheet';
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet';
@@ -350,7 +350,7 @@ export default function CreateEstimateScreen() {
   const [businessSettingsCache, setBusinessSettingsCache] = useState<any>(null);
   
   // Sheet refs
-  const newClientSheetRef = useRef<BottomSheetModal>(null);
+  const newClientSheetRef = useRef<NewClientSelectionSheetRef>(null);
   const addItemSheetRef = useRef<AddItemSheetRef>(null);
   const discountSheetRef = useRef<SelectDiscountTypeSheetRef>(null);
   const taxSheetRef = useRef<EditInvoiceTaxSheetRef>(null);
