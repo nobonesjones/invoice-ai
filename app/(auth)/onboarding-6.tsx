@@ -85,7 +85,7 @@ export default function OnboardingScreen6() {
           <View style={styles.headerContent}>
             <Text style={[styles.headline, { color: '#FFFFFF' }]}>Try For Free</Text>
             <Text style={[styles.subHeadline, { color: '#FFFFFF' }]}>
-              SupaInvoice was made for people like you.
+              SuperInvoice was made for people like you.
             </Text>
           </View>
 

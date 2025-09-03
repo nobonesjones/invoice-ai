@@ -250,7 +250,7 @@ export function AuthModal({
                 <Text style={styles.subtitle}>
                   {initialMode === 'signin' 
                     ? 'Welcome back! Sign in to your account.'
-                    : 'Join thousands of business owners who trust SupaInvoice.'
+                    : 'Join thousands of business owners who trust SuperInvoice.'
                   }
                 </Text>
               </View>

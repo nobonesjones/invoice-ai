@@ -371,18 +371,8 @@ export default function NewSettingsScreen() {
                     [{ text: 'OK', style: 'default' }]
                   );
                 } else {
-                  // Show pricing info before presenting paywall
-                  Alert.alert(
-                    'SuperInvoice Premium',
-                    `Choose your plan:\n\n${SUBSCRIPTION_PLANS.monthly.title}: ${SUBSCRIPTION_PLANS.monthly.price}/month\n${SUBSCRIPTION_PLANS.yearly.title}: ${SUBSCRIPTION_PLANS.yearly.price}/year (Save 17%)\n\nAll plans include unlimited invoices, AI assistant, and premium features.`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'View Plans', 
-                        onPress: handleUpgradePress 
-                      }
-                    ]
-                  );
+                  // Directly show Superwall paywall without hardcoded popup
+                  handleUpgradePress();
                 }
               }}
               disabled={paywallLoading}

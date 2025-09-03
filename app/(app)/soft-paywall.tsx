@@ -160,14 +160,9 @@ export default function SoftPaywallScreen() {
         {isPaywallPresented ? 'Ready to upgrade?' : 'Preparing your experience...'}
       </Text>
       {!isPaywallPresented && (
-        <>
-          <Text style={[styles.subtext, { color: theme.mutedForeground }]}>
-            Setting up your premium options
-          </Text>
-          <View style={{ marginTop: 20 }}>
-            <SubscriptionPricing compact={true} />
-          </View>
-        </>
+        <Text style={[styles.subtext, { color: theme.mutedForeground }]}>
+          Setting up your premium options
+        </Text>
       )}
     </View>
   );

@@ -70,8 +70,7 @@ Resources
 - Learn how to set up and test in-app purchase products in the sandbox environment.
 - Learn more about validating receipts with the App Store.
 
-
-Guideline 3.1.2 - Business - Payments - Subscriptions
+ine 3.1.2 - Business - Payments - Subscriptions
 Issue Description
 
 The submission did not include all the required information for apps offering auto-renewable subscriptions.
@@ -79,6 +78,7 @@ The submission did not include all the required information for apps offering au
 The app's binary is missing the following required information:
 
 - Price of subscription, and price per unit if appropriate
+Guidel
 
 The app's metadata is missing the following required information:
 
