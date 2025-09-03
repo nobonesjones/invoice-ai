@@ -19,7 +19,7 @@ import {
 	Text,
 	StyleSheet,
 	TouchableOpacity,
-	// TextInput, // Will be replaced by BottomSheetTextInput
+	TextInput, // Re-enabled for testing multiline issue
 	Platform,
 	// KeyboardAvoidingView, // Will be replaced by BottomSheetScrollView
 	// ScrollView, // Will be replaced by BottomSheetScrollView
@@ -64,7 +64,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 	EditInvoiceDetailsSheetProps
 >(({ initialDetails, onSave, onClose }, ref) => {
 	const { isLightMode } = useTheme();
-	const themeColors = isLightMode ? colors.light : colors.dark;
+	const themeColors = useMemo(() => isLightMode ? colors.light : colors.dark, [isLightMode]);
 
 	const bottomSheetModalRef = useRef<BottomSheetModal>(null); // Added for programmatic control
 
@@ -218,8 +218,8 @@ const EditInvoiceDetailsSheet = forwardRef<
 			: "Select Date";
 	}, [creationDateObject]);
 
-	// Styles (merged and adapted from AddNewItemFormSheet)
-	const styles = StyleSheet.create({
+	// Memoized styles to prevent re-creation on every render
+	const styles = useMemo(() => StyleSheet.create({
 		modalBackground: { backgroundColor: themeColors.background },
 		handleIndicator: { backgroundColor: themeColors.mutedForeground },
 		headerContainer: {
@@ -295,17 +295,16 @@ const EditInvoiceDetailsSheet = forwardRef<
 		multilineTextInputContainer: {
 			// For description-like inputs, becomes an inputRow
 			// Use inputRow styles, but allow BottomSheetTextInput to expand
-			alignItems: "flex-start", // Align label to top for multiline
-			paddingVertical: Platform.OS === "ios" ? 12 : 10,
+			alignItems: "center", // Changed from flex-start to center
+			paddingVertical: Platform.OS === "ios" ? 14 : 13, // Match regular inputRow
 		},
 		multilineTextInput: {
 			fontSize: 16,
 			color: themeColors.foreground,
-			paddingVertical: 0,
+			paddingVertical: 8, // Add some padding
 			backgroundColor: "transparent",
 			flex: 1,
-			minHeight: 60, // Min height for multiline
-			textAlignVertical: "top",
+			// Removed minHeight and textAlignVertical to test
 		},
 		pressableRowText: {
 			// For date display etc.
@@ -336,7 +335,7 @@ const EditInvoiceDetailsSheet = forwardRef<
 			fontSize: 17, // Matched AddNewItem
 			fontWeight: "600", // Matched AddNewItem
 		},
-	});
+	}), [themeColors]); // Memoize based on themeColors
 
 	return (
 		<BottomSheetModal
@@ -349,8 +348,8 @@ const EditInvoiceDetailsSheet = forwardRef<
 			handleIndicatorStyle={styles.handleIndicator}
 			backgroundStyle={styles.modalBackground}
 			enablePanDownToClose
-			keyboardBehavior="extend" // Changed to extend for behavior like CreateNewClientSheet
-			keyboardBlurBehavior="restore"
+			keyboardBehavior="interactive" // Changed from extend to interactive
+			keyboardBlurBehavior="none" // Changed from restore to none
 			onDismiss={onClose} // Call onClose when sheet is dismissed by pan down etc.
 		>
 			<View style={styles.headerContainer}>
@@ -442,13 +441,12 @@ const EditInvoiceDetailsSheet = forwardRef<
 						<Text style={styles.inputLabelText}>Headline</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
-								style={styles.multilineTextInput}
+								style={styles.textInputStyled}
 								value={customHeadline}
 								onChangeText={setCustomHeadline}
 								placeholder="Optional custom message"
 								placeholderTextColor={themeColors.mutedForeground}
 								editable={!isLoading}
-								multiline
 							/>
 						</View>
 					</View>

@@ -357,16 +357,17 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
             </View>
           </View>
 
-          <View style={styles.descriptionInputContainer}>
-            <BottomSheetTextInput
-              style={styles.textInputStyled}
-              value={itemDescription}
-              onChangeText={setItemDescription}
-              placeholder="Description (optional)"
-              placeholderTextColor={themeColors.mutedForeground}
-              multiline
-              numberOfLines={3}
-            />
+          <View style={styles.inputRow_last}>
+            <Text style={styles.inputLabelText}>Description</Text>
+            <View style={styles.inputValueArea}>
+              <BottomSheetTextInput
+                style={styles.textInputStyled}
+                value={itemDescription}
+                onChangeText={setItemDescription}
+                placeholder="Description (optional)"
+                placeholderTextColor={themeColors.mutedForeground}
+              />
+            </View>
           </View>
         </View>
 

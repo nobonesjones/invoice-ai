@@ -61,11 +61,14 @@ import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivity
 import { ReferenceNumberService } from '@/services/referenceNumberService';
 
 // Import estimate-specific components and modals
-import NewClientSelectionSheet, { Client as ClientType, NewClientSelectionSheetRef } from './NewClientSelectionSheet';
-import AddItemSheet, { AddItemSheetRef } from './AddItemSheet';
-import { NewItemData } from './AddNewItemFormSheet';
-import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet';
-import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from './EditInvoiceTaxSheet';
+import NewClientSelectionSheet, { NewClientSelectionSheetRef } from '../invoices/NewClientSelectionSheet';
+import { Tables } from '../../../../types/database.types';
+
+type ClientType = Tables<'clients'>;
+import AddItemSheet, { AddItemSheetRef } from '../invoices/AddItemSheet';
+import { NewItemData } from '../invoices/AddNewItemFormSheet';
+import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from '../invoices/SelectDiscountTypeSheet';
+import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from '../invoices/EditInvoiceTaxSheet';
 import EditEstimateDetailsSheet, { EditEstimateDetailsSheetRef, EstimateDetailsData } from './EditEstimateDetailsSheet';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
@@ -397,6 +400,10 @@ export default function CreateEstimateScreen() {
   const [globalTaxName, setGlobalTaxName] = useState<string | null>(null);
   const [isLoadingTaxSettings, setIsLoadingTaxSettings] = useState<boolean>(true);
   
+  // State for estimate-specific tax settings
+  const [estimateTaxLabel, setEstimateTaxLabel] = useState<string | null>(null);
+  const [taxPercentage, setTaxPercentage] = useState<number | null>(null);
+  
   // Effect to fetch global tax settings
   useEffect(() => {
     if (!user || !supabase) {
@@ -414,10 +421,18 @@ export default function CreateEstimateScreen() {
           console.error('Error fetching business_settings:', error);
         } else if (data) {
           setGlobalTaxName(data.tax_name || null);
+          // Initialize estimate tax label with global tax name if not already set
+          if (estimateTaxLabel === null) {
+            setEstimateTaxLabel(data.tax_name || null);
+          }
           // Ensure default_tax_rate is treated as a number
           const rate = data.default_tax_rate;
           if (rate !== null && rate !== undefined) {
             setGlobalTaxRatePercent(parseFloat(String(rate)));
+            // Initialize tax percentage with global rate if not already set
+            if (taxPercentage === null) {
+              setTaxPercentage(parseFloat(String(rate)));
+            }
           } else {
             setGlobalTaxRatePercent(null);
           }
@@ -524,15 +539,30 @@ export default function CreateEstimateScreen() {
   const watchedBankAccountActive = watch('bank_account_active');
 
   // Calculate totals
-  const displaySubtotal = currentEstimateLineItems.reduce((sum, item) => sum + item.total_price, 0);
-  const displayDiscountAmount = watchedDiscountType === 'percentage' 
-    ? (displaySubtotal * (watchedDiscountValue || 0)) / 100
-    : watchedDiscountType === 'fixed' 
-      ? (watchedDiscountValue || 0)
-      : 0;
-  const discountedSubtotal = displaySubtotal - displayDiscountAmount;
-  const displayTaxAmount = discountedSubtotal * ((watchedTaxPercentage || 0) / 100);
-  const displayEstimateTotal = discountedSubtotal + displayTaxAmount;
+  const displaySubtotal = currentEstimateLineItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
+  
+  // Calculate discount amount
+  const displayDiscountAmount = (() => {
+    if (!watchedDiscountType || !watchedDiscountValue || watchedDiscountValue <= 0) return 0;
+    if (watchedDiscountType === 'percentage') {
+      return displaySubtotal * (watchedDiscountValue / 100);
+    } else if (watchedDiscountType === 'fixed') {
+      return Math.min(watchedDiscountValue, displaySubtotal);
+    }
+    return 0;
+  })();
+  
+  // Calculate tax amount (after discount) - use state taxPercentage instead of form watchedTaxPercentage
+  const amountAfterDiscount = displaySubtotal - displayDiscountAmount;
+  const displayTaxAmount = (() => {
+    if (typeof taxPercentage === 'number' && taxPercentage > 0) {
+      return amountAfterDiscount * (taxPercentage / 100);
+    }
+    return 0;
+  })();
+  
+  // Calculate final total
+  const displayEstimateTotal = amountAfterDiscount + displayTaxAmount;
 
   // Hide header since it's now in the content
   useEffect(() => {
@@ -643,6 +673,10 @@ export default function CreateEstimateScreen() {
 
         // Set current estimate ID for updates
         setCurrentEstimateId(editEstimateId);
+
+        // Initialize tax values from estimate data
+        setTaxPercentage(estimateData.tax_percentage || null);
+        setEstimateTaxLabel(estimateData.estimate_tax_label || null);
 
         // Populate form with estimate data
         reset({
@@ -1009,6 +1043,20 @@ export default function CreateEstimateScreen() {
     newClientSheetRef.current?.dismiss();
   };
 
+  // Tax modal handlers
+  const handlePresentEditInvoiceTaxSheet = () => {
+    const initialName = estimateTaxLabel !== null ? estimateTaxLabel : globalTaxName;
+    const initialRate = taxPercentage !== null ? taxPercentage : globalTaxRatePercent;
+    taxSheetRef.current?.present(initialName, initialRate);
+  };
+
+  const handleTaxSave = (data: EstimateTaxData) => {
+    setEstimateTaxLabel(data.taxName || 'Tax');
+    const rate = parseFloat(data.taxRate.replace(',', '.'));
+    setTaxPercentage(isNaN(rate) ? null : rate);
+    setValue('taxPercentage', isNaN(rate) ? null : rate);
+  };
+
   // Payment options hook for validation
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
@@ -1160,11 +1208,6 @@ export default function CreateEstimateScreen() {
     // Add any other logic needed when the discount sheet is closed by the user
   };
 
-  const handleTaxSave = (taxData: EstimateTaxData) => {
-    setValue('taxPercentage', parseFloat(taxData.taxRate));
-    // Note: estimate_tax_label is not stored in database, only used for display
-    taxSheetRef.current?.dismiss();
-  };
 
   const handleEstimateDetailsSave = (detailsData: EstimateDetailsData) => {
     
@@ -1610,28 +1653,25 @@ export default function CreateEstimateScreen() {
                 </TouchableOpacity>
               )}
               
-              {/* VAT Row */}
-              <TouchableOpacity 
-                style={styles.summaryRow} 
-                onPress={() => taxSheetRef.current?.present()}
-                activeOpacity={0.7}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.summaryLabel}>VAT </Text>
-                  <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
-                </View>
-                <Text style={styles.summaryText}>
-                  {getCurrencySymbol(currencyCode)}{displayTaxAmount.toFixed(2)}
-                </Text>
-              </TouchableOpacity>
+              {/* Tax Row */}
+              {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
+                <TouchableOpacity 
+                  style={styles.summaryRow} 
+                  onPress={handlePresentEditInvoiceTaxSheet}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={styles.summaryLabel}>{estimateTaxLabel || globalTaxName || 'Tax'} </Text>
+                    {taxPercentage !== null && (
+                      <Text style={styles.taxPercentageStyle}>({taxPercentage}%)</Text>
+                    )}
+                  </View>
+                  <Text style={styles.summaryText}>
+                    {getCurrencySymbol(currencyCode)}{displayTaxAmount.toFixed(2)}
+                  </Text>
+                </TouchableOpacity>
+              )}
               
-              <ActionRow
-                label="Add Payment"
-                value=""
-                onPress={() => editEstimateDetailsSheetRef.current?.present()}
-                icon={CreditCard}
-                themeColors={safeThemeColors}
-              />
               
               <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>
                 <Text style={[styles.summaryLabel, { fontWeight: 'bold', fontSize: 17, color: safeThemeColors.foreground }]}>
@@ -1767,8 +1807,6 @@ export default function CreateEstimateScreen() {
           {/* Tax Edit Sheet */}
           <EditInvoiceTaxSheet
             ref={taxSheetRef}
-            currentTaxPercentage={watchedTaxPercentage}
-            currentTaxLabel={'Tax'}
             onSave={handleTaxSave}
             onClose={() => taxSheetRef.current?.dismiss()}
           />

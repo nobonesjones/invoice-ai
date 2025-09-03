@@ -572,16 +572,11 @@ const CreateNewClientSheet = forwardRef<
 						<Text style={styles.inputLabelText}>Address</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
-								style={[styles.textInputStyled, styles.addressTextInput]}
+								style={styles.textInputStyled}
 								placeholder="e.g. 123 Main St, Anytown, USA 12345"
 								placeholderTextColor={themeColors.mutedForeground}
 								value={address}
 								onChangeText={setAddress}
-								multiline={true}
-								numberOfLines={3}
-								textAlignVertical="top"
-								returnKeyType="default"
-								blurOnSubmit={false}
 								editable={!isLoading}
 							/>
 						</View>

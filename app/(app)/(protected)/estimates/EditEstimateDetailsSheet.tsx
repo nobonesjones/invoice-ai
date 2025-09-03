@@ -6,7 +6,7 @@ import {
 	BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { format, parseISO, isValid, addDays } from "date-fns";
-import { CalendarDays } from "lucide-react-native"; // Added CalendarDays
+import { X, CalendarDays } from "lucide-react-native"; // Added CalendarDays and X for close button
 import React, {
 	useMemo,
 	useCallback,
@@ -237,9 +237,36 @@ const EditEstimateDetailsSheet = forwardRef<
 
 	const formattedCreationDate = format(creationDateObject, "MMM d, yyyy");
 
+	const internalClose = () => {
+		bottomSheetModalRef.current?.dismiss();
+		if (onClose) {
+			onClose();
+		}
+	};
+
 	const styles = StyleSheet.create({
 		modalBackground: { backgroundColor: themeColors.background },
 		handleIndicator: { backgroundColor: themeColors.mutedForeground },
+		headerContainer: {
+			flexDirection: "row",
+			justifyContent: "center",
+			alignItems: "center",
+			paddingVertical: Platform.OS === "ios" ? 12 : 15,
+			paddingHorizontal: 15,
+			borderBottomWidth: StyleSheet.hairlineWidth,
+			borderBottomColor: themeColors.border,
+		},
+		title: {
+			fontSize: 20,
+			fontWeight: "600",
+			color: themeColors.foreground,
+		},
+		closeButton: {
+			position: "absolute",
+			top: Platform.OS === "ios" ? 10 : 12,
+			right: 15,
+			padding: 6,
+		},
 		contentScrollView: {
 			flex: 1,
 		},
@@ -351,6 +378,13 @@ const EditEstimateDetailsSheet = forwardRef<
 			keyboardBlurBehavior="restore"
 			onDismiss={onClose} // Call onClose when sheet is dismissed by pan down etc.
 		>
+			<View style={styles.headerContainer}>
+				<Text style={styles.title}>Edit {terminology || 'Estimate'} Details</Text>
+				<TouchableOpacity onPress={internalClose} style={styles.closeButton}>
+					<X size={24} color={themeColors.mutedForeground} />
+				</TouchableOpacity>
+			</View>
+
 			<BottomSheetScrollView
 				style={styles.contentScrollView}
 				contentContainerStyle={styles.contentContainerStyle}
@@ -414,34 +448,32 @@ const EditEstimateDetailsSheet = forwardRef<
 				</View>
 
 				<View style={styles.inputGroupContainer}>
-					<View style={styles.inputRow}>
+					<View style={styles.inputRow_last}>
 						<Text style={styles.inputLabelText}>Acceptance Terms</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
-								style={styles.multilineTextInput}
+								style={styles.textInputStyled}
 								value={acceptanceTerms}
 								onChangeText={setAcceptanceTerms}
 								placeholder="Optional acceptance terms"
 								placeholderTextColor={themeColors.mutedForeground}
 								editable={!isLoading}
-								multiline
 							/>
 						</View>
 					</View>
 				</View>
 
 				<View style={styles.inputGroupContainer}>
-					<View style={styles.inputRow}>
+					<View style={styles.inputRow_last}>
 						<Text style={styles.inputLabelText}>Headline</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
-								style={styles.multilineTextInput}
+								style={styles.textInputStyled}
 								value={customHeadline}
 								onChangeText={setCustomHeadline}
 								placeholder="Optional custom message"
 								placeholderTextColor={themeColors.mutedForeground}
 								editable={!isLoading}
-								multiline
 							/>
 						</View>
 					</View>
