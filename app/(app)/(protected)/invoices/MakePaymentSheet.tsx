@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
@@ -283,18 +283,21 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
     },
   });
 
+  const snapPoints = useMemo(() => ['65%', '75%'], []);
+
   return (
     <BottomSheetModal
       ref={bottomSheetModalRef}
       index={0} 
-      enableDynamicSizing={true}
+      snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed} 
       onAnimate={handleSheetAnimate}
       onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      enablePanDownToClose={true} 
+      enablePanDownToClose={true}
+      enableDynamicSizing={false}
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>
