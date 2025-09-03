@@ -19,6 +19,12 @@ class AnalyticsService {
       return;
     }
 
+    // Allow disabling analytics during debugging to reduce noise
+    if (String(process.env.EXPO_PUBLIC_DISABLE_ANALYTICS).toLowerCase() === 'true') {
+      console.warn('[Analytics] ⚠️ Disabled by EXPO_PUBLIC_DISABLE_ANALYTICS');
+      return;
+    }
+
     // Check if Mixpanel token is available
     if (!process.env.EXPO_PUBLIC_MIXPANEL_TOKEN) {
       console.warn('[Analytics] ⚠️ EXPO_PUBLIC_MIXPANEL_TOKEN not set. Analytics disabled.');

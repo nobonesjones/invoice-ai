@@ -370,8 +370,8 @@ PODS:
   - MixpanelReactNative (3.1.2):
     - Mixpanel-swift (= 5.1.0)
     - React-Core
-  - PurchasesHybridCommon (15.0.0):
-    - RevenueCat (= 5.33.0)
+  - PurchasesHybridCommon (17.3.0):
+    - RevenueCat (= 5.36.0)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -1653,7 +1653,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-quick-base64 (2.2.0):
+  - react-native-quick-base64 (2.2.2):
     - React-Core
   - react-native-safe-area-context (5.4.0):
     - React-Core
@@ -1682,7 +1682,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-slider (4.5.6):
+  - react-native-slider (4.5.7):
     - DoubleConversion
     - glog
     - RCT-Folly (= 2024.11.18.00)
@@ -2023,7 +2023,7 @@ PODS:
     - React-logger (= 0.79.5)
     - React-perflogger (= 0.79.5)
     - React-utils (= 0.79.5)
-  - RevenueCat (5.33.0)
+  - RevenueCat (5.36.0)
   - RNCAsyncStorage (2.1.2):
     - React-Core
   - RNCMaskedView (0.3.2):
@@ -2051,7 +2051,7 @@ PODS:
     - Yoga
   - RNCPicker (2.11.1):
     - React-Core
-  - RNDateTimePicker (8.4.1):
+  - RNDateTimePicker (8.4.4):
     - React-Core
   - RNFlashList (1.7.6):
     - DoubleConversion
@@ -2099,8 +2099,8 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - RNPurchases (9.0.0):
-    - PurchasesHybridCommon (= 15.0.0)
+  - RNPurchases (9.3.0):
+    - PurchasesHybridCommon (= 17.3.0)
     - React-Core
   - RNReanimated (3.17.5):
     - DoubleConversion
@@ -2252,9 +2252,9 @@ PODS:
     - React-Core
   - RNSVG (15.11.2):
     - React-Core
-  - SDWebImage (5.21.1):
-    - SDWebImage/Core (= 5.21.1)
-  - SDWebImage/Core (5.21.1)
+  - SDWebImage (5.21.2):
+    - SDWebImage/Core (= 5.21.2)
+  - SDWebImage/Core (5.21.2)
   - SDWebImageAVIFCoder (0.11.0):
     - libavif/core (>= 0.11.0)
     - SDWebImage (~> 5.10)
@@ -2265,7 +2265,7 @@ PODS:
     - SDWebImage/Core (~> 5.17)
   - SocketRocket (0.7.1)
   - Superscript (0.2.8)
-  - SuperwallExpo (0.2.0):
+  - SuperwallExpo (0.2.6):
     - ExpoModulesCore
     - SuperwallKit (= 4.5.2)
   - SuperwallKit (4.5.2):
@@ -2402,7 +2402,7 @@ DEPENDENCIES:
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
-  trunk:
+  https://github.com/CocoaPods/Specs.git:
     - libavif
     - libdav1d
     - libwebp
@@ -2682,7 +2682,7 @@ SPEC CHECKSUMS:
   EXNotifications: be5e949edf1d60b70e77178b81aa505298fadd07
   Expo: 8685113c16058e8b3eb101dd52d6c8bca260bbea
   expo-dev-client: 9b1e78baf0dd87b005f035d180bbb07c05917fad
-  expo-dev-launcher: 2f95084d36be3d9106790bea7a933a0d34210646
+  expo-dev-launcher: 33890865edcfb01284aeea43337749614c94a22d
   expo-dev-menu: 1456232a68c883078b61c02b7fa5b01d8a5ab840
   expo-dev-menu-interface: 609c35ae8b97479cdd4c9e23c8cf6adc44beea0e
   ExpoAppleAuthentication: 4d2e0c88a4463229760f1fbb9a937a810efb6863
@@ -2717,7 +2717,7 @@ SPEC CHECKSUMS:
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
   Mixpanel-swift: 7b26468fc0e2e521104e51d65c4bbf7cab8162f8
   MixpanelReactNative: cdcfe933b8ce89aadd183f17aad3c8529daccb94
-  PurchasesHybridCommon: 18b65ad813f50460d4af7e033abb5cc44a686a6f
+  PurchasesHybridCommon: 61759dbf7a02b085e4904d8def867d6a89252cb0
   RCT-Folly: e78785aa9ba2ed998ea4151e314036f6c49e6d82
   RCTDeprecation: 5f638f65935e273753b1f31a365db6a8d6dc53b5
   RCTRequired: 8b46a520ea9071e2bc47d474aa9ca31b4a935bd8
@@ -2752,10 +2752,10 @@ SPEC CHECKSUMS:
   react-native-html-to-pdf: 7a49e6c58ac5221bcc093027b195f4b214f27a9d
   react-native-images-to-pdf: 28a997d530a79468715f4d5d82d1b5a63321ea50
   react-native-pdf-from-image: 053fca055d7f31d3cbb77168886ebc7dcbce6ac7
-  react-native-quick-base64: 17dc4b8daee50e680d5f57cc3ee6773b6ee0110a
+  react-native-quick-base64: 6568199bb2ac8e72ecdfdc73a230fbc5c1d3aac4
   react-native-safe-area-context: 9d72abf6d8473da73033b597090a80b709c0b2f1
   react-native-skia: ca28e396cb6ca5e0f8f7e6380d21a8bce3be12ba
-  react-native-slider: d853d69db89298316b79bb3476fbaa1245e96845
+  react-native-slider: a46c65fa05e739d4941e0caf3d4fc467dd36910a
   react-native-view-shot: 4da305fac8f70d41e6ffb12eb023288789fcd28e
   React-NativeModulesApple: 494c38599b82392ed14b2c0118fca162425bb618
   React-oscompat: 0592889a9fcf0eacb205532028e4a364e22907dd
@@ -2787,28 +2787,28 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: f3e842e6cb5a825b6918a74a38402ba1409411f8
   ReactCodegen: 272c9bc1a8a917bf557bd9d032a4b3e181c6abfe
   ReactCommon: 7eb76fcd5133313d8c6a138a5c7dd89f80f189d5
-  RevenueCat: 9fd6fc0ea8a22fd9d11242feb298f3bb6f9f86db
+  RevenueCat: 1b6e3f4582356a549048dac2cd21410cad67d51b
   RNCAsyncStorage: b9f5f78da5d16a853fe3dc22e8268d932fc45a83
   RNCMaskedView: d4644e239e65383f96d2f32c40c297f09705ac96
   RNCPicker: da0f1c9411208c1ca52bc98383db54a06e0a3862
-  RNDateTimePicker: 60f9e986d61e42169a2716c1b51f1f93dfa82665
+  RNDateTimePicker: 7d93eacf4bdf56350e4b7efd5cfc47639185e10c
   RNFlashList: 1ce91f85037558098d4c19a1f397b0604a68203d
   RNGestureHandler: 6e640921d207f070e4bbcf79f4e6d0eabf323389
-  RNPurchases: d62a081564c6d859ec10702afcb132ce3f75952a
+  RNPurchases: 42a126948a0d80340a4c381ea95a691b5f587d05
   RNReanimated: 34e90d19560aebd52a2ad583fdc2de2cf7651bbb
   RNScreens: 241cfe8fc82737f3e132dd45779f9512928075b8
   RNSound: 314cc5226453ef4a3314a196c65e8a65e5106a7b
   RNSVG: ab84f2de7dd4f2c86d01825b8a65e0ef712fc36b
-  SDWebImage: f29024626962457f3470184232766516dee8dfea
+  SDWebImage: 9f177d83116802728e122410fb25ad88f5c7608a
   SDWebImageAVIFCoder: 00310d246aab3232ce77f1d8f0076f8c4b021d90
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Superscript: 82dbb40f502823160e75503ebc1b6bac756a503d
-  SuperwallExpo: b2e5a615fec6e580d1a67c8d0bcd8e98f829ad04
+  SuperwallExpo: 886a405061d022eec73f97156d5a98781bce242e
   SuperwallKit: 520fd9dff39358c9708d88cc69c1f4fbd32b3008
   Yoga: adb397651e1c00672c12e9495babca70777e411e
 
-PODFILE CHECKSUM: c5c7f0c7d02d54a0a9c4c5a277ad5f6b496f3511
+PODFILE CHECKSUM: d7566b2e02e20c25f2992ffc65afbd4e861f227a
 
 COCOAPODS: 1.16.2
