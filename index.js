@@ -4,8 +4,9 @@
 try {
   console.log('[Entry] App starting. typeof Promise:', typeof Promise);
 
-  // Protect native Promise from being overwritten by polyfills (production only)
-  if (!__DEV__) {
+  // Protect native Promise from being overwritten (opt-in only)
+  const ENABLE_PROMISE_HARDENING = process.env?.EXPO_PUBLIC_ENABLE_PROMISE_HARDENING === '1';
+  if (ENABLE_PROMISE_HARDENING) {
     (function hardenPromise() {
       const NativePromise = globalThis.Promise;
       if (!NativePromise) return;
@@ -30,6 +31,8 @@ try {
         Object.freeze(NativePromise.prototype);
       } catch {}
     })();
+  } else {
+    console.log('[Entry] Promise hardening disabled');
   }
 
   // Minimal safe polyfills commonly needed in RN
@@ -75,6 +78,35 @@ try {
           throw err;
         }
       };
+    }
+  } catch {}
+
+  // Capture console logs into an in-memory ring buffer for in-app debug screen
+  try {
+    if (!global.__LOG_BUFFER__) {
+      const MAX = 500;
+      const buf = [];
+      const push = (level, args) => {
+        try {
+          const ts = new Date().toISOString();
+          const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+          buf.push({ ts, level, msg });
+          if (buf.length > MAX) buf.shift();
+        } catch {}
+      };
+      const orig = {
+        log: console.log,
+        warn: console.warn,
+        error: console.error,
+      };
+      console.log = (...a) => { push('log', a); orig.log(...a); };
+      console.warn = (...a) => { push('warn', a); orig.warn(...a); };
+      console.error = (...a) => { push('error', a); orig.error(...a); };
+      global.__LOG_BUFFER__ = {
+        read: () => buf.slice(-MAX),
+        clear: () => { buf.length = 0; },
+      };
+      console.log('[Entry] Log buffer active');
     }
   } catch {}
 

@@ -89,7 +89,8 @@
     "tailwindcss": "^3.4.14",
     "wonka": "^6.3.5",
     "zod": "^3.23.8",
-    "expo-apple-authentication": "~7.2.4"
+    "expo-apple-authentication": "~7.2.4",
+    "expo-updates": "~0.28.17"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

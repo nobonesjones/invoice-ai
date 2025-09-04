@@ -42,6 +42,7 @@
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to use voice commands for creating invoices and entering information",
         "NSContactsUsageDescription": "The app accesses your contacts to allow you to quickly add clients from your address book.",
         "UIBackgroundModes": [
+          "audio",
           "audio"
         ],
         "CFBundleURLTypes": [
@@ -50,7 +51,20 @@
               "com.googleusercontent.apps.1086610940828-pidi39sius8h03f7rgm0vp0gauu0fo4j",
               "superinvoice"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.1086610940828-pidi39sius8h03f7rgm0vp0gauu0fo4j",
+              "superinvoice"
+            ]
           }
+        ],
+        "NSLocalNetworkUsageDescription": "Allow local network to connect to the development server during debugging.",
+        "NSBonjourServices": [
+          "_expo-development-server._tcp",
+          "_expo-development-client._tcp",
+          "_http._tcp",
+          "_https._tcp"
         ]
       },
       "splash": {
@@ -76,7 +90,11 @@
         "READ_CONTACTS",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.READ_CONTACTS"
+        "android.permission.READ_CONTACTS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
       ],
       "splash": {
         "image": "./assets/superinvoiceicon.png",
@@ -92,6 +110,9 @@
     "experiments": {
       "typedRoutes": true
     },
+    "updates": {
+      "url": "https://u.expo.dev/d275f575-073b-4bde-8867-4d9b7387cc36"
+    },
     "extra": {
       "router": {
         "origin": false
@@ -101,6 +122,7 @@
       },
       "EXPO_PUBLIC_GEMINI_API_KEY": ""
     },
-    "owner": "indianabones"
+    "owner": "indianabones",
+    "runtimeVersion": "1.0.0"
   }
 }

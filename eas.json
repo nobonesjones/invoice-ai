@@ -14,7 +14,11 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_ENABLE_PROMISE_HARDENING": "0"
+      }
     },
     "production": {
       "distribution": "store",
