@@ -1,12 +1,12 @@
 import React, { forwardRef, useMemo, useCallback, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollView, ActionSheetIOS, Alert, Switch } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTheme } from '@/context/theme-provider';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { colors } from '@/constants/colors';
-import { X as XIcon, PercentSquareIcon, PercentIcon, ImageIcon, PaperclipIcon } from 'lucide-react-native';
+import { X as XIcon, PercentSquareIcon, PercentIcon, PaperclipIcon } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type DiscountType = 'percentage' | 'fixed';
 
@@ -24,6 +24,7 @@ export interface NewItemData { // This type describes the object passed to the o
 
 export interface AddNewItemFormSheetProps {
   onSave: (itemData: NewItemData) => void;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export interface AddNewItemFormSheetRef {
@@ -31,11 +32,12 @@ export interface AddNewItemFormSheetRef {
   dismiss: () => void;
 }
 
-const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormSheetProps>(({ onSave }, ref) => {
+const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormSheetProps>(({ onSave, onOpenChange }, ref) => {
   const { isLightMode } = useTheme();
   const analytics = useAnalytics();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const insets = useSafeAreaInsets();
 
   const [itemName, setItemName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
@@ -44,11 +46,17 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
   const [discountType, setDiscountType] = useState<DiscountType | null>(null);
   const [discountValue, setDiscountValue] = useState('');
   const [saveItemForFutureUse, setSaveItemForFutureUse] = useState(false);
-  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  // Removed image attachment option to simplify the form and increase space
 
   React.useImperativeHandle(ref, () => ({
-    present: () => bottomSheetModalRef.current?.present(),
-    dismiss: () => bottomSheetModalRef.current?.dismiss(),
+    present: () => {
+      bottomSheetModalRef.current?.present();
+      try { onOpenChange?.(true); } catch {}
+    },
+    dismiss: () => {
+      bottomSheetModalRef.current?.dismiss();
+      try { onOpenChange?.(false); } catch {}
+    },
   }));
 
   const snapPoints = useMemo(() => ['90%'], []);
@@ -86,7 +94,6 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           default_quantity: parseInt(itemQuantity, 10) || 1,
           discount_type: discountType,
           discount_value: discountValue ? parseFloat(discountValue) : null,
-          image_url: selectedImageUri, // Ensure this maps to your image_url column
         };
 
         const { data: newSavedItem, error: insertError } = await supabase
@@ -118,7 +125,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       quantity: parseInt(itemQuantity, 10) || 1,
       discountType,
       discountValue: discountValue ? parseFloat(discountValue) : null,
-      imageUri: selectedImageUri, // This is for the form, might not be needed by create.tsx directly
+      imageUri: null,
       saved_item_db_id: savedItemDatabaseId, // Pass the DB ID if item was saved
     };
 
@@ -179,26 +186,6 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
         ],
         { cancelable: true }
       );
-    }
-  };
-
-  const handleAttachImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (permissionResult.granted === false) {
-      Alert.alert("Permission Required", "You've refused to allow this app to access your photos.");
-      return;
-    }
-
-    const pickerResult = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.7,
-    });
-
-    if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
-      setSelectedImageUri(pickerResult.assets[0].uri);
     }
   };
 
@@ -332,9 +319,16 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      keyboardBehavior="interactive"
+      keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
-      enablePanDownToClose={true}
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      topInset={Math.max(12, insets.top)}
+      onChange={(i) => {
+        try { console.log('[AddNewItemFormSheet] index change:', i); } catch {}
+        try { onOpenChange?.(i !== -1); } catch {}
+      }}
+      onDismiss={() => { try { onOpenChange?.(false); } catch {} }}
     >
       <BottomSheetScrollView style={styles.container} contentContainerStyle={styles.contentContainerStyle}>
         <TouchableOpacity style={styles.closeButton} onPress={() => bottomSheetModalRef.current?.dismiss()}>
@@ -347,7 +341,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow}>
             <Text style={styles.inputLabelText}>Item Name</Text>
             <View style={styles.inputValueArea}>
-              <BottomSheetTextInput
+              <TextInput
                 style={styles.textInputStyled}
                 value={itemName}
                 onChangeText={setItemName}
@@ -360,7 +354,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow_last}>
             <Text style={styles.inputLabelText}>Description</Text>
             <View style={styles.inputValueArea}>
-              <BottomSheetTextInput
+              <TextInput
                 style={styles.textInputStyled}
                 value={itemDescription}
                 onChangeText={setItemDescription}
@@ -375,7 +369,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow}>
             <Text style={styles.inputLabelText}>Price</Text>
             <View style={styles.inputValueArea}>
-              <BottomSheetTextInput
+              <TextInput
                 style={styles.textInputStyled}
                 value={itemPrice}
                 onChangeText={setItemPrice}
@@ -389,7 +383,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow_last}>
             <Text style={styles.inputLabelText}>Quantity</Text>
             <View style={styles.inputValueArea}>
-              <BottomSheetTextInput
+              <TextInput
                 style={styles.textInputStyled}
                 value={itemQuantity}
                 onChangeText={setItemQuantity}
@@ -430,7 +424,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                 {discountType === 'percentage' ? 'Percent %' : 'Amount'}
               </Text>
               <View style={styles.inputValueArea}>
-                <BottomSheetTextInput
+                <TextInput
                   style={styles.textInputStyled}
                   placeholder={discountType === 'percentage' ? 'e.g. 10%' : 'e.g. $50'}
                   placeholderTextColor={themeColors.mutedForeground}
@@ -442,18 +436,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
             </View>
           )}
 
-          <TouchableOpacity style={styles.inputRow} onPress={handleAttachImage}>
-            <ImageIcon size={20} color={selectedImageUri ? themeColors.primary : themeColors.mutedForeground} style={{ marginRight: 12 }} />
-            <Text
-              style={[
-                styles.textInputStyled,
-                { flex: 1 },
-                selectedImageUri ? { color: themeColors.primary, fontStyle: 'italic' } : { color: themeColors.mutedForeground },
-              ]}
-            >
-              {selectedImageUri ? `Image Attached: ${selectedImageUri.split('/').pop()}` : 'Attach Image'}
-            </Text>
-          </TouchableOpacity>
+          {/* Image attachment row removed to create more space */}
 
           <View style={styles.inputRow_last}>
             <PaperclipIcon size={20} color={themeColors.mutedForeground} style={{ marginRight: 12 }} />

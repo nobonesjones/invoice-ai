@@ -1,6 +1,7 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, /* TextInput, */ ActivityIndicator } from 'react-native'; 
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetFlatList } from '@gorhom/bottom-sheet'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { PlusCircle, Search, X } from 'lucide-react-native';
@@ -54,6 +55,8 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
   const addNewItemFormSheetRef = useRef<AddNewItemFormSheetRef>(null);
+  const insets = useSafeAreaInsets();
+  const [isChildOpen, setIsChildOpen] = useState(false);
 
   // State for saved items
   const [savedItems, setSavedItems] = useState<DisplayableSavedItem[]>([]);
@@ -123,7 +126,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
     },
   }));
 
-  const snapPoints = useMemo(() => ['60%', '90%'], []);
+  const snapPoints = useMemo(() => ['70%', '90%'], []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -324,7 +327,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
   return (
     <BottomSheetModal
       ref={bottomSheetModalRef}
-      index={0} 
+      index={1} 
       snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed} 
@@ -333,6 +336,10 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       keyboardBehavior="extend" 
       keyboardBlurBehavior="restore"
       enableDynamicSizing={false} // Prevent automatic resizing based on content
+      enablePanDownToClose={!isChildOpen}
+      enableContentPanningGesture={!isChildOpen}
+      enableOverDrag={false}
+      topInset={Math.max(12, insets.top)}
     >
       {/* New Modal Header */}
       <View style={styles.modalHeaderContainer}>
@@ -400,7 +407,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
         />
       </View>
       {/* Render the AddNewItemFormSheet modal so it can be presented */}
-      <AddNewItemFormSheet ref={addNewItemFormSheetRef} onSave={handleNewItemSaved} />
+      <AddNewItemFormSheet ref={addNewItemFormSheetRef} onSave={handleNewItemSaved} onOpenChange={setIsChildOpen} />
     </BottomSheetModal>
   );
 });

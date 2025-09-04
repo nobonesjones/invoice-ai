@@ -12,7 +12,8 @@ import {
   Linking
 } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeft, Send, MessageSquare } from 'lucide-react-native';
+import { ChevronLeft, Send, MessageSquare, RefreshCcw } from 'lucide-react-native';
+import * as Updates from 'expo-updates';
 import { useTheme } from '@/context/theme-provider';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useSupabase } from '@/context/supabase-provider';
@@ -39,6 +40,7 @@ export default function CustomerSupportScreen() {
     message: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -278,6 +280,44 @@ export default function CustomerSupportScreen() {
             <Text style={styles.headerSubtitle}>
               You can ask SuperAI any question and they will be able to help, or send us a message and we'll get back to you as soon as possible.
             </Text>
+          </View>
+
+          {/* Manual Update Section (Preview) */}
+          <View style={styles.formSection}>
+            <Text style={styles.fieldLabel}>App Update (Preview)</Text>
+            <Text style={{ color: theme.mutedForeground, marginBottom: 8 }}>
+              Manually check and apply the latest app update.
+            </Text>
+            <TouchableOpacity
+              style={[styles.submitButton, isCheckingUpdate && styles.submitButtonDisabled]}
+              disabled={isCheckingUpdate}
+              onPress={async () => {
+                setIsCheckingUpdate(true);
+                try {
+                  const res = await Updates.checkForUpdateAsync();
+                  if (res.isAvailable) {
+                    await Updates.fetchUpdateAsync();
+                    Alert.alert('Update Ready', 'Restarting to apply update…');
+                    await Updates.reloadAsync();
+                  } else {
+                    Alert.alert('Up to Date', 'You already have the latest version.');
+                  }
+                } catch (e: any) {
+                  Alert.alert('Update Failed', e?.message || 'Could not check/apply update.');
+                } finally {
+                  setIsCheckingUpdate(false);
+                }
+              }}
+            >
+              {isCheckingUpdate ? (
+                <ActivityIndicator size="small" color={theme.primaryForeground} />
+              ) : (
+                <RefreshCcw size={18} color={theme.primaryForeground} />
+              )}
+              <Text style={styles.submitButtonText}>
+                {isCheckingUpdate ? 'Checking…' : 'Check for Update'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.faqSection}>

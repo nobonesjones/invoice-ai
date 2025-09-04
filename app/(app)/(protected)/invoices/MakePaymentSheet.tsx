@@ -4,6 +4,7 @@ import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomShe
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { X as XIcon } from 'lucide-react-native'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface PaymentData {
   paymentAmount: string; 
@@ -27,6 +28,7 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
   const lastPresentTime = useRef<number>(0);
+  const insets = useSafeAreaInsets();
 
   const [paymentAmount, setPaymentAmount] = useState<string>(''); 
   const [paymentMethod, setPaymentMethod] = useState<string>('');
@@ -283,12 +285,12 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
     },
   });
 
-  const snapPoints = useMemo(() => ['65%', '75%'], []);
+  const snapPoints = useMemo(() => ['90%', '95%'], []);
 
   return (
     <BottomSheetModal
       ref={bottomSheetModalRef}
-      index={0} 
+      index={1} 
       snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed} 
@@ -296,8 +298,13 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
       onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      enablePanDownToClose={true}
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      enableOverDrag={false}
       enableDynamicSizing={false}
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+      topInset={Math.max(12, insets.top)}
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>

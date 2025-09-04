@@ -1687,9 +1687,9 @@ export default function CreateInvoiceScreen() {
   return (
       <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "height" : "height"}
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // Adjust offset if header is present
+        keyboardVerticalOffset={0}
       >
         <Stack.Screen
           options={{
@@ -1900,26 +1900,22 @@ export default function CreateInvoiceScreen() {
               themeColors={themeColors} 
               showChevron={!watchedDiscountType} // Show chevron only if no discountType is set
             />
-            {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
-              <>
-                <View style={styles.separator} />
-                <ActionRow
-                  label={
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                      <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
-                      {watchedTaxPercentage !== null && (
-                        <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
-                      )}
-                    </View>
-                  }
-                  value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
-                  icon={Percent}
-                  themeColors={themeColors}
-                  onPress={handlePresentEditInvoiceTaxSheet}
-                  showChevron={displayTaxAmount <= 0}
-                />
-              </>
-            )}
+            <View style={styles.separator} />
+            <ActionRow
+              label={
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
+                  {watchedTaxPercentage !== null && (
+                    <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
+                  )}
+                </View>
+              }
+              value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
+              icon={Percent}
+              themeColors={themeColors}
+              onPress={handlePresentEditInvoiceTaxSheet}
+              showChevron={displayTaxAmount <= 0}
+            />
             <View style={styles.separator} />
             <ActionRow
               label="Add Payment"

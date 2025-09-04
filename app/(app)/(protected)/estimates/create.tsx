@@ -1653,24 +1653,22 @@ export default function CreateEstimateScreen() {
                 </TouchableOpacity>
               )}
               
-              {/* Tax Row */}
-              {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
-                <TouchableOpacity 
-                  style={styles.summaryRow} 
-                  onPress={handlePresentEditInvoiceTaxSheet}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                    <Text style={styles.summaryLabel}>{estimateTaxLabel || globalTaxName || 'Tax'} </Text>
-                    {taxPercentage !== null && (
-                      <Text style={styles.taxPercentageStyle}>({taxPercentage}%)</Text>
-                    )}
-                  </View>
-                  <Text style={styles.summaryText}>
-                    {getCurrencySymbol(currencyCode)}{displayTaxAmount.toFixed(2)}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              {/* Tax Row - always visible, defaults to Tax 0% */}
+              <TouchableOpacity 
+                style={styles.summaryRow} 
+                onPress={handlePresentEditInvoiceTaxSheet}
+                activeOpacity={0.7}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.summaryLabel}>{estimateTaxLabel || globalTaxName || 'Tax'} </Text>
+                  {taxPercentage !== null && (
+                    <Text style={styles.taxPercentageStyle}>({taxPercentage}%)</Text>
+                  )}
+                </View>
+                <Text style={styles.summaryText}>
+                  {getCurrencySymbol(currencyCode)}{displayTaxAmount.toFixed(2)}
+                </Text>
+              </TouchableOpacity>
               
               
               <View style={[styles.summaryRow, { borderBottomWidth: 0, marginTop: 5 }]}>

@@ -1,9 +1,11 @@
 import React from 'react';
 import { ScrollView, View, Text, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DebugScreen() {
   const [logs, setLogs] = React.useState<{ ts: string; level: string; msg: string }[]>([]);
   const [env, setEnv] = React.useState<Record<string, string | undefined>>({});
+  const [lastCrash, setLastCrash] = React.useState<{ ts: string; isFatal: boolean; message: string; stack?: string; recentLogs?: any[] } | null>(null);
 
   const refresh = React.useCallback(() => {
     try {
@@ -16,6 +18,12 @@ export default function DebugScreen() {
       EXPO_PUBLIC_ANON_KEY: process.env.EXPO_PUBLIC_ANON_KEY ? 'set' : 'missing',
       EXPO_PUBLIC_ENABLE_PROMISE_HARDENING: process.env.EXPO_PUBLIC_ENABLE_PROMISE_HARDENING,
     });
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('__LAST_CRASH__');
+        setLastCrash(raw ? JSON.parse(raw) : null);
+      } catch {}
+    })();
   }, []);
 
   React.useEffect(() => {
@@ -30,6 +38,11 @@ export default function DebugScreen() {
       global.__LOG_BUFFER__?.clear?.();
     } catch {}
     refresh();
+  };
+
+  const clearCrash = async () => {
+    try { await AsyncStorage.removeItem('__LAST_CRASH__'); } catch {}
+    setLastCrash(null);
   };
 
   return (
@@ -50,6 +63,17 @@ export default function DebugScreen() {
         </View>
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12 }}>
+        {lastCrash && (
+          <View style={{ marginBottom: 12, borderWidth: 1, borderColor: '#444', borderRadius: 8, padding: 10 }}>
+            <Text style={{ color: '#ff6b6b', fontWeight: '700' }}>Last Crash</Text>
+            <Text style={{ color: '#bbb' }}>{lastCrash.ts} fatal={String(lastCrash.isFatal)}</Text>
+            <Text style={{ color: '#ff9f43', marginTop: 4 }}>{lastCrash.message}</Text>
+            {!!lastCrash.stack && <Text style={{ color: '#999', marginTop: 4 }}>{lastCrash.stack.split('\n').slice(0,5).join('\n')}</Text>}
+            <TouchableOpacity onPress={clearCrash} style={{ marginTop: 8, padding: 6, backgroundColor: '#555', borderRadius: 6, alignSelf: 'flex-start' }}>
+              <Text style={{ color: 'white' }}>Clear crash</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {logs.length === 0 ? (
           <Text style={{ color: '#888' }}>No logs yet…</Text>
         ) : (
@@ -63,4 +87,3 @@ export default function DebugScreen() {
     </View>
   );
 }
-

@@ -152,13 +152,55 @@ try {
     }
   })();
 
-  // Global fatal error handler to surface early exceptions
+  // OTA auto-apply on launch for preview channel (non-dev)
+  try {
+    if (!__DEV__) {
+      const Updates = require('expo-updates');
+      const channel = (Updates?.channel) || (require('expo-constants')?.default?.expoConfig?.updates?.channel) || '';
+      const shouldAutoApply = (channel === 'preview' || channel === 'dev-preview')
+        && (process.env?.EXPO_PUBLIC_AUTO_APPLY_UPDATES === '1');
+      if (shouldAutoApply) {
+        (async () => {
+          try {
+            console.log('[OTA] Checking for updates on launch. Channel:', channel || '(unknown)');
+            const result = await Updates.checkForUpdateAsync();
+            if (result.isAvailable) {
+              console.log('[OTA] Update available. Fetching…');
+              await Updates.fetchUpdateAsync();
+              console.log('[OTA] Fetched. Reloading to apply.');
+              await Updates.reloadAsync();
+            } else {
+              console.log('[OTA] No update available.');
+            }
+          } catch (e) {
+            console.error('[OTA] Update check failed:', e?.message || String(e));
+          }
+        })();
+      } else {
+        console.log('[OTA] Auto-apply disabled. Channel:', channel || '(unknown)', 'Flag:', process.env?.EXPO_PUBLIC_AUTO_APPLY_UPDATES);
+      }
+    }
+  } catch {}
+
+  // Global fatal error handler to surface and persist early exceptions
   if (global.ErrorUtils && typeof global.ErrorUtils.setGlobalHandler === 'function') {
     const prev = global.ErrorUtils.getGlobalHandler?.();
     global.ErrorUtils.setGlobalHandler((err, isFatal) => {
       try {
         const msg = (err && err.message) || String(err);
+        const stack = (err && err.stack) ? String(err.stack) : '';
         console.error('[FATAL]', isFatal, msg);
+        try {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          const payload = {
+            ts: new Date().toISOString(),
+            isFatal: !!isFatal,
+            message: msg,
+            stack,
+            recentLogs: (global.__LOG_BUFFER__?.read?.() ?? []).slice(-200),
+          };
+          AsyncStorage.setItem('__LAST_CRASH__', JSON.stringify(payload)).catch(() => {});
+        } catch {}
       } catch {}
       // Preserve default behavior
       if (typeof prev === 'function') return prev(err, isFatal);

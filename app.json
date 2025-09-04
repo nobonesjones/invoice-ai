@@ -111,7 +111,9 @@
       "typedRoutes": true
     },
     "updates": {
-      "url": "https://u.expo.dev/d275f575-073b-4bde-8867-4d9b7387cc36"
+      "url": "https://u.expo.dev/d275f575-073b-4bde-8867-4d9b7387cc36",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "router": {

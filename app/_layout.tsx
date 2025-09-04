@@ -91,6 +91,7 @@ function RootLayoutNav() {
 		if (session && 
         !inAuthGroup &&
         !inAppProtectedRoute && 
+        !inPublicGroup &&
         !isAccountDetailsScreen &&
         !isBusinessInformationScreen &&
         !isInvoiceSettingsScreen &&
