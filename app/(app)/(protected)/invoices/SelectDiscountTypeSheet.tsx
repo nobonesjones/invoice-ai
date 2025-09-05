@@ -1,9 +1,10 @@
-import React, { forwardRef, useCallback, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
+import React, { forwardRef, useCallback, useRef, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, TextInput, Keyboard } from 'react-native'; 
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { X as XIcon, Percent, DollarSign } from 'lucide-react-native'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface DiscountData {
   discountType: 'percentage' | 'fixed' | null;
@@ -25,6 +26,8 @@ const SelectDiscountTypeSheet = forwardRef<SelectDiscountTypeSheetRef, SelectDis
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
   const lastPresentTime = useRef<number>(0);
+  const insets = useSafeAreaInsets();
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
   const [selectedType, setSelectedType] = useState<'percentage' | 'fixed' | null>(null);
   const [inputValue, setInputValue] = useState<string>('');
@@ -86,6 +89,19 @@ const SelectDiscountTypeSheet = forwardRef<SelectDiscountTypeSheetRef, SelectDis
   const handleSheetChange = (index: number) => {
     console.log('[SelectDiscountTypeSheet] 🔄 INDEX CHANGED TO:', index);
   };
+
+  // When keyboard opens, snap higher; when it closes, snap back
+  React.useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', () => {
+      setKeyboardVisible(true);
+      try { bottomSheetModalRef.current?.snapToIndex?.(1); } catch {}
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardVisible(false);
+      try { bottomSheetModalRef.current?.snapToIndex?.(0); } catch {}
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const handleInternalApply = () => {
     if (!selectedType) {
@@ -227,18 +243,26 @@ const SelectDiscountTypeSheet = forwardRef<SelectDiscountTypeSheetRef, SelectDis
     }
   });
 
+  const snapPoints = useMemo(() => ['70%', '85%'], []);
+
   return (
     <BottomSheetModal
       ref={bottomSheetModalRef}
       index={0} 
-      enableDynamicSizing={true}
+      snapPoints={snapPoints}
+      enableDynamicSizing={false}
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed} 
       onAnimate={handleSheetAnimate}
       onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      enablePanDownToClose={true}
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      enableOverDrag={false}
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+      topInset={Math.max(12, insets.top)}
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>
@@ -316,7 +340,7 @@ const SelectDiscountTypeSheet = forwardRef<SelectDiscountTypeSheetRef, SelectDis
                       ? 'Discount (%)'
                       : 'Discount Amount'}
                   </Text>
-                  <BottomSheetTextInput
+                  <TextInput
                     style={styles.textInput}
                     value={inputValue}
                     onChangeText={setInputValue}
@@ -325,7 +349,7 @@ const SelectDiscountTypeSheet = forwardRef<SelectDiscountTypeSheetRef, SelectDis
                     }
                     placeholderTextColor={themeColors.mutedForeground}
                     keyboardType="numeric"
-                    returnKeyType="none"
+                    returnKeyType="done"
                     autoFocus={true}
                   />
                 </View>

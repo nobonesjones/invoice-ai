@@ -41,7 +41,7 @@ import { Text } from '@/components/ui/text';
 import { useTheme } from '@/context/theme-provider';
 import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/config/supabase';
 import { useSupabase } from '@/context/supabase-provider';
 
 interface PaymentOption {

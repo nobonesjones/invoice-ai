@@ -1,25 +1,24 @@
 import React, { forwardRef, useMemo, useCallback, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollView, ActionSheetIOS, Alert, Switch } from 'react-native';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { useTheme } from '@/context/theme-provider';
-import { useAnalytics } from '@/hooks/useAnalytics';
-import { colors } from '@/constants/colors';
-import { X as XIcon, PercentSquareIcon, PercentIcon, PaperclipIcon } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, Switch } from 'react-native';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/context/theme-provider';
+import { colors } from '@/constants/colors';
+import { X as XIcon, PercentIcon, PaperclipIcon } from 'lucide-react-native';
+import { supabase } from '@/config/supabase';
 
 export type DiscountType = 'percentage' | 'fixed';
 
-export interface NewItemData { // This type describes the object passed to the onSave callback
-  id: string;                 // Added: an ID is generated and passed
-  itemName: string;           // Changed: 'name' to 'itemName' as used internally and passed
-  description?: string | null; // Allow null
-  price: number;              // Changed: converted to number before passing
-  quantity: number;           // Changed: converted to number before passing
-  discountType?: DiscountType | null; // Keep
-  discountValue?: number | null;      // Changed: converted to number or null before passing
-  imageUri?: string | null;         // Added: image URI is included when passed
-  saved_item_db_id?: string | null; // NEW: ID from user_saved_items table
+export interface NewItemData {
+  id: string;
+  itemName: string;
+  description?: string | null;
+  price: number;
+  quantity: number;
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+  imageUri?: string | null;
+  saved_item_db_id?: string | null;
 }
 
 export interface AddNewItemFormSheetProps {
@@ -34,9 +33,9 @@ export interface AddNewItemFormSheetRef {
 
 const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormSheetProps>(({ onSave, onOpenChange }, ref) => {
   const { isLightMode } = useTheme();
-  const analytics = useAnalytics();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const scrollRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
 
   const [itemName, setItemName] = useState('');
@@ -46,12 +45,14 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
   const [discountType, setDiscountType] = useState<DiscountType | null>(null);
   const [discountValue, setDiscountValue] = useState('');
   const [saveItemForFutureUse, setSaveItemForFutureUse] = useState(false);
-  // Removed image attachment option to simplify the form and increase space
 
   React.useImperativeHandle(ref, () => ({
     present: () => {
       bottomSheetModalRef.current?.present();
       try { onOpenChange?.(true); } catch {}
+      setTimeout(() => {
+        try { scrollRef.current?.scrollToEnd?.({ animated: true }); } catch {}
+      }, 50);
     },
     dismiss: () => {
       bottomSheetModalRef.current?.dismiss();
@@ -59,24 +60,26 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     },
   }));
 
-  const snapPoints = useMemo(() => ['90%'], []);
+  // 95% to sit slightly lower; topInset small to lift with keyboard
+  const snapPoints = useMemo(() => ['95%'], []);
 
-  const renderBackdrop = useCallback(
-    (props: any) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.7} />
-    ),
-    []
-  );
+  const renderBackdrop = useCallback((props: any) => (
+    <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.7} />
+  ), []);
+
+  const handleFocus = () => {
+    setTimeout(() => {
+      try { scrollRef.current?.scrollToEnd?.({ animated: true }); } catch {}
+    }, 50);
+  };
 
   const handleSave = useCallback(async () => {
-    // Basic validation (can be expanded)
     if (!itemName.trim() || !itemPrice.trim()) {
       Alert.alert('Missing Information', 'Please enter at least an item name and price.');
       return;
     }
 
     let savedItemDatabaseId: string | null = null;
-
     if (saveItemForFutureUse) {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -84,20 +87,19 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
         if (!session?.user) throw new Error('User not authenticated to save item template.');
 
         const userId = session.user.id;
-
-        // Data for user_saved_items table
         const itemToSaveInDb = {
           user_id: userId,
           item_name: itemName,
           description: itemDescription || null,
-          price: parseFloat(itemPrice), // This is unit_price in user_saved_items
+          price: parseFloat(itemPrice),
           default_quantity: parseInt(itemQuantity, 10) || 1,
           discount_type: discountType,
           discount_value: discountValue ? parseFloat(discountValue) : null,
-        };
+          image_url: null,
+        } as any;
 
         const { data: newSavedItem, error: insertError } = await supabase
-          .from('user_saved_items') // Ensure this table name is correct
+          .from('user_saved_items')
           .insert(itemToSaveInDb)
           .select()
           .single();
@@ -105,46 +107,30 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
         if (insertError) {
           console.error('Error saving item template to Supabase:', insertError);
           Alert.alert('Save Error', `Could not save item template: ${insertError.message}`);
-          // Optionally, decide if you want to proceed with onSave callback if DB save fails
         } else if (newSavedItem) {
-          savedItemDatabaseId = newSavedItem.id;
+          savedItemDatabaseId = (newSavedItem as any).id;
           Alert.alert('Item Saved', 'This item has been saved to your list for future use.');
         }
       } catch (error: any) {
-        console.error('An unexpected error occurred while saving item template:', error);
+        console.error('Unexpected error while saving item template:', error);
         Alert.alert('Error', 'An unexpected error occurred: ' + error.message);
       }
     }
 
-    // Data for the onSave callback (to be used for the current invoice)
     const dataForCallback: NewItemData = {
-      id: `inv_item_${Date.now()}`, // Temporary ID for this specific invoice line item instance
+      id: `inv_item_${Date.now()}`,
       itemName,
       description: itemDescription || null,
-      price: parseFloat(itemPrice), // Unit price for the invoice line item
+      price: parseFloat(itemPrice),
       quantity: parseInt(itemQuantity, 10) || 1,
       discountType,
       discountValue: discountValue ? parseFloat(discountValue) : null,
       imageUri: null,
-      saved_item_db_id: savedItemDatabaseId, // Pass the DB ID if item was saved
+      saved_item_db_id: savedItemDatabaseId,
     };
 
-    // Analytics removed for App Store build
-
     onSave(dataForCallback);
-    // bottomSheetModalRef.current?.dismiss(); // Consider dismissing after successful onSave + DB save
-  }, [
-    itemName,
-    itemDescription,
-    itemPrice,
-    itemQuantity,
-    discountType,
-    discountValue,
-    selectedImageUri,
-    saveItemForFutureUse,
-    onSave,
-    analytics,
-  ]);
+  }, [itemName, itemDescription, itemPrice, itemQuantity, discountType, discountValue, saveItemForFutureUse, onSave]);
 
   const handleDiscountTypeSelected = (type: DiscountType | null) => {
     setDiscountType(type);
@@ -153,39 +139,20 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
 
   const promptForDiscountType = () => {
     if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Percentage (%)', 'Fixed Amount'],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            handleDiscountTypeSelected('percentage');
-          } else if (buttonIndex === 2) {
-            handleDiscountTypeSelected('fixed');
-          }
-        }
-      );
+      // native action sheet
+      const options = ['Cancel', 'Percentage (%)', 'Fixed Amount'];
+      // use Alert as a simple fallback prompt across platforms
+      Alert.alert('Select Discount Type', '', [
+        { text: 'Percentage (%)', onPress: () => handleDiscountTypeSelected('percentage') },
+        { text: 'Fixed Amount', onPress: () => handleDiscountTypeSelected('fixed') },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
     } else {
-      Alert.alert(
-        'Select Discount Type',
-        '',
-        [
-          {
-            text: 'Percentage (%)',
-            onPress: () => handleDiscountTypeSelected('percentage'),
-          },
-          {
-            text: 'Fixed Amount',
-            onPress: () => handleDiscountTypeSelected('fixed'),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ],
-        { cancelable: true }
-      );
+      Alert.alert('Select Discount Type', '', [
+        { text: 'Percentage (%)', onPress: () => handleDiscountTypeSelected('percentage') },
+        { text: 'Fixed Amount', onPress: () => handleDiscountTypeSelected('fixed') },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
     }
   };
 
@@ -193,120 +160,27 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     if (!discountType) return 'Add Discount';
     if (discountType === 'fixed') return 'Fixed Amount Discount ($)';
     if (discountType === 'percentage') return 'Percentage Discount (%)';
-    return 'Add Discount'; // Fallback, though should not be reached if logic is sound
+    return 'Add Discount';
   }, [discountType]);
 
   const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      paddingHorizontal: 20,
-    },
-    contentContainerStyle: {
-      paddingBottom: 40,
-      paddingTop: Platform.OS === 'ios' ? 10 : 15,
-    },
-    title: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: themeColors.foreground,
-      marginBottom: 20,
-      textAlign: 'center',
-    },
-    inputGroupContainer: {
-      backgroundColor: themeColors.card,
-      borderRadius: 12,
-      marginBottom: 20,
-      paddingHorizontal: 0,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 1,
-      },
-      shadowOpacity: 0.05,
-      shadowRadius: 2.00,
-      elevation: 2,
-    },
-    inputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 15,
-      borderBottomWidth: 1,
-      borderBottomColor: themeColors.border,
-    },
-    inputRow_last: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 15,
-    },
-    inputLabelText: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: themeColors.foreground,
-      marginRight: 10,
-      minWidth: '25%',
-    },
-    inputValueArea: {
-      flex: 1,
-    },
-    textInputStyled: {
-      fontSize: 16,
-      color: themeColors.foreground,
-      paddingVertical: 0,
-      backgroundColor: 'transparent',
-    },
-    descriptionInputContainer: {
-      paddingVertical: 12,
-      paddingHorizontal: 15,
-      minHeight: 80,
-    },
-    input: {
-      backgroundColor: themeColors.input,
-      color: themeColors.foreground,
-      fontSize: 16,
-      marginBottom: 15,
-      borderWidth: 1,
-      borderColor: themeColors.border,
-      borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 12,
-    },
-    inputLabel: {
-      fontSize: 14,
-      color: themeColors.mutedForeground,
-      marginBottom: 5,
-      marginLeft: 2,
-    },
-    button: {
-      paddingVertical: 15,
-      borderRadius: 8,
-      alignItems: 'center',
-      marginTop: 10,
-    },
-    saveButton: {
-      backgroundColor: themeColors.primary,
-    },
-    buttonText: {
-      fontSize: 17,
-      fontWeight: '600',
-    },
-    saveButtonText: {
-      color: themeColors.primaryForeground,
-    },
-    modalBackground: {
-      backgroundColor: themeColors.background,
-    },
-    handleIndicator: {
-      backgroundColor: themeColors.mutedForeground,
-    },
-    closeButton: {
-      position: 'absolute',
-      top: Platform.OS === 'ios' ? 10 : 15,
-      right: 15,
-      padding: 5,
-      zIndex: 1,
-    },
+    container: { flex: 1, paddingHorizontal: 20 },
+    contentContainerStyle: { paddingBottom: 40, paddingTop: Platform.OS === 'ios' ? 10 : 15 },
+    title: { fontSize: 22, fontWeight: 'bold', color: themeColors.foreground, marginBottom: 20, textAlign: 'center' },
+    inputGroupContainer: { backgroundColor: themeColors.card, borderRadius: 12, marginBottom: 20, paddingHorizontal: 0, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+    inputRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: themeColors.border },
+    inputRow_last: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15 },
+    inputLabelText: { fontSize: 16, fontWeight: 'bold', color: themeColors.foreground, marginRight: 10, minWidth: '25%' },
+    inputValueArea: { flex: 1 },
+    textInputStyled: { fontSize: 16, color: themeColors.foreground, paddingVertical: 0, backgroundColor: 'transparent' },
+    descriptionInputContainer: { paddingVertical: 12, paddingHorizontal: 15, minHeight: 0 },
+    button: { paddingVertical: 15, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+    saveButton: { backgroundColor: themeColors.primary },
+    buttonText: { fontSize: 17, fontWeight: '600' },
+    saveButtonText: { color: themeColors.primaryForeground },
+    modalBackground: { backgroundColor: themeColors.background },
+    handleIndicator: { backgroundColor: themeColors.mutedForeground },
+    closeButton: { position: 'absolute', top: Platform.OS === 'ios' ? 10 : 15, right: 15, padding: 5, zIndex: 1 },
   });
 
   return (
@@ -323,14 +197,11 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       keyboardBlurBehavior="restore"
       enablePanDownToClose={false}
       enableContentPanningGesture={false}
-      topInset={Math.max(12, insets.top)}
-      onChange={(i) => {
-        try { console.log('[AddNewItemFormSheet] index change:', i); } catch {}
-        try { onOpenChange?.(i !== -1); } catch {}
-      }}
+      topInset={6}
+      onChange={(i) => { try { onOpenChange?.(i !== -1); } catch {} }}
       onDismiss={() => { try { onOpenChange?.(false); } catch {} }}
     >
-      <BottomSheetScrollView style={styles.container} contentContainerStyle={styles.contentContainerStyle}>
+      <BottomSheetScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.contentContainerStyle}>
         <TouchableOpacity style={styles.closeButton} onPress={() => bottomSheetModalRef.current?.dismiss()}>
           <XIcon size={22} color={themeColors.mutedForeground} />
         </TouchableOpacity>
@@ -341,27 +212,29 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow}>
             <Text style={styles.inputLabelText}>Item Name</Text>
             <View style={styles.inputValueArea}>
-              <TextInput
+              <BottomSheetTextInput
                 style={styles.textInputStyled}
                 value={itemName}
                 onChangeText={setItemName}
                 placeholder="Enter item name"
                 placeholderTextColor={themeColors.mutedForeground}
+                onFocus={handleFocus}
+                autoFocus
               />
             </View>
           </View>
 
-          <View style={styles.inputRow_last}>
-            <Text style={styles.inputLabelText}>Description</Text>
-            <View style={styles.inputValueArea}>
-              <TextInput
-                style={styles.textInputStyled}
-                value={itemDescription}
-                onChangeText={setItemDescription}
-                placeholder="Description (optional)"
-                placeholderTextColor={themeColors.mutedForeground}
-              />
-            </View>
+          <View style={styles.descriptionInputContainer}>
+            <BottomSheetTextInput
+              style={styles.textInputStyled}
+              value={itemDescription}
+              onChangeText={setItemDescription}
+              placeholder="Description (optional)"
+              placeholderTextColor={themeColors.mutedForeground}
+              onFocus={handleFocus}
+              autoCorrect={false}
+              returnKeyType="done"
+            />
           </View>
         </View>
 
@@ -369,13 +242,14 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow}>
             <Text style={styles.inputLabelText}>Price</Text>
             <View style={styles.inputValueArea}>
-              <TextInput
+              <BottomSheetTextInput
                 style={styles.textInputStyled}
                 value={itemPrice}
                 onChangeText={setItemPrice}
                 placeholder="0.00"
                 placeholderTextColor={themeColors.mutedForeground}
                 keyboardType="decimal-pad"
+                onFocus={handleFocus}
               />
             </View>
           </View>
@@ -383,30 +257,24 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <View style={styles.inputRow_last}>
             <Text style={styles.inputLabelText}>Quantity</Text>
             <View style={styles.inputValueArea}>
-              <TextInput
+              <BottomSheetTextInput
                 style={styles.textInputStyled}
                 value={itemQuantity}
                 onChangeText={setItemQuantity}
                 placeholder="1"
                 placeholderTextColor={themeColors.mutedForeground}
                 keyboardType="number-pad"
+                onFocus={handleFocus}
               />
             </View>
           </View>
         </View>
 
         <View style={styles.inputGroupContainer}>
-          <TouchableOpacity
-            style={styles.inputRow}
-            onPress={!discountType ? promptForDiscountType : undefined}
-          >
+          <TouchableOpacity style={styles.inputRow} onPress={!discountType ? promptForDiscountType : undefined}>
             <PercentIcon size={20} color={discountType ? themeColors.primary : themeColors.mutedForeground} style={{ marginRight: 12 }} />
             <Text
-              style={[
-                styles.textInputStyled,
-                { flex: 1 },
-                discountType ? { color: themeColors.primary, fontWeight: '500' } : { color: themeColors.mutedForeground }
-              ]}
+              style={[styles.textInputStyled, { flex: 1 }, discountType ? { color: themeColors.primary, fontWeight: '500' } : { color: themeColors.mutedForeground }]}
               onPress={promptForDiscountType}
             >
               {discountDisplayText}
@@ -424,25 +292,22 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                 {discountType === 'percentage' ? 'Percent %' : 'Amount'}
               </Text>
               <View style={styles.inputValueArea}>
-                <TextInput
+                <BottomSheetTextInput
                   style={styles.textInputStyled}
                   placeholder={discountType === 'percentage' ? 'e.g. 10%' : 'e.g. $50'}
                   placeholderTextColor={themeColors.mutedForeground}
                   value={discountValue}
                   onChangeText={setDiscountValue}
                   keyboardType="decimal-pad"
+                  onFocus={handleFocus}
                 />
               </View>
             </View>
           )}
 
-          {/* Image attachment row removed to create more space */}
-
           <View style={styles.inputRow_last}>
             <PaperclipIcon size={20} color={themeColors.mutedForeground} style={{ marginRight: 12 }} />
-            <Text style={[styles.textInputStyled, { flex: 1, color: themeColors.mutedForeground }]}>
-              Save this item for future use?
-            </Text>
+            <Text style={[styles.textInputStyled, { flex: 1, color: themeColors.mutedForeground }]}>Save this item for future use?</Text>
             <Switch
               trackColor={{ false: themeColors.border, true: themeColors.primary }}
               thumbColor={themeColors.card}
@@ -463,3 +328,4 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
 });
 
 export default AddNewItemFormSheet;
+

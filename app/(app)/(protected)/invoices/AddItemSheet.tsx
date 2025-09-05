@@ -1,11 +1,11 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, /* TextInput, */ ActivityIndicator } from 'react-native'; 
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetFlatList } from '@gorhom/bottom-sheet'; 
+import { View, Text, StyleSheet, TouchableOpacity, Platform, TextInput, ActivityIndicator, FlatList } from 'react-native'; 
+import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { PlusCircle, Search, X } from 'lucide-react-native';
-import AddNewItemFormSheet, { AddNewItemFormSheetRef, NewItemData } from './AddNewItemFormSheet';
+import AddNewItemFormSheet, { AddNewItemFormSheetRef, NewItemData } from '@/components/items/AddNewItemFormSheet';
 
 // Currency symbol mapping function (copied from create.tsx)
 const getCurrencySymbol = (code: string) => {
@@ -25,7 +25,7 @@ const getCurrencySymbol = (code: string) => {
 };
 
 // --- Supabase Integration --- 
-import { supabase } from '../../../../lib/supabase'; 
+import { supabase } from '@/config/supabase'; 
 // --- End Supabase Integration ---
 
 // Define the structure for displayable saved items
@@ -48,6 +48,24 @@ export interface AddItemSheetRef {
   dismiss: () => void;
 }
 
+class SheetErrorBoundary extends React.Component<{ onError?: (e: any) => void }, { hasError: boolean; err?: any }> {
+  constructor(props: any) { super(props); this.state = { hasError: false, err: null }; }
+  static getDerivedStateFromError(err: any) { return { hasError: true, err }; }
+  componentDidCatch(error: any, info: any) {
+    try {
+      console.error('[AddItemSheet] Render error:', error?.message || String(error));
+      // @ts-ignore
+      const buf = global.__LOG_BUFFER__?.read?.() ?? [];
+      // Persist last error
+      require('@react-native-async-storage/async-storage').default
+        .setItem('__LAST_CRASH__', JSON.stringify({ ts: new Date().toISOString(), isFatal: false, message: String(error?.message || error), stack: String(error?.stack || ''), recentLogs: buf.slice(-150) }))
+        .catch(() => {});
+    } catch {}
+    this.props.onError?.(error);
+  }
+  render() { return this.state.hasError ? null : this.props.children as any; }
+}
+
 const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref) => {
   // Use currencyCode prop, fallback to USD if not provided
   const currencyCode = props.currencyCode || 'USD';
@@ -65,6 +83,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [listRenderKey, setListRenderKey] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
 
   const fetchSavedItems = async () => {
     setIsLoading(true);
@@ -113,13 +132,12 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
     present: () => {
       setSearchQuery(''); // Reset search query on present
       setFilteredSavedItems([]); // Explicitly clear items before fetch/present
-      fetchSavedItems(); // Fetch items when modal is presented
       setListRenderKey(prevKey => prevKey + 1); // Increment key on present
-      
-      // Introduce a small delay before presenting
+      // Present first, then fetch after a short delay to avoid race conditions
       setTimeout(() => {
-        bottomSheetModalRef.current?.present();
-      }, 50); // 50ms delay, can be adjusted
+        try { bottomSheetModalRef.current?.present(); } catch (e) { console.error('[AddItemSheet] present error', e); }
+        setTimeout(() => { fetchSavedItems().catch(() => {}); }, 120);
+      }, 40);
     },
     dismiss: () => {
       bottomSheetModalRef.current?.dismiss();
@@ -135,6 +153,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.7} // Standard backdrop opacity
+        pressBehavior="close"
       />
     ),
     []
@@ -330,7 +349,8 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       index={1} 
       snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
-      onDismiss={handleSheetDismissed} 
+      onDismiss={() => { setIsOpen(false); handleSheetDismissed(); }} 
+      onChange={(i) => { setIsOpen(i !== -1); }}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       keyboardBehavior="extend" 
@@ -341,73 +361,85 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       enableOverDrag={false}
       topInset={Math.max(12, insets.top)}
     >
-      {/* New Modal Header */}
-      <View style={styles.modalHeaderContainer}>
-        <View style={styles.modalHeaderSpacer} /> 
-        <Text style={styles.modalHeaderTitle}>Add Item or Service</Text>
-        <TouchableOpacity onPress={handleClosePress} style={styles.modalCloseButton}>
-          <X size={24} color={themeColors.mutedForeground} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Main content area, ensure it's styled according to memory */}
-      <View style={styles.container}>
-        <TouchableOpacity style={styles.addNewButton} onPress={handleAddNewItem}>
-          <PlusCircle size={22} color={themeColors.primaryForeground} />
-          <Text style={styles.addNewButtonText}>Add New</Text>
-        </TouchableOpacity>
-
-        <View style={styles.searchContainer}>
-          <Search size={20} color={themeColors.foreground} style={styles.searchIcon} />
-          <BottomSheetTextInput 
-            style={styles.searchInput}
-            placeholder="Search saved items"
-            placeholderTextColor={themeColors.mutedForeground}
-            value={searchQuery}
-            onChangeText={handleSearch}
-          />
+      <SheetErrorBoundary>
+        {/* New Modal Header */}
+        <View style={styles.modalHeaderContainer}>
+          <View style={styles.modalHeaderSpacer} /> 
+          <Text style={styles.modalHeaderTitle}>Add Item or Service</Text>
+          <TouchableOpacity onPress={handleClosePress} style={styles.modalCloseButton}>
+            <X size={24} color={themeColors.mutedForeground} />
+          </TouchableOpacity>
         </View>
 
-        <BottomSheetFlatList
-          key={listRenderKey}
-          data={filteredSavedItems}
-          renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => handleSavedItemSelect(item)}>
-              <View style={styles.savedItemRow}>
-                <View style={styles.savedItemInfo}>
-                  <Text style={styles.savedItemName}>{item.itemName}</Text>
-                  {item.description && <Text style={styles.savedItemDescription}>{item.description}</Text>}
+        {/* Main content area */}
+        <View style={styles.container}>
+          <TouchableOpacity style={styles.addNewButton} onPress={handleAddNewItem}>
+            <PlusCircle size={22} color={themeColors.primaryForeground} />
+            <Text style={styles.addNewButtonText}>Add New</Text>
+          </TouchableOpacity>
+
+          <View style={styles.searchContainer}>
+            <Search size={20} color={themeColors.foreground} style={styles.searchIcon} />
+            <TextInput 
+              style={styles.searchInput}
+              placeholder="Search saved items"
+              placeholderTextColor={themeColors.mutedForeground}
+              value={searchQuery}
+              onChangeText={handleSearch}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          </View>
+
+          {isOpen ? (
+            <FlatList
+              key={listRenderKey}
+              data={filteredSavedItems}
+              renderItem={({ item }) => (
+                <TouchableOpacity onPress={() => handleSavedItemSelect(item)}>
+                  <View style={styles.savedItemRow}>
+                    <View style={styles.savedItemInfo}>
+                      <Text style={styles.savedItemName}>{item.itemName}</Text>
+                      {item.description && <Text style={styles.savedItemDescription}>{item.description}</Text>}
+                    </View>
+                    <Text style={styles.savedItemPrice}>{getCurrencySymbol(currencyCode)}{item.price.toFixed(2)}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[
+                styles.listContentContainer,
+                filteredSavedItems.length === 0 && { flex: 1, justifyContent: 'center' }
+              ]}
+              ListEmptyComponent={
+                <View>
+                  {isLoading && (
+                    <View style={styles.loadingIndicatorContainer}>
+                      <ActivityIndicator size="large" color={themeColors.primary} />
+                    </View>
+                  )}
+                  {fetchError && <Text style={styles.errorText}>{fetchError}</Text>}
+                  {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery === '' && (
+                    <Text style={styles.emptyListText}>No saved items yet. Add some!</Text>
+                  )}
+                  {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery !== '' && (
+                    <Text style={styles.emptyListText}>No items match your search.</Text>
+                  )}
                 </View>
-                <Text style={styles.savedItemPrice}>{getCurrencySymbol(currencyCode)}{item.price.toFixed(2)}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContentContainer,
-            filteredSavedItems.length === 0 && { flex: 1, justifyContent: 'center' } // Center empty state
-          ]}
-          ListEmptyComponent={
-            <View>
-              {isLoading && (
-                <View style={styles.loadingIndicatorContainer}>
-                  <ActivityIndicator size="large" color={themeColors.primary} />
-                </View>
-              )}
-              {fetchError && <Text style={styles.errorText}>{fetchError}</Text>}
-              {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery === '' && (
-                 <Text style={styles.emptyListText}>No saved items yet. Add some!</Text>
-              )}
-              {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery !== '' && (
-                 <Text style={styles.emptyListText}>No items match your search.</Text>
-              )}
+              }
+              style={{ flex: 1, minHeight: 200 }}
+            />
+          ) : (
+            <View style={[styles.loadingIndicatorContainer, { paddingVertical: 40 }]}>
+              <ActivityIndicator size="small" color={themeColors.primary} />
             </View>
-          }
-          style={{ flex: 1, minHeight: 200 }} // Ensure FlatList takes up available vertical space with minimum height
-        />
-      </View>
-      {/* Render the AddNewItemFormSheet modal so it can be presented */}
-      <AddNewItemFormSheet ref={addNewItemFormSheetRef} onSave={handleNewItemSaved} onOpenChange={setIsChildOpen} />
+          )}
+        </View>
+
+        {/* Child sheet */}
+        <AddNewItemFormSheet ref={addNewItemFormSheetRef} onSave={handleNewItemSaved} onOpenChange={setIsChildOpen} />
+      </SheetErrorBoundary>
     </BottomSheetModal>
   );
 });

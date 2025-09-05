@@ -1,11 +1,11 @@
 import React, { forwardRef, useMemo, useCallback, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform, ScrollView, ActionSheetIOS, Alert, Switch } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { X as XIcon, PercentSquareIcon, PercentIcon, ImageIcon, PaperclipIcon } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { X as XIcon, PercentSquareIcon, PercentIcon, PaperclipIcon } from 'lucide-react-native';
+import { supabase } from '@/config/supabase'; // Import Supabase client
 
 export type DiscountType = 'percentage' | 'fixed';
 
@@ -34,6 +34,8 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const scrollRef = useRef<any>(null);
+  const insets = useSafeAreaInsets();
 
   const [itemName, setItemName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
@@ -42,14 +44,20 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
   const [discountType, setDiscountType] = useState<DiscountType | null>(null);
   const [discountValue, setDiscountValue] = useState('');
   const [saveItemForFutureUse, setSaveItemForFutureUse] = useState(false);
-  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  // Image attachment removed from this modal
 
   React.useImperativeHandle(ref, () => ({
-    present: () => bottomSheetModalRef.current?.present(),
+    present: () => {
+      bottomSheetModalRef.current?.present();
+      setTimeout(() => {
+        // Focus first input to bring keyboard immediately
+        try { (scrollRef as any)?.current; } catch {}
+      }, 50);
+    },
     dismiss: () => bottomSheetModalRef.current?.dismiss(),
   }));
 
-  const snapPoints = useMemo(() => ['90%'], []);
+  const snapPoints = useMemo(() => ['95%'], []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -57,6 +65,12 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     ),
     []
   );
+
+  const handleFocus = () => {
+    setTimeout(() => {
+      try { scrollRef.current?.scrollToEnd?.({ animated: true }); } catch {}
+    }, 50);
+  };
 
   const handleSave = useCallback(async () => {
     // Basic validation (can be expanded)
@@ -84,7 +98,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           default_quantity: parseInt(itemQuantity, 10) || 1,
           discount_type: discountType,
           discount_value: discountValue ? parseFloat(discountValue) : null,
-          image_url: selectedImageUri, // Ensure this maps to your image_url column
+          image_url: null, // Image attachment not supported in this modal
         };
 
         const { data: newSavedItem, error: insertError } = await supabase
@@ -116,7 +130,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       quantity: parseInt(itemQuantity, 10) || 1,
       discountType,
       discountValue: discountValue ? parseFloat(discountValue) : null,
-      imageUri: selectedImageUri, // This is for the form, might not be needed by create.tsx directly
+      imageUri: null, // Image attachment removed
       saved_item_db_id: savedItemDatabaseId, // Pass the DB ID if item was saved
     };
 
@@ -129,7 +143,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     itemQuantity,
     discountType,
     discountValue,
-    selectedImageUri,
+    // removed image state
     saveItemForFutureUse,
     onSave,
   ]);
@@ -177,25 +191,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     }
   };
 
-  const handleAttachImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (permissionResult.granted === false) {
-      Alert.alert("Permission Required", "You've refused to allow this app to access your photos.");
-      return;
-    }
-
-    const pickerResult = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.7,
-    });
-
-    if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
-      setSelectedImageUri(pickerResult.assets[0].uri);
-    }
-  };
+  // Image attachment removed
 
   const discountDisplayText = useMemo(() => {
     if (!discountType) return 'Add Discount';
@@ -267,7 +263,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     descriptionInputContainer: {
       paddingVertical: 12,
       paddingHorizontal: 15,
-      minHeight: 80,
+      minHeight: 0,
     },
     input: {
       backgroundColor: themeColors.input,
@@ -327,11 +323,13 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      keyboardBehavior="interactive"
+      keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
-      enablePanDownToClose={true}
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      topInset={6}
     >
-      <BottomSheetScrollView style={styles.container} contentContainerStyle={styles.contentContainerStyle}>
+      <BottomSheetScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.contentContainerStyle}>
         <TouchableOpacity style={styles.closeButton} onPress={() => bottomSheetModalRef.current?.dismiss()}>
           <XIcon size={22} color={themeColors.mutedForeground} />
         </TouchableOpacity>
@@ -348,6 +346,8 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                 onChangeText={setItemName}
                 placeholder="Enter item name"
                 placeholderTextColor={themeColors.mutedForeground}
+                onFocus={handleFocus}
+                autoFocus
               />
             </View>
           </View>
@@ -359,8 +359,9 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
               onChangeText={setItemDescription}
               placeholder="Description (optional)"
               placeholderTextColor={themeColors.mutedForeground}
-              multiline
-              numberOfLines={3}
+              onFocus={handleFocus}
+              autoCorrect={false}
+              returnKeyType="done"
             />
           </View>
         </View>
@@ -376,6 +377,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                 placeholder="0.00"
                 placeholderTextColor={themeColors.mutedForeground}
                 keyboardType="decimal-pad"
+                onFocus={handleFocus}
               />
             </View>
           </View>
@@ -390,6 +392,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                 placeholder="1"
                 placeholderTextColor={themeColors.mutedForeground}
                 keyboardType="number-pad"
+                onFocus={handleFocus}
               />
             </View>
           </View>
@@ -431,23 +434,13 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
                   value={discountValue}
                   onChangeText={setDiscountValue}
                   keyboardType="decimal-pad"
+                  onFocus={handleFocus}
                 />
               </View>
             </View>
           )}
 
-          <TouchableOpacity style={styles.inputRow} onPress={handleAttachImage}>
-            <ImageIcon size={20} color={selectedImageUri ? themeColors.primary : themeColors.mutedForeground} style={{ marginRight: 12 }} />
-            <Text
-              style={[
-                styles.textInputStyled,
-                { flex: 1 },
-                selectedImageUri ? { color: themeColors.primary, fontStyle: 'italic' } : { color: themeColors.mutedForeground },
-              ]}
-            >
-              {selectedImageUri ? `Image Attached: ${selectedImageUri.split('/').pop()}` : 'Attach Image'}
-            </Text>
-          </TouchableOpacity>
+          {/* Image attachment removed */}
 
           <View style={styles.inputRow_last}>
             <PaperclipIcon size={20} color={themeColors.mutedForeground} style={{ marginRight: 12 }} />

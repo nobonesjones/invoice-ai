@@ -61,8 +61,9 @@ import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; // Added import
 import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
 import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoiceDetailsSheet'; // Correctly import named export
-import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
-import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
+import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // legacy fallback if needed
+import AddItemSheetStable, { AddItemSheetStableRef } from '@/components/items/AddItemSheetStable';
+import { NewItemData } from '@/components/items/AddNewItemFormSheet';
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import working discount modal
 
@@ -521,13 +522,14 @@ export default function CreateInvoiceScreen() {
   }, [navigation, setIsTabBarVisible, hasUnsavedChanges, autoSaveAsDraft, isSavingInvoice, isAutoSaving, isEditMode, editInvoiceId, isLoadingInvoice]);
 
   // --- Bottom Sheet Modal (Add Item) --- //
-  const addItemSheetRef = useRef<AddItemSheetRef>(null);
+  const USE_STABLE_ADD_ITEM = true;
+  const addItemSheetRef = useRef<AddItemSheetStableRef | AddItemSheetRef>(null);
   const addItemSnapPoints = useMemo(() => ['50%', '90%'], []);
 
   const handlePresentAddItemModal = useCallback(() => {
     // Dismiss keyboard if open
     Keyboard.dismiss();
-    addItemSheetRef.current?.present();
+    (addItemSheetRef.current as any)?.present?.();
   }, []);
 
   const handleSheetChanges = useCallback((index: number) => {
@@ -2023,11 +2025,19 @@ export default function CreateInvoiceScreen() {
         </TouchableOpacity>
 
         {/* Add Item Bottom Sheet Modal */}
-        <AddItemSheet 
-          ref={addItemSheetRef} 
-          onItemFromFormSaved={handleItemFromSheetSaved}
-          currencyCode={currencyCode}
-        />
+        {USE_STABLE_ADD_ITEM ? (
+          <AddItemSheetStable
+            ref={addItemSheetRef as React.RefObject<AddItemSheetStableRef>}
+            onItemFromFormSaved={handleItemFromSheetSaved}
+            currencyCode={currencyCode}
+          />
+        ) : (
+          <AddItemSheet 
+            ref={addItemSheetRef as React.RefObject<AddItemSheetRef>} 
+            onItemFromFormSaved={handleItemFromSheetSaved}
+            currencyCode={currencyCode}
+          />
+        )}
 
         <NewClientSelectionSheet
           ref={newClientSheetRef}

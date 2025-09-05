@@ -22,7 +22,7 @@ import CreateNewClientSheet from "./CreateNewClientSheet";
 
 import CustomerListItem, { Customer } from "@/components/CustomerListItem";
 import { colors } from "@/constants/colors";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/config/supabase";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useTheme } from "@/context/theme-provider";
 

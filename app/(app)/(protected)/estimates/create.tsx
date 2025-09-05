@@ -66,7 +66,8 @@ import { Tables } from '../../../../types/database.types';
 
 type ClientType = Tables<'clients'>;
 import AddItemSheet, { AddItemSheetRef } from '../invoices/AddItemSheet';
-import { NewItemData } from '../invoices/AddNewItemFormSheet';
+import AddItemSheetStable, { AddItemSheetStableRef } from '@/components/items/AddItemSheetStable';
+import { NewItemData } from '@/components/items/AddNewItemFormSheet';
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from '../invoices/SelectDiscountTypeSheet';
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from '../invoices/EditInvoiceTaxSheet';
 import EditEstimateDetailsSheet, { EditEstimateDetailsSheetRef, EstimateDetailsData } from './EditEstimateDetailsSheet';
@@ -354,7 +355,7 @@ export default function CreateEstimateScreen() {
   
   // Sheet refs
   const newClientSheetRef = useRef<NewClientSelectionSheetRef>(null);
-  const addItemSheetRef = useRef<AddItemSheetRef>(null);
+  const addItemSheetRef = useRef<AddItemSheetStableRef | AddItemSheetRef>(null);
   const discountSheetRef = useRef<SelectDiscountTypeSheetRef>(null);
   const taxSheetRef = useRef<EditInvoiceTaxSheetRef>(null);
   const editEstimateDetailsSheetRef = useRef<EditEstimateDetailsSheetRef>(null);
@@ -391,6 +392,7 @@ export default function CreateEstimateScreen() {
   const [isEstimateDetailsSheetOpen, setIsEstimateDetailsSheetOpen] = useState(false);
   const [isValidUntilDateSheetOpen, setIsValidUntilDateSheetOpen] = useState(false);
   const [isAddItemSheetOpen, setIsAddItemSheetOpen] = useState(false);
+  const USE_STABLE_ADD_ITEM = true;
   const [isNewClientSelectionSheetOpen, setIsNewClientSelectionSheetOpen] = useState(false);
   const [isSelectDiscountTypeSheetOpen, setIsSelectDiscountTypeSheetOpen] = useState(false);
   const [isEditInvoiceTaxSheetOpen, setIsEditInvoiceTaxSheetOpen] = useState(false);
@@ -1627,31 +1629,29 @@ export default function CreateEstimateScreen() {
                 </Text>
               </View>
               
-              {/* Discount Row - Only show if discount exists or can be added */}
-              {(displayDiscountAmount > 0 || !watchedDiscountType) && (
-                <TouchableOpacity 
-                  style={styles.summaryRow} 
-                  onPress={() => discountSheetRef.current?.present()}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.summaryLabel}>
-                    {watchedDiscountType === 'percentage' && watchedDiscountValue && watchedDiscountValue > 0 
-                      ? `Discount ${watchedDiscountValue}%` 
-                      : watchedDiscountType === 'fixed' && watchedDiscountValue && watchedDiscountValue > 0
-                        ? 'Discount'
-                        : watchedDiscountType
-                          ? 'Edit Discount'
-                          : 'Add Discount'
-                    }
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    {displayDiscountAmount > 0 
-                      ? `- ${getCurrencySymbol(currencyCode)}${Number(displayDiscountAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                      : ''
-                    }
-                  </Text>
-                </TouchableOpacity>
-              )}
+              {/* Discount Row - always visible */}
+              <TouchableOpacity 
+                style={styles.summaryRow} 
+                onPress={() => discountSheetRef.current?.present(watchedDiscountType as any, watchedDiscountValue as any)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.summaryLabel}>
+                  {watchedDiscountType === 'percentage' && watchedDiscountValue && watchedDiscountValue > 0 
+                    ? `Discount ${watchedDiscountValue}%` 
+                    : watchedDiscountType === 'fixed' && watchedDiscountValue && watchedDiscountValue > 0
+                      ? 'Discount'
+                      : watchedDiscountType
+                        ? 'Edit Discount'
+                        : 'Add Discount'
+                  }
+                </Text>
+                <Text style={styles.summaryText}>
+                  {displayDiscountAmount > 0 
+                    ? `- ${getCurrencySymbol(currencyCode)}${Number(displayDiscountAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                    : ''
+                  }
+                </Text>
+              </TouchableOpacity>
               
               {/* Tax Row - always visible, defaults to Tax 0% */}
               <TouchableOpacity 
@@ -1789,11 +1789,19 @@ export default function CreateEstimateScreen() {
           />
 
           {/* Add Item Sheet */}
-          <AddItemSheet
-            ref={addItemSheetRef}
-            onItemFromFormSaved={handleItemFromFormSaved}
-            currencyCode={currencyCode}
-          />
+          {USE_STABLE_ADD_ITEM ? (
+            <AddItemSheetStable
+              ref={addItemSheetRef as React.RefObject<AddItemSheetStableRef>}
+              onItemFromFormSaved={handleItemFromFormSaved}
+              currencyCode={currencyCode}
+            />
+          ) : (
+            <AddItemSheet
+              ref={addItemSheetRef as React.RefObject<AddItemSheetRef>}
+              onItemFromFormSaved={handleItemFromFormSaved}
+              currencyCode={currencyCode}
+            />
+          )}
 
           {/* Discount Selection Sheet */}
           <SelectDiscountTypeSheet

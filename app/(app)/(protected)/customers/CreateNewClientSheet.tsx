@@ -30,7 +30,7 @@ import {
 import * as Contacts from 'expo-contacts';
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/config/supabase";
 import { Tables } from '../../../../types/database.types';
 
 type Client = Tables<'clients'>;
