@@ -282,43 +282,7 @@ export default function CustomerSupportScreen() {
             </Text>
           </View>
 
-          {/* Manual Update Section (Preview) */}
-          <View style={styles.formSection}>
-            <Text style={styles.fieldLabel}>App Update (Preview)</Text>
-            <Text style={{ color: theme.mutedForeground, marginBottom: 8 }}>
-              Manually check and apply the latest app update.
-            </Text>
-            <TouchableOpacity
-              style={[styles.submitButton, isCheckingUpdate && styles.submitButtonDisabled]}
-              disabled={isCheckingUpdate}
-              onPress={async () => {
-                setIsCheckingUpdate(true);
-                try {
-                  const res = await Updates.checkForUpdateAsync();
-                  if (res.isAvailable) {
-                    await Updates.fetchUpdateAsync();
-                    Alert.alert('Update Ready', 'Restarting to apply update…');
-                    await Updates.reloadAsync();
-                  } else {
-                    Alert.alert('Up to Date', 'You already have the latest version.');
-                  }
-                } catch (e: any) {
-                  Alert.alert('Update Failed', e?.message || 'Could not check/apply update.');
-                } finally {
-                  setIsCheckingUpdate(false);
-                }
-              }}
-            >
-              {isCheckingUpdate ? (
-                <ActivityIndicator size="small" color={theme.primaryForeground} />
-              ) : (
-                <RefreshCcw size={18} color={theme.primaryForeground} />
-              )}
-              <Text style={styles.submitButtonText}>
-                {isCheckingUpdate ? 'Checking…' : 'Check for Update'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Manual Update Section removed for production */}
 
           <View style={styles.faqSection}>
             <TouchableOpacity 

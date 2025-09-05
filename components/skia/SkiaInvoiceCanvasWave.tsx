@@ -939,6 +939,9 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
   const singlePageNotesHeight = invoice?.notes ? (15 + (notesLineCount * 12) + 10) : 0; // Header + lines + spacing
   const paymentMethodsY = footerY + 20 + singlePageNotesHeight;
 
+  // Compute the visible container width for centering the Canvas when using a higher internal render scale
+  const visibleWidth = renderSinglePage !== undefined ? (baseCanvasWidth / renderScale) : baseCanvasWidth;
+
   return (
     <View style={[
       styles.container, 

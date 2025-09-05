@@ -73,12 +73,11 @@ const AddItemSheetStable = forwardRef<AddItemSheetStableRef, AddItemSheetStableP
         .order('item_name', { ascending: true });
       if (error) throw error;
       const items = (data || []).map((d: any) => ({ id: d.id, itemName: d.item_name, price: d.price, description: d.description }));
-      if (!isOpen) return;
       setSavedItems(items);
       setFilteredSavedItems(items);
     } catch (e: any) {
       setFetchError(e?.message || 'Failed to load items.');
-    } finally { if (isOpen) setIsLoading(false); }
+    } finally { setIsLoading(false); }
   };
 
   const handleSearch = (text: string) => {
@@ -194,11 +193,6 @@ const AddItemSheetStable = forwardRef<AddItemSheetStableRef, AddItemSheetStableP
             contentContainerStyle={[styles.listContentContainer, filteredSavedItems.length === 0 && { flex: 1, justifyContent: 'center' }]}
             ListEmptyComponent={
               <View>
-                {isLoading && (
-                  <View style={styles.loadingIndicatorContainer}>
-                    <ActivityIndicator size="large" color={themeColors.primary} />
-                  </View>
-                )}
                 {fetchError && <Text style={styles.errorText}>{fetchError}</Text>}
                 {!isLoading && !fetchError && filteredSavedItems.length === 0 && searchQuery === '' && (
                   <Text style={styles.emptyListText}>No saved items yet. Add some!</Text>
@@ -221,4 +215,3 @@ const AddItemSheetStable = forwardRef<AddItemSheetStableRef, AddItemSheetStableP
 });
 
 export default AddItemSheetStable;
-

@@ -25,13 +25,14 @@ import { SubscriptionPricing, SUBSCRIPTION_PLANS } from '@/components/Subscripti
 
 export default function NewSettingsScreen() {
   const router = useRouter();
-  const { user, signOut } = useSupabase();
+  const { user, signOut, supabase } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { presentPaywall, isSubscribed, isLoading: paywallLoading, checkSubscriptionStatus } = usePaywall();
   const [searchTerm, setSearchTerm] = useState('');
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [isLoadingUsage, setIsLoadingUsage] = useState(true);
+  const [currencyCode, setCurrencyCode] = useState<string>('USD');
 
   // Test Superwall context
   const superwall = useSuperwall();
@@ -116,6 +117,45 @@ export default function NewSettingsScreen() {
   useEffect(() => {
     loadUsageStats();
   }, [user?.id, loadUsageStats]);
+
+  // Load user's currency code from business settings for symbol formatting
+  useEffect(() => {
+    const loadCurrency = async () => {
+      try {
+        if (!user?.id || !supabase) return;
+        const { data, error } = await supabase
+          .from('business_settings')
+          .select('currency_code')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!error && data?.currency_code) {
+          setCurrencyCode(data.currency_code);
+        }
+      } catch {}
+    };
+    loadCurrency();
+  }, [user?.id, supabase]);
+
+  const getCurrencySymbol = (code?: string) => {
+    const mapping: Record<string, string> = {
+      GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥', INR: '₹', CHF: 'Fr', CNY: '¥', NZD: 'NZ$', SEK: 'kr', NOK: 'kr', DKK: 'kr', SGD: 'S$', HKD: 'HK$'
+    };
+    if (!code) return '$';
+    const normalized = code.split(' ')[0];
+    return mapping[normalized] || '$';
+  };
+
+  // Derive a per-day price from the yearly plan (simple display; not region-specific pricing)
+  const parseYearlyPrice = () => {
+    try {
+      const raw = SUBSCRIPTION_PLANS.yearly.price || '';
+      const numeric = parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+      return isNaN(numeric) ? 0 : numeric;
+    } catch { return 0; }
+  };
+  const yearlyPrice = parseYearlyPrice();
+  const perDay = yearlyPrice > 0 ? yearlyPrice / 365 : 0;
+  const perDayDisplay = `${getCurrencySymbol(currencyCode)}${perDay.toFixed(2)}`;
 
   const handleUpgradePress = async () => {
     try {
@@ -441,7 +481,7 @@ export default function NewSettingsScreen() {
                         Upgrade to continue using SuperInvoice
                       </Text>
                       <Text style={[styles.usagePricingText, { color: theme.mutedForeground }]}>
-                        From {SUBSCRIPTION_PLANS.monthly.price}/month
+                        From as little as {perDayDisplay}/day
                       </Text>
                     </>
                   )}

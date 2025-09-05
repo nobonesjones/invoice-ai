@@ -422,8 +422,11 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 					>
 						{businessSettings && transformedEstimate ? (
 							<View style={{
-								transform: [{ scale: 0.6 }],
-								marginLeft: -120,
+								// Reduce size by ~10% from 0.65 and nudge slightly more left
+								// New scale ≈ 0.585; center shift ~ -58.5; apply -70 to bias a touch left
+								// Further nudge left to visually center within the 200px container
+								// +10% larger and 9px left total
+								transform: [{ scale: 0.645 }, { translateX: -99 }],
 							}}>
 								<EstimateDesignComponent
 									renderSinglePage={0}
@@ -936,8 +939,9 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					>
 						{businessSettings && transformedInvoice ? (
 							<View style={{
-								transform: [{ scale: 0.6 }], // Slightly smaller than modal for chat preview
-								marginLeft: -120, // Center the invoice by shifting left
+								// Reduce size by ~10% from 0.65 and nudge slightly more left
+								// +10% larger and 9px left total
+								transform: [{ scale: 0.645 }, { translateX: -99 }],
 							}}>
 																	<InvoiceDesignComponent
 										renderSinglePage={0}

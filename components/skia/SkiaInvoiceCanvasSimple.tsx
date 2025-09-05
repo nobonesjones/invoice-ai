@@ -940,6 +940,9 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   const singlePageNotesHeight = invoice?.notes ? (15 + (notesLineCount * 12) + 10) : 0; // Header + lines + spacing
   const paymentMethodsY = footerY + 20 + singlePageNotesHeight;
 
+  // Compute visible container width for single-page thumbnail contexts
+  const visibleWidth = renderSinglePage !== undefined ? (baseCanvasWidth / renderScale) : baseCanvasWidth;
+
   return (
     <View style={[
       styles.container, 
