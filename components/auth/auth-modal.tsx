@@ -25,7 +25,6 @@ import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
 import { SignUpModal } from "./sign-up-modal";
-import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 import { SignInModal } from "./sign-in-modal";
 
 WebBrowser.maybeCompleteAuthSession();

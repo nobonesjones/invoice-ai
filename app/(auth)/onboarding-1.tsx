@@ -26,7 +26,6 @@ import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarouse
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from "@/config/supabase";
 import { useOnboarding } from "@/context/onboarding-provider";
-import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 
 WebBrowser.maybeCompleteAuthSession();
 
