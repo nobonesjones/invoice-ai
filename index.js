@@ -157,8 +157,9 @@ try {
     if (!__DEV__) {
       const Updates = require('expo-updates');
       const channel = (Updates?.channel) || (require('expo-constants')?.default?.expoConfig?.updates?.channel) || '';
-      const shouldAutoApply = (channel === 'preview' || channel === 'dev-preview')
-        && (process.env?.EXPO_PUBLIC_AUTO_APPLY_UPDATES === '1');
+      // Default to auto-apply on preview unless explicitly disabled with EXPO_PUBLIC_AUTO_APPLY_UPDATES=0
+      const envFlag = process.env?.EXPO_PUBLIC_AUTO_APPLY_UPDATES;
+      const shouldAutoApply = (channel === 'preview' || channel === 'dev-preview') && (envFlag !== '0');
       if (shouldAutoApply) {
         (async () => {
           try {

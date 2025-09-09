@@ -4,6 +4,8 @@ import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Updates from 'expo-updates';
+import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 import {
   View,
   Text,
@@ -25,6 +27,7 @@ import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarouse
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from "@/config/supabase";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { generateNonce, sha256Hex, decodeJwtPayload } from '@/utils/apple-nonce';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -150,18 +153,29 @@ export default function OnboardingScreen1() {
     setIsAppleLoading(true);
     
     try {
+      const rawNonce = await generateNonce(32);
+      const hashedNonce = await sha256Hex(rawNonce);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
+        // Per Apple docs, this must be the SHA-256 digest of the raw nonce
+        nonce: hashedNonce,
       });
 
       if (credential.identityToken) {
+        try {
+          if ((Updates as any)?.channel === 'preview') {
+            const payload: any = decodeJwtPayload(credential.identityToken);
+            console.log('[Apple Debug] aud:', payload?.aud, 'token.nonce:', payload?.nonce, 'hashedNonce:', hashedNonce);
+          }
+        } catch {}
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,
-          nonce: credential.nonce,
+          // Supabase expects the original raw nonce
+          nonce: rawNonce,
         });
 
         if (error) {

@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Updates from 'expo-updates';
+import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
@@ -24,6 +26,7 @@ import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
 import { SignUpModal } from "./sign-up-modal";
+import { generateNonce, sha256Hex, decodeJwtPayload } from '@/utils/apple-nonce';
 import { SignInModal } from "./sign-in-modal";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -158,18 +161,27 @@ export function AuthModal({
     setIsAppleLoading(true);
     
     try {
+      const rawNonce = await generateNonce(32);
+      const hashedNonce = await sha256Hex(rawNonce);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
+        nonce: hashedNonce,
       });
 
       if (credential.identityToken) {
+        try {
+          if ((Updates as any)?.channel === 'preview') {
+            const payload: any = decodeJwtPayload(credential.identityToken);
+            console.log('[Apple Debug] aud:', payload?.aud, 'token.nonce:', payload?.nonce, 'hashedNonce:', hashedNonce);
+          }
+        } catch {}
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,
-          nonce: credential.nonce,
+          nonce: rawNonce,
         });
 
         if (error) {

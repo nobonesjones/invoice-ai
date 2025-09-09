@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   ScrollView, 
@@ -41,6 +41,7 @@ export default function CustomerSupportScreen() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [showUpdateButton, setShowUpdateButton] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -48,6 +49,36 @@ export default function CustomerSupportScreen() {
       return () => {};
     }, [setIsTabBarVisible])
   );
+
+  useEffect(() => {
+    try {
+      const ch = (Updates as any)?.channel || '';
+      // Only surface the manual update button on preview builds
+      if (ch === 'preview') setShowUpdateButton(true);
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        Alert.alert('Update Available', 'Restarting to apply update…', [
+          { text: 'OK', onPress: () => Updates.reloadAsync() },
+        ]);
+      } else {
+        Alert.alert('Up to date', 'No updates available.');
+      }
+    } catch (e: any) {
+      console.error('[OTA] Manual update check failed:', e?.message || String(e));
+      Alert.alert('Update Check Failed', e?.message || 'Please try again later.');
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
@@ -214,6 +245,28 @@ export default function CustomerSupportScreen() {
     faqSection: {
       marginBottom: 16,
     },
+    updateRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    updateButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: isLightMode ? theme.background : theme.card,
+      borderWidth: 1,
+      borderColor: theme.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    updateButtonText: {
+      color: theme.mutedForeground,
+      fontSize: 14,
+      marginLeft: 8,
+      fontWeight: '500',
+    },
     faqButton: {
       backgroundColor: theme.card,
       borderRadius: 12,
@@ -360,6 +413,26 @@ export default function CustomerSupportScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {showUpdateButton && (
+            <View style={styles.updateRow}>
+              <TouchableOpacity 
+                style={styles.updateButton} 
+                onPress={handleCheckForUpdates}
+                disabled={isCheckingUpdate}
+                accessibilityLabel="Check for updates"
+              >
+                {isCheckingUpdate ? (
+                  <ActivityIndicator size="small" color={theme.mutedForeground} />
+                ) : (
+                  <RefreshCcw size={18} color={theme.mutedForeground} />
+                )}
+                <Text style={styles.updateButtonText}>
+                  {isCheckingUpdate ? 'Checking…' : 'Check for Updates'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
