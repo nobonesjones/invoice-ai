@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Updates from 'expo-updates';
 import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,7 @@ import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
 import { SignUpModal } from "./sign-up-modal";
-import { generateNonce, sha256Hex, decodeJwtPayload } from '@/utils/apple-nonce';
+import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 import { SignInModal } from "./sign-in-modal";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -172,12 +171,7 @@ export function AuthModal({
       });
 
       if (credential.identityToken) {
-        try {
-          if ((Updates as any)?.channel === 'preview') {
-            const payload: any = decodeJwtPayload(credential.identityToken);
-            console.log('[Apple Debug] aud:', payload?.aud, 'token.nonce:', payload?.nonce, 'hashedNonce:', hashedNonce);
-          }
-        } catch {}
+        // (Preview-only debug removed to reduce bundle complexity)
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,

@@ -1,6 +1,5 @@
 import * as Random from 'expo-random';
 import * as Crypto from 'expo-crypto';
-import { decode as atob } from 'base-64';
 
 // Secure, cryptographically-strong nonce generator (URL-safe charset)
 export async function generateNonce(length: number = 32): Promise<string> {
@@ -20,15 +19,4 @@ export async function sha256Hex(input: string): Promise<string> {
   });
 }
 
-export function decodeJwtPayload(jwt: string): any | null {
-  try {
-    const parts = jwt.split('.');
-    if (parts.length < 2) return null;
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const pad = base64.length % 4 ? '===='.slice(base64.length % 4) : '';
-    const json = atob(base64 + pad);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
+// (Debug helpers removed to minimize dependencies)

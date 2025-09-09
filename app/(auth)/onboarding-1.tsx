@@ -4,7 +4,6 @@ import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Updates from 'expo-updates';
 import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 import {
   View,
@@ -27,7 +26,7 @@ import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarouse
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from "@/config/supabase";
 import { useOnboarding } from "@/context/onboarding-provider";
-import { generateNonce, sha256Hex, decodeJwtPayload } from '@/utils/apple-nonce';
+import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -165,12 +164,7 @@ export default function OnboardingScreen1() {
       });
 
       if (credential.identityToken) {
-        try {
-          if ((Updates as any)?.channel === 'preview') {
-            const payload: any = decodeJwtPayload(credential.identityToken);
-            console.log('[Apple Debug] aud:', payload?.aud, 'token.nonce:', payload?.nonce, 'hashedNonce:', hashedNonce);
-          }
-        } catch {}
+        // (Preview-only debug removed to reduce bundle complexity)
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,
