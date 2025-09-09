@@ -1,4 +1,12 @@
 // Early diagnostics and hardening before expo-router/entry
+// Provide global base64 helpers (React Native doesn't define btoa/atob by default)
+try {
+  const { encode: __btoa, decode: __atob } = require('base-64');
+  if (typeof global.btoa !== 'function') global.btoa = __btoa;
+  if (typeof global.atob !== 'function') global.atob = __atob;
+  // eslint-disable-next-line no-console
+  console.log('[Entry] Base64 polyfill active:', typeof global.btoa === 'function' && typeof global.atob === 'function');
+} catch {}
 /* eslint-disable no-console */
 
 try {
