@@ -380,7 +380,7 @@ export default function PaymentOptionsScreen() {
   const paypalBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const stripeBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const bankTransferBottomSheetModalRef = useRef<BottomSheetModal>(null);
-  const bankTransferScrollViewRef = useRef<BottomSheetScrollView>(null); // Ref for Bank Transfer scroll view
+  // Bank Transfer sheet does not require a scroll ref with stable keyboard handling
 
   const [isPayPalEnabled, setIsPayPalEnabled] = useState(false);
   const [paypalEmail, setPayPalEmail] = useState('');
@@ -412,8 +412,7 @@ export default function PaymentOptionsScreen() {
 
   // PayPal modal now uses fixed snap points with extend behavior; no dynamic swap needed
 
-  // State to track if bank transfer modal is the one currently focused for keyboard events
-  const [isBankTransferModalFocused, setIsBankTransferModalFocused] = useState(false);
+  // No special focus tracking needed for bank transfer modal
 
   const paymentIcons = [
     { name: 'Visa', source: require('../../assets/visaicon.png') },
@@ -424,27 +423,13 @@ export default function PaymentOptionsScreen() {
   ];
 
   const stripeSnapPoints = useMemo(() => ['60%', '90%'], []);
-  const bankTransferSnapPoints = useMemo(() => ['60%', '80%'], []);
+  const bankTransferSnapPoints = useMemo(() => ['60%', '90%'], []);
 
-  useEffect(() => {
-    // Keep only bank transfer keyboard assist; PayPal uses stable extend behavior
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      if (isBankTransferModalFocused) {
-        setTimeout(() => {
-          bankTransferScrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
-    });
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {});
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, [isBankTransferModalFocused]);
+  // No keyboard listeners needed; rely on keyboardBehavior="extend" inside sheets
 
   const openPayPalModal = useCallback(async () => {
     if (!user) return;
-    setIsBankTransferModalFocused(false); // Ensure other modals don't trigger bank scroll
+    // ensure other modal state is isolated (no-op)
     setIsLoadingSettings(true);
     paypalBottomSheetModalRef.current?.present();
 
@@ -634,7 +619,6 @@ export default function PaymentOptionsScreen() {
 
   const openBankTransferModal = useCallback(async () => {
     if (!user) return;
-    setIsBankTransferModalFocused(true); // Set focus for keyboard listener
     setIsLoadingBankTransferSettings(true);
     bankTransferBottomSheetModalRef.current?.present();
 
@@ -1149,20 +1133,18 @@ export default function PaymentOptionsScreen() {
             ref={bankTransferBottomSheetModalRef}
             index={0}
             snapPoints={bankTransferSnapPoints}
-            onChange={(index) => {
-              handleSheetChanges(index); // Existing handler
-              if (index === -1) { // Modal dismissed
-                setIsBankTransferModalFocused(false);
-              }
-            }}
+            onChange={handleSheetChanges}
             backdropComponent={renderBackdrop}
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
-            keyboardBehavior="interactive"
+            keyboardBehavior="extend"
+            enableDynamicSizing={false}
           >
             <BottomSheetScrollView
-              ref={bankTransferScrollViewRef} // Assign ref here
-              contentContainerStyle={styles.modalContentContainer}
+              contentContainerStyle={[
+                styles.modalContentContainer,
+                { paddingBottom: Platform.OS === 'ios' ? 90 : 80 },
+              ]}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
             >
