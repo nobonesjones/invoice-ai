@@ -189,7 +189,7 @@ const getStyles = (theme: any) =>
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: Platform.OS === 'ios' ? 32 : 20,
-      backgroundColor: theme.card,
+      backgroundColor: theme.background, // match screen grey background
     },
     modalHeader: {
       flexDirection: 'row',
@@ -661,9 +661,34 @@ export default function PaymentOptionsScreen() {
         Alert.alert('Error', 'Could not load your Bank Transfer settings.');
       } else if (data) {
         setIsBankTransferEnabled(data.bank_transfer_enabled);
-        setBankDetails(data.bank_details || '');
-        setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
-        setInitialBankDetails(data.bank_details || '');
+        const raw = data.bank_details || '';
+        try {
+          const obj = JSON.parse(raw as any);
+          if (obj && typeof obj === 'object') {
+            setBankAccountName((obj as any).accountName || '');
+            setBankName((obj as any).bankName || '');
+            setAccountIban((obj as any).accountIban || '');
+            setRoutingSwift((obj as any).routingSwift || '');
+            setBankNotes((obj as any).notes || '');
+          } else {
+            setBankNotes(raw);
+          }
+        } catch {
+          const lines = raw.split('\n').map(l => l.trim());
+          const lower = (s: string) => s.toLowerCase();
+          const getVal = (prefixes: string[]) => {
+            const line = lines.find(l => prefixes.some(p => lower(l).startsWith(p)));
+            return line ? line.split(':').slice(1).join(':').trim() : '';
+          };
+          setBankAccountName(getVal(['account name']));
+          setBankName(getVal(['bank name']));
+          setAccountIban(getVal(['account / iban', 'account', 'iban']));
+          setRoutingSwift(getVal(['routing / swift', 'routing', 'swift', 'bic']));
+          const consumed = ['account name','bank name','account / iban','account','iban','routing / swift','routing','swift','bic'];
+          setBankNotes(lines.filter(l => !consumed.some(c => lower(l).startsWith(c))).join('\n'));
+        }
+setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
+        setInitialBankDetails(raw);
         if (data.id && !paymentOptionsId) setPaymentOptionsId(data.id);
       } else {
         setIsBankTransferEnabled(false);
