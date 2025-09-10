@@ -101,6 +101,17 @@ const getStyles = (theme: any) =>
       textAlignVertical: 'top',
       minHeight: 100,
       marginBottom: 10,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 5,
+        },
+      }),
     },
     inputLabel: {
       fontSize: 16,
@@ -117,6 +128,17 @@ const getStyles = (theme: any) =>
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
       marginBottom: 10,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 5,
+        },
+      }),
     },
     sectionTitle: {
       fontSize: 14,
@@ -193,7 +215,7 @@ const getStyles = (theme: any) =>
       backgroundColor: theme.mutedForeground,
     },
     modalBackground: {
-      backgroundColor: theme.card,
+      backgroundColor: theme.isLightMode ? '#F7F7F5' : theme.card,
     },
     inputRow: {
       flexDirection: 'row',
@@ -399,7 +421,12 @@ export default function PaymentOptionsScreen() {
   const [isStripeActiveOnScreen, setIsStripeActiveOnScreen] = useState(false);
 
   const [isBankTransferEnabled, setIsBankTransferEnabled] = useState(false);
-  const [bankDetails, setBankDetails] = useState('');
+  // Structured bank details (composed into bank_details string for DB)
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountIban, setAccountIban] = useState('');
+  const [routingSwift, setRoutingSwift] = useState('');
+  const [bankNotes, setBankNotes] = useState('');
   const [initialIsBankTransferEnabled, setInitialIsBankTransferEnabled] = useState(false);
   const [initialBankDetails, setInitialBankDetails] = useState('');
   const [bankTransferSettingsChanged, setBankTransferSettingsChanged] = useState(false);
@@ -640,7 +667,11 @@ export default function PaymentOptionsScreen() {
         if (data.id && !paymentOptionsId) setPaymentOptionsId(data.id);
       } else {
         setIsBankTransferEnabled(false);
-        setBankDetails('');
+        setBankAccountName('');
+        setBankName('');
+        setAccountIban('');
+        setRoutingSwift('');
+        setBankNotes('');
         setInitialIsBankTransferEnabled(false);
         setInitialBankDetails('');
       }
@@ -662,10 +693,12 @@ export default function PaymentOptionsScreen() {
     setBankTransferSettingsChanged(true);
   };
 
-  const handleBankDetailsChange = (text: string) => {
-    setBankDetails(text);
-    setBankTransferSettingsChanged(true);
-  };
+  // Mark changed handlers for structured fields
+  const onChangeBankAccountName = (t: string) => { setBankAccountName(t); setBankTransferSettingsChanged(true); };
+  const onChangeBankName = (t: string) => { setBankName(t); setBankTransferSettingsChanged(true); };
+  const onChangeAccountIban = (t: string) => { setAccountIban(t); setBankTransferSettingsChanged(true); };
+  const onChangeRoutingSwift = (t: string) => { setRoutingSwift(t); setBankTransferSettingsChanged(true); };
+  const onChangeBankNotes = (t: string) => { setBankNotes(t); setBankTransferSettingsChanged(true); };
 
   const handleSaveBankTransferSettings = async () => {
     Keyboard.dismiss();
@@ -679,10 +712,19 @@ export default function PaymentOptionsScreen() {
       return;
     }
     setIsLoadingBankTransferSettings(true);
+    // Compose a readable multi-line string for DB storage (backward compatible)
+    const composed = [
+      bankAccountName && `Account Name: ${bankAccountName}`,
+      bankName && `Bank Name: ${bankName}`,
+      accountIban && `Account / IBAN: ${accountIban}`,
+      routingSwift && `Routing / SWIFT: ${routingSwift}`,
+      bankNotes && `Notes: ${bankNotes}`,
+    ].filter(Boolean).join('\n');
+
     const updateData: Partial<PaymentOption> & { user_id: string } = {
       user_id: user.id,
       bank_transfer_enabled: isBankTransferEnabled,
-      bank_details: isBankTransferEnabled ? bankDetails : null,
+      bank_details: isBankTransferEnabled ? composed : null,
     };
     try {
       const { error } = await supabase.from('payment_options').upsert(
@@ -697,7 +739,7 @@ export default function PaymentOptionsScreen() {
       ]);
       setBankTransferSettingsChanged(false);
       setInitialIsBankTransferEnabled(isBankTransferEnabled);
-      setInitialBankDetails(bankDetails);
+      setInitialBankDetails(composed);
       setIsBankTransferActiveOnScreen(isBankTransferEnabled);
       if (!paymentOptionsId && !error) {
         const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).maybeSingle();
@@ -1175,17 +1217,52 @@ export default function PaymentOptionsScreen() {
                       <Text style={styles.label}>Bank Account Details</Text>
                     </View>
                     <BottomSheetTextInput
-                      style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
-                      value={bankDetails}
-                      onChangeText={handleBankDetailsChange}
-                      placeholder="Add IBAN / Account No. / Routing"
-                      autoCapitalize="none"
-                      autoCorrect={false}
+                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      value={bankAccountName}
+                      onChangeText={onChangeBankAccountName}
+                      placeholder="Account Holder Name"
+                      autoCapitalize="words"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      value={bankName}
+                      onChangeText={onChangeBankName}
+                      placeholder="Bank Name"
+                      autoCapitalize="words"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      value={accountIban}
+                      onChangeText={onChangeAccountIban}
+                      placeholder="Account Number / IBAN"
+                      autoCapitalize="characters"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      value={routingSwift}
+                      onChangeText={onChangeRoutingSwift}
+                      placeholder="Routing Number / SWIFT / BIC"
+                      autoCapitalize="characters"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      value={bankNotes}
+                      onChangeText={onChangeBankNotes}
+                      placeholder="Notes (optional)"
+                      autoCapitalize="sentences"
                       editable={!isLoadingBankTransferSettings}
                       returnKeyType="done"
                     />
                     <View style={styles.infoTextContainer}>
-                      <Text style={styles.infoText}>Keep it brief — you can add detailed terms in Payment Instructions below.</Text>
+                      <Text style={styles.infoText}>You can add additional payment instructions in the section below.</Text>
                     </View>
                   </View>
                 )}
