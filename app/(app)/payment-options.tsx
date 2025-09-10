@@ -422,7 +422,7 @@ export default function PaymentOptionsScreen() {
     { name: 'GooglePay', source: require('../../assets/googlepayicon.png') },
   ];
 
-  const stripeSnapPoints = useMemo(() => ['60%', '90%'], []);
+  const stripeSnapPoints = useMemo(() => ['75%', '90%'], []);
   const bankTransferSnapPoints = useMemo(() => ['60%', '90%'], []);
 
   // No keyboard listeners needed; rely on keyboardBehavior="extend" inside sheets
@@ -655,7 +655,6 @@ export default function PaymentOptionsScreen() {
 
   const closeBankTransferModal = useCallback(() => {
     bankTransferBottomSheetModalRef.current?.dismiss();
-    setIsBankTransferModalFocused(false); // Clear focus
   }, []);
 
   const handleBankTransferToggle = (newValue: boolean) => {
@@ -1176,16 +1175,17 @@ export default function PaymentOptionsScreen() {
                       <Text style={styles.label}>Bank Account Details</Text>
                     </View>
                     <BottomSheetTextInput
-                      style={[styles.multilineInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
+                      style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
                       value={bankDetails}
                       onChangeText={handleBankDetailsChange}
-                      placeholder="Enter your bank name, account number, sort code/routing number, IBAN, SWIFT/BIC, etc."
-                      multiline
-                      numberOfLines={5} 
+                      placeholder="Add IBAN / Account No. / Routing"
+                      autoCapitalize="none"
+                      autoCorrect={false}
                       editable={!isLoadingBankTransferSettings}
+                      returnKeyType="done"
                     />
                     <View style={styles.infoTextContainer}>
-                      <Text style={styles.infoText}>Provide clear instructions for customers to make a bank transfer.</Text>
+                      <Text style={styles.infoText}>Keep it brief — you can add detailed terms in Payment Instructions below.</Text>
                     </View>
                   </View>
                 )}
