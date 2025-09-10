@@ -1,4 +1,5 @@
 export const sampleInvoices = [
+  // Keep the main order, but move invoice 2 to second last and add invoice 8 last
   {
     id: '1',
     clientName: 'Acme Corporation',
@@ -11,23 +12,8 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#f0f9ff',
     accentColor: '#0ea5e9',
-    imageSource: require('../assets/onboarding/final/invoice_1.png'),
+    imageSource: require('../assets/onboarding/final/invoice--1.png'),
     template: 'clean'
-  },
-  {
-    id: '2',
-    clientName: 'Tech Solutions Ltd',
-    amount: '$1,850.00',
-    dueDate: '2024-02-20',
-    status: 'pending' as const,
-    items: [
-      { name: 'Mobile App Design', quantity: 1, price: '$1,500.00' },
-      { name: 'User Testing', quantity: 1, price: '$350.00' },
-    ],
-    backgroundColor: '#fef3c7',
-    accentColor: '#f59e0b',
-    imageSource: require('../assets/onboarding/final/Invoice_2.png'),
-    template: 'modern'
   },
   {
     id: '3',
@@ -41,7 +27,7 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#fef2f2',
     accentColor: '#ef4444',
-    imageSource: require('../assets/onboarding/final/invoice_3.png'),
+    imageSource: require('../assets/onboarding/final/invoice--3.png'),
     template: 'simple'
   },
   {
@@ -56,7 +42,7 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#f0fdf4',
     accentColor: '#22c55e',
-    imageSource: require('../assets/onboarding/final/Invoice_4.png'),
+    imageSource: require('../assets/onboarding/final/invoice--4.png'),
     template: 'classic'
   },
   {
@@ -71,7 +57,7 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#faf5ff',
     accentColor: '#8B5CF6',
-    imageSource: require('../assets/onboarding/final/Invoice_5.png'),
+    imageSource: require('../assets/onboarding/final/invoice--5.png'),
     template: 'wave'
   },
   {
@@ -87,7 +73,7 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#eff6ff',
     accentColor: '#3b82f6',
-    imageSource: require('../assets/onboarding/final/Invoice_6.png'),
+    imageSource: require('../assets/onboarding/final/invoice--6.png'),
     template: 'wave'
   },
   {
@@ -103,7 +89,37 @@ export const sampleInvoices = [
     ],
     backgroundColor: '#f0fdf4',
     accentColor: '#059669',
-    imageSource: require('../assets/onboarding/final/Invoice_7.png'),
+    imageSource: require('../assets/onboarding/final/invoice--7.png'),
     template: 'clean'
   },
-]; 
+  {
+    id: '2',
+    clientName: 'Tech Solutions Ltd',
+    amount: '$1,850.00',
+    dueDate: '2024-02-20',
+    status: 'pending' as const,
+    items: [
+      { name: 'Mobile App Design', quantity: 1, price: '$1,500.00' },
+      { name: 'User Testing', quantity: 1, price: '$350.00' },
+    ],
+    backgroundColor: '#fef3c7',
+    accentColor: '#f59e0b',
+    imageSource: require('../assets/onboarding/final/invoice--2.png'),
+    template: 'modern'
+  },
+  {
+    id: '8',
+    clientName: 'NextGen Services',
+    amount: '$2,975.00',
+    dueDate: '2024-03-20',
+    status: 'paid' as const,
+    items: [
+      { name: 'Consulting', quantity: 1, price: '$2,500.00' },
+      { name: 'Support', quantity: 1, price: '$475.00' },
+    ],
+    backgroundColor: '#eef2ff',
+    accentColor: '#6366f1',
+    imageSource: require('../assets/onboarding/final/invoice--8.png'),
+    template: 'modern'
+  },
+];

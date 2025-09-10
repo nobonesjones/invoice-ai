@@ -1295,4 +1295,4 @@ BOTTOMSHEETMODAL CHEAT SHEET
    predictable and reliable.
 
   This cheat sheet would have saved us 90% of
-   the debugging time! 🚀
+   the debugging time! 🚀pay pal one - lets 

@@ -410,9 +410,7 @@ export default function PaymentOptionsScreen() {
   const [initialInvoiceTermsNotes, setInitialInvoiceTermsNotes] = useState<string>('');
   const [isLoadingInvoiceTermsNotes, setIsLoadingInvoiceTermsNotes] = useState<boolean>(false);
 
-  const defaultPayPalSnapPoints = useMemo(() => ['50%', '65%'], []);
-  const keyboardActivePayPalSnapPoints = useMemo(() => ['75%', '90%'], []); // Taller when keyboard is active
-  const [currentPayPalSnapPoints, setCurrentPayPalSnapPoints] = useState(defaultPayPalSnapPoints);
+  // PayPal modal now uses fixed snap points with extend behavior; no dynamic swap needed
 
   // State to track if bank transfer modal is the one currently focused for keyboard events
   const [isBankTransferModalFocused, setIsBankTransferModalFocused] = useState(false);
@@ -425,38 +423,24 @@ export default function PaymentOptionsScreen() {
     { name: 'GooglePay', source: require('../../assets/googlepayicon.png') },
   ];
 
-  const stripeSnapPoints = useMemo(() => ['90%'], []);
+  const stripeSnapPoints = useMemo(() => ['60%', '90%'], []);
   const bankTransferSnapPoints = useMemo(() => ['60%', '80%'], []);
 
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => {
-        // Handle PayPal modal snap points
-        setCurrentPayPalSnapPoints(keyboardActivePayPalSnapPoints);
-
-        // Handle Bank Transfer modal scroll
-        if (isBankTransferModalFocused) {
-          // Add a slight delay to ensure layout is complete after keyboard is up
-          setTimeout(() => {
-            bankTransferScrollViewRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
+    // Keep only bank transfer keyboard assist; PayPal uses stable extend behavior
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      if (isBankTransferModalFocused) {
+        setTimeout(() => {
+          bankTransferScrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setCurrentPayPalSnapPoints(defaultPayPalSnapPoints);
-        // No specific action needed for bank transfer modal on keyboard hide for now
-      }
-    );
-
+    });
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {});
     return () => {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
-  }, [keyboardActivePayPalSnapPoints, defaultPayPalSnapPoints, isPayPalEnabled, isBankTransferModalFocused]);
+  }, [isBankTransferModalFocused]);
 
   const openPayPalModal = useCallback(async () => {
     if (!user) return;
@@ -995,19 +979,23 @@ export default function PaymentOptionsScreen() {
 
           </ScrollView>
 
-          {/* PayPal Modal */}
+          {/* PayPal Modal (stable cloned config) */}
           <BottomSheetModal
             ref={paypalBottomSheetModalRef}
             index={0}
-            snapPoints={currentPayPalSnapPoints} // Use dynamic snap points
+            snapPoints={useMemo(() => ['60%', '90%'], [])}
             onChange={handleSheetChanges} 
             backdropComponent={renderBackdrop}
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
-            keyboardBehavior="interactive"
+            keyboardBehavior="extend"
+            enableDynamicSizing={false}
           >
             <BottomSheetScrollView
-              contentContainerStyle={styles.modalContentContainer}
+              contentContainerStyle={[
+                styles.modalContentContainer,
+                { paddingBottom: Platform.OS === 'ios' ? 90 : 80 },
+              ]}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
             >
