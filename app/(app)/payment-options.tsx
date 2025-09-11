@@ -125,20 +125,10 @@ const getStyles = (theme: any) =>
       paddingVertical: Platform.OS === 'ios' ? 12 : 10,
       fontSize: 16,
       color: theme.foreground,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: theme.border,
       marginBottom: 10,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.18,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 5,
-        },
-      }),
+      backgroundColor: theme.card,
     },
     sectionTitle: {
       fontSize: 14,
@@ -189,33 +179,35 @@ const getStyles = (theme: any) =>
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: Platform.OS === 'ios' ? 32 : 20,
-      backgroundColor: theme.background, // match screen grey background
+      backgroundColor: theme.background,
     },
+    // Align modal header with Add Payment modal
     modalHeader: {
       flexDirection: 'row',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
       alignItems: 'center',
-      paddingBottom: 16,
+      paddingTop: Platform.OS === 'ios' ? 20 : 15,
+      paddingBottom: 10,
       paddingHorizontal: 16,
-      position: 'relative',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
     },
     modalTitle: {
       fontSize: 18,
-      fontWeight: 'bold',
+      fontWeight: '600',
       color: theme.foreground,
     },
     closeButton: {
-      position: 'absolute',
-      right: 16,
-      top: '50%',
-      transform: [{ translateY: -12 }],
-      padding: 4,
+      padding: 5,
     },
     handleIndicator: {
       backgroundColor: theme.mutedForeground,
     },
+    // Match Add Payment modal surface
     modalBackground: {
-      backgroundColor: theme.isLightMode ? '#F7F7F5' : theme.card,
+      backgroundColor: theme.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
     },
     inputRow: {
       flexDirection: 'row',
@@ -266,11 +258,10 @@ const getStyles = (theme: any) =>
     },
     saveButton: {
       backgroundColor: theme.primary,
-      paddingVertical: 15,
-      borderRadius: 12,
+      paddingVertical: 16,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      // marginHorizontal is not needed here as modalInnerContent provides padding
     },
     saveButtonText: {
       color: theme.primaryForeground,
@@ -674,18 +665,28 @@ export default function PaymentOptionsScreen() {
             setBankNotes(raw);
           }
         } catch {
-          const lines = raw.split('\n').map(l => l.trim());
-          const lower = (s: string) => s.toLowerCase();
-          const getVal = (prefixes: string[]) => {
-            const line = lines.find(l => prefixes.some(p => lower(l).startsWith(p)));
-            return line ? line.split(':').slice(1).join(':').trim() : '';
-          };
-          setBankAccountName(getVal(['account name']));
-          setBankName(getVal(['bank name']));
-          setAccountIban(getVal(['account / iban', 'account', 'iban']));
-          setRoutingSwift(getVal(['routing / swift', 'routing', 'swift', 'bic']));
-          const consumed = ['account name','bank name','account / iban','account','iban','routing / swift','routing','swift','bic'];
-          setBankNotes(lines.filter(l => !consumed.some(c => lower(l).startsWith(c))).join('\n'));
+          const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+          const hasLabels = lines.some(l => l.includes(':'));
+          if (hasLabels) {
+            const lower = (s: string) => s.toLowerCase();
+            const getVal = (prefixes: string[]) => {
+              const line = lines.find(l => prefixes.some(p => lower(l).startsWith(p)));
+              return line ? line.split(':').slice(1).join(':').trim() : '';
+            };
+            setBankAccountName(getVal(['account name']));
+            setBankName(getVal(['bank name']));
+            setAccountIban(getVal(['account / iban', 'account', 'iban']));
+            setRoutingSwift(getVal(['routing / swift', 'routing', 'swift', 'bic']));
+            const consumed = ['account name','bank name','account / iban','account','iban','routing / swift','routing','swift','bic'];
+            setBankNotes(lines.filter(l => !consumed.some(c => lower(l).startsWith(c))).join('\n'));
+          } else {
+            // Treat as unlabeled sequential lines in the order of fields
+            setBankAccountName(lines[0] || '');
+            setBankName(lines[1] || '');
+            setAccountIban(lines[2] || '');
+            setRoutingSwift(lines[3] || '');
+            setBankNotes(lines.slice(4).join('\n'));
+          }
         }
 setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
         setInitialBankDetails(raw);
@@ -737,13 +738,13 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
       return;
     }
     setIsLoadingBankTransferSettings(true);
-    // Compose a readable multi-line string for DB storage (backward compatible)
+    // Store exactly what user typed, one value per line (no labels)
     const composed = [
-      bankAccountName && `Account Name: ${bankAccountName}`,
-      bankName && `Bank Name: ${bankName}`,
-      accountIban && `Account / IBAN: ${accountIban}`,
-      routingSwift && `Routing / SWIFT: ${routingSwift}`,
-      bankNotes && `Notes: ${bankNotes}`,
+      bankAccountName?.trim(),
+      bankName?.trim(),
+      accountIban?.trim(),
+      routingSwift?.trim(),
+      bankNotes?.trim(),
     ].filter(Boolean).join('\n');
 
     const updateData: Partial<PaymentOption> & { user_id: string } = {
@@ -1075,7 +1076,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                   <View style={[styles.sectionCard, styles.emailInputCard]}>
                     <Text style={[styles.inputLabel, { color: theme.foreground, marginBottom: 8, fontWeight: 'bold' }]}>PayPal Email</Text>
                     <BottomSheetTextInput
-                      style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
+                      style={[styles.emailInputStyle]} 
                       placeholder="Enter your PayPal email address"
                       placeholderTextColor={theme.mutedForeground}
                       value={paypalEmail}
@@ -1242,7 +1243,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       <Text style={styles.label}>Bank Account Details</Text>
                     </View>
                     <BottomSheetTextInput
-                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      style={[styles.emailInputStyle]}
                       value={bankAccountName}
                       onChangeText={onChangeBankAccountName}
                       placeholder="Account Holder Name"
@@ -1251,7 +1252,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       returnKeyType="next"
                     />
                     <BottomSheetTextInput
-                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      style={[styles.emailInputStyle]}
                       value={bankName}
                       onChangeText={onChangeBankName}
                       placeholder="Bank Name"
@@ -1260,7 +1261,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       returnKeyType="next"
                     />
                     <BottomSheetTextInput
-                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      style={[styles.emailInputStyle]}
                       value={accountIban}
                       onChangeText={onChangeAccountIban}
                       placeholder="Account Number / IBAN"
@@ -1269,7 +1270,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       returnKeyType="next"
                     />
                     <BottomSheetTextInput
-                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      style={[styles.emailInputStyle]}
                       value={routingSwift}
                       onChangeText={onChangeRoutingSwift}
                       placeholder="Routing Number / SWIFT / BIC"
@@ -1278,7 +1279,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       returnKeyType="next"
                     />
                     <BottomSheetTextInput
-                      style={[styles.inputShadow, styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]}
+                      style={[styles.emailInputStyle]}
                       value={bankNotes}
                       onChangeText={onChangeBankNotes}
                       placeholder="Notes (optional)"
@@ -1287,7 +1288,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       returnKeyType="done"
                     />
                     <View style={styles.infoTextContainer}>
-                      <Text style={styles.infoText}>You can add additional payment instructions in the section below.</Text>
+                      <Text style={styles.infoText}>These details will show exactly what you type on your invoice.</Text>
                     </View>
                   </View>
                 )}
