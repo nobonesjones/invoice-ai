@@ -71,6 +71,9 @@ function RootLayoutNav() {
     const isPaymentRemindersScreen =
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-reminders";
 
+    // Detect onboarding routes inside (auth)
+    const isOnboardingRoute = segments[0] === '(auth)' && segments.length >= 2 && String(segments[1] || '').startsWith('onboarding');
+
 		const isInProtectedGroup = inAppProtectedRoute;
 
 		// console.log("[Auth Effect] Running Effect..."); // Log start
@@ -88,8 +91,12 @@ function RootLayoutNav() {
     // console.log("[Auth Effect] isPaymentOptionsScreen:", isPaymentOptionsScreen);
     // console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
 
-		if (session && 
-        !inAuthGroup &&
+    if (session && 
+        (
+          // If session exists but we're still in auth group (e.g., sign-in/up screens), move to protected
+          (inAuthGroup && !isOnboardingRoute) ||
+          // Or if not in auth group and not already in allowed app-level screens
+          (!inAuthGroup &&
         !inAppProtectedRoute && 
         !inPublicGroup &&
         !isAccountDetailsScreen &&
@@ -100,12 +107,12 @@ function RootLayoutNav() {
         !isCustomerSupportScreen &&
         !isPaymentOptionsScreen &&
         !isPaymentRemindersScreen &&
-        !isSoftPaywallScreen
-      ) { 
-			// User is logged in but not in the main protected area OR any allowed app-level screens.
-			// Redirect to the main protected route (e.g., home screen).
-			// console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
-			router.replace("/(app)/(protected)");
+        !isSoftPaywallScreen)
+        ) { 
+      // User is logged in but not in the main protected area OR any allowed app-level screens.
+      // Redirect to the main protected route (e.g., home screen).
+      // console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
+      router.replace("/(app)/(protected)");
 		} else if (
 			!session &&
 			!(inAuthGroup || inAppAuthGroup || inPublicGroup || isWelcomeScreen || isSoftPaywallScreen)

@@ -25,6 +25,7 @@ import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
+import { useRouter } from 'expo-router';
 import { OAUTH_REDIRECT } from "@/utils/oauth";
 
 // Removed maybeCompleteAuthSession() here to avoid affecting email/password flows
@@ -55,6 +56,7 @@ export function SignInModal({
   const { theme } = useTheme();
   const { signInWithPassword } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
+  const router = useRouter();
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -121,6 +123,10 @@ export function SignInModal({
         }
       }
       
+      // Navigate to protected area explicitly to avoid relying on global effect
+      try {
+        router.replace('/(app)/(protected)');
+      } catch {}
       onSuccess?.();
     } catch (error: any) {
       console.error("Error signing in:", error);

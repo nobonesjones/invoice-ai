@@ -58,6 +58,13 @@ export function AuthModal({
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
 
+  // Ensure sign-in modal closes on success to avoid getting "stuck"
+  const handleSignInSuccess = () => {
+    try { setShowSignIn(false); } catch {}
+    try { setShowSignUp(false); } catch {}
+    onSuccess?.();
+  };
+
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
     player.loop = true;
@@ -380,7 +387,7 @@ export function AuthModal({
           }
         }}
         plan={plan}
-        onSuccess={onSuccess}
+        onSuccess={handleSignInSuccess}
       />
     </>
   );
