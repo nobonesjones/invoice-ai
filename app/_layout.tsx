@@ -3,6 +3,7 @@ import "../global.css";
 
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Slot, useRouter, useSegments } from "expo-router";
+import * as Linking from 'expo-linking';
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Host } from "react-native-portalize";
@@ -15,6 +16,7 @@ import { UsageProvider } from "@/context/usage-provider";
 import { OnboardingProvider } from "@/context/onboarding-provider";
 import { PaywallProvider } from "@/context/paywall-provider";
 import { SuperwallProvider } from "expo-superwall";
+import { supabase } from "@/config/supabase";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
 // Inner component to access theme and supabase context
@@ -126,7 +128,49 @@ function RootLayoutNav() {
 			// console.log("[Auth Effect] Redirecting to /(auth)/onboarding-1"); // Log redirection case 2
 			router.replace("/(auth)/onboarding-1");
 		}
-	}, [initialized, session, segments]);
+}, [initialized, session, segments]);
+
+  // Global deep link handler to catch OAuth callbacks even if WebBrowser handler misses
+  useEffect(() => {
+    const sub = Linking.addEventListener('url', async (event) => {
+      try {
+        const url = event.url || '';
+        if (!url || !url.startsWith('superinvoice://')) return;
+        const parts = url.includes('#') ? url.split('#') : url.split('?');
+        const tokenString = parts[1] || '';
+        const params = new URLSearchParams(tokenString);
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        const code = params.get('code');
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+        } else if (code) {
+          await supabase.auth.exchangeCodeForSession({ authCode: code });
+        } else {
+          return;
+        }
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData?.session?.user?.id;
+        if (userId) {
+          try {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('onboarding_completed')
+              .eq('id', userId)
+              .maybeSingle();
+            if (profile?.onboarding_completed) {
+              router.replace('/(app)/(protected)');
+            } else {
+              router.replace('/(auth)/onboarding-1');
+            }
+          } catch {
+            router.replace('/(auth)/onboarding-1');
+          }
+        }
+      } catch {}
+    });
+    return () => { try { sub.remove(); } catch {} };
+  }, []);
 
 	// Render the current route using Slot
 	// Navigation is handled by the useEffect above
