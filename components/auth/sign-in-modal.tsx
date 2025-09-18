@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -54,7 +54,7 @@ export function SignInModal({
   onSuccess 
 }: SignInModalProps) {
   const { theme } = useTheme();
-  const { signInWithPassword } = useSupabase();
+  const { signInWithPassword, session } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
   const router = useRouter();
   
@@ -166,6 +166,7 @@ export function SignInModal({
           data.url,
           OAUTH_REDIRECT,
         );
+        console.log('[Google SignIn] WebBrowser result:', { type: result.type, hasUrl: !!(result as any).url });
         if (result.type === "success" && result.url) {
           const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
           const tokenString = urlParts[1] || '';
@@ -195,6 +196,7 @@ export function SignInModal({
 
           // Get the user ID from the session, save onboarding data (non-blocking), and route explicitly
           const { data: sessionData } = await supabase.auth.getSession();
+          console.log('[Google SignIn] Session after success URL:', !!sessionData?.session);
           const userId = sessionData?.session?.user?.id;
           if (userId) {
             // Fire-and-forget save; don't block navigation
@@ -224,6 +226,7 @@ export function SignInModal({
         // Fallback: even if result wasn't "success", the callback route may have set the session
         try {
           const { data: postSession } = await supabase.auth.getSession();
+          console.log('[Google SignIn] Session after dismiss:', !!postSession?.session);
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
@@ -249,6 +252,7 @@ export function SignInModal({
         // No URL returned; check if session already exists (callback route might have handled it)
         try {
           const { data: postSession } = await supabase.auth.getSession();
+          console.log('[Google SignIn] No URL; session exists?:', !!postSession?.session);
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
@@ -285,6 +289,36 @@ export function SignInModal({
       setIsGoogleLoading(false);
     }
   };
+
+  // Session watcher: if a session appears while this modal is visible (e.g., callback set it), route out immediately
+  useEffect(() => {
+    const run = async () => {
+      try {
+        if (!visible) return;
+        const { data } = await supabase.auth.getSession();
+        if (!data?.session) return;
+        const userId = data.session.user?.id;
+        if (!userId) return;
+        try { await saveOnboardingData(userId); } catch {}
+        try {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('onboarding_completed')
+            .eq('id', userId)
+            .maybeSingle();
+          if (profile?.onboarding_completed) {
+            router.replace('/(app)/(protected)');
+          } else {
+            router.replace('/(auth)/onboarding-1');
+          }
+        } catch {
+          router.replace('/(auth)/onboarding-1');
+        }
+        onSuccess?.();
+      } catch {}
+    };
+    run();
+  }, [visible, session]);
 
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
