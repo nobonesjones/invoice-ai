@@ -24,6 +24,7 @@ import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
+import { useRouter } from 'expo-router';
 import { SignUpModal } from "./sign-up-modal";
 import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { SignInModal } from "./sign-in-modal";
@@ -50,6 +51,7 @@ export function AuthModal({
   const { theme } = useTheme();
   const { session } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
+  const router = useRouter();
   
   const [showSignUp, setShowSignUp] = useState(initialMode === 'signup');
   const [showSignIn, setShowSignIn] = useState(initialMode === 'signin');
@@ -137,6 +139,21 @@ export function AuthModal({
               console.error('[AuthModal] Error saving onboarding data:', error);
               // Don't block the flow if onboarding data save fails
             }
+          }
+          // Route based on onboarding status
+          try {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('onboarding_completed')
+              .eq('id', sessionData?.session?.user?.id)
+              .maybeSingle();
+            if (profile?.onboarding_completed) {
+              router.replace('/(app)/(protected)');
+            } else {
+              router.replace('/(auth)/onboarding-1');
+            }
+          } catch {
+            router.replace('/(auth)/onboarding-1');
           }
           onSuccess?.();
         }

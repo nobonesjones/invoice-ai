@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
+// Note: Avoid completing OAuth sessions in email-only flows to prevent interference
 import * as WebBrowser from "expo-web-browser";
 import { z } from "zod";
 
@@ -26,7 +27,7 @@ import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
 import { OAUTH_REDIRECT } from "@/utils/oauth";
 
-WebBrowser.maybeCompleteAuthSession();
+// Removed maybeCompleteAuthSession() here to avoid affecting email/password flows
 
 const signInSchema = z.object({
   email: z.string().email("Please enter a valid email address"),

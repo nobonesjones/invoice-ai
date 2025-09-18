@@ -134,10 +134,24 @@ export default function OnboardingScreen1() {
             } catch (error) {
               console.error('[Onboarding] Error saving onboarding data:', error);
             }
+            // Route appropriately
+            try {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', sessionData.session.user.id)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
+            }
+          } else {
+            router.replace('/(auth)/onboarding-1');
           }
-
-          console.log('[Onboarding] Navigating to onboarding-2 after Google signup');
-          router.push("/(auth)/onboarding-2");
         }
       }
     } catch (err) {
