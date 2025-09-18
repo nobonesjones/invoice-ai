@@ -105,7 +105,7 @@ export function AuthModal({
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          skipBrowserRedirect: true,
+          skipBrowserRedirect: false,
           redirectTo: OAUTH_REDIRECT,
           queryParams: {
             access_type: 'offline',
@@ -124,76 +124,7 @@ export function AuthModal({
         return;
       }
 
-      if (data?.url) {
-        console.log("OAuth URL from Supabase:", data.url);
-        
-        // Use the original approach - the token extraction should handle localhost redirects
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          OAUTH_REDIRECT,
-        );
-        
-        console.log("WebBrowser result:", result);
-        
-        if (result.type === "success" && result.url) {
-          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
-          const tokenString = urlParts[1] || '';
-          const params = new URLSearchParams(tokenString);
-
-          const access_token = params.get('access_token');
-          const refresh_token = params.get('refresh_token');
-          const code = params.get('code');
-
-          if (access_token && refresh_token) {
-            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
-            if (setError) {
-              console.error('Error setting session manually:', setError);
-              Alert.alert('Session Error', 'Could not set user session.');
-              return;
-            }
-          } else if (code) {
-            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
-            if (exchangeError) {
-              console.error('Error exchanging code for session:', exchangeError);
-              Alert.alert('Authentication Error', 'Could not complete sign-in.');
-              return;
-            }
-          } else {
-            Alert.alert('Authentication Error', 'No tokens or code found in redirect.');
-            return;
-          }
-
-          const { data: sessionData } = await supabase.auth.getSession();
-          if (sessionData?.session?.user?.id) {
-            try {
-              await saveOnboardingData(sessionData.session.user.id);
-              console.log('[AuthModal] Onboarding data saved after Google auth');
-            } catch (error) {
-              console.error('[AuthModal] Error saving onboarding data:', error);
-              // Don't block the flow if onboarding data save fails
-            }
-          }
-          // Route based on onboarding status
-          try {
-            // Close any open auth modals before navigating
-            try { setShowSignIn(false); } catch {}
-            try { setShowSignUp(false); } catch {}
-            const { data: profile } = await supabase
-              .from('user_profiles')
-              .select('onboarding_completed')
-              .eq('id', sessionData?.session?.user?.id)
-              .maybeSingle();
-            if (profile?.onboarding_completed) {
-              router.replace('/(app)/(protected)');
-            } else {
-              router.replace('/(auth)/onboarding-1');
-            }
-          } catch {
-            router.replace('/(auth)/onboarding-1');
-          }
-          onSuccess?.();
-        }
-      } else {
+      if (!data?.url) {
         Alert.alert("Authentication Error", "Could not get authentication URL.");
       }
     } catch (catchError: any) {
