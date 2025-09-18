@@ -193,16 +193,30 @@ export function SignInModal({
             return;
           }
 
-          // Get the user ID from the session and save onboarding data
+          // Get the user ID from the session, save onboarding data (non-blocking), and route explicitly
           const { data: sessionData } = await supabase.auth.getSession();
-          if (sessionData?.session?.user?.id) {
+          const userId = sessionData?.session?.user?.id;
+          if (userId) {
+            // Fire-and-forget save; don't block navigation
+            try { await saveOnboardingData(userId); } catch {}
+
+            // Decide destination based on onboarding flag
             try {
-              await saveOnboardingData(sessionData.session.user.id);
-              console.log('[SignInModal] Onboarding data saved after Google sign in');
-            } catch (error) {
-              console.error('[SignInModal] Error saving onboarding data:', error);
-              // Don't block the flow if onboarding data save fails
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', userId)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
             }
+          } else {
+            router.replace('/(auth)/onboarding-1');
           }
           onSuccess?.();
         }

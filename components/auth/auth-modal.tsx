@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -64,6 +64,14 @@ export function AuthModal({
     try { setShowSignUp(false); } catch {}
     onSuccess?.();
   };
+
+  // Close any auth UI if a session exists (covers Google return via callback route)
+  useEffect(() => {
+    if (session) {
+      try { setShowSignIn(false); } catch {}
+      try { setShowSignUp(false); } catch {}
+    }
+  }, [session]);
 
   const handleSignUpSuccess = async () => {
     try { setShowSignUp(false); } catch {}
