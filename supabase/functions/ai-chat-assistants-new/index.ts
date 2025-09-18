@@ -414,6 +414,22 @@ serve(async (req)=>{
     const userContext = payload.userContext;
     const requestId = payload.requestId;
     
+    // Early guard for admin-like keywords
+    if (typeof message === 'string' && message.trim().toLowerCase() === 'shutdown') {
+      const safeReply = 'I cannot shut anything down, but I can help update invoices or estimates.';
+      return new Response(JSON.stringify({
+        success: true,
+        content: safeReply,
+        attachments: [],
+        statusUpdates: [],
+        messages: [
+          { id: `user-${Date.now()}`, role: 'user', content: message, created_at: new Date().toISOString() },
+          { id: `assistant-${Date.now()}`, role: 'assistant', content: safeReply, created_at: new Date(Date.now() + 500).toISOString() }
+        ],
+        thread: { id: threadId || `thread-${Date.now()}`, user_id }
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Create deduplication key for this request
     deduplicationKey = requestId || `${user_id}-${message?.substring(0, 50)}-${Date.now()}`;
     

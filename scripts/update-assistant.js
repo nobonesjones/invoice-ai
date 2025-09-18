@@ -135,6 +135,17 @@ ALWAYS DO THIS (Parallel):
 
 This makes operations 3-5x faster. Users notice the difference.
 
+TAX & CURRENCY RULES (GLOBAL vs INVOICE):
+• Global business settings (affects all future invoices):
+  - Use update_business_settings for tax_number, tax_name, default_tax_rate, auto_apply_tax
+  - Use set_currency(currency_code) to change currency (e.g., GBP, USD, EUR). Never write currency to notes.
+  - Map names to codes: "British Pounds"/"Pounds"→GBP, "US Dollars"→USD, "Euros"→EUR
+• This invoice only:
+  - Use update_invoice(tax_rate: 20) to change VAT rate on the current invoice
+• Combined request example: "Add VAT and change currency to British Pounds"
+  - Call set_currency(currency_code: "GBP") then update_invoice(invoice_identifier: "latest", tax_rate: 20)
+  - Then show the updated invoice
+
 🚨 DOCUMENT TYPE AWARENESS - CRITICAL:
 NEVER MIX DOCUMENT TYPES: Each document type has specific functions that must be used.
 
@@ -355,6 +366,23 @@ When the user indicates you made an error or corrected you:
 • Never ignore or argue with corrections - immediately acknowledge and fix them`,
   model: "gpt-4o-mini",
   tools: [
+    {
+      type: "function",
+      function: {
+        name: "set_currency",
+        description: "Set the default business currency (affects new invoices). Use 3-letter currency codes (e.g., GBP, USD, EUR).",
+        parameters: {
+          type: "object",
+          properties: {
+            currency_code: {
+              type: "string",
+              description: "Three-letter ISO currency code (e.g., GBP, USD, EUR)"
+            }
+          },
+          required: ["currency_code"]
+        }
+      }
+    },
     {
       type: "function",
       function: {

@@ -24,6 +24,7 @@ import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
+import { OAUTH_REDIRECT } from "@/utils/oauth";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -136,11 +137,10 @@ export function SignInModal({
     setIsGoogleLoading(true);
     
     try {
-      const explicitRedirectTo = "expo-supabase-starter://oauth/callback";
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: explicitRedirectTo,
+          redirectTo: OAUTH_REDIRECT,
         },
       });
 
@@ -157,40 +157,47 @@ export function SignInModal({
       if (data?.url) {
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          explicitRedirectTo,
+          OAUTH_REDIRECT,
         );
         if (result.type === "success" && result.url) {
-          const params = new URLSearchParams(result.url.split("#")[1]);
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
+          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
+          const tokenString = urlParts[1] || '';
+          const params = new URLSearchParams(tokenString);
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          const code = params.get('code');
+
           if (access_token && refresh_token) {
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
+            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
             if (setError) {
-              console.error("Error setting session manually:", setError);
-              Alert.alert("Session Error", "Could not set user session.");
-            } else {
-              // Get the user ID from the session and save onboarding data
-              const { data: sessionData } = await supabase.auth.getSession();
-              if (sessionData?.session?.user?.id) {
-                try {
-                  await saveOnboardingData(sessionData.session.user.id);
-                  console.log('[SignInModal] Onboarding data saved after Google sign in');
-                } catch (error) {
-                  console.error('[SignInModal] Error saving onboarding data:', error);
-                  // Don't block the flow if onboarding data save fails
-                }
-              }
-              onSuccess?.();
+              console.error('Error setting session manually:', setError);
+              Alert.alert('Session Error', 'Could not set user session.');
+              return;
+            }
+          } else if (code) {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError);
+              Alert.alert('Sign In Error', 'Could not complete sign-in.');
+              return;
             }
           } else {
-            Alert.alert(
-              "Sign In Error",
-              "Could not process authentication response.",
-            );
+            Alert.alert('Sign In Error', 'No tokens or code found in redirect.');
+            return;
           }
+
+          // Get the user ID from the session and save onboarding data
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user?.id) {
+            try {
+              await saveOnboardingData(sessionData.session.user.id);
+              console.log('[SignInModal] Onboarding data saved after Google sign in');
+            } catch (error) {
+              console.error('[SignInModal] Error saving onboarding data:', error);
+              // Don't block the flow if onboarding data save fails
+            }
+          }
+          onSuccess?.();
         }
       } else {
         Alert.alert("Sign In Error", "Could not get authentication URL.");

@@ -25,6 +25,7 @@ import { SignUpModal } from "@/components/auth/sign-up-modal";
 import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarousel";
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from "@/config/supabase";
+import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { useOnboarding } from "@/context/onboarding-provider";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -67,6 +68,7 @@ export default function OnboardingScreen1() {
         provider: "google",
         options: {
           skipBrowserRedirect: true,
+          redirectTo: OAUTH_REDIRECT,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -89,48 +91,53 @@ export default function OnboardingScreen1() {
         
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          "superinvoice://oauth/callback",
+          OAUTH_REDIRECT,
         );
         
         console.log("WebBrowser result:", result);
         
-        if (result.type === "success" && result.url && result.url.includes("access_token")) {
-          console.log("Got auth tokens from redirect URL:", result.url);
-          
-          const urlParts = result.url.includes('#') ? result.url.split("#") : result.url.split("?");
-          const tokenString = urlParts[1] || urlParts[0];
+        if (result.type === "success" && result.url) {
+          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
+          const tokenString = urlParts[1] || '';
           const params = new URLSearchParams(tokenString);
-          
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
+
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          const code = params.get('code');
+
           if (access_token && refresh_token) {
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
+            // Implicit flow: set the session directly
+            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
             if (setError) {
-              console.error("Error setting session manually:", setError);
-              Alert.alert("Session Error", "Could not set user session.");
-            } else {
-              const { data: sessionData } = await supabase.auth.getSession();
-              if (sessionData?.session?.user?.id) {
-                try {
-                  await saveOnboardingData(sessionData.session.user.id);
-                  console.log('[Onboarding] Onboarding data saved after Google auth');
-                } catch (error) {
-                  console.error('[Onboarding] Error saving onboarding data:', error);
-                }
-              }
-              // Navigate to onboarding-2 to continue the signup flow
-              console.log('[Onboarding] Navigating to onboarding-2 after Google signup');
-              router.push("/(auth)/onboarding-2");
+              console.error('Error setting session manually:', setError);
+              Alert.alert('Session Error', 'Could not set user session.');
+              return;
+            }
+          } else if (code) {
+            // PKCE code flow: exchange code for session
+            const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError);
+              Alert.alert('Authentication Error', 'Could not complete sign-in.');
+              return;
             }
           } else {
-            Alert.alert(
-              "Authentication Error",
-              "Could not process authentication response.",
-            );
+            Alert.alert('Authentication Error', 'No tokens or code found in redirect.');
+            return;
           }
+
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user?.id) {
+            try {
+              await saveOnboardingData(sessionData.session.user.id);
+              console.log('[Onboarding] Onboarding data saved after Google auth');
+            } catch (error) {
+              console.error('[Onboarding] Error saving onboarding data:', error);
+            }
+          }
+
+          console.log('[Onboarding] Navigating to onboarding-2 after Google signup');
+          router.push("/(auth)/onboarding-2");
         }
       }
     } catch (err) {

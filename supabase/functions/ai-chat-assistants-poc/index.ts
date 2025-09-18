@@ -260,15 +260,9 @@ async function getInvoiceCreationContext(supabase, userId) {
     // Single optimized query to get business settings + latest invoice patterns
     const { data: contextData } = await supabase.from('business_settings').select(`
         default_tax_rate,
-        tax_label,
-        currency,
+        tax_name,
+        currency_code,
         payment_terms_days,
-        stripe_enabled,
-        paypal_enabled,
-        bank_transfer_enabled,
-        venmo_enabled,
-        cash_app_enabled,
-        zelle_enabled,
         invoice_reference_format,
         default_invoice_design
       `).eq('user_id', userId).single();
@@ -293,12 +287,12 @@ async function getInvoiceCreationContext(supabase, userId) {
     }
     // Compact context format
     let context = '\n\nINVOICE CREATION CONTEXT:\n';
-    context += `TAX: ${recent?.tax_rate || bs?.default_tax_rate || 0}% (${bs?.tax_label || 'Tax'}) | `;
+    context += `TAX: ${recent?.tax_rate || bs?.default_tax_rate || 0}% (${bs?.tax_name || 'Tax'}) | `;
     context += `PAYMENTS_AVAILABLE: ${availablePayments.join(',') || 'none'} | `;
     context += `USER_TYPICALLY_ENABLES: ${typicallyUsed.join(',') || 'none'} | `;
     context += `DESIGN: ${recent?.invoice_design || bs?.default_invoice_design || 'clean'} | `;
     context += `TERMS: ${recent?.payment_terms_days || bs?.payment_terms_days || 30}days | `;
-    context += `FORMAT: ${bs?.invoice_reference_format || 'INV-001'}\n`;
+    context += `FORMAT: ${bs?.invoice_reference_format || 'INV-001'} | CURRENCY_CODE: ${bs?.currency_code || 'USD'}\n`;
     context += '\nCRITICAL PAYMENT METHOD RULES:\n';
     context += '⚠️  NEVER enable payment methods that are NOT in PAYMENTS_AVAILABLE list above\n';
     context += '⚠️  If PAYMENTS_AVAILABLE shows "none" - DO NOT enable any payment methods\n';
@@ -477,6 +471,24 @@ serve(async (req)=>{
     const requestId = payload.requestId;
     // Initialize status updates for this request
     globalThis.statusUpdates = [];
+
+    // Guard: safely handle admin-like keywords without invoking tools
+    if (typeof message === 'string' && message.trim().toLowerCase() === 'shutdown') {
+      const safeReply = 'I can’t shut anything down, but I can help with invoices. Want me to update the latest one?';
+      return new Response(JSON.stringify({
+        success: true,
+        content: safeReply,
+        attachments: [],
+        statusUpdates: globalThis.statusUpdates || [],
+        messages: [
+          { id: `user-${Date.now()}`, role: 'user', content: message, created_at: new Date().toISOString() },
+          { id: `assistant-${Date.now()}`, role: 'assistant', content: safeReply, created_at: new Date(Date.now() + 500).toISOString() }
+        ],
+        thread: { id: threadId || `thread-${Date.now()}`, user_id }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     
     // Create deduplication key for this request
     const deduplicationKey1 = requestId || `${user_id}-${message?.substring(0, 50)}-${Date.now()}`;
@@ -3797,7 +3809,7 @@ Let me know if you'd like any changes?`;
       }
       if (name === 'update_business_settings') {
         await sendStatusUpdate('Updating business settings', '⚙️');
-        const { business_name, business_address, business_phone, business_email, business_website, tax_number, tax_name, default_tax_rate, auto_apply_tax } = parsedArgs;
+        const { business_name, business_address, business_phone, business_email, business_website, tax_number, tax_name, default_tax_rate, auto_apply_tax, currency_code } = parsedArgs;
         console.log('[Assistants POC] Updating business settings:', parsedArgs);
         // Build update object with only provided fields - using correct column names from business_settings table
         const updateData = {
@@ -3812,6 +3824,7 @@ Let me know if you'd like any changes?`;
         if (tax_name !== undefined) updateData.tax_name = tax_name;
         if (default_tax_rate !== undefined) updateData.default_tax_rate = default_tax_rate;
         if (auto_apply_tax !== undefined) updateData.auto_apply_tax = auto_apply_tax;
+        if (currency_code !== undefined) updateData.currency_code = String(currency_code).toUpperCase();
         // 🚨 CRITICAL FIX: Update business_settings table, not profiles table!
         const { data: settings, error: settingsError } = await supabase.from('business_settings').update(updateData).eq('user_id', user_id).select().single();
         if (settingsError) {
@@ -3830,6 +3843,7 @@ Let me know if you'd like any changes?`;
         if (tax_name) successMessage += `\n• Tax label: ${tax_name}`;
         if (default_tax_rate !== undefined) successMessage += `\n• Default tax rate: ${default_tax_rate}%`;
         if (auto_apply_tax !== undefined) successMessage += `\n• Auto-apply tax: ${auto_apply_tax ? 'Enabled' : 'Disabled'}`;
+        if (currency_code) successMessage += `\n• Currency: ${String(currency_code).toUpperCase()}`;
         // 🔥 CRITICAL: Show updated invoice/estimate with new business settings
         const lastAction = ConversationMemory.getLastAction(user_id);
         console.log('[update_business_settings] Last action:', lastAction);
@@ -3861,6 +3875,41 @@ Let me know if you'd like any changes?`;
           }
         }
         return successMessage;
+      }
+
+      if (name === 'set_currency') {
+        await sendStatusUpdate('Updating currency', '💱');
+        const { currency_code } = parsedArgs;
+        if (!currency_code || typeof currency_code !== 'string' || currency_code.length !== 3) {
+          return 'Please provide a valid 3-letter currency code (e.g., GBP, USD, EUR).';
+        }
+        const code = currency_code.toUpperCase();
+        const { error: curErr } = await supabase
+          .from('business_settings')
+          .update({ currency_code: code, updated_at: new Date().toISOString() })
+          .eq('user_id', user_id);
+        if (curErr) {
+          console.error('[set_currency] Update error:', curErr);
+          return `Error updating currency: ${curErr.message}`;
+        }
+        // Try to attach latest invoice so UI reflects new symbol
+        const { data: recentInvoice } = await supabase
+          .from('invoices')
+          .select('*, client:clients(*)')
+          .eq('user_id', user_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (recentInvoice) {
+          const { data: lineItems } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', recentInvoice.id)
+            .order('created_at', { ascending: true });
+          const invoiceAttachment = await createInvoiceAttachment(recentInvoice, lineItems || [], recentInvoice.client);
+          setLatestInvoice(invoiceAttachment);
+        }
+        return `✅ Currency set to ${code}.`;
       }
       if (name === 'enable_payment_methods') {
         const { invoice_number, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs;
@@ -6330,8 +6379,14 @@ To change colors, just say:
     
     // Clean up request tracking on error
     if (globalThis.processingRequests) {
-      globalThis.processingRequests.delete(deduplicationKey);
-      console.log('[Assistants POC] 🧹 Cleaned up error request:', deduplicationKey);
+      try {
+        // Use the scoped key used in this handler
+        // @ts-ignore - best effort cleanup
+        if (typeof deduplicationKey1 !== 'undefined') {
+          globalThis.processingRequests.delete(deduplicationKey1);
+          console.log('[Assistants POC] 🧹 Cleaned up error request:', deduplicationKey1);
+        }
+      } catch {}
     }
     return new Response(JSON.stringify({
       error: error.message,
