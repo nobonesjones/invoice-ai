@@ -219,8 +219,57 @@ export function SignInModal({
             router.replace('/(auth)/onboarding-1');
           }
           onSuccess?.();
+          return;
         }
+        // Fallback: even if result wasn't "success", the callback route may have set the session
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', userId)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
+            }
+            onSuccess?.();
+            return;
+          }
+        } catch {}
       } else {
+        // No URL returned; check if session already exists (callback route might have handled it)
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', userId)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
+            }
+            onSuccess?.();
+            return;
+          }
+        } catch {}
         Alert.alert("Sign In Error", "Could not get authentication URL.");
       }
     } catch (catchError: any) {
