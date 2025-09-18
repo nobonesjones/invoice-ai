@@ -65,6 +65,32 @@ export function AuthModal({
     onSuccess?.();
   };
 
+  const handleSignUpSuccess = async () => {
+    try { setShowSignUp(false); } catch {}
+    try { setShowSignIn(false); } catch {}
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('onboarding_completed')
+          .eq('id', userId)
+          .maybeSingle();
+        if (profile?.onboarding_completed) {
+          router.replace('/(app)/(protected)');
+        } else {
+          router.replace('/(auth)/onboarding-1');
+        }
+      } else {
+        router.replace('/(auth)/onboarding-1');
+      }
+    } catch {
+      router.replace('/(auth)/onboarding-1');
+    }
+    onSuccess?.();
+  };
+
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
     player.loop = true;
@@ -371,7 +397,7 @@ export function AuthModal({
           setShowSignIn(true);
         }}
         plan={plan}
-        onSuccess={onSuccess}
+        onSuccess={handleSignUpSuccess}
       />
 
       {/* Sign In Modal */}

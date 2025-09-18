@@ -73,6 +73,8 @@ function RootLayoutNav() {
 
     // Detect onboarding routes inside (auth)
     const isOnboardingRoute = segments[0] === '(auth)' && segments.length >= 2 && String(segments[1] || '').startsWith('onboarding');
+    // Treat both (auth) and (app)/(auth) as auth groups for redirect purposes
+    const inAnyAuthGroup = inAuthGroup || inAppAuthGroup;
 
 		const isInProtectedGroup = inAppProtectedRoute;
 
@@ -106,7 +108,7 @@ function RootLayoutNav() {
     );
 
     const shouldGoProtected = !!session && (
-      (inAuthGroup && !isOnboardingRoute) ||
+      (inAnyAuthGroup && !isOnboardingRoute) ||
       (!inAuthGroup && !inAllowedAppScreens)
     );
 
