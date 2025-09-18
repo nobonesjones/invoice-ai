@@ -91,24 +91,26 @@ function RootLayoutNav() {
     // console.log("[Auth Effect] isPaymentOptionsScreen:", isPaymentOptionsScreen);
     // console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
 
-    if (session && 
-        (
-          // If session exists but we're still in auth group (e.g., sign-in/up screens), move to protected
-          (inAuthGroup && !isOnboardingRoute) ||
-          // Or if not in auth group and not already in allowed app-level screens
-          (!inAuthGroup &&
-        !inAppProtectedRoute && 
-        !inPublicGroup &&
-        !isAccountDetailsScreen &&
-        !isBusinessInformationScreen &&
-        !isInvoiceSettingsScreen &&
-        !isTaxCurrencyScreen &&
-        !isAppLanguageScreen &&
-        !isCustomerSupportScreen &&
-        !isPaymentOptionsScreen &&
-        !isPaymentRemindersScreen &&
-        !isSoftPaywallScreen)
-        ) { 
+    const inAllowedAppScreens = (
+      inAppProtectedRoute ||
+      isAccountDetailsScreen ||
+      isBusinessInformationScreen ||
+      isInvoiceSettingsScreen ||
+      isTaxCurrencyScreen ||
+      isAppLanguageScreen ||
+      isCustomerSupportScreen ||
+      isPaymentOptionsScreen ||
+      isPaymentRemindersScreen ||
+      isSoftPaywallScreen ||
+      inPublicGroup
+    );
+
+    const shouldGoProtected = !!session && (
+      (inAuthGroup && !isOnboardingRoute) ||
+      (!inAuthGroup && !inAllowedAppScreens)
+    );
+
+    if (shouldGoProtected) { 
       // User is logged in but not in the main protected area OR any allowed app-level screens.
       // Redirect to the main protected route (e.g., home screen).
       // console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
