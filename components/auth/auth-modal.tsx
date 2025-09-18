@@ -175,6 +175,9 @@ export function AuthModal({
           }
           // Route based on onboarding status
           try {
+            // Close any open auth modals before navigating
+            try { setShowSignIn(false); } catch {}
+            try { setShowSignUp(false); } catch {}
             const { data: profile } = await supabase
               .from('user_profiles')
               .select('onboarding_completed')
