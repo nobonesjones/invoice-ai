@@ -105,7 +105,7 @@ export function AuthModal({
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          skipBrowserRedirect: false,
+          skipBrowserRedirect: true,
           redirectTo: OAUTH_REDIRECT,
           queryParams: {
             access_type: 'offline',
@@ -124,7 +124,67 @@ export function AuthModal({
         return;
       }
 
-      if (!data?.url) {
+      if (data?.url) {
+        // Open system browser; deep link returns to app
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          OAUTH_REDIRECT,
+        );
+        if (result.type === 'success' && result.url) {
+          // Extract tokens or code from result URL (handles both # and ? styles)
+          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
+          const tokenString = urlParts[1] || '';
+          const params = new URLSearchParams(tokenString);
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          const code = params.get('code');
+
+          if (access_token && refresh_token) {
+            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
+            if (setError) {
+              console.error('Error setting session manually:', setError);
+              Alert.alert('Session Error', 'Could not set user session.');
+              return;
+            }
+          } else if (code) {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError);
+              Alert.alert('Authentication Error', 'Could not complete sign-in.');
+              return;
+            }
+          } else {
+            // Callback route will handle if needed
+          }
+
+          // Close modals before routing
+          try { setShowSignIn(false); } catch {}
+          try { setShowSignUp(false); } catch {}
+
+          // Decide onboarding vs protected
+          const { data: sessionData } = await supabase.auth.getSession();
+          const userId = sessionData?.session?.user?.id;
+          if (userId) {
+            try {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', userId)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
+            }
+          } else {
+            router.replace('/(auth)/onboarding-1');
+          }
+          onSuccess?.();
+        }
+      } else {
         Alert.alert("Authentication Error", "Could not get authentication URL.");
       }
     } catch (catchError: any) {
