@@ -30,6 +30,46 @@ async function sendStatusUpdate(status, emoji = '🤔') {
     timestamp: new Date().toISOString()
   });
 }
+
+// Resolve Assistant ID from env override or system_config table (with fallback + log)
+async function getAssistantIdFromConfig(supabase): Promise<string> {
+  const override = (globalThis as any).Deno?.env?.get?.('ASSISTANT_ID_OVERRIDE') || Deno.env.get('ASSISTANT_ID_OVERRIDE');
+  if (override && String(override).trim()) {
+    console.log('[Assistants POC] Using ASSISTANT_ID_OVERRIDE from env');
+    return String(override).trim();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('key', 'assistant_id')
+      .single();
+
+    if (error) {
+      console.error('[Assistants POC] Failed to read system_config.assistant_id:', error.message);
+      // Fallback to stable assistant if DB lookup fails (avoid hard crash in prod)
+      const fallback = "asst_U3mCSffTmk79xS43fSgMPwDe";
+      console.warn('[Assistants POC] Falling back to stable assistant ID:', fallback);
+      return fallback;
+    }
+    if (!data?.value) {
+      console.error('[Assistants POC] system_config row found but value is empty for key=assistant_id');
+      const fallback = "asst_U3mCSffTmk79xS43fSgMPwDe";
+      console.warn('[Assistants POC] Falling back to stable assistant ID:', fallback);
+      return fallback;
+    }
+
+    const id = String(data.value).trim();
+    console.log('[Assistants POC] Using assistant from DB:', id);
+    return id;
+  } catch (e) {
+    console.error('[Assistants POC] Unexpected error while resolving assistant_id:', e);
+    const fallback = "asst_U3mCSffTmk79xS43fSgMPwDe";
+    console.warn('[Assistants POC] Falling back to stable assistant ID:', fallback);
+    return fallback;
+  }
+}
 // Function to find invoice by identifier
 async function findInvoice(supabase, user_id, invoice_identifier) {
   try {
@@ -530,15 +570,8 @@ serve(async (req)=>{
     // Force create new assistant to ensure estimate tools are available
     const FORCE_NEW_ASSISTANT = false; // FIXED: Use existing assistant to maintain context
     const ALLOW_ASSISTANT_UPDATE = false; // Set to true temporarily when you need to update the assistant
-    // Force new assistant to get latest function definitions
-    // Get assistant ID from database
-    const { data: assistantConfig } = await supabase
-      .from('system_config')
-      .select('value')
-      .eq('key', 'assistant_id')
-      .single();
-    
-    const ASSISTANT_ID = assistantConfig?.value || "asst_U3mCSffTmk79xS43fSgMPwDe"; // Fallback to stable ID
+    // Resolve the assistant ID (env override -> DB -> fallback)
+    const ASSISTANT_ID = await getAssistantIdFromConfig(supabase);
     console.log('[ASSISTANTS POC] 🚨 FORCE_NEW_ASSISTANT FLAG IS:', FORCE_NEW_ASSISTANT);
     console.log('[ASSISTANTS POC] Using assistant ID:', ASSISTANT_ID);
     let assistant;
@@ -1418,6 +1451,35 @@ When the user indicates you made an error or corrected you:
                         description: "Whether to automatically apply tax to new invoices (optional)"
                       }
                     }
+                  }
+                }
+              },
+              {
+                type: "function",
+                function: {
+                  name: "update_tax_settings",
+                  description: "Update global tax settings for the business: default tax rate, tax label/name, tax/VAT number, and auto-apply toggle.",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      default_tax_rate: {
+                        type: "number",
+                        description: "Default tax rate percentage (e.g., 20 for 20%)"
+                      },
+                      tax_name: {
+                        type: "string",
+                        description: "Tax label/name (e.g., VAT, GST, Sales Tax)"
+                      },
+                      tax_number: {
+                        type: "string",
+                        description: "Business tax number (e.g., VAT number)"
+                      },
+                      auto_apply_tax: {
+                        type: "boolean",
+                        description: "Automatically apply tax to new invoices"
+                      }
+                    },
+                    required: []
                   }
                 }
               },
@@ -3591,8 +3653,16 @@ When the user indicates you made an error or corrected you:
           }
         }
         const after_discount = subtotal_amount - discount_amount;
-        // Calculate tax
-        const tax_rate = tax_percentage || 0;
+        // Fetch business settings to support default tax application
+        const { data: bsTax } = await supabase
+          .from('business_settings')
+          .select('default_tax_rate, auto_apply_tax')
+          .eq('user_id', user_id)
+          .maybeSingle();
+        // Calculate tax (auto-apply defaults if not provided)
+        const tax_rate = (typeof tax_percentage === 'number')
+          ? tax_percentage
+          : (bsTax?.auto_apply_tax ? (bsTax?.default_tax_rate || 0) : 0);
         const tax_amount = after_discount * (tax_rate / 100);
         // Calculate final total
         const total_amount = after_discount + tax_amount;
@@ -3602,7 +3672,11 @@ When the user indicates you made an error or corrected you:
         // Generate invoice number using sequential numbering
         const invoice_number = await ReferenceNumberService.generateNextReference(supabase, user_id, 'invoice');
         // Get user's business settings for default design and color
-        const { data: businessSettings } = await supabase.from('business_settings').select('default_invoice_design, default_accent_color').eq('user_id', user_id).single();
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('default_invoice_design, default_accent_color')
+          .eq('user_id', user_id)
+          .single();
         // Use user's defaults instead of hardcoded values
         const defaultDesign = businessSettings?.default_invoice_design || 'clean';
         const defaultColor = businessSettings?.default_accent_color || '#3B82F6';
@@ -3668,11 +3742,10 @@ When the user indicates you made an error or corrected you:
             clientId = newClient.id;
           }
         }
-        // Create comprehensive invoice in database
-        const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
+        // Create comprehensive invoice in database with retry on duplicate invoice_number
+        const baseInvoicePayload: any = {
           user_id: user_id,
           client_id: clientId,
-          invoice_number,
           request_id: deduplicationKey1,
           invoice_date: invoiceDate,
           due_date: invoiceDueDate,
@@ -3689,10 +3762,84 @@ When the user indicates you made an error or corrected you:
           invoice_design: invoice_design || defaultDesign,
           accent_color: accent_color || defaultColor,
           created_at: new Date().toISOString()
-        }).select().single();
+        };
+
+        let invoiceInsertNumber = invoice_number;
+        let invoiceRes = await supabase.from('invoices').insert({ ...baseInvoicePayload, invoice_number: invoiceInsertNumber }).select().single();
+        let invoice = invoiceRes.data;
+        let invoiceError = invoiceRes.error as any;
+        if (invoiceError && invoiceError.code === '23505' && String(invoiceError.message || '').includes('unique_user_invoice_number')) {
+          // Smart fallback: compute next from true max suffix across this user's invoices and estimates
+          try {
+            const invPromise = supabase
+              .from('invoices')
+              .select('invoice_number, created_at')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(500);
+            const estPromise = supabase
+              .from('estimates')
+              .select('estimate_number, created_at')
+              .eq('user_id', user_id)
+              .order('created_at', { ascending: false })
+              .limit(500);
+            const [{ data: invRows }, { data: estRows }] = await Promise.all([invPromise, estPromise]);
+            let maxSuffix = 0;
+            const updateMax = (val: string | null | undefined) => {
+              if (!val) return;
+              const m = String(val).match(/(\d+)$/);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                if (!Number.isNaN(n)) maxSuffix = Math.max(maxSuffix, n);
+              }
+            };
+            (invRows || []).forEach((r: any) => updateMax(r.invoice_number));
+            (estRows || []).forEach((r: any) => updateMax(r.estimate_number));
+            const mCur = (invoiceInsertNumber || '').match(/^(.*?)(\d+)$/);
+            if (mCur) {
+              const prefix = mCur[1];
+              const width = mCur[2].length;
+              const candidate = (maxSuffix + 1).toString().padStart(width, '0');
+              const smartNumber = `${prefix}${candidate}`;
+              console.warn('[create_invoice] Smart fallback picks next from global max:', smartNumber);
+              // Try once with smart number
+              const smartRes = await supabase
+                .from('invoices')
+                .insert({ ...baseInvoicePayload, invoice_number: smartNumber })
+                .select()
+                .single();
+              invoice = smartRes.data;
+              invoiceError = smartRes.error as any;
+              if (!invoiceError) {
+                invoiceInsertNumber = smartNumber;
+              } else {
+                // keep error; will fall through to incremental retries
+              }
+            }
+          } catch (e) {
+            console.warn('[create_invoice] Smart fallback failed, proceeding with incremental retries');
+          }
+          // Retry up to 4 times by incrementing numeric suffix
+          for (let attempt = 0; attempt < 4 && invoiceError; attempt++) {
+            console.warn('[create_invoice] Duplicate invoice_number detected, retry attempt', attempt + 1, 'for', invoiceInsertNumber);
+            const m = (invoiceInsertNumber || '').match(/^(.*?)(\d+)$/);
+            if (m) {
+              const width = m[2].length;
+              const nextNum = (parseInt(m[2], 10) + 1).toString().padStart(width, '0');
+              invoiceInsertNumber = `${m[1]}${nextNum}`;
+            } else {
+              invoiceInsertNumber = `${invoiceInsertNumber}-${Date.now().toString().slice(-4)}`;
+            }
+            const retryRes = await supabase.from('invoices').insert({ ...baseInvoicePayload, invoice_number: invoiceInsertNumber }).select().single();
+            invoice = retryRes.data;
+            invoiceError = retryRes.error as any;
+            if (!invoiceError) break;
+            if (!(invoiceError.code === '23505' && String(invoiceError.message || '').includes('unique_user_invoice_number'))) break;
+          }
+        }
         if (invoiceError) {
           // Check if this is a duplicate request error
-          if (invoiceError.code === '23505' && invoiceError.message.includes('idx_invoices_request_id')) {
+          if (invoiceError.code === '23505' && String(invoiceError.message || '').includes('idx_invoices_request_id')) {
             console.log(`[Instance ${INSTANCE_ID}] Duplicate request detected via database constraint, fetching existing invoice:`, deduplicationKey1);
             // Fetch the existing invoice created by the other instance
             const { data: existingInvoice, error: fetchError } = await supabase
@@ -3726,7 +3873,6 @@ When the user indicates you made an error or corrected you:
             
             console.log(`[Instance ${INSTANCE_ID}] Returning existing invoice ${existingInvoice.invoice_number} from duplicate request`);
             
-            // Return the existing invoice in the same format as a successful creation
             await sendStatusUpdate('Invoice ready', '✅');
             ConversationMemory.setLastAction(user_id, 'created_invoice', {
               invoice_number: existingInvoice.invoice_number,
@@ -3734,23 +3880,10 @@ When the user indicates you made an error or corrected you:
               invoice_id: existingInvoice.id,
               client_id: existingInvoice.client_id
             });
-            
-            InvoiceGate.setLatestInvoice(existingInvoice.invoice_number);
-            
-            return JSON.stringify({
-              success: true,
-              invoice_number: existingInvoice.invoice_number,
-              total_amount: existingInvoice.total_amount,
-              message: `✅ Invoice ${existingInvoice.invoice_number} ready`,
-              attachments: [{
-                type: 'invoice',
-                data: {
-                  ...existingInvoice,
-                  line_items: existingLineItems || [],
-                  client: clientData
-                }
-              }]
-            });
+            // Attach the existing invoice via gate for preview
+            const invoiceAttachment = await createInvoiceAttachment(existingInvoice, existingLineItems || [], clientData);
+            setLatestInvoice(invoiceAttachment);
+            return `✅ Invoice ${existingInvoice.invoice_number} ready`;
           }
           
           console.error('[Assistants POC] Invoice creation error:', invoiceError);
@@ -3786,8 +3919,28 @@ When the user indicates you made an error or corrected you:
             clientData = fullClient;
           }
         }
+        // Recompute totals from actual saved line items + discount + tax, then persist for accuracy
+        const rawSubtotal = (createdLineItems || []).reduce((sum, li) => sum + (li.total_price || 0), 0);
+        const dType = discount_type || null;
+        const dValue = discount_value || 0;
+        let afterDiscountCalc = rawSubtotal;
+        if (dType === 'percentage' && dValue > 0) afterDiscountCalc = rawSubtotal * (1 - (dValue / 100));
+        else if (dType === 'fixed' && dValue > 0) afterDiscountCalc = Math.max(rawSubtotal - dValue, 0);
+        const finalTotalCalc = afterDiscountCalc + (afterDiscountCalc * (tax_rate / 100));
+        await supabase.from('invoices').update({
+          subtotal_amount: rawSubtotal,
+          total_amount: finalTotalCalc
+        }).eq('id', invoice.id).eq('user_id', user_id);
+
+        // Refetch updated invoice for accurate attachment
+        const { data: updatedInvoiceCalc } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('id', invoice.id)
+          .single();
+
         // Store attachment for UI with full client data
-        const invoiceAttachment = await createInvoiceAttachment(invoice, createdLineItems, clientData);
+        const invoiceAttachment = await createInvoiceAttachment(updatedInvoiceCalc || invoice, createdLineItems, clientData);
         setLatestInvoice(invoiceAttachment);
         // 🚨 CONVERSATION MEMORY - Track that we just created this invoice
         ConversationMemory.setLastAction(user_id, 'created_invoice', {
@@ -3877,6 +4030,107 @@ Let me know if you'd like any changes?`;
         return successMessage;
       }
 
+      if (name === 'update_tax_settings') {
+        await sendStatusUpdate('Updating tax settings', '🧾');
+        const { tax_name, default_tax_rate, auto_apply_tax, tax_number } = parsedArgs;
+        console.log('[Assistants POC] Updating tax settings:', parsedArgs);
+
+        const updateData: any = { updated_at: new Date().toISOString() };
+        if (tax_name !== undefined) updateData.tax_name = tax_name;
+        if (default_tax_rate !== undefined) updateData.default_tax_rate = default_tax_rate;
+        if (auto_apply_tax !== undefined) updateData.auto_apply_tax = auto_apply_tax;
+        if (tax_number !== undefined) updateData.tax_number = tax_number;
+
+        const { error: settingsError } = await supabase
+          .from('business_settings')
+          .update(updateData)
+          .eq('user_id', user_id);
+
+        if (settingsError) {
+          console.error('[update_tax_settings] Update error:', settingsError);
+          return `Error updating tax settings: ${settingsError.message}`;
+        }
+
+        let successMessage = '✅ Tax settings updated:';
+        if (tax_name !== undefined) successMessage += `\n• Tax label: ${tax_name}`;
+        if (default_tax_rate !== undefined) successMessage += `\n• Default tax rate: ${default_tax_rate}%`;
+        if (auto_apply_tax !== undefined) successMessage += `\n• Auto-apply tax: ${auto_apply_tax ? 'Enabled' : 'Disabled'}`;
+        if (tax_number !== undefined) successMessage += `\n• Tax number: ${tax_number}`;
+
+        // Try to attach latest invoice so UI reflects new label/rate
+        const { data: recentInvoice } = await supabase
+          .from('invoices')
+          .select('*, client:clients(*)')
+          .eq('user_id', user_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (recentInvoice) {
+          const { data: lineItems } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', recentInvoice.id)
+            .order('created_at', { ascending: true });
+
+          // Recalculate totals and decide whether to apply new default tax to this invoice
+          const rawSubtotal = (lineItems || []).reduce((sum, li) => sum + (li.total_price || 0), 0);
+          const discountType = recentInvoice.discount_type || null;
+          const discountValue = recentInvoice.discount_value || 0;
+          let afterDiscount = rawSubtotal;
+          if (discountType === 'percentage') {
+            afterDiscount = rawSubtotal * (1 - (discountValue / 100));
+          } else if (discountType === 'fixed') {
+            afterDiscount = Math.max(rawSubtotal - discountValue, 0);
+          }
+          // Determine auto-apply flag (prefer provided value, else DB)
+          let applyAuto = auto_apply_tax;
+          if (applyAuto === undefined) {
+            const { data: bsAuto } = await supabase
+              .from('business_settings')
+              .select('auto_apply_tax')
+              .eq('user_id', user_id)
+              .single();
+            applyAuto = bsAuto?.auto_apply_tax ?? true;
+          }
+          // Choose tax rate to use on this invoice
+          let taxRateToUse = recentInvoice.tax_percentage || 0;
+          if (applyAuto) {
+            if (default_tax_rate !== undefined) taxRateToUse = default_tax_rate;
+            else {
+              const { data: bs } = await supabase
+                .from('business_settings')
+                .select('default_tax_rate')
+                .eq('user_id', user_id)
+                .single();
+              taxRateToUse = bs?.default_tax_rate || 0;
+            }
+          }
+          const totalAmount = afterDiscount + (afterDiscount * (taxRateToUse / 100));
+          // Persist recalculated totals (update tax_percentage only if applying auto defaults)
+          const updatePayload: any = {
+            subtotal_amount: rawSubtotal,
+            total_amount: totalAmount
+          };
+          if (applyAuto) updatePayload.tax_percentage = taxRateToUse;
+          await supabase
+            .from('invoices')
+            .update(updatePayload)
+            .eq('id', recentInvoice.id)
+            .eq('user_id', user_id);
+
+          // Refetch and attach
+          const { data: updatedInv } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('id', recentInvoice.id)
+            .single();
+          const invoiceAttachment = await createInvoiceAttachment(updatedInv || recentInvoice, lineItems || [], recentInvoice.client);
+          setLatestInvoice(invoiceAttachment);
+          return successMessage + "\n\nHere's your invoice with the updated tax settings:";
+        }
+        return successMessage;
+      }
+
       if (name === 'set_currency') {
         await sendStatusUpdate('Updating currency', '💱');
         const { currency_code } = parsedArgs;
@@ -3910,6 +4164,42 @@ Let me know if you'd like any changes?`;
           setLatestInvoice(invoiceAttachment);
         }
         return `✅ Currency set to ${code}.`;
+      }
+
+      if (name === 'get_invoice_details') {
+        await sendStatusUpdate('Loading invoice details', '📄');
+        const { invoice_number } = parsedArgs;
+        if (!invoice_number) {
+          return 'Invoice number is required.';
+        }
+
+        // Reuse existing finder to support 'latest', number, or client name
+        const found = await findInvoice(supabase, user_id, invoice_number);
+        if (!found || typeof found === 'string') {
+          return typeof found === 'string' ? found : `Invoice not found for identifier: ${invoice_number}`;
+        }
+
+        const targetInvoice = found;
+        // Load line items and client for full preview
+        const { data: lineItems } = await supabase
+          .from('invoice_line_items')
+          .select('*')
+          .eq('invoice_id', targetInvoice.id)
+          .order('created_at', { ascending: true });
+
+        let clientData = null;
+        if (targetInvoice.client_id) {
+          const { data: client } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('id', targetInvoice.client_id)
+            .maybeSingle();
+          if (client) clientData = client;
+        }
+
+        const invoiceAttachment = await createInvoiceAttachment(targetInvoice, lineItems || [], clientData);
+        setLatestInvoice(invoiceAttachment);
+        return `Here are the details for ${targetInvoice.invoice_number}.`;
       }
       if (name === 'enable_payment_methods') {
         const { invoice_number, enable_stripe, enable_paypal, enable_bank_transfer } = parsedArgs;
@@ -4422,6 +4712,28 @@ To accept payments, configure at least one payment method.`;
               taxRate
             });
           }
+          // If only discount changed (and no line items provided), recalc totals from current items
+          const discountChanged = (discount_type !== undefined) || (discount_value !== undefined);
+          const taxChanged = (tax_rate !== undefined);
+          const lineItemsProvided = Array.isArray(line_items) && line_items.length > 0;
+          if ((discountChanged || taxChanged) && !lineItemsProvided) {
+            const { data: currentItems } = await supabase
+              .from('invoice_line_items')
+              .select('*')
+              .eq('invoice_id', targetInvoice.id)
+              .order('created_at', { ascending: true });
+            const subtotal = (currentItems || []).reduce((sum, li) => sum + (li.total_price || 0), 0);
+            const dType = (discount_type !== undefined ? discount_type : targetInvoice.discount_type) || null;
+            const dValue = (discount_value !== undefined ? discount_value : targetInvoice.discount_value) || 0;
+            let afterDiscount = subtotal;
+            if (dType === 'percentage') afterDiscount = subtotal * (1 - (dValue / 100));
+            else if (dType === 'fixed') afterDiscount = Math.max(subtotal - dValue, 0);
+            const effectiveTax = (tax_rate !== undefined ? tax_rate : targetInvoice.tax_percentage) || 0;
+            const totalAmount = afterDiscount + (afterDiscount * (effectiveTax / 100));
+            invoiceUpdates.subtotal_amount = subtotal;
+            invoiceUpdates.total_amount = totalAmount;
+          }
+
           console.log('[update_invoice] Updating invoice with:', invoiceUpdates);
           // Update invoice if there are changes
           if (Object.keys(invoiceUpdates).length > 0) {
@@ -5414,8 +5726,12 @@ To change colors, just say:
         
         await sendStatusUpdate('Creating estimate', '📄');
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, valid_until_date, estimate_date, tax_percentage, notes, acceptance_terms, estimate_template, discount_type, discount_value } = parsedArgs;
-        // Get user's terminology preference
-        const { data: businessSettings } = await supabase.from('business_settings').select('estimate_terminology, default_estimate_template').eq('user_id', user_id).single();
+        // Get user's terminology preference and tax defaults
+        const { data: businessSettings } = await supabase
+          .from('business_settings')
+          .select('estimate_terminology, default_estimate_template, default_tax_rate, auto_apply_tax')
+          .eq('user_id', user_id)
+          .single();
         const terminology = businessSettings?.estimate_terminology || 'estimate';
         const termCapitalized = terminology.charAt(0).toUpperCase() + terminology.slice(1);
         // Calculate subtotal
@@ -5430,8 +5746,10 @@ To change colors, just say:
           }
         }
         const after_discount = subtotal_amount - discount_amount;
-        // Calculate tax
-        const tax_rate = tax_percentage || 0;
+        // Calculate tax (auto-apply defaults if not provided)
+        const tax_rate = (typeof tax_percentage === 'number')
+          ? tax_percentage
+          : (businessSettings?.auto_apply_tax ? (businessSettings?.default_tax_rate || 0) : 0);
         const tax_amount = after_discount * (tax_rate / 100);
         // Calculate final total
         const total_amount = after_discount + tax_amount;
@@ -5568,8 +5886,24 @@ To change colors, just say:
             clientData = fullClient;
           }
         }
+        // Recalculate totals from created line items + discount + tax, then persist for accuracy
+        const rawSubtotal = (createdLineItems || []).reduce((sum, li) => sum + (li.total_price || 0), 0);
+        const dType = discount_type || null;
+        const dValue = discount_value || 0;
+        let afterDiscount = rawSubtotal;
+        if (dType === 'percentage' && dValue > 0) afterDiscount = rawSubtotal * (1 - (dValue / 100));
+        else if (dType === 'fixed' && dValue > 0) afterDiscount = Math.max(rawSubtotal - dValue, 0);
+        const effectiveTax = tax_rate || 0;
+        const finalTotal = afterDiscount + (afterDiscount * (effectiveTax / 100));
+        await supabase.from('estimates').update({
+          subtotal_amount: rawSubtotal,
+          total_amount: finalTotal
+        }).eq('id', estimate.id).eq('user_id', user_id);
+
+        // Refetch updated estimate for accurate attachment
+        const { data: updatedEstimateCalc } = await supabase.from('estimates').select('*').eq('id', estimate.id).single();
         // Store attachment for UI with complete data (like invoices)
-        const estimateAttachment = await createEstimateAttachment(estimate, createdLineItems, clientData);
+        const estimateAttachment = await createEstimateAttachment(updatedEstimateCalc || estimate, createdLineItems, clientData);
         setLatestEstimate(estimateAttachment);
         // 🚨 CONVERSATION MEMORY - Track that we just created this estimate
         ConversationMemory.setLastAction(user_id, 'created_estimate', {

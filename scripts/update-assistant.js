@@ -135,16 +135,31 @@ ALWAYS DO THIS (Parallel):
 
 This makes operations 3-5x faster. Users notice the difference.
 
-TAX & CURRENCY RULES (GLOBAL vs INVOICE):
-• Global business settings (affects all future invoices):
-  - Use update_business_settings for tax_number, tax_name, default_tax_rate, auto_apply_tax
-  - Use set_currency(currency_code) to change currency (e.g., GBP, USD, EUR). Never write currency to notes.
-  - Map names to codes: "British Pounds"/"Pounds"→GBP, "US Dollars"→USD, "Euros"→EUR
-• This invoice only:
-  - Use update_invoice(tax_rate: 20) to change VAT rate on the current invoice
-• Combined request example: "Add VAT and change currency to British Pounds"
-  - Call set_currency(currency_code: "GBP") then update_invoice(invoice_identifier: "latest", tax_rate: 20)
-  - Then show the updated invoice
+TAX & CURRENCY (GLOBAL ONLY - POLICY):
+• Always treat currency and tax changes as BUSINESS SETTINGS (not per-invoice)
+• Currency:
+  - Use set_currency(currency_code) to change currency (e.g., GBP, USD, EUR). Do NOT pass currency to invoice updates
+  - Supported codes: USD, EUR, GBP, CAD, AUD, NZD, CHF, SEK, DKK, NOK, BGN, CZK, HUF, PLN, RON, AED
+  - Name/symbol mapping examples:
+    • British Pounds / UK Pounds / Pounds / £ → GBP
+    • US Dollars / Dollars / $ (US) → USD
+    • Euros / Euro / € → EUR
+    • Canadian Dollar / CA$ / C$ → CAD
+    • Australian Dollar / A$ → AUD
+    • New Zealand Dollar / NZ$ → NZD
+    • Swiss Franc / CHF → CHF
+    • Swedish Krona / kr (SEK) → SEK
+    • Danish Krone / kr (DKK) → DKK
+    • Norwegian Krone / kr (NOK) → NOK
+    • Bulgarian Lev / лв → BGN
+    • Czech Koruna / Kč → CZK
+    • Hungarian Forint / Ft → HUF
+    • Polish Złoty / zł → PLN
+    • Romanian Leu / lei → RON
+    • UAE Dirham / د.إ → AED
+• Tax defaults (rate, name, number, auto apply):
+  - Use update_tax_settings({ default_tax_rate, tax_name, tax_number, auto_apply_tax })
+• After changing currency or tax defaults, show the latest invoice so the new symbol/labels are visible (amounts themselves do not change)
 
 🚨 DOCUMENT TYPE AWARENESS - CRITICAL:
 NEVER MIX DOCUMENT TYPES: Each document type has specific functions that must be used.
@@ -380,6 +395,52 @@ When the user indicates you made an error or corrected you:
             }
           },
           required: ["currency_code"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "update_tax_settings",
+        description: "Update business tax settings (global): default tax rate, tax name (e.g., VAT), tax number, and auto-apply.",
+        parameters: {
+          type: "object",
+          properties: {
+            default_tax_rate: {
+              type: "number",
+              description: "Default tax rate percentage (e.g., 20 for 20%)"
+            },
+            tax_name: {
+              type: "string",
+              description: "Tax label/name (e.g., VAT, GST, Sales Tax)"
+            },
+            tax_number: {
+              type: "string",
+              description: "Business tax/VAT number"
+            },
+            auto_apply_tax: {
+              type: "boolean",
+              description: "Whether to automatically apply tax to new invoices"
+            }
+          },
+          required: []
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_invoice_details",
+        description: "Get details for a specific invoice (to show updated symbol/labels after settings changes).",
+        parameters: {
+          type: "object",
+          properties: {
+            invoice_number: {
+              type: "string",
+              description: "Invoice number like 'INV-001'"
+            }
+          },
+          required: ["invoice_number"]
         }
       }
     },
