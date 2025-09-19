@@ -136,8 +136,55 @@ export default function OnboardingScreen1() {
           } else {
             router.replace('/(auth)/onboarding-1');
           }
+          return;
         }
+        // Fallback: regardless of result, if session exists route immediately
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', userId)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
+            }
+            return;
+          }
+        } catch {}
       } else {
+        // No URL returned; check session in case callback already set it
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('onboarding_completed')
+                .eq('id', userId)
+                .maybeSingle();
+              if (profile?.onboarding_completed) {
+                router.replace('/(app)/(protected)');
+              } else {
+                router.replace('/(auth)/onboarding-1');
+              }
+            } catch {
+              router.replace('/(auth)/onboarding-1');
+            }
+            return;
+          }
+        } catch {}
         Alert.alert('Authentication Error', 'Could not get authentication URL.');
       }
     } catch (err) {
