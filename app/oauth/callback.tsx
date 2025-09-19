@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { InteractionManager } from 'react-native';
 import { supabase } from '@/config/supabase';
 
 export default function OAuthCallback() {
@@ -25,26 +24,10 @@ export default function OAuthCallback() {
           await supabase.auth.exchangeCodeForSession({ authCode: code });
         }
 
-        // Close any open modals and wait for animations
-        router.dismissAll?.();
-        await new Promise(res => InteractionManager.runAfterInteractions(res));
-
-        const { data: sessionData } = await supabase.auth.getSession();
-        const userId = sessionData?.session?.user?.id;
-        if (!userId) {
-          router.replace('/(auth)/onboarding-1');
-          return;
-        }
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('onboarding_completed')
-          .eq('id', userId)
-          .maybeSingle();
-        if (profile?.onboarding_completed) {
-          router.replace('/(app)/(protected)');
-        } else {
-          router.replace('/(auth)/onboarding-1');
-        }
+        // Immediately route like email flow; avoid any blocking DB reads here
+        try { router.dismissAll?.(); } catch {}
+        router.replace('/(app)/(protected)');
+        return;
       } catch {
         router.replace('/(auth)/onboarding-1');
       }
