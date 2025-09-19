@@ -115,27 +115,9 @@ export default function OnboardingScreen1() {
           }
 
           const { data: sessionData } = await supabase.auth.getSession();
-          if (sessionData?.session?.user?.id) {
-            try {
-              await saveOnboardingData(sessionData.session.user.id);
-            } catch {}
-            try {
-              const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('onboarding_completed')
-                .eq('id', sessionData.session.user.id)
-                .maybeSingle();
-              if (profile?.onboarding_completed) {
-                router.replace('/(app)/(protected)');
-              } else {
-                router.replace('/(auth)/onboarding-1');
-              }
-            } catch {
-              router.replace('/(auth)/onboarding-1');
-            }
-          } else {
-            router.replace('/(auth)/onboarding-1');
-          }
+          const userId = sessionData?.session?.user?.id;
+          if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          router.replace('/(app)/(protected)');
           return;
         }
         // Fallback: regardless of result, if session exists route immediately
@@ -144,20 +126,7 @@ export default function OnboardingScreen1() {
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
-            try {
-              const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('onboarding_completed')
-                .eq('id', userId)
-                .maybeSingle();
-              if (profile?.onboarding_completed) {
-                router.replace('/(app)/(protected)');
-              } else {
-                router.replace('/(auth)/onboarding-1');
-              }
-            } catch {
-              router.replace('/(auth)/onboarding-1');
-            }
+            router.replace('/(app)/(protected)');
             return;
           }
         } catch {}
@@ -168,20 +137,7 @@ export default function OnboardingScreen1() {
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
-            try {
-              const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('onboarding_completed')
-                .eq('id', userId)
-                .maybeSingle();
-              if (profile?.onboarding_completed) {
-                router.replace('/(app)/(protected)');
-              } else {
-                router.replace('/(auth)/onboarding-1');
-              }
-            } catch {
-              router.replace('/(auth)/onboarding-1');
-            }
+            router.replace('/(app)/(protected)');
             return;
           }
         } catch {}

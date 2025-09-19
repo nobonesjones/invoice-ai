@@ -165,31 +165,15 @@ export function AuthModal({
             // Callback route will handle if needed
           }
 
-          // Close modals before routing
+          // Close modals and route immediately like email flow; save onboarding in background
           try { setShowSignIn(false); } catch {}
           try { setShowSignUp(false); } catch {}
-
-          // Decide onboarding vs protected
-          const { data: sessionData } = await supabase.auth.getSession();
-          const userId = sessionData?.session?.user?.id;
-          if (userId) {
-            try {
-              const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('onboarding_completed')
-                .eq('id', userId)
-                .maybeSingle();
-              if (profile?.onboarding_completed) {
-                router.replace('/(app)/(protected)');
-              } else {
-                router.replace('/(auth)/onboarding-1');
-              }
-            } catch {
-              router.replace('/(auth)/onboarding-1');
-            }
-          } else {
-            router.replace('/(auth)/onboarding-1');
-          }
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const userId = sessionData?.session?.user?.id;
+            if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          } catch {}
+          try { router.replace('/(app)/(protected)'); } catch {}
           onSuccess?.();
           return;
         }
@@ -200,23 +184,9 @@ export function AuthModal({
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
-            // Close any auth UI before routing
             try { setShowSignIn(false); } catch {}
             try { setShowSignUp(false); } catch {}
-            try {
-              const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('onboarding_completed')
-                .eq('id', userId)
-                .maybeSingle();
-              if (profile?.onboarding_completed) {
-                router.replace('/(app)/(protected)');
-              } else {
-                router.replace('/(auth)/onboarding-1');
-              }
-            } catch {
-              router.replace('/(auth)/onboarding-1');
-            }
+            try { router.replace('/(app)/(protected)'); } catch {}
             onSuccess?.();
             return;
           }
@@ -230,20 +200,7 @@ export function AuthModal({
             try { await saveOnboardingData(userId); } catch {}
             try { setShowSignIn(false); } catch {}
             try { setShowSignUp(false); } catch {}
-            try {
-              const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('onboarding_completed')
-                .eq('id', userId)
-                .maybeSingle();
-              if (profile?.onboarding_completed) {
-                router.replace('/(app)/(protected)');
-              } else {
-                router.replace('/(auth)/onboarding-1');
-              }
-            } catch {
-              router.replace('/(auth)/onboarding-1');
-            }
+            try { router.replace('/(app)/(protected)'); } catch {}
             onSuccess?.();
             return;
           }
