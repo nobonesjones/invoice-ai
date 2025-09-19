@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { View, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/config/supabase';
+import { waitForSupabaseSession } from '@/utils/wait-for-session';
 
 export default function OAuthCallback() {
   const router = useRouter();
@@ -24,8 +25,9 @@ export default function OAuthCallback() {
           await supabase.auth.exchangeCodeForSession({ authCode: code });
         }
 
-        // Immediately route like email flow; avoid any blocking DB reads here
+        // Immediately route like email flow; but ensure session is actually ready
         try { router.dismissAll?.(); } catch {}
+        try { await waitForSupabaseSession(8000); } catch {}
         router.replace('/(app)/(protected)');
         return;
       } catch {

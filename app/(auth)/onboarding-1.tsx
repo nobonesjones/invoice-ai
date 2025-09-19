@@ -27,6 +27,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from "@/config/supabase";
 import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { startAuthWatchdog } from "@/utils/auth-watchdog";
+import { waitForSupabaseSession } from "@/utils/wait-for-session";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -64,6 +66,7 @@ export default function OnboardingScreen1() {
     setIsGoogleLoading(true);
     
     try {
+      const watchdog = startAuthWatchdog({ tag: 'google.onboarding1', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -117,7 +120,9 @@ export default function OnboardingScreen1() {
           const { data: sessionData } = await supabase.auth.getSession();
           const userId = sessionData?.session?.user?.id;
           if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          try { await waitForSupabaseSession(8000); } catch {}
           router.replace('/(app)/(protected)');
+          try { watchdog.stop(); } catch {}
           return;
         }
         // Fallback: regardless of result, if session exists route immediately
@@ -126,7 +131,9 @@ export default function OnboardingScreen1() {
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
             router.replace('/(app)/(protected)');
+            try { watchdog.stop(); } catch {}
             return;
           }
         } catch {}
@@ -137,7 +144,9 @@ export default function OnboardingScreen1() {
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
             router.replace('/(app)/(protected)');
+            try { watchdog.stop(); } catch {}
             return;
           }
         } catch {}

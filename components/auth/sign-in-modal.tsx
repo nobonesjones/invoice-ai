@@ -27,6 +27,7 @@ import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
 import { useRouter } from 'expo-router';
 import { OAUTH_REDIRECT } from "@/utils/oauth";
+import { waitForSupabaseSession } from "@/utils/wait-for-session";
 
 // Removed maybeCompleteAuthSession() here to avoid affecting email/password flows
 
@@ -124,9 +125,7 @@ export function SignInModal({
       }
       
       // Navigate to protected area explicitly to avoid relying on global effect
-      try {
-        router.replace('/(app)/(protected)');
-      } catch {}
+      try { router.replace('/(app)/(protected)'); } catch {}
       onSuccess?.();
     } catch (error: any) {
       console.error("Error signing in:", error);
@@ -144,6 +143,7 @@ export function SignInModal({
     setIsGoogleLoading(true);
     
     try {
+      const watchdog = startAuthWatchdog({ tag: 'google.signInModal', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -198,7 +198,9 @@ export function SignInModal({
           const { data: sessionData } = await supabase.auth.getSession();
           const userId = sessionData?.session?.user?.id;
           if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          try { await waitForSupabaseSession(8000); } catch {}
           try { router.replace('/(app)/(protected)'); } catch {}
+          try { watchdog.stop(); } catch {}
           onSuccess?.();
           return;
         }
@@ -209,7 +211,9 @@ export function SignInModal({
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
             try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
             onSuccess?.();
             return;
           }
@@ -222,7 +226,9 @@ export function SignInModal({
           const userId = postSession?.session?.user?.id;
           if (userId) {
             try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
             try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
             onSuccess?.();
             return;
           }

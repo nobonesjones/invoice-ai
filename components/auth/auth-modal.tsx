@@ -28,6 +28,8 @@ import { useRouter } from 'expo-router';
 import { SignUpModal } from "./sign-up-modal";
 import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { SignInModal } from "./sign-in-modal";
+import { startAuthWatchdog } from "@/utils/auth-watchdog";
+import { waitForSupabaseSession } from "@/utils/wait-for-session";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -79,23 +81,10 @@ export function AuthModal({
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id;
-      if (userId) {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('onboarding_completed')
-          .eq('id', userId)
-          .maybeSingle();
-        if (profile?.onboarding_completed) {
-          router.replace('/(app)/(protected)');
-        } else {
-          router.replace('/(auth)/onboarding-1');
-        }
-      } else {
-        router.replace('/(auth)/onboarding-1');
-      }
-    } catch {
-      router.replace('/(auth)/onboarding-1');
-    }
+      if (userId) { try { await saveOnboardingData(userId); } catch {} }
+    } catch {}
+    // Always move new sign-ups into the onboarding flow
+    router.replace('/(auth)/onboarding-2');
     onSuccess?.();
   };
 
@@ -110,6 +99,7 @@ export function AuthModal({
     setIsGoogleLoading(true);
     
     try {
+      const watchdog = startAuthWatchdog({ tag: 'google.authModal', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -173,7 +163,9 @@ export function AuthModal({
             const userId = sessionData?.session?.user?.id;
             if (userId) { try { await saveOnboardingData(userId); } catch {} }
           } catch {}
+          try { await waitForSupabaseSession(8000); } catch {}
           try { router.replace('/(app)/(protected)'); } catch {}
+          try { watchdog.stop(); } catch {}
           onSuccess?.();
           return;
         }
@@ -186,7 +178,9 @@ export function AuthModal({
             try { await saveOnboardingData(userId); } catch {}
             try { setShowSignIn(false); } catch {}
             try { setShowSignUp(false); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
             try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
             onSuccess?.();
             return;
           }
@@ -200,7 +194,9 @@ export function AuthModal({
             try { await saveOnboardingData(userId); } catch {}
             try { setShowSignIn(false); } catch {}
             try { setShowSignUp(false); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
             try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
             onSuccess?.();
             return;
           }
