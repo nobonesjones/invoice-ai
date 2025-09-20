@@ -72,40 +72,7 @@ export default function WelcomeScreen() {
 
 			{/* Button Container with Padding */}
 			<View style={styles.buttonContainer}>
-				{/* Sign up with Google Button */}
-				<Button
-					onPress={handleContinue}
-					className={cn("mb-4")}
-					style={[
-						{
-							backgroundColor: "#FFFFFF",
-							borderWidth: 1,
-							borderColor: "#E0E0E0",
-						},
-						Platform.OS === "ios"
-							? {
-									shadowColor: "#000",
-									shadowOffset: { width: 0, height: 2 },
-									shadowOpacity: 0.1,
-									shadowRadius: 3,
-								}
-							: {
-									elevation: 3,
-								},
-					]}
-				>
-					<View className="flex-row items-center justify-center">
-						<Image
-							source={require("../../assets/google.png")}
-							style={styles.googleLogo}
-						/>
-						<Text
-							style={{ color: "#000000", marginLeft: 12, fontWeight: "600" }}
-						>
-							Sign up with Google
-						</Text>
-					</View>
-				</Button>
+				{/* Google sign up temporarily disabled */}
 
 				{/* Email Sign Up Button */}
 				<Button

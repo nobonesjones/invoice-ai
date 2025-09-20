@@ -308,19 +308,7 @@ export default function OnboardingScreen1() {
                 )}
               </Pressable>
 
-              {/* Google Sign In */}
-              <Pressable
-                onPress={handleGoogleAuth}
-                style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-              >
-                <View style={styles.googleIconContainer}>
-                  <Image 
-                    source={require('@/assets/google.png')} 
-                    style={styles.googleIconImage} 
-                  />
-                </View>
-                <Text style={[styles.authButtonText, { color: theme.foreground }]}>Continue with Google</Text>
-              </Pressable>
+              {/* Google Sign In temporarily disabled */}
 
               {/* Email Sign In */}
               <Pressable

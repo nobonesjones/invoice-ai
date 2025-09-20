@@ -350,25 +350,7 @@ export function AuthModal({
                     </>
                   )}
                 </Button>
-                <Button
-                  onPress={handleGoogleAuth}
-                  style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-                  disabled={isGoogleLoading}
-                >
-                  {isGoogleLoading ? (
-                    <ActivityIndicator color={theme.foreground} />
-                  ) : (
-                    <>
-                      <Image 
-                        source={require('@/assets/google.png')} 
-                        style={styles.googleIcon} 
-                      />
-                      <Text style={[styles.googleButtonText, { color: theme.foreground }]}>
-                        Sign In With Google
-                      </Text>
-                    </>
-                  )}
-                </Button>
+                {/* Google Sign-In temporarily disabled */}
                 <Button
                   onPress={handleContinueWithEmail}
                   style={[styles.choiceButton, styles.emailButton, { backgroundColor: theme.primary }]}                  
