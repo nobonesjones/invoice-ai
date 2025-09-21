@@ -12,12 +12,10 @@ import {
 } from "react-native";
 
 import { useTheme } from "@/context/theme-provider";
-import { useAnalytics } from "@/hooks/useAnalytics";
 
 export default function OnboardingScreen7() {
   const router = useRouter();
   const { theme } = useTheme();
-  const analytics = useAnalytics();
   const [progress, setProgress] = useState(0);
   
   // Animation refs
@@ -27,12 +25,6 @@ export default function OnboardingScreen7() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    analytics.trackEvent('Onboarding Step Viewed', {
-      step: 9,
-      step_id: 'onboarding-7',
-      step_label: 'onboarding 8',
-      group: 'onboarding'
-    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
@@ -76,7 +68,6 @@ export default function OnboardingScreen7() {
         if (index === progressSteps.length - 1) {
           setTimeout(() => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            analytics.trackEvent('Onboarding Next', { from_step: 9, to_step: 10, action: 'auto_continue' });
             router.push("/(auth)/onboarding-8");
           }, 500);
         }

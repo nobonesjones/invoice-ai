@@ -48,12 +48,7 @@ export default function OnboardingScreen1() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     // Track onboarding step view
-    analytics.trackEvent('Onboarding Step Viewed', {
-      step: 1,
-      step_id: 'onboarding-1',
-      step_label: 'welcome',
-      group: 'onboarding'
-    });
+    analytics.trackEvent('Onboarding 1 - Sign Up', { step: 1 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };

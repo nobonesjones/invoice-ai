@@ -42,7 +42,7 @@ export default function SoftPaywallScreen() {
     onPresent: (info) => {
       console.log('[SoftPaywall] Paywall Presented:', info);
       setIsPaywallPresented(true);
-      analytics.trackEvent('Paywall Viewed', { placement: 'onboarding', source: 'post_signup' });
+      analytics.trackEvent('Onboarding - Paywall', { placement: 'onboarding', source: 'post_signup' });
     },
     onDismiss: (info, result) => {
       console.log('[SoftPaywall] Paywall Dismissed:', info, 'Result:', result);

@@ -33,12 +33,7 @@ export default function OnboardingScreen2() {
     StatusBar.setHidden(true, 'fade');
 
     // Track onboarding step reached
-    analytics.trackEvent('Onboarding Step Viewed', {
-      step: 2,
-      step_id: 'onboarding-2',
-      step_label: 'onboarding 1',
-      group: 'onboarding'
-    });
+    analytics.trackEvent('Onboarding 2 - Video', { step: 2 });
     
     return () => {
       StatusBar.setHidden(false, 'fade');

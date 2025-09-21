@@ -26,12 +26,7 @@ export default function OnboardingScreen8() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    analytics.trackEvent('Onboarding Step Viewed', {
-      step: 8,
-      step_id: 'onboarding-8',
-      step_name: 'ready_to_start',
-      group: 'onboarding'
-    });
+    analytics.trackEvent('Onboarding 8 - Account Created', { step: 8 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };

@@ -43,12 +43,7 @@ export default function OnboardingScreen2_2() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    analytics.trackEvent('Onboarding Step Viewed', {
-      step: 4,
-      step_id: 'onboarding-2-2',
-      step_label: 'onboarding 3',
-      group: 'onboarding'
-    });
+    analytics.trackEvent('Onboarding 4 - Video', { step: 4 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };

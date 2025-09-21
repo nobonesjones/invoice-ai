@@ -74,12 +74,7 @@ export default function OnboardingScreen4() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    analytics.trackEvent('Onboarding Step Viewed', {
-      step: 6,
-      step_id: 'onboarding-4',
-      step_label: 'onboarding 5',
-      group: 'onboarding'
-    });
+    analytics.trackEvent('Onboarding 6 - Industry', { step: 6 });
     
     // Analytics removed for App Store build
     
