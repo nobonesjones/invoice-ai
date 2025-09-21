@@ -51,13 +51,13 @@ export default function OnboardingScreen1() {
     analytics.trackEvent('Onboarding Step Viewed', {
       step: 1,
       step_id: 'onboarding-1',
-      step_name: 'welcome',
+      step_label: 'welcome',
       group: 'onboarding'
     });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   const handleGetStarted = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

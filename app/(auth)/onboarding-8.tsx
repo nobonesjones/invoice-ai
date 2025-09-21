@@ -35,7 +35,7 @@ export default function OnboardingScreen8() {
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   useEffect(() => {
     // Trigger success haptic feedback when screen loads
@@ -47,12 +47,12 @@ export default function OnboardingScreen8() {
     
     // Track onboarding completion - key funnel event!
     analytics.trackEvent('Completed onboarding', {
-      final_step: 8,
-      step_name: 'ready_to_start',
+      final_step: 10,
+      step_label: 'onboarding 9',
       timestamp: new Date().toISOString()
     });
     analytics.trackEvent('Onboarding Completed', {
-      final_step: 8,
+      final_step: 10,
       outcome: 'proceed_to_paywall'
     });
     

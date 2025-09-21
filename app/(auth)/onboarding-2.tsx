@@ -36,24 +36,20 @@ export default function OnboardingScreen2() {
     analytics.trackEvent('Onboarding Step Viewed', {
       step: 2,
       step_id: 'onboarding-2',
-      step_name: 'video_introduction',
+      step_label: 'onboarding 1',
       group: 'onboarding'
     });
     
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     // Track onboarding progression
-    analytics.trackEvent('Onboarding Next', {
-      from_step: 2,
-      to_step: '2-1',
-      action: 'continue'
-    });
+    analytics.trackEvent('Onboarding Next', { from_step: 2, to_step: 3, action: 'continue' });
     
     router.push("/(auth)/onboarding-2-1");
   };

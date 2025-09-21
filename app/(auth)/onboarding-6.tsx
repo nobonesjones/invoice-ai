@@ -43,15 +43,15 @@ export default function OnboardingScreen6() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     analytics.trackEvent('Onboarding Step Viewed', {
-      step: 6,
+      step: 8,
       step_id: 'onboarding-6',
-      step_name: 'social_proof',
+      step_label: 'onboarding 7',
       group: 'onboarding'
     });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   React.useEffect(() => {
     // Cycle through testimonials
@@ -66,7 +66,7 @@ export default function OnboardingScreen6() {
 
   const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.trackEvent('Onboarding Next', { from_step: 6, to_step: 7, action: 'continue' });
+    analytics.trackEvent('Onboarding Next', { from_step: 8, to_step: 9, action: 'continue' });
     router.push("/(auth)/onboarding-7");
   };
 

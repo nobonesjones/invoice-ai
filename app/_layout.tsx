@@ -47,15 +47,6 @@ function RootLayoutNav() {
 		}
 	}, [initialized, session?.user?.id]);
 
-	// Send a one-time preview connectivity ping so you can verify Live View
-	useEffect(() => {
-		try {
-			analytics.trackEvent('Analytics Preview Ping', {
-				source: 'app/_layout',
-				timestamp: new Date().toISOString(),
-			});
-		} catch {}
-	}, []);
 
 	useEffect(() => {
 		if (!initialized) return; // Wait until supabase is initialized

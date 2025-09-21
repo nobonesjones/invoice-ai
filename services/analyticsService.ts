@@ -47,16 +47,7 @@ class AnalyticsService {
       this.mixpanel.setLoggingEnabled(false);
       this.isInitialized = true;
       
-      this.mixpanel.track('Debug Test Event', {
-        timestamp: new Date().toISOString(),
-        test_event: true,
-        sdk_version: 'mixpanel-react-native@3.1.2',
-        platform: Platform.OS,
-        environment: __DEV__ ? 'development' : 'production'
-      });
-      
-      // Force flush the test event immediately
-      this.mixpanel.flush();
+      // Debug test event removed to avoid noise in production/preview
 
       // Process any queued events
       this.processEventQueue();

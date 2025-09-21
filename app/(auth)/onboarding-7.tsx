@@ -28,15 +28,15 @@ export default function OnboardingScreen7() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     analytics.trackEvent('Onboarding Step Viewed', {
-      step: 7,
+      step: 9,
       step_id: 'onboarding-7',
-      step_name: 'loading',
+      step_label: 'onboarding 8',
       group: 'onboarding'
     });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   useEffect(() => {
     // Start spinner animation
@@ -76,7 +76,7 @@ export default function OnboardingScreen7() {
         if (index === progressSteps.length - 1) {
           setTimeout(() => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            analytics.trackEvent('Onboarding Next', { from_step: 7, to_step: 8, action: 'auto_continue' });
+            analytics.trackEvent('Onboarding Next', { from_step: 9, to_step: 10, action: 'auto_continue' });
             router.push("/(auth)/onboarding-8");
           }, 500);
         }

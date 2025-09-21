@@ -33,15 +33,15 @@ export default function OnboardingScreen5() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     analytics.trackEvent('Onboarding Step Viewed', {
-      step: 5,
+      step: 7,
       step_id: 'onboarding-5',
-      step_name: 'logo',
+      step_label: 'onboarding 6',
       group: 'onboarding'
     });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -51,7 +51,7 @@ export default function OnboardingScreen5() {
       console.log('[Onboarding5] Saving logo:', logoUri);
       await updateLogo(logoUri);
       
-      analytics.trackEvent('Onboarding Next', { from_step: 5, to_step: 6, action: 'continue' });
+      analytics.trackEvent('Onboarding Next', { from_step: 7, to_step: 8, action: 'continue' });
       router.push("/(auth)/onboarding-6");
     } catch (error) {
       console.error('[Onboarding5] Error saving logo:', error);

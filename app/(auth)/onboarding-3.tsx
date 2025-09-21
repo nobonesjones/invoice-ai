@@ -90,15 +90,15 @@ export default function OnboardingScreen3() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     analytics.trackEvent('Onboarding Step Viewed', {
-      step: 3,
+      step: 5,
       step_id: 'onboarding-3',
-      step_name: 'business_info',
+      step_label: 'onboarding 4',
       group: 'onboarding'
     });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   // Auto-focus name input when screen loads
 	useEffect(() => {
@@ -122,7 +122,7 @@ export default function OnboardingScreen3() {
       console.log('[Onboarding3] Saving business info:', { businessName, selectedRegion });
       await updateBusinessInfo({ businessName, selectedRegion });
       
-      analytics.trackEvent('Onboarding Next', { from_step: 3, to_step: 4, action: 'continue' });
+      analytics.trackEvent('Onboarding Next', { from_step: 5, to_step: 6, action: 'continue' });
       router.push("/(auth)/onboarding-4");
     } catch (error) {
       console.error('[Onboarding3] Error saving business info:', error);

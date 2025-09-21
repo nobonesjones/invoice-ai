@@ -75,9 +75,9 @@ export default function OnboardingScreen4() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     analytics.trackEvent('Onboarding Step Viewed', {
-      step: 4,
+      step: 6,
       step_id: 'onboarding-4',
-      step_name: 'industry',
+      step_label: 'onboarding 5',
       group: 'onboarding'
     });
     
@@ -109,7 +109,7 @@ export default function OnboardingScreen4() {
       
       // Analytics removed for App Store build
       
-      analytics.trackEvent('Onboarding Next', { from_step: 4, to_step: 5, action: 'continue' });
+      analytics.trackEvent('Onboarding Next', { from_step: 6, to_step: 7, action: 'continue' });
       router.push("/(auth)/onboarding-5");
     } catch (error) {
       console.error('[Onboarding4] Error saving industry:', error);

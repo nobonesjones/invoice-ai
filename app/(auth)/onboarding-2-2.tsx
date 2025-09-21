@@ -44,19 +44,19 @@ export default function OnboardingScreen2_2() {
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
     analytics.trackEvent('Onboarding Step Viewed', {
-      step: '2-2',
+      step: 4,
       step_id: 'onboarding-2-2',
-      step_name: 'value_prop_2',
+      step_label: 'onboarding 3',
       group: 'onboarding'
     });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.trackEvent('Onboarding Next', { from_step: '2-2', to_step: '3', action: 'continue' });
+    analytics.trackEvent('Onboarding Next', { from_step: 4, to_step: 5, action: 'continue' });
     router.push("/(auth)/onboarding-3");
   };
 
