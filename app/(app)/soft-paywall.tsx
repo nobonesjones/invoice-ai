@@ -6,6 +6,7 @@ import { useTheme } from '@/context/theme-provider';
 import { useSupabase } from '@/context/supabase-provider';
 import PaywallService from '@/services/paywallService';
 import { SubscriptionPricing } from '@/components/SubscriptionPricing';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function SoftPaywallScreen() {
   console.log('[SoftPaywall] Screen component mounted');
@@ -13,6 +14,7 @@ export default function SoftPaywallScreen() {
   const router = useRouter();
   const { theme } = useTheme();
   const { user } = useSupabase();
+  const analytics = useAnalytics();
   const [isPaywallPresented, setIsPaywallPresented] = useState(false);
   const [shouldNavigate, setShouldNavigate] = useState(false);
   
@@ -33,16 +35,20 @@ export default function SoftPaywallScreen() {
   const { registerPlacement, state: placementState } = usePlacement({
     onError: (err) => {
       console.error('[SoftPaywall] Placement Error:', err);
+      analytics.trackEvent('Paywall Error', { placement: 'onboarding', message: String(err?.message || err) });
       // Navigate to main app on error
       setShouldNavigate(true);
     },
     onPresent: (info) => {
       console.log('[SoftPaywall] Paywall Presented:', info);
       setIsPaywallPresented(true);
+      analytics.trackEvent('Paywall Viewed', { placement: 'onboarding', source: 'post_signup' });
     },
     onDismiss: (info, result) => {
       console.log('[SoftPaywall] Paywall Dismissed:', info, 'Result:', result);
       setIsPaywallPresented(false);
+      const outcome = (result as any)?.purchased ? 'subscribed' : 'closed';
+      analytics.trackEvent('Paywall Dismissed', { placement: 'onboarding', outcome });
       
       // Navigate to main app regardless of purchase decision
       setShouldNavigate(true);
@@ -70,6 +76,7 @@ export default function SoftPaywallScreen() {
       
       if (!user?.id) {
         console.log('[SoftPaywall] No user ID found, navigating to main app');
+        analytics.trackEvent('Paywall Skipped', { reason: 'no_user' });
         setShouldNavigate(true);
         return;
       }
@@ -83,6 +90,7 @@ export default function SoftPaywallScreen() {
 
       try {
         console.log('[SoftPaywall] Presenting onboarding paywall for user:', user.id);
+        analytics.trackEvent('Paywall Attempt', { placement: 'onboarding', user_id: user.id });
         
         // Debug Superwall state before placement
         if (superwall) {
@@ -129,11 +137,13 @@ export default function SoftPaywallScreen() {
         // If result is undefined and no callbacks fired, something's wrong
         if (result === undefined) {
           console.log('[SoftPaywall] registerPlacement returned undefined - paywall might be skipped or user already subscribed');
+          analytics.trackEvent('Paywall Skipped', { reason: 'undefined_result' });
           
           // Just wait a bit to see if callbacks fire, then navigate
           setTimeout(() => {
             if (!isPaywallPresented) {
               console.log('[SoftPaywall] No paywall presented after 2 seconds, navigating to main app');
+              analytics.trackEvent('Paywall Skipped', { reason: 'not_presented' });
               setShouldNavigate(true);
             }
           }, 2000);
@@ -142,6 +152,7 @@ export default function SoftPaywallScreen() {
       } catch (error) {
         console.error('[SoftPaywall] Failed to present paywall:', error);
         console.error('[SoftPaywall] Error details:', JSON.stringify(error, null, 2));
+        analytics.trackEvent('Paywall Error', { placement: 'onboarding', message: String(error?.message || error) });
         // Navigate to main app on error
         setShouldNavigate(true);
       }

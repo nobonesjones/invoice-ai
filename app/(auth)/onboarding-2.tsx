@@ -31,12 +31,13 @@ export default function OnboardingScreen2() {
   // Hide status bar for immersive video experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    
+
     // Track onboarding step reached
-    analytics.trackEvent('Onboarding Step Reached', {
+    analytics.trackEvent('Onboarding Step Viewed', {
       step: 2,
+      step_id: 'onboarding-2',
       step_name: 'video_introduction',
-      timestamp: new Date().toISOString()
+      group: 'onboarding'
     });
     
     return () => {
@@ -46,13 +47,12 @@ export default function OnboardingScreen2() {
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     // Track onboarding progression
-    analytics.trackEvent('Onboarding Step Completed', {
-      step: 2,
-      step_name: 'video_introduction',
-      next_step: '2-1',
-      timestamp: new Date().toISOString()
+    analytics.trackEvent('Onboarding Next', {
+      from_step: 2,
+      to_step: '2-1',
+      action: 'continue'
     });
     
     router.push("/(auth)/onboarding-2-1");

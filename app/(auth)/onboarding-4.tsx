@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 // import { useAnalytics } from "@/hooks/useAnalytics"; // Removed for App Store build
 
 const INDUSTRIES = [
@@ -63,6 +64,7 @@ export default function OnboardingScreen4() {
   const router = useRouter();
   const { theme } = useTheme();
   const { updateIndustry } = useOnboarding();
+  const analytics = useAnalytics();
   // const analytics = useAnalytics(); // Removed for App Store build
   const searchInputRef = useRef<TextInput>(null);
   
@@ -72,6 +74,12 @@ export default function OnboardingScreen4() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: 4,
+      step_id: 'onboarding-4',
+      step_name: 'industry',
+      group: 'onboarding'
+    });
     
     // Analytics removed for App Store build
     
@@ -101,6 +109,7 @@ export default function OnboardingScreen4() {
       
       // Analytics removed for App Store build
       
+      analytics.trackEvent('Onboarding Next', { from_step: 4, to_step: 5, action: 'continue' });
       router.push("/(auth)/onboarding-5");
     } catch (error) {
       console.error('[Onboarding4] Error saving industry:', error);

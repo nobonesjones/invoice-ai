@@ -16,6 +16,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 const TESTIMONIALS = [
   "Game-changer for my business! 📈",
@@ -28,6 +29,7 @@ const TESTIMONIALS = [
 export default function OnboardingScreen6() {
   const router = useRouter();
   const { theme } = useTheme();
+  const analytics = useAnalytics();
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0);
   
   // Initialize video player
@@ -40,10 +42,16 @@ export default function OnboardingScreen6() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: 6,
+      step_id: 'onboarding-6',
+      step_name: 'social_proof',
+      group: 'onboarding'
+    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, [analytics]);
 
   React.useEffect(() => {
     // Cycle through testimonials
@@ -58,6 +66,7 @@ export default function OnboardingScreen6() {
 
   const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding Next', { from_step: 6, to_step: 7, action: 'continue' });
     router.push("/(auth)/onboarding-7");
   };
 

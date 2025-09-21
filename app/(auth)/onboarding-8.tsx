@@ -26,10 +26,16 @@ export default function OnboardingScreen8() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: 8,
+      step_id: 'onboarding-8',
+      step_name: 'ready_to_start',
+      group: 'onboarding'
+    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, [analytics]);
 
   useEffect(() => {
     // Trigger success haptic feedback when screen loads
@@ -44,6 +50,10 @@ export default function OnboardingScreen8() {
       final_step: 8,
       step_name: 'ready_to_start',
       timestamp: new Date().toISOString()
+    });
+    analytics.trackEvent('Onboarding Completed', {
+      final_step: 8,
+      outcome: 'proceed_to_paywall'
     });
     
     try {

@@ -29,6 +29,7 @@ import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { startAuthWatchdog } from "@/utils/auth-watchdog";
 import { waitForSupabaseSession } from "@/utils/wait-for-session";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -36,6 +37,7 @@ export default function OnboardingScreen1() {
   const router = useRouter();
   const { theme } = useTheme();
   const { saveOnboardingData } = useOnboarding();
+  const analytics = useAnalytics();
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'auth' | 'signup' | 'signin'>('auth');
   const [signUpModalVisible, setSignUpModalVisible] = useState(false);
@@ -45,18 +47,31 @@ export default function OnboardingScreen1() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    // Track onboarding step view
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: 1,
+      step_id: 'onboarding-1',
+      step_name: 'welcome',
+      group: 'onboarding'
+    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, [analytics]);
 
   const handleGetStarted = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding Next', {
+      from_step: 1,
+      to_step: 2,
+      action: 'get_started'
+    });
     router.push("/(auth)/onboarding-2");
   };
 
   const handleSignIn = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'open_signin' });
     setAuthModalMode('signin');
     setAuthModalVisible(true);
   };
@@ -64,6 +79,7 @@ export default function OnboardingScreen1() {
   const handleGoogleAuth = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsGoogleLoading(true);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'continue_google' });
     
     try {
       const watchdog = startAuthWatchdog({ tag: 'google.onboarding1', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
@@ -162,12 +178,14 @@ export default function OnboardingScreen1() {
 
   const handleEmailAuth = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'continue_email' });
     setSignUpModalVisible(true);
   };
 
   const handleAppleAuth = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsAppleLoading(true);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'continue_apple' });
     
     try {
       const rawNonce = await generateNonce(32);

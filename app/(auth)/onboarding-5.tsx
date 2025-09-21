@@ -20,20 +20,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 export default function OnboardingScreen5() {
   const router = useRouter();
   const { theme } = useTheme();
   const { updateLogo } = useOnboarding();
+  const analytics = useAnalytics();
   const [logoUri, setLogoUri] = useState<string | null>(null);
 
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: 5,
+      step_id: 'onboarding-5',
+      step_name: 'logo',
+      group: 'onboarding'
+    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, [analytics]);
 
   const handleContinue = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -43,6 +51,7 @@ export default function OnboardingScreen5() {
       console.log('[Onboarding5] Saving logo:', logoUri);
       await updateLogo(logoUri);
       
+      analytics.trackEvent('Onboarding Next', { from_step: 5, to_step: 6, action: 'continue' });
       router.push("/(auth)/onboarding-6");
     } catch (error) {
       console.error('[Onboarding5] Error saving logo:', error);

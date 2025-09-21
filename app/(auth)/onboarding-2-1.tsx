@@ -14,10 +14,12 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 export default function OnboardingScreen2_1() {
   const router = useRouter();
   const { theme } = useTheme();
+  const analytics = useAnalytics();
   const [videoReady, setVideoReady] = useState(false);
 
   // Initialize video player
@@ -41,13 +43,20 @@ export default function OnboardingScreen2_1() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: '2-1',
+      step_id: 'onboarding-2-1',
+      step_name: 'value_prop_1',
+      group: 'onboarding'
+    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, [analytics]);
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding Next', { from_step: '2-1', to_step: '2-2', action: 'continue' });
     router.push("/(auth)/onboarding-2-2");
   };
 

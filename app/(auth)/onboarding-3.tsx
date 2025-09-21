@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 const REGIONS = [
   { label: 'Select Region', value: '', flag: '' },
@@ -77,6 +78,7 @@ export default function OnboardingScreen3() {
 	const router = useRouter();
   const { theme } = useTheme();
   const { updateBusinessInfo, onboardingData, loadOnboardingData } = useOnboarding();
+  const analytics = useAnalytics();
   const nameInputRef = useRef<TextInput>(null);
 
   const [businessName, setBusinessName] = useState('');
@@ -87,10 +89,16 @@ export default function OnboardingScreen3() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding Step Viewed', {
+      step: 3,
+      step_id: 'onboarding-3',
+      step_name: 'business_info',
+      group: 'onboarding'
+    });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, []);
+  }, [analytics]);
 
   // Auto-focus name input when screen loads
 	useEffect(() => {
@@ -114,6 +122,7 @@ export default function OnboardingScreen3() {
       console.log('[Onboarding3] Saving business info:', { businessName, selectedRegion });
       await updateBusinessInfo({ businessName, selectedRegion });
       
+      analytics.trackEvent('Onboarding Next', { from_step: 3, to_step: 4, action: 'continue' });
       router.push("/(auth)/onboarding-4");
     } catch (error) {
       console.error('[Onboarding3] Error saving business info:', error);
