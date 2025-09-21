@@ -241,6 +241,10 @@ export default function NewSettingsScreen() {
     setIsTabBarVisible(false);
     router.push('/customer-support');
   };
+  const handleAnalyticsDebugPress = () => {
+    setIsTabBarVisible(false);
+    router.push('/analytics-debug');
+  };
   const handleContactUsPress = () => console.log('Contact Us pressed');
   const handleLeaveReviewPress = () => console.log('Leave Review pressed');
 
@@ -338,6 +342,13 @@ export default function NewSettingsScreen() {
           label: 'Help & Customer Support',
           onPress: handleHelpPress,
           searchTerms: ['help', 'customer', 'support', 'assistance', 'contact']
+        },
+        {
+          id: 'analytics-debug',
+          icon: <Zap color={theme.foreground} size={24} />,
+          label: 'Analytics Debug',
+          onPress: handleAnalyticsDebugPress,
+          searchTerms: ['analytics', 'mixpanel', 'debug', 'events', 'tracking']
         },
         {
           id: 'review',
