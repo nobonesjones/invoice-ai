@@ -1,13 +1,24 @@
 import React, { useMemo } from 'react';
-import { View, Text, Button, Platform, StyleSheet } from 'react-native';
+import { View, Text, Button, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { ChevronLeft } from 'lucide-react-native';
 
 export default function AnalyticsDebugScreen() {
   const { theme } = useTheme();
   const analytics = useAnalytics();
+  const router = useRouter();
+  const { setIsTabBarVisible } = useTabBarVisibility();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsTabBarVisible(false);
+      return () => {};
+    }, [setIsTabBarVisible])
+  );
 
   const tokenInfo = useMemo(() => {
     const token = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN || '';
@@ -16,8 +27,20 @@ export default function AnalyticsDebugScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Analytics Debug' }} />
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+      <Stack.Screen 
+        options={{ 
+          headerShown: true, 
+          title: 'Analytics Debug',
+          headerStyle: { backgroundColor: theme.background },
+          headerTintColor: theme.foreground,
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+          )
+        }} 
+      />
       <View style={[styles.container, { backgroundColor: theme.background }]}> 
         <Text style={[styles.title, { color: theme.foreground }]}>Analytics Debug</Text>
         <Text style={[styles.sub, { color: theme.mutedForeground }]}>Quick checks for Mixpanel connectivity</Text>
@@ -67,4 +90,3 @@ const styles = StyleSheet.create({
   actions: { marginTop: 16 },
   buttonWrapper: { marginTop: 8 },
 });
-
