@@ -3,8 +3,8 @@ import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, Acti
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient'; 
-import {
-  ChevronRight, Search, Zap, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
+import { 
+  ChevronRight, Search, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
   Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell,
   Crown 
 } from 'lucide-react-native';
@@ -241,10 +241,6 @@ export default function NewSettingsScreen() {
     setIsTabBarVisible(false);
     router.push('/customer-support');
   };
-  const handleAnalyticsDebugPress = () => {
-    setIsTabBarVisible(false);
-    router.push('/analytics-debug');
-  };
   const handleContactUsPress = () => console.log('Contact Us pressed');
   const handleLeaveReviewPress = () => console.log('Leave Review pressed');
 
@@ -342,13 +338,6 @@ export default function NewSettingsScreen() {
           label: 'Help & Customer Support',
           onPress: handleHelpPress,
           searchTerms: ['help', 'customer', 'support', 'assistance', 'contact']
-        },
-        {
-          id: 'analytics-debug',
-          icon: <Zap color={theme.foreground} size={24} />,
-          label: 'Analytics Debug',
-          onPress: handleAnalyticsDebugPress,
-          searchTerms: ['analytics', 'mixpanel', 'debug', 'events', 'tracking']
         },
         {
           id: 'review',

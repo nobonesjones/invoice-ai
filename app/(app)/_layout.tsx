@@ -39,7 +39,6 @@ export default function AppLayout() {
 				<Stack.Screen name="customer-support" options={{ headerShown: false }} />
 				<Stack.Screen name="payment-options" options={{ headerShown: false }} />
 				<Stack.Screen name="payment-reminders" options={{ headerShown: false }} />
-				<Stack.Screen name="analytics-debug" options={{ headerShown: false }} />
 				{/* <Stack.Screen name="settings" options={{ headerShown: false }} /> */}
 				<Stack.Screen name="welcome" options={{ headerShown: false }} />
 				<Stack.Screen name="soft-paywall" options={{ headerShown: false }} />
