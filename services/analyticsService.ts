@@ -4,6 +4,7 @@
  */
 
 import { Mixpanel } from 'mixpanel-react-native';
+import { Platform } from 'react-native';
 
 class AnalyticsService {
   private mixpanel: Mixpanel | null = null;
@@ -35,10 +36,12 @@ class AnalyticsService {
       // Initialize Mixpanel with proper serverURL configuration
       const trackAutomaticEvents = false; // We'll track manually for more control
       const useNative = true; // Native mode for React Native
-      const serverURL = 'https://api.mixpanel.com'; // US data residency (change if EU/India)
-      
-      this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents, useNative, serverURL);
-      await this.mixpanel.init();
+      const serverURL = 'https://api-eu.mixpanel.com'; // EU data residency per your project
+
+      // Note: serverURL arg is not respected in the native constructor signature.
+      // Pass it via init() or call setServerURL() after init.
+      this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents, useNative);
+      await this.mixpanel.init(undefined, undefined, serverURL);
       
       // Disable debug logging for production
       this.mixpanel.setLoggingEnabled(false);
@@ -48,8 +51,8 @@ class AnalyticsService {
         timestamp: new Date().toISOString(),
         test_event: true,
         sdk_version: 'mixpanel-react-native@3.1.2',
-        platform: 'ios',
-        environment: 'development'
+        platform: Platform.OS,
+        environment: __DEV__ ? 'development' : 'production'
       });
       
       // Force flush the test event immediately

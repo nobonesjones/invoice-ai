@@ -3,7 +3,7 @@
     "name": "SuperInvoice",
     "slug": "meetings",
     "scheme": "superinvoice",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/superinvoiceicon.png",
     "userInterfaceStyle": "automatic",

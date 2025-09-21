@@ -3,7 +3,7 @@ import "../global.css";
 
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Slot, useRouter, useSegments } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Host } from "react-native-portalize";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -25,6 +25,37 @@ function RootLayoutNav() {
 	
 	// Initialize analytics
 	const analytics = useAnalytics();
+	const lastIdentifiedIdRef = useRef<string | null>(null);
+
+	// Identify the user once when a session is present
+	useEffect(() => {
+		if (!initialized) return;
+		const user = session?.user;
+		const userId = user?.id || null;
+
+		if (userId && lastIdentifiedIdRef.current !== userId) {
+			analytics.identifyUser(userId, {
+				$email: (user?.email as string | undefined) || undefined,
+				$name: (user?.user_metadata as any)?.full_name || undefined,
+				$created: (user as any)?.created_at || new Date().toISOString(),
+			});
+			lastIdentifiedIdRef.current = userId;
+		}
+
+		if (!userId) {
+			lastIdentifiedIdRef.current = null;
+		}
+	}, [initialized, session?.user?.id]);
+
+	// Send a one-time preview connectivity ping so you can verify Live View
+	useEffect(() => {
+		try {
+			analytics.trackEvent('Analytics Preview Ping', {
+				source: 'app/_layout',
+				timestamp: new Date().toISOString(),
+			});
+		} catch {}
+	}, []);
 
 	useEffect(() => {
 		if (!initialized) return; // Wait until supabase is initialized
