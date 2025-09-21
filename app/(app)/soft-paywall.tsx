@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { usePlacement, useSuperwall } from 'expo-superwall';
@@ -17,6 +17,13 @@ export default function SoftPaywallScreen() {
   const analytics = useAnalytics();
   const [isPaywallPresented, setIsPaywallPresented] = useState(false);
   const [shouldNavigate, setShouldNavigate] = useState(false);
+  const skipTrackedRef = useRef(false);
+
+  const trackSkipOnce = useCallback((reason: string) => {
+    if (skipTrackedRef.current) return;
+    skipTrackedRef.current = true;
+    analytics.trackEvent('Paywall Skipped', { reason });
+  }, [analytics]);
   
   // Get Superwall instance for debugging
   const superwall = useSuperwall();
@@ -76,7 +83,7 @@ export default function SoftPaywallScreen() {
       
       if (!user?.id) {
         console.log('[SoftPaywall] No user ID found, navigating to main app');
-        analytics.trackEvent('Paywall Skipped', { reason: 'no_user' });
+        trackSkipOnce('no_user');
         setShouldNavigate(true);
         return;
       }
@@ -90,7 +97,6 @@ export default function SoftPaywallScreen() {
 
       try {
         console.log('[SoftPaywall] Presenting onboarding paywall for user:', user.id);
-        analytics.trackEvent('Paywall Attempt', { placement: 'onboarding', user_id: user.id });
         
         // Debug Superwall state before placement
         if (superwall) {
@@ -137,13 +143,13 @@ export default function SoftPaywallScreen() {
         // If result is undefined and no callbacks fired, something's wrong
         if (result === undefined) {
           console.log('[SoftPaywall] registerPlacement returned undefined - paywall might be skipped or user already subscribed');
-          analytics.trackEvent('Paywall Skipped', { reason: 'undefined_result' });
+          trackSkipOnce('undefined_result');
           
           // Just wait a bit to see if callbacks fire, then navigate
           setTimeout(() => {
             if (!isPaywallPresented) {
               console.log('[SoftPaywall] No paywall presented after 2 seconds, navigating to main app');
-              analytics.trackEvent('Paywall Skipped', { reason: 'not_presented' });
+              trackSkipOnce('not_presented');
               setShouldNavigate(true);
             }
           }, 2000);

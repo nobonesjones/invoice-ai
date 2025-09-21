@@ -41,14 +41,11 @@ export default function OnboardingScreen8() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     // Track onboarding completion - key funnel event!
-    analytics.trackEvent('Completed onboarding', {
-      final_step: 10,
-      step_label: 'onboarding 9',
-      timestamp: new Date().toISOString()
-    });
     analytics.trackEvent('Onboarding Completed', {
-      final_step: 10,
-      outcome: 'proceed_to_paywall'
+      final_step: 9,
+      step_label: 'Onboarding 9 - Account Created',
+      outcome: 'proceed_to_paywall',
+      timestamp: new Date().toISOString()
     });
     
     try {

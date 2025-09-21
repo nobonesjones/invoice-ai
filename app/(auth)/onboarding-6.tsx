@@ -42,7 +42,7 @@ export default function OnboardingScreen6() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    analytics.trackEvent('Onboarding 7 - Value', { step: 7 });
+    analytics.trackEvent('Onboarding 8 - Value', { step: 8 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
