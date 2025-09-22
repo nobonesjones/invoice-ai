@@ -43,7 +43,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
-import { useAnalytics } from '@/hooks/useAnalytics';
 import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft, Palette } from 'lucide-react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -59,7 +58,6 @@ import { UsageService } from '@/services/usageService';
 import { usePaymentOptions } from '@/hooks/invoices/usePaymentOptions';
 import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivityLogger';
 import { ReferenceNumberService } from '@/services/referenceNumberService';
-import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Import estimate-specific components and modals
 import NewClientSelectionSheet, { NewClientSelectionSheetRef } from '../invoices/NewClientSelectionSheet';
@@ -313,7 +311,6 @@ const calculateGrandTotal = (
 };
 
 export default function CreateEstimateScreen() {
-  const analytics = useAnalytics();
   const { isLightMode } = useTheme();
   const analytics = useAnalytics();
   const themeColors = isLightMode ? colors.light : colors.dark;
