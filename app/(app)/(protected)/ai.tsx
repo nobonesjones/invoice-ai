@@ -27,6 +27,7 @@ import SkiaInvoiceCanvasClean from "@/components/skia/SkiaInvoiceCanvasClean";
 import SkiaInvoiceCanvasSimple from "@/components/skia/SkiaInvoiceCanvasSimple";
 import SkiaInvoiceCanvasWave from "@/components/skia/SkiaInvoiceCanvasWave";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
+import { useAnalytics } from '@/hooks/useAnalytics';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
@@ -1096,7 +1097,7 @@ export default function AiScreen() {
 	const router = useRouter();
 	const scrollViewRef = useRef<ScrollView>(null);
 	const transcribeButtonRef = useRef<TranscribeButtonRef>(null);
-	// const analytics = useAnalytics(); // Removed for App Store build
+	const analytics = useAnalytics();
 	
 	// State
 	const [inputText, setInputText] = useState('');
@@ -1463,7 +1464,8 @@ or '${example2}'`,
 
 		const messageToSend = inputText.trim();
 		
-		// 📊 Track AI chat usage immediately when send button is clicked
+		// 📊 Track AI text message sent
+		try { analytics.trackEvent('AI Message - Text'); } catch {}
 		const startTime = Date.now();
 		
 		// Simple intent detection
@@ -1473,7 +1475,7 @@ or '${example2}'`,
 		else if (lowerMessage.includes('estimate') || lowerMessage.includes('quote')) detectedIntent = 'create_estimate';
 		else if (lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('discount')) detectedIntent = 'update_document';
 		
-		// Analytics removed for App Store build
+		// Analytics: additional properties can be tracked here if needed
 		
 		// Clear input immediately to prevent the text from staying
 		// Store it in case we need to restore on error
@@ -1943,7 +1945,8 @@ or '${example2}'`,
 																																	if (!aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 												}
-												transcribeButtonRef.current?.startRecording();
+											try { analytics.trackEvent('AI Message - Audio'); } catch {}
+											transcribeButtonRef.current?.startRecording();
 											}}
 											disabled={aiIsLoading || showSetupMessage}
 											style={{

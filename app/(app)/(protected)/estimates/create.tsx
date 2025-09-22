@@ -59,6 +59,7 @@ import { UsageService } from '@/services/usageService';
 import { usePaymentOptions } from '@/hooks/invoices/usePaymentOptions';
 import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivityLogger';
 import { ReferenceNumberService } from '@/services/referenceNumberService';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Import estimate-specific components and modals
 import NewClientSelectionSheet, { NewClientSelectionSheetRef } from '../invoices/NewClientSelectionSheet';
@@ -312,6 +313,7 @@ const calculateGrandTotal = (
 };
 
 export default function CreateEstimateScreen() {
+  const analytics = useAnalytics();
   const { isLightMode } = useTheme();
   const analytics = useAnalytics();
   const themeColors = isLightMode ? colors.light : colors.dark;
@@ -951,7 +953,16 @@ export default function CreateEstimateScreen() {
         // Don't fail the estimate creation for this, just log it
       }
 
-      // 6. Success - Navigate to viewer
+      // 6. Success - Track and Navigate to viewer
+      try {
+        if (!isEditMode) {
+          analytics.trackEvent('Save Estimate - Step 2', {
+            amount: displayEstimateTotal,
+            currency: currencyCode,
+            line_items_count: (formData.items || []).length,
+          });
+        }
+      } catch {}
       const successMessage = isEditMode ? 'Estimate updated successfully!' : 'Estimate created successfully!';
       
       // Update local state

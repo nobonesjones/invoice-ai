@@ -81,6 +81,7 @@ import { UsageService } from '@/services/usageService'; // Added UsageService im
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal'; // Added InvoicePreviewModal import
 // import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'; // Removed to match estimates behavior
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -271,6 +272,7 @@ const calculateGrandTotal = (
 };
 
 export default function CreateInvoiceScreen() {
+  const analytics = useAnalytics();
   // Add state for currency code INSIDE the component
   const [currencyCode, setCurrencyCode] = useState<string>('USD');
   const { isLightMode } = useTheme();
@@ -738,7 +740,16 @@ export default function CreateInvoiceScreen() {
       // 2. Handle line items (create/update/delete)
       await handleLineItemsUpdate(savedInvoice.id, formData.items);
 
-      // 3. Success - Navigate to viewer
+      // 3. Success - Track and Navigate to viewer
+      try {
+        if (!isEditMode) {
+          analytics.trackEvent('Save Invoice - Step 2', {
+            amount: invoiceTotal,
+            currency: currencyCode,
+            line_items_count: (formData.items || []).length,
+          });
+        }
+      } catch {}
       const successMessage = isEditMode ? 'Invoice updated successfully!' : 'Invoice created successfully!';
       
       // Log the activity

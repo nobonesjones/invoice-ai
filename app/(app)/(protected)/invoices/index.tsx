@@ -33,6 +33,7 @@ import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useInvoiceStatusUpdater } from '@/hooks/useInvoiceStatusUpdater';
+import { useAnalytics } from '@/hooks/useAnalytics';
 import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 import type { Database } from "../../../../supabase/types/database.types"; 
 
@@ -209,6 +210,7 @@ export default function InvoiceDashboardScreen() {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
+  const analytics = useAnalytics();
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { checkAndShowPaywall } = useItemCreationLimit();
@@ -509,6 +511,7 @@ export default function InvoiceDashboardScreen() {
                   const canProceed = await checkAndShowPaywall();
                   // Can proceed with creation
                   if (canProceed) {
+                    try { analytics.trackEvent('Make Invoice - Step 1'); } catch {}
                     router.push("/invoices/create" as any);
                   }
                 }}

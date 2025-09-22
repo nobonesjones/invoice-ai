@@ -35,6 +35,7 @@ import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useEstimateStatusUpdater } from '@/hooks/useEstimateStatusUpdater';
 import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 import type { Database } from "../../../../types/database.types"; 
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Define filter options here to map type to label for initialization and sync
 const filterOptions = [
@@ -211,6 +212,7 @@ export default function EstimateDashboardScreen() {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
+  const analytics = useAnalytics();
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { checkAndShowPaywall } = useItemCreationLimit();
@@ -509,6 +511,7 @@ export default function EstimateDashboardScreen() {
                 onPress={async () => {
                   const canProceed = await checkAndShowPaywall();
                   if (canProceed) {
+                    try { analytics.trackEvent('Make Estimate - Step 1'); } catch {}
                     router.push("/estimates/create" as any);
                   }
                 }}
