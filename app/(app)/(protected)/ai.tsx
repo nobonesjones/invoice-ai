@@ -1098,6 +1098,10 @@ export default function AiScreen() {
 	const scrollViewRef = useRef<ScrollView>(null);
 	const transcribeButtonRef = useRef<TranscribeButtonRef>(null);
 	const analytics = useAnalytics();
+
+	// Single-flight guard to prevent duplicate runs
+	const [inFlight, setInFlight] = useState(false);
+	const inFlightTimerRef = useRef<NodeJS.Timeout | null>(null);
 	
 	// State
 	const [inputText, setInputText] = useState('');
@@ -1451,6 +1455,8 @@ or '${example2}'`,
 	const displayMessages = aiMessages.length > 0 ? aiMessages : [getWelcomeMessage()];
 
 	const handleSendMessage = async () => {
+		// Block if a run is already in-flight
+		if (inFlight) return;
 		if (!inputText.trim() || aiIsLoading) return;
 
 		// Check if API is configured before sending
@@ -1467,6 +1473,11 @@ or '${example2}'`,
 		// 📊 Track AI text message sent
 		try { analytics.trackEvent('AI Message - Text'); } catch {}
 		const startTime = Date.now();
+
+		// Engage single-flight with safety timeout
+		setInFlight(true);
+		if (inFlightTimerRef.current) clearTimeout(inFlightTimerRef.current as any);
+		inFlightTimerRef.current = setTimeout(() => setInFlight(false), 20000);
 		
 		// Simple intent detection
 		const lowerMessage = messageToSend.toLowerCase();
@@ -1498,6 +1509,12 @@ or '${example2}'`,
 			console.error('[AI Screen] Failed to send message:', error);
 			// Restore the text on error so user can retry
 			setInputText(messageToSend);
+		} finally {
+			setInFlight(false);
+			if (inFlightTimerRef.current) {
+				clearTimeout(inFlightTimerRef.current);
+				inFlightTimerRef.current = null;
+			}
 		}
 	};
 
@@ -1945,10 +1962,15 @@ or '${example2}'`,
 																																	if (!aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 												}
+											// Prevent starting a new recording while a run is in-flight
+											if (inFlight) return;
 											try { analytics.trackEvent('AI Message - Audio'); } catch {}
+											setInFlight(true);
+											if (inFlightTimerRef.current) clearTimeout(inFlightTimerRef.current as any);
+											inFlightTimerRef.current = setTimeout(() => setInFlight(false), 20000);
 											transcribeButtonRef.current?.startRecording();
 											}}
-											disabled={aiIsLoading || showSetupMessage}
+											disabled={aiIsLoading || showSetupMessage || inFlight}
 											style={{
 												width: 44,
 												height: 44,
@@ -1956,7 +1978,7 @@ or '${example2}'`,
 												backgroundColor: theme.primary,
 												alignItems: 'center',
 												justifyContent: 'center',
-												opacity: (aiIsLoading || showSetupMessage) ? 0.5 : 1
+												opacity: (aiIsLoading || showSetupMessage || inFlight) ? 0.5 : 1
 											}}
 										>
 											<Mic size={20} color="#FFFFFF" />
@@ -1970,14 +1992,15 @@ or '${example2}'`,
 												if (inputText.trim() && !aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 												}
+												if (inFlight) return;
 												handleSendMessage();
 											}}
-											disabled={!inputText.trim() || aiIsLoading || showSetupMessage}
+											disabled={!inputText.trim() || aiIsLoading || showSetupMessage || inFlight}
 											style={{
 												width: 44,
 												height: 44,
 												borderRadius: 22,
-												backgroundColor: (inputText.trim() && !aiIsLoading && !showSetupMessage) ? theme.primary : theme.muted,
+												backgroundColor: (inputText.trim() && !aiIsLoading && !showSetupMessage && !inFlight) ? theme.primary : theme.muted,
 												alignItems: 'center',
 												justifyContent: 'center'
 											}}
