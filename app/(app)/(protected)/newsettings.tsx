@@ -237,10 +237,10 @@ export default function NewSettingsScreen() {
   const handleStoragePress = () => console.log('Storage pressed');
   const handlePrivacyPolicyPress = () => Linking.openURL('https://www.getsuperinvoice.com/privacy');
   const handleTermsOfServicePress = () => Linking.openURL('https://www.getsuperinvoice.com/terms');
-  const handleHelpPress = () => {
-    setIsTabBarVisible(false);
-    router.push('/customer-support');
-  };
+ const handleHelpPress = () => {
+   setIsTabBarVisible(false);
+    router.push('/(app)/customer-support');
+ };
   const handleContactUsPress = () => console.log('Contact Us pressed');
   const handleLeaveReviewPress = () => console.log('Leave Review pressed');
 

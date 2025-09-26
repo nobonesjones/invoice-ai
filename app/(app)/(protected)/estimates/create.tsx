@@ -354,6 +354,22 @@ export default function CreateEstimateScreen() {
   // Business settings cache for preview
   const [businessSettingsCache, setBusinessSettingsCache] = useState<any>(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (isEditMode) {
+        return;
+      }
+
+      try {
+        analytics.trackEvent('Make Estimate - Step 1', {
+          source: estimateTerminology === 'quote' ? 'quotes_tab' : 'estimates_tab'
+        });
+      } catch (error) {
+        console.warn('[CreateEstimate] Analytics failed to log CTA:', error);
+      }
+    }, [analytics, isEditMode, estimateTerminology])
+  );
+
   // Sheet refs
   const newClientSheetRef = useRef<NewClientSelectionSheetRef>(null);
   const addItemSheetRef = useRef<AddItemSheetStableRef | AddItemSheetRef>(null);

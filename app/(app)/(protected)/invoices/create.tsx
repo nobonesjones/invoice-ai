@@ -344,6 +344,22 @@ export default function CreateInvoiceScreen() {
 
   const styles = getStyles(themeColors); // MOVED STYLES DECLARATION HERE
 
+  useFocusEffect(
+    useCallback(() => {
+      if (isEditMode) {
+        return;
+      }
+
+      try {
+        analytics.trackEvent('Make Invoice - Step 1', {
+          source: 'invoices_tab'
+        });
+      } catch (error) {
+        console.warn('[CreateInvoice] Analytics failed to log CTA:', error);
+      }
+    }, [isEditMode, analytics])
+  );
+
   // Initialize invoice_date in the form state
   useEffect(() => {
     setValue('invoice_date', new Date());
@@ -2609,18 +2625,3 @@ const getStyles = (themeColors: ThemeColorPalette) => {
     },
   });
 }
-  useFocusEffect(
-    useCallback(() => {
-      if (isEditMode) {
-        return;
-      }
-
-      try {
-        analytics.trackEvent('Make Invoice - Step 1', {
-          source: 'invoices_tab'
-        });
-      } catch (error) {
-        console.warn('[CreateInvoice] Analytics failed to log CTA:', error);
-      }
-    }, [isEditMode, analytics])
-  );
