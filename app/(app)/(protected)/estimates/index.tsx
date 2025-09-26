@@ -511,33 +511,15 @@ export default function EstimateDashboardScreen() {
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
                   const source = estimateTerminology === 'quote' ? 'quotes_tab' : 'estimates_tab';
-
                   try {
-                    trackEvent('Estimates - Create Estimate CTA', {
-                      stage: 'clicked',
-                      source
-                    });
+                    trackEvent('Make Estimate - Step 1', { source });
                   } catch {}
 
                   const canProceed = await checkAndShowPaywall();
 
                   if (!canProceed) {
-                    try {
-                      trackEvent('Estimates - Create Estimate CTA', {
-                        stage: 'blocked',
-                        source
-                      });
-                    } catch {}
                     return;
                   }
-
-                  try {
-                    trackEvent('Make Estimate - Step 1');
-                    trackEvent('Estimates - Create Estimate CTA', {
-                      stage: 'proceed',
-                      source
-                    });
-                  } catch {}
 
                   router.push("/estimates/create" as any);
                 }}
