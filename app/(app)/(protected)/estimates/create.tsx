@@ -41,7 +41,7 @@ import {
   StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft, Palette } from 'lucide-react-native';
