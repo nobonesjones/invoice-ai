@@ -213,6 +213,7 @@ export default function EstimateDashboardScreen() {
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
   const analytics = useAnalytics();
+  const trackEvent = analytics.trackEvent;
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { checkAndShowPaywall } = useItemCreationLimit();
@@ -509,11 +510,36 @@ export default function EstimateDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
+                  const source = estimateTerminology === 'quote' ? 'quotes_tab' : 'estimates_tab';
+
+                  try {
+                    trackEvent('Estimates - Create Estimate CTA', {
+                      stage: 'clicked',
+                      source
+                    });
+                  } catch {}
+
                   const canProceed = await checkAndShowPaywall();
-                  if (canProceed) {
-                    try { analytics.trackEvent('Make Estimate - Step 1'); } catch {}
-                    router.push("/estimates/create" as any);
+
+                  if (!canProceed) {
+                    try {
+                      trackEvent('Estimates - Create Estimate CTA', {
+                        stage: 'blocked',
+                        source
+                      });
+                    } catch {}
+                    return;
                   }
+
+                  try {
+                    trackEvent('Make Estimate - Step 1');
+                    trackEvent('Estimates - Create Estimate CTA', {
+                      stage: 'proceed',
+                      source
+                    });
+                  } catch {}
+
+                  router.push("/estimates/create" as any);
                 }}
               >
                 <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>

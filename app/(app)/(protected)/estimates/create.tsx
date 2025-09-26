@@ -41,7 +41,7 @@ import {
   StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Calendar, Trash2, Percent, CreditCard, Banknote, Paperclip, Landmark, ChevronLeft, Palette } from 'lucide-react-native';
@@ -58,6 +58,7 @@ import { UsageService } from '@/services/usageService';
 import { usePaymentOptions } from '@/hooks/invoices/usePaymentOptions';
 import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivityLogger';
 import { ReferenceNumberService } from '@/services/referenceNumberService';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Import estimate-specific components and modals
 import NewClientSelectionSheet, { NewClientSelectionSheetRef } from '../invoices/NewClientSelectionSheet';
@@ -313,6 +314,7 @@ const calculateGrandTotal = (
 export default function CreateEstimateScreen() {
   const { isLightMode } = useTheme();
   const analytics = useAnalytics();
+  const trackEvent = analytics.trackEvent;
   const themeColors = isLightMode ? colors.light : colors.dark;
   const router = useRouter();
   const navigation = useNavigation();
@@ -321,6 +323,7 @@ export default function CreateEstimateScreen() {
   
   // Add activity logger for estimate tracking
   const { logEstimateCreated, logEstimateEdited } = useEstimateActivityLogger();
+  const hasLoggedCreateCTA = useRef(false);
   
   const params = useLocalSearchParams<{ 
     id?: string;
@@ -351,7 +354,26 @@ export default function CreateEstimateScreen() {
   
   // Business settings cache for preview
   const [businessSettingsCache, setBusinessSettingsCache] = useState<any>(null);
-  
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isEditMode || hasLoggedCreateCTA.current) {
+        return;
+      }
+
+      try {
+        hasLoggedCreateCTA.current = true;
+        trackEvent('Estimates - Create Estimate CTA', {
+          stage: 'screen_loaded',
+          source: 'estimates_tab'
+        });
+        trackEvent('Make Estimate - Step 1');
+      } catch (error) {
+        console.warn('[CreateEstimate] Analytics failed to log CTA:', error);
+      }
+    }, [isEditMode, trackEvent])
+  );
+
   // Sheet refs
   const newClientSheetRef = useRef<NewClientSelectionSheetRef>(null);
   const addItemSheetRef = useRef<AddItemSheetStableRef | AddItemSheetRef>(null);
@@ -953,7 +975,7 @@ export default function CreateEstimateScreen() {
       // 6. Success - Track and Navigate to viewer
       try {
         if (!isEditMode) {
-          analytics.trackEvent('Save Estimate - Step 2', {
+          trackEvent('Save Estimate - Step 2', {
             amount: displayEstimateTotal,
             currency: currencyCode,
             line_items_count: (formData.items || []).length,
