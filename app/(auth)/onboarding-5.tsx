@@ -28,6 +28,7 @@ export default function OnboardingScreen5() {
   const { updateLogo } = useOnboarding();
   const analytics = useAnalytics();
   const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -39,6 +40,9 @@ export default function OnboardingScreen5() {
   }, []);
 
   const handleContinue = async () => {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
@@ -46,11 +50,12 @@ export default function OnboardingScreen5() {
       console.log('[Onboarding5] Saving logo:', logoUri);
       await updateLogo(logoUri);
       
-      analytics.trackEvent('Onboarding Next', { from_step: 7, to_step: 8, action: 'continue' });
       router.push("/(auth)/onboarding-6");
     } catch (error) {
       console.error('[Onboarding5] Error saving logo:', error);
       Alert.alert('Error', 'Failed to save logo. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
   };
 
@@ -207,7 +212,12 @@ export default function OnboardingScreen5() {
               <View style={styles.buttonContainer}>
                 <Button
                   onPress={handleContinue}
-                  style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                  disabled={isSubmitting}
+                  style={[
+                    styles.primaryButton,
+                    { backgroundColor: theme.primary },
+                    isSubmitting && { opacity: 0.6 }
+                  ]}
                 >
                   <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
                 </Button>

@@ -85,6 +85,7 @@ export default function OnboardingScreen3() {
   const [selectedRegion, setSelectedRegion] = useState('');
   const [showRegionPicker, setShowRegionPicker] = useState(false);
   const [isNameInputFocused, setIsNameInputFocused] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -110,6 +111,9 @@ export default function OnboardingScreen3() {
       return;
     }
 
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
@@ -117,11 +121,12 @@ export default function OnboardingScreen3() {
       console.log('[Onboarding3] Saving business info:', { businessName, selectedRegion });
       await updateBusinessInfo({ businessName, selectedRegion });
       
-      analytics.trackEvent('Onboarding Next', { from_step: 5, to_step: 6, action: 'continue' });
       router.push("/(auth)/onboarding-4");
     } catch (error) {
       console.error('[Onboarding3] Error saving business info:', error);
       Alert.alert('Error', 'Failed to save business information. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
   };
 
@@ -242,11 +247,12 @@ export default function OnboardingScreen3() {
                 <View style={styles.buttonContainer}>
 				<Button
                     onPress={handleContinue}
+                    disabled={!isFormValid || isSubmitting}
                     style={[
                       styles.primaryButton,
-                      { backgroundColor: isFormValid ? theme.primary : theme.muted }
+                      { backgroundColor: isFormValid ? theme.primary : theme.muted },
+                      isSubmitting && { opacity: 0.6 }
                     ]}
-                    disabled={!isFormValid}
                   >
                     <Text style={[
                       styles.primaryButtonText,

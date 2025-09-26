@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   ScrollView, 
@@ -15,7 +15,6 @@ import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Send, MessageSquare, RefreshCcw } from 'lucide-react-native';
 import * as Updates from 'expo-updates';
 import { useTheme } from '@/context/theme-provider';
-import { useAnalytics } from '@/hooks/useAnalytics';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useSupabase } from '@/context/supabase-provider';
 import { Text } from '@/components/ui/text';
@@ -33,12 +32,6 @@ export default function CustomerSupportScreen() {
   const { theme, isLightMode } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { user, supabase } = useSupabase();
-  const analytics = useAnalytics();
-  const tokenInfo = useMemo(() => {
-    const token = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN || '';
-    const masked = token ? `${token.slice(0, 6)}...${token.slice(-4)}` : 'NONE';
-    return { present: !!token, masked };
-  }, []);
 
   const [formData, setFormData] = useState<SupportFormData>({
     name: '',
@@ -274,57 +267,6 @@ export default function CustomerSupportScreen() {
       marginLeft: 8,
       fontWeight: '500',
     },
-    analyticsSection: {
-      backgroundColor: theme.card,
-      borderRadius: 12,
-      padding: 16,
-      marginTop: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    analyticsTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.foreground,
-      marginBottom: 8,
-    },
-    analyticsRowLabel: {
-      fontSize: 12,
-      color: theme.mutedForeground,
-      textTransform: 'uppercase',
-      marginTop: 8,
-    },
-    analyticsRowValue: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.foreground,
-    },
-    analyticsButton: {
-      backgroundColor: theme.primary,
-      borderRadius: 12,
-      padding: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 12,
-    },
-    analyticsButtonSecondary: {
-      backgroundColor: theme.muted,
-      borderRadius: 12,
-      padding: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 8,
-    },
-    analyticsButtonText: {
-      color: theme.primaryForeground,
-      fontSize: 16,
-      fontWeight: 'bold',
-    },
-    analyticsButtonTextSecondary: {
-      color: theme.foreground,
-      fontSize: 16,
-      fontWeight: '600',
-    },
     faqButton: {
       backgroundColor: theme.card,
       borderRadius: 12,
@@ -492,40 +434,7 @@ export default function CustomerSupportScreen() {
             </View>
           )}
 
-          {/* Analytics Debug Section (placed below Check for Updates) */}
-          <View style={styles.analyticsSection}>
-            <Text style={styles.analyticsTitle}>Analytics Debug</Text>
-            <Text style={styles.analyticsRowLabel}>Token Present</Text>
-            <Text style={styles.analyticsRowValue}>{String(tokenInfo.present)}</Text>
-            <Text style={styles.analyticsRowLabel}>Token (masked)</Text>
-            <Text style={styles.analyticsRowValue}>{tokenInfo.masked}</Text>
-            <Text style={styles.analyticsRowLabel}>Region</Text>
-            <Text style={styles.analyticsRowValue}>EU (api-eu.mixpanel.com)</Text>
-            <Text style={styles.analyticsRowLabel}>Platform</Text>
-            <Text style={styles.analyticsRowValue}>{Platform.OS}</Text>
-
-            <TouchableOpacity
-              style={styles.analyticsButton}
-              onPress={() => {
-                analytics.trackEvent('Manual Analytics Test', {
-                  token_present: tokenInfo.present,
-                  token_prefix: tokenInfo.masked.slice(0, 10),
-                  platform: Platform.OS,
-                  environment: __DEV__ ? 'development' : 'production',
-                  source: 'customer-support',
-                });
-              }}
-            >
-              <Text style={styles.analyticsButtonText}>Send Analytics Test Event</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.analyticsButtonSecondary}
-              onPress={() => analytics.emergencyDebugTest()}
-            >
-              <Text style={styles.analyticsButtonTextSecondary}>Run Emergency Debug Test</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Analytics debug tools removed for production */}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

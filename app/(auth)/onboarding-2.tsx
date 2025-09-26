@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ export default function OnboardingScreen2() {
   const router = useRouter();
   const { theme } = useTheme();
   const analytics = useAnalytics();
+  const [isAdvancing, setIsAdvancing] = useState(false);
 
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0627 (1).mp4'), (player) => {
@@ -41,11 +42,11 @@ export default function OnboardingScreen2() {
   }, []);
 
   const handleContinue = () => {
+    if (isAdvancing) return;
+
+    setIsAdvancing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Track onboarding progression
-    analytics.trackEvent('Onboarding Next', { from_step: 2, to_step: 3, action: 'continue' });
-    
     router.push("/(auth)/onboarding-2-1");
   };
 
@@ -77,7 +78,12 @@ export default function OnboardingScreen2() {
             <View style={styles.buttonContainer}>
               <Button
                 onPress={handleContinue}
-                style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                disabled={isAdvancing}
+                style={[
+                  styles.primaryButton,
+                  { backgroundColor: theme.primary },
+                  isAdvancing && { opacity: 0.6 }
+                ]}
               >
                 <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
               </Button>

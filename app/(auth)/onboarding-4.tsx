@@ -70,6 +70,7 @@ export default function OnboardingScreen4() {
   
   const [searchText, setSearchText] = useState('');
   const [selectedIndustry, setSelectedIndustry] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
@@ -95,6 +96,9 @@ export default function OnboardingScreen4() {
       return;
     }
 
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
@@ -104,11 +108,12 @@ export default function OnboardingScreen4() {
       
       // Analytics removed for App Store build
       
-      analytics.trackEvent('Onboarding Next', { from_step: 6, to_step: 7, action: 'continue' });
       router.push("/(auth)/onboarding-5");
     } catch (error) {
       console.error('[Onboarding4] Error saving industry:', error);
       Alert.alert('Error', 'Failed to save industry information. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
   };
 
@@ -205,11 +210,12 @@ export default function OnboardingScreen4() {
               <View style={styles.buttonContainer}>
                 <Button
                   onPress={handleContinue}
+                  disabled={!isFormValid || isSubmitting}
                   style={[
                     styles.primaryButton,
-                    { backgroundColor: isFormValid ? theme.primary : theme.muted }
+                    { backgroundColor: isFormValid ? theme.primary : theme.muted },
+                    (isSubmitting || !isFormValid) && { opacity: 0.6 }
                   ]}
-                  disabled={!isFormValid}
                 >
                   <Text style={[
                     styles.primaryButtonText,

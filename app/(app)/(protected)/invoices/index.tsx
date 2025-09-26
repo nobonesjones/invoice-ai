@@ -507,13 +507,34 @@ export default function InvoiceDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
-                  // Create button pressed
+                  try {
+                    analytics.trackEvent('Invoices - Create Invoice CTA', {
+                      stage: 'clicked',
+                      source: 'invoices_tab'
+                    });
+                  } catch {}
+
                   const canProceed = await checkAndShowPaywall();
-                  // Can proceed with creation
-                  if (canProceed) {
-                    try { analytics.trackEvent('Make Invoice - Step 1'); } catch {}
-                    router.push("/invoices/create" as any);
+
+                  if (!canProceed) {
+                    try {
+                      analytics.trackEvent('Invoices - Create Invoice CTA', {
+                        stage: 'blocked',
+                        source: 'invoices_tab'
+                      });
+                    } catch {}
+                    return;
                   }
+
+                  try {
+                    analytics.trackEvent('Make Invoice - Step 1');
+                    analytics.trackEvent('Invoices - Create Invoice CTA', {
+                      stage: 'proceed',
+                      source: 'invoices_tab'
+                    });
+                  } catch {}
+
+                  router.push("/invoices/create" as any);
                 }}
               >
                 <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>

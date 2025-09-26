@@ -21,6 +21,7 @@ export default function OnboardingScreen2_2() {
   const { theme } = useTheme();
   const analytics = useAnalytics();
   const [videoReady, setVideoReady] = useState(false);
+  const [isAdvancing, setIsAdvancing] = useState(false);
 
   // Initialize video player
   const player = useVideoPlayer(require('@/assets/videos/manual.mp4'), (player) => {
@@ -50,8 +51,10 @@ export default function OnboardingScreen2_2() {
   }, []);
 
   const handleContinue = () => {
+    if (isAdvancing) return;
+
+    setIsAdvancing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.trackEvent('Onboarding Next', { from_step: 4, to_step: 5, action: 'continue' });
     router.push("/(auth)/onboarding-3");
   };
 
@@ -80,7 +83,12 @@ export default function OnboardingScreen2_2() {
       <View style={styles.buttonOverlay}>
         <Button
           onPress={handleContinue}
-          style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+          disabled={isAdvancing}
+          style={[
+            styles.primaryButton,
+            { backgroundColor: theme.primary },
+            isAdvancing && { opacity: 0.6 }
+          ]}
         >
           <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
         </Button>

@@ -31,6 +31,7 @@ export default function OnboardingScreen6() {
   const { theme } = useTheme();
   const analytics = useAnalytics();
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0);
+  const [isAdvancing, setIsAdvancing] = useState(false);
   
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
@@ -42,7 +43,7 @@ export default function OnboardingScreen6() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    analytics.trackEvent('Onboarding 8 - Value', { step: 8 });
+    analytics.trackEvent('Onboarding 8 - Try for Free', { step: 8 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
@@ -60,8 +61,10 @@ export default function OnboardingScreen6() {
   }, []);
 
   const handleContinue = async () => {
+    if (isAdvancing) return;
+
+    setIsAdvancing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.trackEvent('Onboarding Next', { from_step: 8, to_step: 9, action: 'continue' });
     router.push("/(auth)/onboarding-7");
   };
 
@@ -164,7 +167,12 @@ export default function OnboardingScreen6() {
           <View style={styles.buttonContainer}>
             <Button
               onPress={handleContinue}
-              style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+              disabled={isAdvancing}
+              style={[
+                styles.primaryButton,
+                { backgroundColor: theme.primary },
+                isAdvancing && { opacity: 0.6 }
+              ]}
             >
               <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
             </Button>

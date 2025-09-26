@@ -56,11 +56,6 @@ export default function OnboardingScreen1() {
 
   const handleGetStarted = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.trackEvent('Onboarding Next', {
-      from_step: 1,
-      to_step: 2,
-      action: 'get_started'
-    });
     router.push("/(auth)/onboarding-2");
   };
 

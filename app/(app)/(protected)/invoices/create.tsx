@@ -273,6 +273,7 @@ const calculateGrandTotal = (
 
 export default function CreateInvoiceScreen() {
   const analytics = useAnalytics();
+  const trackEvent = analytics.trackEvent;
   // Add state for currency code INSIDE the component
   const [currencyCode, setCurrencyCode] = useState<string>('USD');
   const { isLightMode } = useTheme();
@@ -282,6 +283,7 @@ export default function CreateInvoiceScreen() {
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
   const { supabase, user } = useSupabase(); // Use Supabase context
   const { logPaymentAdded, logInvoiceCreated, logInvoiceEdited } = useInvoiceActivityLogger(); // Add activity logger
+  const hasLoggedCreateCTA = useRef(false);
   
   // Updated parameter handling to support both edit and create modes
   const params = useLocalSearchParams<{ 
@@ -743,7 +745,7 @@ export default function CreateInvoiceScreen() {
       // 3. Success - Track and Navigate to viewer
       try {
         if (!isEditMode) {
-          analytics.trackEvent('Save Invoice - Step 2', {
+          trackEvent('Save Invoice - Step 2', {
             amount: invoiceTotal,
             currency: currencyCode,
             line_items_count: (formData.items || []).length,
@@ -2609,3 +2611,21 @@ const getStyles = (themeColors: ThemeColorPalette) => {
     },
   });
 }
+  useFocusEffect(
+    useCallback(() => {
+      if (isEditMode || hasLoggedCreateCTA.current) {
+        return;
+      }
+
+      try {
+        hasLoggedCreateCTA.current = true;
+        trackEvent('Invoices - Create Invoice CTA', {
+          stage: 'screen_loaded',
+          source: 'invoices_tab'
+        });
+        trackEvent('Make Invoice - Step 1');
+      } catch (error) {
+        console.warn('[CreateInvoice] Analytics failed to log CTA:', error);
+      }
+    }, [isEditMode, trackEvent])
+  );
