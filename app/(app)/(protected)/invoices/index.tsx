@@ -508,31 +508,14 @@ export default function InvoiceDashboardScreen() {
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
                   try {
-                    analytics.trackEvent('Invoices - Create Invoice CTA', {
-                      stage: 'clicked',
-                      source: 'invoices_tab'
-                    });
+                    analytics.trackEvent('Make Invoice - Step 1', { source: 'invoices_tab' });
                   } catch {}
 
                   const canProceed = await checkAndShowPaywall();
 
                   if (!canProceed) {
-                    try {
-                      analytics.trackEvent('Invoices - Create Invoice CTA', {
-                        stage: 'blocked',
-                        source: 'invoices_tab'
-                      });
-                    } catch {}
                     return;
                   }
-
-                  try {
-                    analytics.trackEvent('Make Invoice - Step 1');
-                    analytics.trackEvent('Invoices - Create Invoice CTA', {
-                      stage: 'proceed',
-                      source: 'invoices_tab'
-                    });
-                  } catch {}
 
                   router.push("/invoices/create" as any);
                 }}
