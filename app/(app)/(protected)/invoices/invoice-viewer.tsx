@@ -1055,7 +1055,7 @@ function InvoiceViewerScreen() {
 
   // Get the accent color from invoice-specific settings
   const getAccentColor = () => {
-    const savedColor = invoice?.accent_color || '#14B8A6';
+    const savedColor = invoice?.accent_color || '#1E40AF';
     // Using accent color for invoice
     return savedColor;
   };

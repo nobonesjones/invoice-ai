@@ -636,7 +636,7 @@ export default function CreateInvoiceScreen() {
 
       // Get default design and color from business settings for new invoices
       let defaultDesign = DEFAULT_DESIGN_ID; // Use correct default ('clean') instead of hardcoded 'classic'
-      let defaultAccentColor = '#14B8A6';
+      let defaultAccentColor = '#1E40AF';
       
       
       if (!isEditMode) {
@@ -649,7 +649,7 @@ export default function CreateInvoiceScreen() {
           
           if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
-            defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
+            defaultAccentColor = businessSettings.default_accent_color || '#1E40AF';
           } else {
           }
         } catch (error) {

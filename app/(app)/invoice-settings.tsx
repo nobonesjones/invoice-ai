@@ -657,7 +657,7 @@ export default function InvoiceSettingsScreen() {
   // Invoice settings state
   const [settings, setSettings] = useState<InvoiceSettings>({
     default_invoice_design: DEFAULT_DESIGN_ID,
-    default_accent_color: '#14B8A6',
+  default_accent_color: '#1E40AF',
     show_business_logo: true,
     show_business_name: true,
     show_business_address: true,
@@ -688,7 +688,7 @@ export default function InvoiceSettingsScreen() {
         setBusinessSettings(data); // Store all business settings for dummy data
         setSettings({
           default_invoice_design: data.default_invoice_design || DEFAULT_DESIGN_ID,
-          default_accent_color: data.default_accent_color || '#14B8A6',
+          default_accent_color: data.default_accent_color || '#1E40AF',
           show_business_logo: data.show_business_logo ?? true,
           show_business_name: data.show_business_name ?? true,
           show_business_address: data.show_business_address ?? true,

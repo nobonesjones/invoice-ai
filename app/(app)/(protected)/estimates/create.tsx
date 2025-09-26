@@ -341,7 +341,7 @@ export default function CreateEstimateScreen() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [estimateTerminology, setEstimateTerminology] = useState<'estimate' | 'quote'>('estimate');
   const [currentDesign, setCurrentDesign] = useState<string>(DEFAULT_DESIGN_ID); // Use correct default ('clean') instead of hardcoded 'classic'
-  const [currentAccentColor, setCurrentAccentColor] = useState<string>('#14B8A6');
+  const [currentAccentColor, setCurrentAccentColor] = useState<string>('#1E40AF');
   const [isLoadingEstimateNumber, setIsLoadingEstimateNumber] = useState(true);
   
   // Preview modal state
@@ -780,7 +780,7 @@ export default function CreateEstimateScreen() {
 
       // Get default design and color from business settings for new estimates
       let defaultDesign = 'classic';
-      let defaultAccentColor = '#14B8A6';
+      let defaultAccentColor = '#1E40AF';
       
       if (!isEditMode) {
         try {
@@ -792,7 +792,7 @@ export default function CreateEstimateScreen() {
           
           if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
-            defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
+            defaultAccentColor = businessSettings.default_accent_color || '#1E40AF';
           }
         } catch (error) {
         }

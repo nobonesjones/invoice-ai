@@ -446,7 +446,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 									business={businessSettings}
 									client={transformedClient}
 									currencySymbol={businessSettings?.currency_symbol || '$'}
-									accentColor={estimate?.accent_color || '#14B8A6'}
+									accentColor={estimate?.accent_color || '#1E40AF'}
 									documentType="estimate"
 									estimateTerminology={'estimate'}
 									displaySettings={{
@@ -965,7 +965,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 										}}
 										client={transformedClient}
 										currencySymbol={businessSettings?.currency_symbol || '$'}
-										accentColor={invoice?.accent_color || '#14B8A6'}
+										accentColor={invoice?.accent_color || '#1E40AF'}
 										displaySettings={{
 											show_business_logo: businessSettings?.show_business_logo ?? true,
 											show_business_name: businessSettings?.show_business_name ?? true,

@@ -380,7 +380,7 @@ function EstimateViewerScreen() {
   const EstimateDesignComponent = getEstimateDesignComponent();
 
   const getAccentColor = () => {
-    return estimate?.accent_color || '#14B8A6';
+    return estimate?.accent_color || '#1E40AF';
   };
 
   const handleEdit = () => {
