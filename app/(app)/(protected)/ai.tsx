@@ -1534,6 +1534,12 @@ or '${example2}'`,
 	const handleTranscript = (transcript: string) => {
 		setInputText(transcript);
 		setIsTranscribing(false);
+		// Release single-flight lock after transcription completes so user can send
+		setInFlight(false);
+		if (inFlightTimerRef.current) {
+			clearTimeout(inFlightTimerRef.current as any);
+			inFlightTimerRef.current = null;
+		}
 	};
 
 	const handleRecordingStateChange = (recording: boolean) => {

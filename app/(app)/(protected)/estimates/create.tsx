@@ -354,12 +354,15 @@ export default function CreateEstimateScreen() {
   // Business settings cache for preview
   const [businessSettingsCache, setBusinessSettingsCache] = useState<any>(null);
 
+  const hasLoggedMakeEstimate = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      if (isEditMode) {
+      if (isEditMode || hasLoggedMakeEstimate.current) {
         return;
       }
 
+      hasLoggedMakeEstimate.current = true;
       try {
         analytics.trackEvent('Make Estimate - Step 1', {
           source: estimateTerminology === 'quote' ? 'quotes_tab' : 'estimates_tab'

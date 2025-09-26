@@ -344,12 +344,15 @@ export default function CreateInvoiceScreen() {
 
   const styles = getStyles(themeColors); // MOVED STYLES DECLARATION HERE
 
+  const hasLoggedMakeInvoice = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      if (isEditMode) {
+      if (isEditMode || hasLoggedMakeInvoice.current) {
         return;
       }
 
+      hasLoggedMakeInvoice.current = true;
       try {
         analytics.trackEvent('Make Invoice - Step 1', {
           source: 'invoices_tab'

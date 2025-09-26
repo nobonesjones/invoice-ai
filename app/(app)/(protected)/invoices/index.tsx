@@ -507,10 +507,6 @@ export default function InvoiceDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
-                  try {
-                    analytics.trackEvent('Make Invoice - Step 1', { source: 'invoices_tab' });
-                  } catch {}
-
                   const canProceed = await checkAndShowPaywall();
 
                   if (!canProceed) {

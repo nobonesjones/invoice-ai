@@ -510,11 +510,6 @@ export default function EstimateDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={async () => {
-                  const source = estimateTerminology === 'quote' ? 'quotes_tab' : 'estimates_tab';
-                  try {
-                    trackEvent('Make Estimate - Step 1', { source });
-                  } catch {}
-
                   const canProceed = await checkAndShowPaywall();
 
                   if (!canProceed) {
