@@ -31,6 +31,7 @@ import { useAnalytics } from '@/hooks/useAnalytics';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
+import AIUsageService from '@/services/aiUsageService';
 
 // Simple Invoice Modal using our new InvoicePreviewModal component
 
@@ -1455,47 +1456,56 @@ or '${example2}'`,
 	const displayMessages = aiMessages.length > 0 ? aiMessages : [getWelcomeMessage()];
 
 	const handleSendMessage = async () => {
-		// Block if a run is already in-flight
 		if (inFlight) return;
 		if (!inputText.trim() || aiIsLoading) return;
 
-		// Check if API is configured before sending
 		if (showSetupMessage) {
 			Alert.alert(
-				'Setup Required', 
+				'Setup Required',
 				'Please configure your OpenAI API key in environment variables first.'
 			);
 			return;
 		}
 
 		const messageToSend = inputText.trim();
-		
-		// 📊 Track AI text message sent
-		try { analytics.trackEvent('AI Message - Text'); } catch {}
-		const startTime = Date.now();
-
-		// Engage single-flight with safety timeout
-		setInFlight(true);
-		if (inFlightTimerRef.current) clearTimeout(inFlightTimerRef.current as any);
-		inFlightTimerRef.current = setTimeout(() => setInFlight(false), 20000);
-		
-		// Simple intent detection
 		const lowerMessage = messageToSend.toLowerCase();
 		let detectedIntent = 'general_query';
 		if (lowerMessage.includes('invoice')) detectedIntent = 'create_invoice';
 		else if (lowerMessage.includes('estimate') || lowerMessage.includes('quote')) detectedIntent = 'create_estimate';
 		else if (lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('discount')) detectedIntent = 'update_document';
-		
-		// Analytics: additional properties can be tracked here if needed
-		
-		// Clear input immediately to prevent the text from staying
-		// Store it in case we need to restore on error
+
+		const requiresAllowance = detectedIntent === 'create_invoice' || detectedIntent === 'create_estimate';
+
+		if (requiresAllowance) {
+			if (!user?.id) {
+				Alert.alert('Sign in required', 'Please sign in to use AI-assisted creation.');
+				return;
+			}
+			try {
+				const allowance = await AIUsageService.evaluateAllowance(user.id);
+				if (!allowance.allowed || allowance.remainingFreeSlots === 0) {
+					Alert.alert(
+						'AI Limit Reached',
+						'You have used all 3 free AI-assisted creations. Upgrade to continue using AI features.'
+					);
+					return;
+				}
+			} catch (error) {
+				console.error('[AI Screen] Failed to evaluate AI allowance:', error);
+				Alert.alert('AI Unavailable', 'Unable to verify AI usage allowance right now. Please try again later.');
+				return;
+			}
+		}
+
+		try { analytics.trackEvent('AI Message - Text'); } catch {}
+
+		setInFlight(true);
+		if (inFlightTimerRef.current) clearTimeout(inFlightTimerRef.current as any);
+		inFlightTimerRef.current = setTimeout(() => setInFlight(false), 20000);
+
 		setInputText('');
 
 		try {
-			
-			
-			// Prepare user context if loaded
 			const contextForMessage = userContext ? {
 				currency: userContext.currency,
 				symbol: userContext.currencySymbol,
@@ -1504,10 +1514,8 @@ or '${example2}'`,
 			} : undefined;
 
 			await sendMessage(messageToSend, contextForMessage);
-			
 		} catch (error) {
 			console.error('[AI Screen] Failed to send message:', error);
-			// Restore the text on error so user can retry
 			setInputText(messageToSend);
 		} finally {
 			setInFlight(false);

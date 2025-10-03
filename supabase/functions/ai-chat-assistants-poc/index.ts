@@ -642,25 +642,29 @@ serve(async (req)=>{
         .select('subscription_tier')
         .eq('id', user_id)
         .maybeSingle();
-      
-      const tier = profile?.subscription_tier || 'free';
-      
-      if (tier === 'free') {
-        // For free users, get their current usage
-        const { count } = await supabase
-          .rpc('count_user_items', { user_id });
-        
-        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
-• User is on FREE plan (3 item limit)
-• Items created: ${count || 0} of 3
-• Can create more: ${(count || 0) < 3 ? 'Yes' : 'No - limit reached'}
-${(count || 0) >= 3 ? '• Politely mention upgrade benefits when relevant' : ''}
 
-USAGE LIMITS - CRITICAL:
-• Free users can ONLY create 3 items total (invoices + estimates combined)
-• When limit is reached, the create functions will automatically block and show upgrade message
-• Do NOT attempt to bypass or work around these limits
-• If user asks about limits, explain they can upgrade for unlimited access
+      const tier = profile?.subscription_tier || 'free';
+
+      if (tier === 'free') {
+        const { data: usageProfile } = await supabase
+          .from('user_profiles')
+          .select('ai_items_created')
+          .eq('id', user_id)
+          .maybeSingle();
+
+        const aiCreated = usageProfile?.ai_items_created ?? 0;
+        const aiRemaining = Math.max(0, 3 - aiCreated);
+
+        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
+• Plan: FREE (manual creation is unlimited)
+• AI-created invoices/estimates used: ${aiCreated} of 3
+• Remaining free AI creations: ${aiRemaining}
+• After 3 AI creations, politely inform the user they must upgrade to continue using AI assistance
+
+AI USAGE RULES - CRITICAL:
+• Allow the user to create up to 3 invoices/estimates with AI
+• Once the limit is reached, do NOT attempt to create additional items—inform them the AI limit is reached
+• Manual invoice/estimate creation outside of AI is unrestricted
 
 🚨🚨 PAYMENT WORKFLOWS - MANDATORY FOR ALL PAYMENT UPDATES 🚨🚨
 **WHEN USER SAYS "MARK AS PAID" OR "SET TO PAID":**
@@ -681,9 +685,9 @@ USAGE LIMITS - CRITICAL:
 **CRITICAL RULE: Status changes without payment amounts will show incorrect totals on invoice documents!**`;
       } else {
         contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
-• User is on ${tier.toUpperCase()} plan
-• Unlimited items allowed
-• No usage restrictions`;
+• Plan: ${tier.toUpperCase()}
+• Unlimited AI access
+• No AI usage restrictions`;
       }
     } catch (error) {
       console.error('[Assistants POC] Error fetching subscription context:', error);

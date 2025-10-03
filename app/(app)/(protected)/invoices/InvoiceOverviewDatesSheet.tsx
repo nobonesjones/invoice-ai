@@ -29,6 +29,7 @@ interface InvoiceOverviewDatesSheetProps {
 }
 
 export const DATE_RANGE_FILTER_OPTIONS: DateRangeFilterOption[] = [
+	{ label: "All", type: "all" },
 	{ label: "This Week", type: "this_week" },
 	{ label: "This Month", type: "this_month" },
 	{ label: "Last Month", type: "last_month" },
