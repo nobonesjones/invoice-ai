@@ -28,6 +28,7 @@ import SkiaInvoiceCanvasSimple from "@/components/skia/SkiaInvoiceCanvasSimple";
 import SkiaInvoiceCanvasWave from "@/components/skia/SkiaInvoiceCanvasWave";
 import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
@@ -1099,6 +1100,7 @@ export default function AiScreen() {
 	const scrollViewRef = useRef<ScrollView>(null);
 	const transcribeButtonRef = useRef<TranscribeButtonRef>(null);
 	const analytics = useAnalytics();
+	const { presentPaywall } = usePaywall();
 
 	// Single-flight guard to prevent duplicate runs
 	const [inFlight, setInFlight] = useState(false);
@@ -1120,6 +1122,10 @@ export default function AiScreen() {
 	const [userContext, setUserContext] = useState<any>(null);
 	const [statusBoxes, setStatusBoxes] = useState<Array<{id: string, message: string, timestamp: number, isInitial?: boolean}>>([]);
 	const [hasReceivedBackendUpdates, setHasReceivedBackendUpdates] = useState(false);
+
+	const lastStatusTimestampRef = useRef<number>(Date.now());
+	const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+	const hasHeartbeatFromBackendRef = useRef<boolean>(false);
 
 	// Animated values for waveform
 	const waveformAnims = useRef([
@@ -1149,6 +1155,68 @@ export default function AiScreen() {
 	// 🧪 TEST: Track when AI screen is opened (remove after testing)
 	// Analytics removed for App Store build
 
+	// Heartbeat fallback while waiting for backend status updates
+	useEffect(() => {
+		if (!aiIsLoading) {
+			if (heartbeatIntervalRef.current) {
+				clearInterval(heartbeatIntervalRef.current);
+				heartbeatIntervalRef.current = null;
+			}
+			hasHeartbeatFromBackendRef.current = false;
+			lastStatusTimestampRef.current = Date.now();
+			return;
+		}
+
+		if (!heartbeatIntervalRef.current) {
+			heartbeatIntervalRef.current = setInterval(() => {
+				const now = Date.now();
+				const secondsSinceUpdate = (now - lastStatusTimestampRef.current) / 1000;
+				if (secondsSinceUpdate >= 3 && !hasHeartbeatFromBackendRef.current) {
+					const lastStatus = statusBoxes[statusBoxes.length - 1];
+					const fallbackMessage = lastStatus?.message || statusMessage || '🤔 Thinking...';
+					const heartbeatMessage = fallbackMessage.includes('(still working)')
+						? fallbackMessage
+						: `${fallbackMessage} (still working)`;
+					setStatusBoxes(prev => {
+						const withoutHeartbeats = prev.filter(box => !box.id.startsWith('heartbeat-'));
+						if (withoutHeartbeats.length > 0) {
+							const updated = [...withoutHeartbeats];
+							const lastIndex = updated.length - 1;
+							if (lastIndex >= 0) {
+								const last = updated[lastIndex];
+								if (!last.message.includes('(still working)')) {
+									updated[lastIndex] = { ...last, message: heartbeatMessage, id: `heartbeat-${Date.now()}`, timestamp: now };
+									lastStatusTimestampRef.current = now;
+									return updated;
+								}
+								if (last.message === heartbeatMessage) {
+									return updated;
+								}
+							}
+						}
+
+						lastStatusTimestampRef.current = now;
+						return [
+							...withoutHeartbeats,
+							{
+								id: `heartbeat-${Date.now()}`,
+								message: heartbeatMessage,
+								timestamp: now
+							},
+						];
+					});
+				}
+			}, 2000) as any;
+		}
+
+		return () => {
+			if (heartbeatIntervalRef.current) {
+				clearInterval(heartbeatIntervalRef.current);
+				heartbeatIntervalRef.current = null;
+			}
+		};
+	}, [aiIsLoading, statusBoxes, statusMessage]);
+
 	// Handle status message updates - add them as status boxes
 	useEffect(() => {
 		if (statusMessage && aiIsLoading) {
@@ -1163,6 +1231,9 @@ export default function AiScreen() {
 					setStatusBoxes(prev => prev.filter(box => !box.message.includes('🤔 Thinking')));
 			}
 			
+			hasHeartbeatFromBackendRef.current = true;
+			lastStatusTimestampRef.current = Date.now();
+			if (!hasReceivedBackendUpdates) setHasReceivedBackendUpdates(true);
 			const isInitialFrontendStatus = !hasReceivedBackendUpdates; // All statuses are from frontend now
 			
 			const newStatusBox = {
@@ -1173,13 +1244,14 @@ export default function AiScreen() {
 			};
 			
 			setStatusBoxes(prev => {
-				
 				// Auto-scroll to show the new status box
 				setTimeout(() => {
 					scrollViewRef.current?.scrollToEnd({ animated: true });
 				}, 50); // Small delay to ensure status box is rendered
-				
-				return [...prev, newStatusBox];
+
+				const withoutHeartbeats = prev.filter(box => !box.id.startsWith('heartbeat-'));
+				const withoutDuplicateMessages = withoutHeartbeats.filter(box => box.message !== statusMessage);
+				return [...withoutDuplicateMessages, newStatusBox];
 			});
 			
 			// Status boxes are cleared by seamless transition when AI response arrives
@@ -1196,12 +1268,14 @@ export default function AiScreen() {
 			// Clear status boxes immediately - the invoice itself shows completion
 			setStatusBoxes([]);
 			setHasReceivedBackendUpdates(false);
+			hasHeartbeatFromBackendRef.current = false;
 			
 		} else if (!aiIsLoading) {
 			// Fallback: Clear after delay if no attachments
 			setTimeout(() => {
 				setStatusBoxes([]);
 				setHasReceivedBackendUpdates(false); // Reset for next request
+				hasHeartbeatFromBackendRef.current = false;
 			}, 1000);
 		}
 	}, [aiMessages, aiIsLoading]);
@@ -1484,10 +1558,18 @@ or '${example2}'`,
 			try {
 				const allowance = await AIUsageService.evaluateAllowance(user.id);
 				if (!allowance.allowed || allowance.remainingFreeSlots === 0) {
-					Alert.alert(
-						'AI Limit Reached',
-						'You have used all 3 free AI-assisted creations. Upgrade to continue using AI features.'
-					);
+					try {
+						await presentPaywall({
+							event: 'ai_pay_wall',
+							params: { source: 'ai_limit', remainingFreeSlots: allowance.remainingFreeSlots }
+						});
+					} catch (paywallError) {
+						console.error('[AI Screen] Failed to present AI paywall:', paywallError);
+						Alert.alert(
+							'AI Limit Reached',
+							'You have used all 3 free AI-assisted creations. Upgrade to continue using AI features.'
+						);
+					}
 					return;
 				}
 			} catch (error) {

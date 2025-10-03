@@ -90,14 +90,7 @@ export class AssistantService {
         body: JSON.stringify(payload),
       };
 
-      let response: Response | null = null;
-      try {
-        response = await fetchWithTimeout(url, init, 25000); // 25s client budget
-      } catch (e: any) {
-        console.warn('[AssistantService] First call timed out, retrying once...');
-        await new Promise(r => setTimeout(r, 400));
-        response = await fetchWithTimeout(url, init, 25000);
-      }
+      const response = await fetchWithTimeout(url, init, 240000); // allow up to 4 minutes for edge function run
 
       if (!response.ok) {
         const errorData = await response.text();

@@ -43,6 +43,7 @@ import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { supabase } from '@/config/supabase';
 import { useSupabase } from '@/context/supabase-provider';
+import { usePaywall } from '@/context/paywall-provider';
 
 interface PaymentOption {
   id?: string;
@@ -389,6 +390,7 @@ export default function PaymentOptionsScreen() {
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { user, supabase } = useSupabase();
+  const { isSubscribed, presentPaywall } = usePaywall();
 
   const paypalBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const stripeBottomSheetModalRef = useRef<BottomSheetModal>(null);
@@ -784,10 +786,24 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
     // setCurrentSnapIndex(index); 
   }, []);
 
-  const openStripeConnectionModal = () => {
+  const openStripeConnectionModal = useCallback(async () => {
     console.log('Attempting to open Stripe Connection Modal...');
-    Alert.alert("Connect with Stripe", "This will open the Stripe connection flow. (Not yet implemented)");
-  };
+
+    if (!isSubscribed) {
+      try {
+        await presentPaywall({ event: 'stripe_button', params: { source: 'stripe_connect' } });
+      } catch (error) {
+        console.error('[PaymentOptions] Failed to present Stripe paywall:', error);
+        Alert.alert(
+          'Upgrade Required',
+          'Stripe payments are part of the SuperInvoice Pro plan. Upgrade to unlock this feature.'
+        );
+      }
+      return;
+    }
+
+    Alert.alert('Connect with Stripe', 'This will open the Stripe connection flow. (Not yet implemented)');
+  }, [isSubscribed, presentPaywall]);
 
   const handleSaveInvoiceTermsNotes = async () => {
     if (!user) {

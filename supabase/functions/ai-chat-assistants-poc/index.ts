@@ -3675,8 +3675,10 @@ When the user indicates you made an error or corrected you:
           return JSON.stringify(permission);
         }
         
-        // Status already sent - no duplicate needed
+        // Emit streaming statuses for the full invoice workflow
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, due_date, invoice_date, tax_percentage, notes, payment_terms, enable_paypal, paypal_email, enable_stripe, enable_bank_transfer, invoice_design, accent_color, discount_type, discount_value } = parsedArgs;
+
+        await sendStatusUpdate('Creating invoice', '📄');
         // Calculate subtotal
         const subtotal_amount = line_items.reduce((sum, item)=>sum + item.unit_price * (item.quantity || 1), 0);
         // Apply discount if specified
@@ -3733,6 +3735,8 @@ When the user indicates you made an error or corrected you:
           design: invoice_design || 'clean'
         });
         // First, create or get client  
+        await sendStatusUpdate('Gathering client details', '👤');
+
         let clientId = null;
         if (client_name) {
           // Try to find existing client (use case-insensitive search to avoid duplicates from spacing/case issues)
@@ -3927,6 +3931,8 @@ When the user indicates you made an error or corrected you:
         }
         console.log('[Assistants POC] Created invoice:', invoice.id);
         // Create comprehensive line items with all details
+        await sendStatusUpdate('Adding line items', '➕');
+
         const createdLineItems = [];
         for (const item of line_items){
           const quantity = item.quantity || 1;
@@ -3975,6 +3981,8 @@ When the user indicates you made an error or corrected you:
           .eq('id', invoice.id)
           .single();
 
+        await sendStatusUpdate('Finalizing totals', '🧮');
+
         // Store attachment for UI with full client data
         const invoiceAttachment = await createInvoiceAttachment(updatedInvoiceCalc || invoice, createdLineItems, clientData);
         setLatestInvoice(invoiceAttachment);
@@ -3990,6 +3998,7 @@ When the user indicates you made an error or corrected you:
 
 
 Let me know if you'd like any changes?`;
+        await sendStatusUpdate('Invoice ready', '✅');
         await incrementAiUsage(supabase, user_id);
         return successMessage;
       }
@@ -5761,7 +5770,7 @@ To change colors, just say:
           return JSON.stringify(permission);
         }
         
-        await sendStatusUpdate('Creating estimate', '📄');
+        await sendStatusUpdate('Creating estimate', '📊');
         const { client_name, client_email, client_phone, client_address, client_tax_number, line_items, valid_until_date, estimate_date, tax_percentage, notes, acceptance_terms, estimate_template, discount_type, discount_value } = parsedArgs;
         // Get user's terminology preference and tax defaults
         const { data: businessSettings } = await supabase
@@ -5828,6 +5837,8 @@ To change colors, just say:
             bankTransferEnabled
           }
         });
+        await sendStatusUpdate('Gathering client details', '👤');
+
         // First, create or get client  
         let clientId = null;
         if (client_name) {
@@ -5895,6 +5906,8 @@ To change colors, just say:
           console.error('[create_estimate] Estimate creation error:', estimateError);
           return `Error creating ${terminology}: ${estimateError.message}`;
         }
+        await sendStatusUpdate('Adding line items', '➕');
+
         // Create line items
         const createdLineItems = [];
         for (const item of line_items){
@@ -5932,6 +5945,8 @@ To change colors, just say:
         else if (dType === 'fixed' && dValue > 0) afterDiscount = Math.max(rawSubtotal - dValue, 0);
         const effectiveTax = tax_rate || 0;
         const finalTotal = afterDiscount + (afterDiscount * (effectiveTax / 100));
+        await sendStatusUpdate('Finalizing totals', '🧮');
+
         await supabase.from('estimates').update({
           subtotal_amount: rawSubtotal,
           total_amount: finalTotal
@@ -5953,6 +5968,7 @@ To change colors, just say:
         });
         // Build success message
         const successMessage = `I've created ${terminology} ${estimate_number} for ${client_name} that totals $${total_amount.toFixed(2)}.\n\nValid until: ${validUntilDate}\n\nLet me know if you'd like any changes?`;
+        await sendStatusUpdate(`${termCapitalized} ready`, '✅');
         return successMessage;
       }
       if (name === 'update_estimate') {

@@ -84,6 +84,12 @@ class PaywallService {
         case 'campaign_trigger':
           placement = 'campaign_trigger';
           break;
+        case 'stripe_button':
+          placement = 'stripe_button';
+          break;
+        case 'ai_pay_wall':
+          placement = 'ai_pay_wall';
+          break;
         default:
           placement = 'campaign_trigger'; // Default fallback
       }
@@ -172,6 +178,8 @@ class PaywallService {
     ONBOARDING_COMPLETE: 'campaign_trigger', // Using same placement for now
     SEND_BLOCK: 'send_block', // Old send block campaign
     NO_SEND: 'no_send', // New no_send paywall for send items block campaign
+    STRIPE_BUTTON: 'stripe_button',
+    AI_PAY_WALL: 'ai_pay_wall',
     INVOICE_LIMIT_REACHED: 'invoice_limit_reached',
     PREMIUM_FEATURE_ACCESSED: 'premium_feature_accessed'
   } as const;
