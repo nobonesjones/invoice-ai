@@ -90,9 +90,9 @@ export default function OnboardingScreen6() {
             <View style={styles.contentContainer}>
           {/* Header */}
           <View style={styles.headerContent}>
-            <Text style={[styles.headline, { color: '#FFFFFF' }]}>Try For Free</Text>
+            <Text style={[styles.headline, { color: '#FFFFFF' }]}>SuperInvoice is Free</Text>
             <Text style={[styles.subHeadline, { color: '#FFFFFF' }]}>
-              SuperInvoice was made for people like you.
+              Make unlimited invoices, estimates or quotes for free.
             </Text>
           </View>
 
@@ -156,7 +156,7 @@ export default function OnboardingScreen6() {
           {/* Main Message */}
           <View style={styles.mainMessageSection}>
             <Text style={[styles.mainMessage, { color: '#FFFFFF' }]}>
-              Look professional{'\n'}keep customers happy.
+              Upgrade for AI usage and much more to help your business grow
             </Text>
           </View>
 

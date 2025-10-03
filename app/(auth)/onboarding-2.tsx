@@ -71,7 +71,7 @@ export default function OnboardingScreen2() {
             
             {/* Header content - positioned just above button */}
             <View style={styles.headerContent}>
-              <Text style={styles.headline}>Make professional invoices in seconds from anywhere</Text>
+              <Text style={styles.headline}>Make professional invoices and estimates for free</Text>
             </View>
 
             {/* Bottom button */}

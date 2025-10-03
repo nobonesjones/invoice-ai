@@ -175,9 +175,9 @@ export default function OnboardingScreen5() {
             <View style={styles.contentContainer}>
               {/* Header */}
               <View style={styles.headerContent}>
-                <Text style={[styles.headline, { color: theme.foreground }]}>Upload logo</Text>
-                <Text style={[styles.instructionText, { color: theme.mutedForeground }]}>
-                  Optional, can be edited any time.
+                <Text style={[styles.headline, { color: theme.foreground }]}>Add your logo</Text>
+                <Text style={[styles.instructionText, { color: theme.mutedForeground }]}> 
+                  Please give us your logo so we can add it to your invoices. It can be edited any time.
                 </Text>
               </View>
 

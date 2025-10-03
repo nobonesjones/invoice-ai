@@ -243,55 +243,87 @@ function detectInvoiceCreationIntent(message, userId = '') {
 // Function to check if user can create more items (usage limits)
 async function checkCanCreateItem(supabase, userId) {
   try {
-    // One efficient query - get everything we need
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error } = await supabase
       .from('user_profiles')
-      .select('subscription_tier')
+      .select('subscription_tier, ai_items_created')
       .eq('id', userId)
       .maybeSingle();
-    
-    if (profileError) {
-      console.error('[checkCanCreateItem] Error fetching profile:', profileError);
-      // Fail open to avoid blocking legitimate users
+
+    if (error) {
+      console.error('[checkCanCreateItem] Error fetching profile:', error);
       return { allowed: true };
     }
-    
-    // Premium/paid users - always allow
-    if (profile?.subscription_tier && profile.subscription_tier !== 'free') {
-      console.log(`[checkCanCreateItem] User ${userId} is ${profile.subscription_tier} - no limits`);
-      return { allowed: true };
+
+    const tier = profile?.subscription_tier || 'free';
+
+    if (tier !== 'free') {
+      console.log(`[checkCanCreateItem] User ${userId} is ${tier} - no AI limits`);
+      return {
+        allowed: true,
+        success: true,
+        message: 'You have unlimited AI access with your subscription.'
+      };
     }
-    
-    // Free users - check count using RPC function
-    const { data: count, error: countError } = await supabase
-      .rpc('count_user_items', { user_id: userId });
-      
-    if (countError) {
-      console.error('[checkCanCreateItem] Error counting items:', countError);
-      // Fail open to avoid blocking legitimate users
-      return { allowed: true };
-    }
-    
-    console.log(`[checkCanCreateItem] Free user ${userId} has ${count}/3 items`);
-    
-    if (count >= 3) {
+
+    const aiCreated = profile?.ai_items_created ?? 0;
+    const remaining = Math.max(0, 3 - aiCreated);
+    console.log(`[checkCanCreateItem] Free user ${userId} has used ${aiCreated}/3 AI creations`);
+
+    if (remaining <= 0) {
       return {
         allowed: false,
         success: false,
-        message: "You've reached your free plan limit of 3 items (invoices + estimates). Upgrade to create unlimited invoices and estimates!",
-        showPaywall: true,
-        currentCount: count,
+        message: 'You have used all 3 free AI-assisted creations. Upgrade to keep using AI features.',
+        showPaywall: false,
+        currentCount: aiCreated,
         limit: 3
       };
     }
-    
-    return { allowed: true };
+
+    return {
+      allowed: true,
+      success: true,
+      message: `You can still use AI ${remaining} more time${remaining === 1 ? '' : 's'} for free.`,
+      currentCount: aiCreated,
+      limit: 3
+    };
   } catch (error) {
     console.error('[checkCanCreateItem] Unexpected error:', error);
-    // Fail open to avoid blocking legitimate users  
     return { allowed: true };
   }
 }
+
+async function incrementAiUsage(supabase, userId) {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('ai_items_created')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[incrementAiUsage] Failed to load profile:', error);
+      return;
+    }
+
+    const current = data?.ai_items_created ?? 0;
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({
+        ai_items_created: current + 1,
+        last_ai_item_created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+
+    if (updateError) {
+      console.error('[incrementAiUsage] Failed to update AI usage:', updateError);
+    }
+  } catch (error) {
+    console.error('[incrementAiUsage] Unexpected error:', error);
+  }
+}
+
 
 // Optimized function to get user context for invoice/estimate creation
 async function getInvoiceCreationContext(supabase, userId) {
@@ -3958,6 +3990,7 @@ When the user indicates you made an error or corrected you:
 
 
 Let me know if you'd like any changes?`;
+        await incrementAiUsage(supabase, user_id);
         return successMessage;
       }
       if (name === 'setup_paypal_payments') {
@@ -5910,6 +5943,7 @@ To change colors, just say:
         const estimateAttachment = await createEstimateAttachment(updatedEstimateCalc || estimate, createdLineItems, clientData);
         setLatestEstimate(estimateAttachment);
         // 🚨 CONVERSATION MEMORY - Track that we just created this estimate
+        await incrementAiUsage(supabase, user_id);
         ConversationMemory.setLastAction(user_id, 'created_estimate', {
           estimate_number: estimate_number,
           client_name: client_name,
@@ -6277,6 +6311,7 @@ To change colors, just say:
               invoice_id: invoice.id
             })), clientData);
           setLatestInvoice(invoiceAttachment);
+          await incrementAiUsage(supabase, user_id);
           return `I've successfully converted ${terminology} ${targetEstimate.estimate_number} to invoice ${invoice_number}.\n\nThe invoice is ready to send to your client.`;
         } catch (error) {
           console.error('[convert_estimate_to_invoice] Error:', error);
