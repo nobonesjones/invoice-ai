@@ -2,7 +2,8 @@ import { supabase } from '@/config/supabase';
 import { ReferenceNumberService } from './referenceNumberService';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import UserContextService from '@/services/userContextService';
-import AIUsageService from '@/services/aiUsageService';
+
+const AI_FREE_LIMIT = 3;
 
 // Function interface for AI edge functions
 export interface AIFunction {
@@ -2050,7 +2051,7 @@ Would you like me to help you send this invoice or make any changes?`;
 
       console.log('[createInvoice] 🎨 Attaching invoice with design:', invoice.invoice_design, 'full invoice:', JSON.stringify(invoice, null, 2));
 
-      await AIUsageService.incrementUsage(userId);
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -4647,7 +4648,7 @@ Deleted:
       if (new_client_name) changesSummary.push(`Client changed to "${clientName}"`);
       if (new_invoice_date) changesSummary.push(`Date changed to ${new Date(invoiceDate).toLocaleDateString()}`);
       
-      await AIUsageService.incrementUsage(userId);
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -4821,7 +4822,7 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
       if (new_client_name) changesSummary.push(`Client changed to "${clientName}"`);
       if (new_estimate_date) changesSummary.push(`Date changed to ${new Date(estimateDate).toLocaleDateString()}`);
       
-      await AIUsageService.incrementUsage(userId);
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -5236,7 +5237,7 @@ The new client is ready to use for invoices!`
       // Line items data logged
 
       // Return the same structure as createInvoice for consistency
-      await AIUsageService.incrementUsage(userId);
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -5697,7 +5698,7 @@ The new client is ready to use for invoices!`
         `💰 **Amount:** ${businessCurrencySymbol}${invoice.total.toFixed(2)}\n\n` +
         `🎯 The invoice is now ready to be sent to your client.`;
 
-      await AIUsageService.incrementUsage(userId);
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -5856,7 +5857,7 @@ The new client is ready to use for invoices!`
 
       // Successfully converted invoice to estimate
 
-      await AIUsageService.incrementUsage(userId);
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -6514,7 +6515,7 @@ The new client is ready to use for invoices!`
 
   private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
     try {
-      const allowance = await AIUsageService.evaluateAllowance(userId);
+      const allowance = await this.evaluateAiAllowance(userId);
 
       if (!allowance.allowed) {
         if (allowance.reason === 'no_user') {
@@ -6529,6 +6530,7 @@ The new client is ready to use for invoices!`
           success: true,
           data: {
             canUseAi: false,
+            canCreate: false,
             reason: allowance.reason,
             remainingFreeSlots: 0,
             aiItemsCreated: allowance.usage?.aiItemsCreated ?? 0,
@@ -6543,6 +6545,7 @@ The new client is ready to use for invoices!`
         success: true,
         data: {
           canUseAi: true,
+          canCreate: true,
           reason: allowance.reason,
           remainingFreeSlots: remaining,
           aiItemsCreated: allowance.usage?.aiItemsCreated ?? 0,
@@ -6558,6 +6561,105 @@ The new client is ready to use for invoices!`
         message: 'Failed to check AI usage limits. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
+    }
+  }
+
+  private static async evaluateAiAllowance(userId: string) {
+    try {
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier, ai_items_created')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      const subscriptionTier = profile?.subscription_tier || 'free';
+      const aiItemsCreated = profile?.ai_items_created ?? 0;
+      const isSubscribed = ['premium', 'grandfathered'].includes(subscriptionTier);
+
+      if (isSubscribed) {
+        return {
+          allowed: true,
+          reason: 'subscribed' as const,
+          remainingFreeSlots: Infinity,
+          usage: {
+            aiItemsCreated,
+            lastAiItemCreatedAt: null,
+            subscriptionTier: subscriptionTier as any,
+          },
+        };
+      }
+
+      const remaining = Math.max(0, AI_FREE_LIMIT - aiItemsCreated);
+
+      if (remaining > 0) {
+        return {
+          allowed: true,
+          reason: 'free_slot' as const,
+          remainingFreeSlots: remaining,
+          usage: {
+            aiItemsCreated,
+            lastAiItemCreatedAt: null,
+            subscriptionTier: subscriptionTier as any,
+          },
+        };
+      }
+
+      return {
+        allowed: false,
+        reason: 'limit_reached' as const,
+        remainingFreeSlots: 0,
+        usage: {
+          aiItemsCreated,
+          lastAiItemCreatedAt: null,
+          subscriptionTier: subscriptionTier as any,
+        },
+      };
+    } catch (error) {
+      console.error('[InvoiceFunctionService] Failed to evaluate AI allowance:', error);
+      return {
+        allowed: false,
+        reason: 'no_user' as const,
+        remainingFreeSlots: 0,
+        usage: null,
+      };
+    }
+  }
+
+  private static async incrementAiUsage(userId: string): Promise<void> {
+    if (!userId) return;
+
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('ai_items_created')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      const currentCount = profile?.ai_items_created ?? 0;
+      const nextCount = currentCount + 1;
+
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({
+          ai_items_created: nextCount,
+          last_ai_item_created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
+    } catch (error) {
+      console.error('[InvoiceFunctionService] Failed to increment AI usage:', error);
     }
   }
 
