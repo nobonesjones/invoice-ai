@@ -38,6 +38,16 @@ class AIUsageService {
       .maybeSingle();
 
     if (error) {
+      // If the AI columns are missing, assume default free usage instead of blocking the user
+      if ((error as any)?.code === '42703') {
+        console.warn('[AIUsageService] AI usage columns missing on user_profiles; falling back to defaults');
+        return {
+          aiItemsCreated: 0,
+          lastAiItemCreatedAt: null,
+          subscriptionTier: 'free',
+        };
+      }
+
       console.error('[AIUsageService] Failed to load user profile:', error.message || error);
       throw error;
     }
@@ -77,6 +87,11 @@ class AIUsageService {
       .eq('id', userId);
 
     if (error) {
+      if ((error as any)?.code === '42703') {
+        console.warn('[AIUsageService] AI usage columns missing during increment; skipping update');
+        return;
+      }
+
       console.error('[AIUsageService] Failed to increment AI usage:', error.message || error);
       throw error;
     }

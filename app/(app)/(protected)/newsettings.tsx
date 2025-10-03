@@ -20,7 +20,6 @@ import PaywallService, { PaywallService as PaywallServiceClass } from '@/service
 import RevenueCatService from '@/services/revenueCatService';
 import { UsageService } from '@/services/usageService';
 import { usePlacement, useSuperwall } from 'expo-superwall';
-import UsageTrackingService, { UsageStats } from '@/services/usageTrackingService';
 import { SubscriptionPricing, SUBSCRIPTION_PLANS } from '@/components/SubscriptionPricing';
 
 export default function NewSettingsScreen() {
@@ -30,7 +29,7 @@ export default function NewSettingsScreen() {
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { presentPaywall, isSubscribed, isLoading: paywallLoading, checkSubscriptionStatus } = usePaywall();
   const [searchTerm, setSearchTerm] = useState('');
-  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
+  const [aiUsageCount, setAiUsageCount] = useState(0);
   const [isLoadingUsage, setIsLoadingUsage] = useState(true);
   const [currencyCode, setCurrencyCode] = useState<string>('USD');
 
@@ -99,19 +98,27 @@ export default function NewSettingsScreen() {
 
   // Load usage stats function
   const loadUsageStats = useCallback(async () => {
-    if (!user?.id) return;
-    
+    if (!user?.id || !supabase) return;
+
     setIsLoadingUsage(true);
     try {
-      const stats = await UsageTrackingService.getUserUsageStats(user.id);
-      console.log('[Settings] Loaded usage stats:', stats);
-      setUsageStats(stats);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('ai_items_created')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        setAiUsageCount(data.ai_items_created ?? 0);
+      } else {
+        setAiUsageCount(0);
+      }
     } catch (error) {
-      console.error('[Settings] Error loading usage stats:', error);
+      console.error('[Settings] Error loading AI usage:', error);
     } finally {
       setIsLoadingUsage(false);
     }
-  }, [user?.id]);
+  }, [user?.id, supabase]);
 
   // Load usage stats when screen loads or user changes
   useEffect(() => {
@@ -459,26 +466,26 @@ export default function NewSettingsScreen() {
           </View>
 
           {/* Usage Counter - Only show for non-premium users */}
-          {!isSubscribed && usageStats && (
+          {!isSubscribed && (
             <View style={[styles.usageCounterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.usageCounterContent}>
                 <View style={styles.usageCounterMain}>
                   <Text style={[styles.usageCounterTitle, { color: theme.foreground }]}>
-                    Free Plan Usage
+                    Free AI Usage
                   </Text>
                   <View style={styles.usageCounterBar}>
                     <View style={[styles.usageCounterProgress, { 
                       backgroundColor: theme.primary,
-                      width: `${(usageStats.totalItemsCreated / 3) * 100}%`
+                      width: `${Math.min(1, aiUsageCount / 3) * 100}%`
                     }]} />
                   </View>
                   <Text style={[styles.usageCounterText, { color: theme.mutedForeground }]}>
-                    {usageStats.totalItemsCreated}/3 items created
+                    {aiUsageCount}/3 AI creations used
                   </Text>
-                  {usageStats.totalItemsCreated >= 3 && (
+                  {aiUsageCount >= 3 && (
                     <>
                       <Text style={[styles.usageUpgradeText, { color: '#25D366' }]}>
-                        Upgrade to continue using SuperInvoice
+                        Upgrade to keep using SuperInvoice AI
                       </Text>
                       <Text style={[styles.usagePricingText, { color: theme.mutedForeground }]}>
                         From as little as {perDayDisplay}/day
