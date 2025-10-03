@@ -605,35 +605,6 @@ export default function CreateInvoiceScreen() {
 
     try {
 
-      // Check usage limits for new invoice creation (not for edits)
-      if (!isEditMode) {
-        const limitCheck = await UsageService.checkInvoiceLimit(user.id);
-        
-        if (!limitCheck.canCreate) {
-          Alert.alert(
-            'Upgrade Required',
-            `You've reached your limit of ${limitCheck.remaining === 0 ? limitCheck.total : 'free'} invoices! Upgrade to create unlimited invoices and unlock premium features.`,
-            [
-              {
-                text: 'Maybe Later',
-                style: 'cancel'
-              },
-              {
-                text: 'Upgrade Now',
-                onPress: () => {
-                  // Navigate to paywall/subscription screen
-                  router.push('/(app)/(protected)/subscription/paywall');
-                }
-              }
-            ]
-          );
-          setIsSavingInvoice(false);
-          return;
-        }
-
-      }
-
-
       // Get default design and color from business settings for new invoices
       let defaultDesign = DEFAULT_DESIGN_ID; // Use correct default ('clean') instead of hardcoded 'classic'
       let defaultAccentColor = '#1E40AF';

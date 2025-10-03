@@ -34,7 +34,6 @@ import { useSupabase } from "@/context/supabase-provider";
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useInvoiceStatusUpdater } from '@/hooks/useInvoiceStatusUpdater';
 import { useAnalytics } from '@/hooks/useAnalytics';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 import type { Database } from "../../../../supabase/types/database.types"; 
 
 // Define filter options here to map type to label for initialization and sync
@@ -213,7 +212,6 @@ export default function InvoiceDashboardScreen() {
   const analytics = useAnalytics();
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { checkAndShowPaywall } = useItemCreationLimit();
   
   // Auto-update overdue invoice statuses
   useInvoiceStatusUpdater();
@@ -506,13 +504,7 @@ export default function InvoiceDashboardScreen() {
             </Text>
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
-                onPress={async () => {
-                  const canProceed = await checkAndShowPaywall();
-
-                  if (!canProceed) {
-                    return;
-                  }
-
+                onPress={() => {
                   router.push("/invoices/create" as any);
                 }}
               >

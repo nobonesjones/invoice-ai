@@ -25,9 +25,6 @@ import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoice
 import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
 import { ColorSelector } from '@/components/ColorSelector';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
-import { usePaywall } from '@/context/paywall-provider';
-import { usePlacement } from 'expo-superwall';
 import { router } from 'expo-router';
 
 export interface InvoicePreviewModalRef {
@@ -142,12 +139,7 @@ export const InvoicePreviewModal = forwardRef(
     // Send modal refs and setup
     const skiaInvoiceRef = useCanvasRef();
     
-    // Paywall setup
-    const { checkAndShowPaywall } = useItemCreationLimit();
-    const { isSubscribed } = usePaywall();
-    const { registerPlacement } = usePlacement({
-      placement: 'create_item_limit'
-    });
+    // Paywall setup removed – manual sending is now free
 
     // Gesture handler for swipe functionality
     const onGestureEvent = Animated.event(
@@ -314,26 +306,6 @@ export const InvoicePreviewModal = forwardRef(
 
     // Send handlers
     const handleSendByEmail = async () => {
-      // Check if user is subscribed - sending is premium only
-      if (!isSubscribed) {
-        console.log('[Modal handleSendByEmail] Free user attempting to send - showing no_send paywall');
-        try {
-          await registerPlacement({
-            placement: 'create_item_limit', // Using existing working placement
-            params: {
-              source: 'invoice_send_email',
-              invoiceId: invoiceData?.id,
-              userId: user?.id,
-              action: 'send_invoice'
-            }
-          });
-        } catch (error) {
-          console.error('[Modal handleSendByEmail] Paywall failed, using fallback');
-          router.push('/subscription');
-        }
-        return;
-      }
-
       if (!invoiceData || !businessSettings) {
         Alert.alert('Error', 'Invoice or business data is not available.');
         return;
@@ -443,25 +415,6 @@ export const InvoicePreviewModal = forwardRef(
     };
 
     const handleSendLink = async () => {
-      // Check if user is subscribed - sending is premium only
-      if (!isSubscribed) {
-        console.log('[Modal handleSendLink] Free user attempting to send - showing no_send paywall');
-        try {
-          await registerPlacement({
-            placement: 'create_item_limit', // Using existing working placement
-            params: {
-              source: 'invoice_send_link',
-              invoiceId: invoiceData?.id,
-              userId: user?.id,
-              action: 'send_invoice'
-            }
-          });
-        } catch (error) {
-          console.error('[Modal handleSendLink] Paywall failed, using fallback');
-          router.push('/subscription');
-        }
-        return;
-      }
 
       if (!invoiceData || !supabase || !user) {
         Alert.alert('Error', 'Unable to send invoice at this time.');
@@ -576,25 +529,6 @@ export const InvoicePreviewModal = forwardRef(
     };
 
     const handleSendPDF = async () => {
-      // Check if user is subscribed - sending is premium only
-      if (!isSubscribed) {
-        console.log('[Modal handleSendPDF] Free user attempting to send - showing no_send paywall');
-        try {
-          await registerPlacement({
-            placement: 'create_item_limit', // Using existing working placement
-            params: {
-              source: 'invoice_send_pdf',
-              invoiceId: invoiceData?.id,
-              userId: user?.id,
-              action: 'send_invoice'
-            }
-          });
-        } catch (error) {
-          console.error('[Modal handleSendPDF] Paywall failed, using fallback');
-          router.push('/subscription');
-        }
-        return;
-      }
 
       if (!invoiceData || !businessSettings) {
         Alert.alert('Error', 'Cannot export PDF - invoice data not loaded');

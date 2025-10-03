@@ -46,11 +46,8 @@ import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivity
 import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistorySheet';
 import { EstimateConversionService } from '@/services/estimateConversionService';
 import { EstimateSenderService } from '@/services/estimateSenderService';
-import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { EstimateShareService } from '@/services/estimateShareService';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
-import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // SKIA IMPORTS for estimate rendering
@@ -119,29 +116,6 @@ function EstimateViewerScreen() {
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted, logStatusChanged } = useEstimateActivityLogger();
-  const { isSubscribed } = usePaywall();
-  const { checkAndShowPaywall } = useItemCreationLimit();
-  
-  // Paywall for send block using the working pattern
-  const { registerPlacement } = usePlacement({
-    onError: (err) => {},
-    onPresent: (info) => {},
-    onDismiss: (info, result) => {
-      // Paywall dismissed
-    },
-  });
-  
-  // Paywall for send block
-  // const { registerPlacement } = usePlacement({
-  //   onError: (err) => {},
-  //   onPresent: (info) => {},
-  //   onDismiss: (info, result) => {
-  //     // Send block dismissed
-  //     if (result?.type === 'purchased') {
-  //       // User subscribed, continuing send...
-  //     }
-  //   },
-  // });
 
   const [estimate, setEstimate] = useState<EstimateForTemplate | null>(null);
   const [client, setClient] = useState<Tables<'clients'> | null>(null);
@@ -487,25 +461,6 @@ function EstimateViewerScreen() {
   };
 
   const handleSendPDF = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'estimate_send_pdf',
-            estimateId: estimate?.id,
-            userId: user?.id,
-            action: 'send_estimate'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
 
     if (!estimate || !businessSettings) {
       Alert.alert('Error', 'Cannot export PDF - estimate data not loaded');
@@ -572,25 +527,6 @@ function EstimateViewerScreen() {
   };
 
   const handleSendByEmail = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'estimate_send_email',
-            estimateId: estimate?.id,
-            userId: user?.id,
-            action: 'send_estimate'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
 
     if (!estimate || !businessSettings || !user) {
       Alert.alert('Error', 'Cannot send estimate - data not available');
@@ -623,25 +559,6 @@ function EstimateViewerScreen() {
   };
 
   const handleSendByLink = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'estimate_send_link',
-            estimateId: estimate?.id,
-            userId: user?.id,
-            action: 'send_estimate'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
 
     if (!estimate || !user) {
       Alert.alert('Error', 'Cannot send estimate - data not available');
@@ -749,12 +666,6 @@ function EstimateViewerScreen() {
             try {
               if (!user?.id) {
                 Alert.alert('Error', 'User information not available.');
-                return;
-              }
-
-              // Check usage limits and show paywall if needed
-              const canProceed = await checkAndShowPaywall();
-              if (!canProceed) {
                 return;
               }
 

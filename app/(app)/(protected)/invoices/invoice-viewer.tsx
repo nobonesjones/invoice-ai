@@ -63,9 +63,6 @@ import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistoryShe
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
 import { InvoiceShareService } from '@/services/invoiceShareService';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
-import { usePaywall } from '@/context/paywall-provider';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
-import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // NEW SKIA IMPORTS
@@ -150,17 +147,6 @@ function InvoiceViewerScreen() {
   const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
   const { supabase, user } = useSupabase(); 
   const { logPaymentAdded, logStatusChanged, logInvoiceSent } = useInvoiceActivityLogger();
-  const { isSubscribed } = usePaywall();
-  const { checkAndShowPaywall } = useItemCreationLimit();
-  
-  // Paywall for send block using the working pattern
-  const { registerPlacement } = usePlacement({
-    onError: (err) => {},
-    onPresent: (info) => {},
-    onDismiss: (info, result) => {
-      // Send paywall dismissed
-    },
-  });
   
   // Paywall for send block
   // const { registerPlacement } = usePlacement({
@@ -264,26 +250,6 @@ function InvoiceViewerScreen() {
   }, [navigation, setIsTabBarVisible]);
 
   const handleSendByEmail = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'invoice_send_email',
-            invoiceId: invoice?.id,
-            userId: user?.id,
-            action: 'send_invoice'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
-
     if (!invoice || !businessSettings) {
       Alert.alert('Error', 'Invoice or business data is not available.');
       return;
@@ -400,26 +366,6 @@ function InvoiceViewerScreen() {
   };
 
   const handleSendLink = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'invoice_send_link',
-            invoiceId: invoice?.id,
-            userId: user?.id,
-            action: 'send_invoice'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
-
     if (!invoice || !supabase || !user) {
       Alert.alert('Error', 'Unable to send invoice at this time.');
       return;
@@ -506,26 +452,6 @@ function InvoiceViewerScreen() {
   };
 
   const handleSendPDF = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'invoice_send_pdf',
-            invoiceId: invoice?.id,
-            userId: user?.id,
-            action: 'send_invoice'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
-
     if (!invoice || !businessSettings) {
       Alert.alert('Error', 'Cannot export PDF - invoice data or business settings not loaded');
       return;
@@ -1570,12 +1496,6 @@ function InvoiceViewerScreen() {
             try {
               if (!user?.id) {
                 Alert.alert('Error', 'User information not available.');
-                return;
-              }
-
-              // Check usage limits and show paywall if needed
-              const canProceed = await checkAndShowPaywall();
-              if (!canProceed) {
                 return;
               }
 
