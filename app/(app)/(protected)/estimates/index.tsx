@@ -38,6 +38,7 @@ import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Define filter options here to map type to label for initialization and sync
 const filterOptions = [
+  { label: "All", type: "all" },
   { label: "Today", type: "today" },
   { label: "This Week", type: "this_week" },
   { label: "This Month", type: "this_month" },
@@ -99,6 +100,9 @@ export const getFilterDateRange = (filterType: string): { startDate: string, end
   let endDateObj: Date;
 
   switch (filterType) {
+    case "all":
+    case "all_time":
+      return null;
     case "this_week":
       startDateObj = getStartOfWeek(now);
       endDateObj = getEndOfWeek(now);
@@ -132,7 +136,7 @@ export const getFilterDateRange = (filterType: string): { startDate: string, end
       endDateObj = getEndOfYear(lastYearDate);
       break;
     default:
-      return null; // No filter or unknown filter type, or handle as 'all time'
+      return null; // No filter or unknown filter type
   }
   return { startDate: toSupabaseISOString(startDateObj), endDate: toSupabaseISOString(endDateObj) };
 };
@@ -224,9 +228,9 @@ export default function EstimateDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
-  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("this_month"); // Default filter type
+  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("all"); // Default filter type
   const [currentFilterLabel, setCurrentFilterLabel] = useState<string>(
-    filterOptions.find(opt => opt.type === "this_month")?.label || "This Month" // Initialize label
+    filterOptions.find(opt => opt.type === "all")?.label || "All" // Initialize label
   );
   const [totalEstimated, setTotalEstimated] = useState<number>(0); 
   const [totalAccepted, setTotalAccepted] = useState<number>(0); 

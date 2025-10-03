@@ -460,81 +460,89 @@ function EstimateViewerScreen() {
     sendEstimateModalRef.current?.present();
   };
 
-  const handleSendPDF = async () => {
+  const exportEstimatePdf = useCallback(async () => {
+    if (!estimate) {
+      throw new Error('Estimate not loaded');
+    }
 
-    if (!estimate || !businessSettings) {
-      Alert.alert('Error', 'Cannot export PDF - estimate data not loaded');
+    const image = skiaEstimateRef.current?.makeImageSnapshot();
+
+    if (!image) {
+      throw new Error('Failed to create image snapshot');
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          @page { margin: 0; size: ${image.width()}px ${image.height()}px; }
+          body { margin: 0; padding: 0; width: ${image.width()}px; height: ${image.height()}px; overflow: hidden; }
+          .estimate-image { width: ${image.width()}px; height: ${image.height()}px; display: block; object-fit: none; }
+        </style>
+      </head>
+      <body>
+        <img src="data:image/png;base64,${image.encodeToBase64()}" class="estimate-image" alt="Estimate ${estimate.estimate_number}" />
+      </body>
+      </html>
+    `;
+
+    const { uri } = await Print.printToFileAsync({
+      html: htmlContent,
+      base64: false,
+    });
+
+    return uri;
+  }, [estimate, skiaEstimateRef]);
+
+  const handleSendPDF = async () => {
+    if (!estimate || !supabase || !user) {
+      Alert.alert('Error', 'Cannot export PDF - estimate data not available');
       return;
     }
 
     try {
-      const image = skiaEstimateRef.current?.makeImageSnapshot();
-      
-      if (!image) {
-        throw new Error('Failed to create image snapshot');
-      }
-      
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            @page { margin: 0; size: ${image.width()}px ${image.height()}px; }
-            body { margin: 0; padding: 0; width: ${image.width()}px; height: ${image.height()}px; overflow: hidden; }
-            .estimate-image { width: ${image.width()}px; height: ${image.height()}px; display: block; object-fit: none; }
-          </style>
-        </head>
-        <body>
-          <img src="data:image/png;base64,${image.encodeToBase64()}" class="estimate-image" alt="Estimate ${estimate.estimate_number}" />
-        </body>
-        </html>
-      `;
-      
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-      });
-
-      // Update estimate status and log activity
-      if (user && estimate.status !== 'sent') {
-        const sendResult = await EstimateSenderService.sendEstimateByPDF(
-          estimate.id,
-          user.id,
-          estimate.estimate_number || 'Unknown',
-          supabase
-        );
-
-        if (sendResult.success) {
-          // Update local state
-          setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
-        } else {
-          // Failed to update status
-        }
-      }
+      const uri = await exportEstimatePdf();
 
       await Sharing.shareAsync(uri, { 
         mimeType: 'application/pdf', 
         dialogTitle: 'Share Estimate PDF' 
       });
 
+      const sendResult = await EstimateSenderService.sendEstimateByPDF(
+        estimate.id,
+        user.id,
+        estimate.estimate_number || 'Unknown',
+        supabase
+      );
+
+      if (sendResult.success) {
+        setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
+      }
+
       sendEstimateModalRef.current?.dismiss();
-      
+
     } catch (error: any) {
-      // Error in handleSendPDF
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error.message}`);
     }
   };
 
   const handleSendByEmail = async () => {
 
-    if (!estimate || !businessSettings || !user) {
+    if (!estimate || !supabase || !user) {
       Alert.alert('Error', 'Cannot send estimate - data not available');
       return;
     }
 
     try {
-      // Update estimate status and log activity
+      const uri = await exportEstimatePdf();
+
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Send Estimate via Email'
+      });
+
       const sendResult = await EstimateSenderService.sendEstimateByEmail(
         estimate.id,
         user.id,
@@ -566,7 +574,20 @@ function EstimateViewerScreen() {
     }
 
     try {
-      // Update estimate status and log activity
+      const result = await EstimateShareService.generateShareLinkFromCanvas(
+        estimateId,
+        user.id,
+        skiaEstimateRef,
+        30
+      );
+
+      if (!result.success || !result.shareUrl) {
+        Alert.alert('Error', result.error || 'Failed to generate share link.');
+        return;
+      }
+
+      await Clipboard.setStringAsync(result.shareUrl);
+
       const sendResult = await EstimateSenderService.sendEstimateByLink(
         estimate.id,
         user.id,
@@ -575,17 +596,18 @@ function EstimateViewerScreen() {
       );
 
       if (sendResult.success) {
-        // Update local state
         setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
-        Alert.alert('Success', sendResult.message || 'Estimate link shared successfully');
-      } else {
-        Alert.alert('Error', sendResult.error || 'Failed to share estimate link');
       }
 
+      Alert.alert(
+        'Link Copied',
+        `A shareable link has been copied to your clipboard.\n\nLink: ${result.shareUrl}`
+      );
+
       sendEstimateModalRef.current?.dismiss();
-      
+
     } catch (error: any) {
-      // Error in handleSendByLink
+      Alert.alert('Error', `Failed to create share link: ${error.message}`);
     }
   };
 
