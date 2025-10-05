@@ -1,4 +1,5 @@
 import * as Superwall from 'expo-superwall';
+import { SuperwallExpoModule } from 'expo-superwall';
 import { Platform } from 'react-native';
 
 class SuperwallService {
@@ -34,17 +35,35 @@ class SuperwallService {
       
       // Check what methods are available on the Superwall object
       console.log('[Superwall] Available methods:', Object.keys(Superwall));
-      
-      // Try different possible method names
-      if (typeof Superwall.register === 'function') {
+
+      // Prefer the native Expo module API exposed by expo-superwall
+      if (SuperwallExpoModule && typeof SuperwallExpoModule.registerPlacement === 'function') {
+        await SuperwallExpoModule.registerPlacement(event, params, 'paywall-service');
+        console.log('[Superwall] Native registerPlacement resolved for event:', event);
+        return;
+      }
+
+      // Fallbacks for older SDK signatures (kept for safety if the module API changes)
+      if (typeof (Superwall as any).registerPlacement === 'function') {
+        await (Superwall as any).registerPlacement(event, params);
+        console.log('[Superwall] JS registerPlacement resolved for event:', event);
+        return;
+      } else if (typeof Superwall.register === 'function') {
+        // Legacy SDK fallback
         await Superwall.register({
           placement: event,
-          ...params
+          ...params,
         });
+        console.log('[Superwall] Legacy register resolved for event:', event);
+        return;
       } else if (typeof Superwall.present === 'function') {
         await Superwall.present(event, params);
+        console.log('[Superwall] present resolved for event:', event);
+        return;
       } else if (typeof Superwall.presentPaywall === 'function') {
         await Superwall.presentPaywall(event, params);
+        console.log('[Superwall] presentPaywall resolved for event:', event);
+        return;
       } else {
         console.log('[Superwall] No suitable method found, paywall methods available:', Object.keys(Superwall));
         throw new Error('No suitable paywall presentation method found');
