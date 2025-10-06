@@ -83,8 +83,7 @@ class PaywallService {
           placement = 'campaign_trigger';
           break;
         case 'stripe_button':
-          // Stripe button should mirror the main upgrade placement that is known to show a paywall
-          placement = 'create_item_limit';
+          placement = 'stripe_button';
           break;
         case 'ai_pay_wall':
           placement = 'ai_pay_wall';
