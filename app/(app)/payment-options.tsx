@@ -44,6 +44,7 @@ import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { supabase } from '@/config/supabase';
 import { useSupabase } from '@/context/supabase-provider';
 import { usePaywall } from '@/context/paywall-provider';
+import { usePlacement } from 'expo-superwall';
 
 interface PaymentOption {
   id?: string;
@@ -390,7 +391,29 @@ export default function PaymentOptionsScreen() {
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { user, supabase } = useSupabase();
-  const { isSubscribed, presentPaywall } = usePaywall();
+  const { isSubscribed, presentPaywall, checkSubscriptionStatus } = usePaywall();
+  const stripeSkipReasonRef = useRef<any>(null);
+
+  const { registerPlacement: registerStripePlacement } = usePlacement({
+    onError: (err) => {
+      console.error('[PaymentOptions] Stripe placement error:', err);
+    },
+    onPresent: (info) => {
+      console.log('[PaymentOptions] Stripe paywall presented:', info);
+    },
+    onDismiss: async (info, result) => {
+      console.log('[PaymentOptions] Stripe paywall dismissed:', result);
+      try {
+        await checkSubscriptionStatus();
+      } catch (error) {
+        console.warn('[PaymentOptions] Failed to refresh subscription after Stripe paywall:', error);
+      }
+    },
+    onSkip: (reason) => {
+      stripeSkipReasonRef.current = reason;
+      console.log('[PaymentOptions] Stripe placement skipped:', reason);
+    },
+  });
 
   const paypalBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const stripeBottomSheetModalRef = useRef<BottomSheetModal>(null);
@@ -791,7 +814,21 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
 
     if (!isSubscribed) {
       try {
-        await presentPaywall({ event: 'stripe_button', params: { source: 'stripe_connect' } });
+        stripeSkipReasonRef.current = null;
+        const params = { source: 'stripe_connect' };
+        console.log('[PaymentOptions] Triggering Stripe placement with params:', params);
+        await registerStripePlacement({
+          placement: 'stripe_button',
+          params,
+          feature: () => {
+            console.log('[PaymentOptions] Stripe placement unlocked feature without showing paywall');
+          },
+        });
+
+        if (stripeSkipReasonRef.current) {
+          console.log('[PaymentOptions] Stripe placement skipped with reason:', stripeSkipReasonRef.current, '— using shared paywall service fallback');
+          await presentPaywall({ event: 'stripe_button', params });
+        }
       } catch (error) {
         console.error('[PaymentOptions] Failed to present Stripe paywall:', error);
         Alert.alert(
