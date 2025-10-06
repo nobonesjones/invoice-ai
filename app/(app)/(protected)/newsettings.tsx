@@ -37,7 +37,7 @@ export default function NewSettingsScreen() {
   const superwall = useSuperwall();
 
   // Use the Superwall placement hook
-  const { registerPlacement, state: placementState } = usePlacement({
+  const { registerPlacement } = usePlacement({
     onError: (err) => {
       console.error('Superwall Placement Error:', err);
       console.error('Platform:', Platform.OS);
@@ -180,15 +180,6 @@ export default function NewSettingsScreen() {
       const result = await Promise.race([placementPromise, timeoutPromise]);
       
       console.log('[Settings] Placement result:', result);
-      
-      // If placement not found, try campaign_trigger as fallback
-      if (placementState?.reason?.type === 'PlacementNotFound') {
-        console.log('[Settings] Trying fallback placement');
-        const fallbackResult = await registerPlacement({
-          placement: 'campaign_trigger'
-        });
-        console.log('[Settings] Fallback result:', fallbackResult);
-      }
       
     } catch (error: any) {
       console.error('Failed to present paywall:', error);
