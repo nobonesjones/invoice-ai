@@ -5,7 +5,7 @@ import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient'; 
 import { 
   ChevronRight, Search, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
-  Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell,
+  Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell, Receipt,
   Crown 
 } from 'lucide-react-native';
 
@@ -288,6 +288,16 @@ export default function NewSettingsScreen() {
           label: 'Payment Options',
           onPress: handlePaymentOptionsPress,
           searchTerms: ['payment', 'options', 'credit', 'card', 'paypal', 'bank']
+        },
+        {
+          id: 'expenses',
+          icon: <Receipt color={theme.foreground} size={24} />,
+          label: 'Expenses',
+          onPress: () => {
+            setIsTabBarVisible(false);
+            router.push('/expenses');
+          },
+          searchTerms: ['expenses', 'receipts', 'costs', 'spending', 'track']
         },
         // {
         //   id: 'payment-reminders',

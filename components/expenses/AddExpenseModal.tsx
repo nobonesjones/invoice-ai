@@ -1,0 +1,475 @@
+import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/context/theme-provider';
+import { Text } from '@/components/ui/text';
+import { X, Save, Calendar, ChevronDown } from 'lucide-react-native';
+import { useSupabase } from '@/context/supabase-provider';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
+
+export interface AddExpenseModalRef {
+  present: () => void;
+  dismiss: () => void;
+}
+
+export interface AddExpenseModalProps {
+  onExpenseAdded?: () => void;
+}
+
+type Category = {
+  id: string;
+  category_name: string;
+  icon_emoji: string;
+};
+
+const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ onExpenseAdded }, ref) => {
+  const { theme } = useTheme();
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const scrollRef = useRef<any>(null);
+  const insets = useSafeAreaInsets();
+  const { supabase, user } = useSupabase();
+
+  const [merchant, setMerchant] = useState('');
+  const [amount, setAmount] = useState('');
+  const [taxAmount, setTaxAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [expenseDate, setExpenseDate] = useState(new Date());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Date picker state
+  const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  
+  // Category state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
+
+  React.useImperativeHandle(ref, () => ({
+    present: () => {
+      bottomSheetModalRef.current?.present();
+      // Clear form when opening
+      setMerchant('');
+      setAmount('');
+      setTaxAmount('');
+      setDescription('');
+      setExpenseDate(new Date());
+      setSelectedCategory(null);
+      setIsSubmitting(false);
+      // Load categories when opening
+      loadCategories();
+    },
+    dismiss: () => {
+      bottomSheetModalRef.current?.dismiss();
+    },
+  }));
+
+  const snapPoints = useMemo(() => ['85%'], []);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from('expense_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('category_name');
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const renderBackdrop = useCallback((props: any) => (
+    <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.7} />
+  ), []);
+
+  const handleFocus = () => {
+    setTimeout(() => {
+      try { scrollRef.current?.scrollToEnd?.({ animated: true }); } catch {}
+    }, 50);
+  };
+
+  const showDatePicker = () => setDatePickerVisibility(true);
+  const hideDatePicker = () => setDatePickerVisibility(false);
+  const handleConfirmDate = (selectedDate: Date) => {
+    setExpenseDate(selectedDate);
+    hideDatePicker();
+  };
+
+  const handleSave = useCallback(async () => {
+    if (!merchant.trim() || !amount.trim()) {
+      Alert.alert('Missing Information', 'Please enter merchant and amount');
+      return;
+    }
+
+    if (!selectedCategory) {
+      Alert.alert('Missing Information', 'Please select a category');
+      return;
+    }
+
+    if (!user || !supabase) {
+      Alert.alert('Error', 'Not authenticated');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase.from('expenses').insert({
+        user_id: user.id,
+        merchant_name: merchant,
+        total_amount: parseFloat(amount),
+        tax_amount: taxAmount ? parseFloat(taxAmount) : 0,
+        category_id: selectedCategory.id,
+        description: description || null,
+        expense_date: expenseDate.toISOString(),
+        receipt_image_url: null,
+        is_reimbursable: false,
+        reimbursement_status: 'pending',
+      });
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Expense added successfully');
+      bottomSheetModalRef.current?.dismiss();
+      onExpenseAdded?.();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add expense');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [merchant, amount, taxAmount, description, expenseDate, selectedCategory, user, supabase, onExpenseAdded]);
+
+  const renderCategoryItem = ({ item }: { item: Category }) => (
+    <TouchableOpacity
+      style={[styles.categoryItem, { borderBottomColor: theme.border }]}
+      onPress={() => {
+        setSelectedCategory(item);
+        setCategoryModalVisible(false);
+      }}
+    >
+      <Text style={styles.categoryEmoji}>{item.icon_emoji}</Text>
+      <Text style={[styles.categoryName, { color: theme.foreground }]}>{item.category_name}</Text>
+      {selectedCategory?.id === item.id && (
+        <View style={[styles.selectedIndicator, { backgroundColor: theme.primary }]} />
+      )}
+    </TouchableOpacity>
+  );
+
+  const styles = StyleSheet.create({
+    container: { 
+      flex: 1, 
+      paddingHorizontal: 20 
+    },
+    contentContainerStyle: { 
+      paddingBottom: 40, 
+      paddingTop: 15 
+    },
+    modalBackground: { 
+      backgroundColor: theme.background 
+    },
+    handleIndicator: { 
+      backgroundColor: theme.mutedForeground 
+    },
+    closeButton: { 
+      position: 'absolute', 
+      top: 15, 
+      right: 15, 
+      padding: 5, 
+      zIndex: 1 
+    },
+    title: { 
+      fontSize: 22, 
+      fontWeight: 'bold', 
+      color: theme.foreground, 
+      marginBottom: 20, 
+      textAlign: 'center' 
+    },
+    inputGroupContainer: { 
+      backgroundColor: theme.card, 
+      borderRadius: 12, 
+      marginBottom: 20, 
+      paddingHorizontal: 0, 
+      shadowColor: '#000', 
+      shadowOffset: { width: 0, height: 1 }, 
+      shadowOpacity: 0.05, 
+      shadowRadius: 2, 
+      elevation: 2 
+    },
+    inputRow: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      paddingVertical: 12, 
+      paddingHorizontal: 15, 
+      borderBottomWidth: 1, 
+      borderBottomColor: theme.border 
+    },
+    inputRow_last: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      paddingVertical: 12, 
+      paddingHorizontal: 15 
+    },
+    inputLabelText: { 
+      fontSize: 16, 
+      fontWeight: 'bold', 
+      color: theme.foreground, 
+      marginRight: 10, 
+      minWidth: '25%' 
+    },
+    inputValueArea: { 
+      flex: 1 
+    },
+    textInputStyled: { 
+      fontSize: 16, 
+      color: theme.foreground, 
+      paddingVertical: 0, 
+      backgroundColor: 'transparent' 
+    },
+    button: { 
+      paddingVertical: 15, 
+      borderRadius: 8, 
+      alignItems: 'center', 
+      marginTop: 10 
+    },
+    saveButton: { 
+      backgroundColor: theme.primary,
+      flexDirection: 'row',
+      justifyContent: 'center'
+    },
+    buttonText: { 
+      fontSize: 17, 
+      fontWeight: '600' 
+    },
+    saveButtonText: { 
+      color: theme.primaryForeground 
+    },
+    selectorButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+    },
+    // Modal Styles
+    modalContainer: {
+      flex: 1,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+    },
+    closeButtonModal: {
+      padding: 4,
+    },
+    categoryList: {
+      padding: 16,
+    },
+    categoryItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    categoryEmoji: {
+      fontSize: 24,
+      marginRight: 16,
+    },
+    categoryName: {
+      fontSize: 16,
+      flex: 1,
+    },
+    selectedIndicator: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+  });
+
+  return (
+    <BottomSheetModal
+      ref={bottomSheetModalRef}
+      name="addExpenseModal"
+      stackBehavior="push"
+      index={0}
+      snapPoints={snapPoints}
+      backdropComponent={renderBackdrop}
+      handleIndicatorStyle={styles.handleIndicator}
+      backgroundStyle={styles.modalBackground}
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+      enablePanDownToClose={!isSubmitting}
+      enableContentPanningGesture={!isSubmitting}
+      topInset={6}
+    >
+      <BottomSheetScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.contentContainerStyle}>
+        <TouchableOpacity style={styles.closeButton} onPress={() => bottomSheetModalRef.current?.dismiss()}>
+          <X size={22} color={theme.mutedForeground} />
+        </TouchableOpacity>
+
+        <Text style={styles.title}>Add Expense</Text>
+
+        <View style={styles.inputGroupContainer}>
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabelText}>Merchant</Text>
+            <View style={styles.inputValueArea}>
+              <BottomSheetTextInput
+                style={styles.textInputStyled}
+                value={merchant}
+                onChangeText={setMerchant}
+                placeholder="e.g. Starbucks"
+                placeholderTextColor={theme.mutedForeground}
+                onFocus={handleFocus}
+                autoFocus
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabelText}>Category</Text>
+            <TouchableOpacity
+              style={styles.inputValueArea}
+              onPress={() => setCategoryModalVisible(true)}
+            >
+              <View style={[styles.selectorButton, { borderColor: theme.border }]}>
+                {selectedCategory ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ marginRight: 8, fontSize: 18 }}>{selectedCategory.icon_emoji}</Text>
+                    <Text style={{ color: theme.foreground, fontSize: 16 }}>{selectedCategory.category_name}</Text>
+                  </View>
+                ) : (
+                  <Text style={{ color: theme.mutedForeground, fontSize: 16 }}>Select Category</Text>
+                )}
+                <ChevronDown size={20} color={theme.mutedForeground} />
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabelText}>Amount</Text>
+            <View style={styles.inputValueArea}>
+              <BottomSheetTextInput
+                style={styles.textInputStyled}
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="0.00"
+                placeholderTextColor={theme.mutedForeground}
+                keyboardType="decimal-pad"
+                onFocus={handleFocus}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabelText}>Tax (Optional)</Text>
+            <View style={styles.inputValueArea}>
+              <BottomSheetTextInput
+                style={styles.textInputStyled}
+                value={taxAmount}
+                onChangeText={setTaxAmount}
+                placeholder="0.00"
+                placeholderTextColor={theme.mutedForeground}
+                keyboardType="decimal-pad"
+                onFocus={handleFocus}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabelText}>Date</Text>
+            <TouchableOpacity
+              style={styles.inputValueArea}
+              onPress={showDatePicker}
+            >
+              <View style={[styles.selectorButton, { borderColor: theme.border }]}>
+                <Text style={{ color: theme.foreground }}>{expenseDate.toLocaleDateString()}</Text>
+                <Calendar size={20} color={theme.mutedForeground} />
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.inputRow_last}>
+            <Text style={styles.inputLabelText}>Description</Text>
+            <View style={styles.inputValueArea}>
+              <BottomSheetTextInput
+                style={styles.textInputStyled}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Optional notes..."
+                placeholderTextColor={theme.mutedForeground}
+                onFocus={handleFocus}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.button, styles.saveButton]}
+          onPress={handleSave}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color={theme.primaryForeground} />
+          ) : (
+            <>
+              <Save size={20} color={theme.primaryForeground} style={{ marginRight: 8 }} />
+              <Text style={[styles.buttonText, styles.saveButtonText]}>Save Expense</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </BottomSheetScrollView>
+
+      {/* Date Picker */}
+      <DateTimePickerModal
+        isVisible={isDatePickerVisible}
+        mode="date"
+        onConfirm={handleConfirmDate}
+        onCancel={hideDatePicker}
+        date={expenseDate}
+      />
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={isCategoryModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCategoryModalVisible(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: theme.foreground }]}>Select Category</Text>
+            <TouchableOpacity onPress={() => setCategoryModalVisible(false)} style={styles.closeButtonModal}>
+              <X size={24} color={theme.foreground} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={categories}
+            renderItem={renderCategoryItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.categoryList}
+          />
+        </View>
+      </Modal>
+
+    </BottomSheetModal>
+  );
+});
+
+export default AddExpenseModal;
