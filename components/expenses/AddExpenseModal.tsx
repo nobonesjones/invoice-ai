@@ -1,5 +1,5 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList, TextInput, Platform } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/theme-provider';
@@ -169,7 +169,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     },
     contentContainerStyle: { 
       paddingBottom: 40, 
-      paddingTop: 15 
+      paddingTop: Platform.OS === 'ios' ? 10 : 15 
     },
     modalBackground: { 
       backgroundColor: theme.background 
@@ -179,7 +179,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     },
     closeButton: { 
       position: 'absolute', 
-      top: 15, 
+      top: Platform.OS === 'ios' ? 10 : 15, 
       right: 15, 
       padding: 5, 
       zIndex: 1 
@@ -232,6 +232,25 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       paddingVertical: 0, 
       backgroundColor: 'transparent' 
     },
+    selectorContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 0,
+    },
+    descriptionInputContainer: { 
+      paddingVertical: 12, 
+      paddingHorizontal: 15, 
+      minHeight: 0 
+    },
+    descriptionInput: {
+      fontSize: 16,
+      color: theme.foreground,
+      paddingVertical: 0,
+      backgroundColor: 'transparent',
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
     button: { 
       paddingVertical: 15, 
       borderRadius: 8, 
@@ -249,14 +268,6 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     },
     saveButtonText: { 
       color: theme.primaryForeground 
-    },
-    selectorButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      borderWidth: 1,
-      borderRadius: 8,
-      padding: 12,
     },
     // Modal Styles
     modalContainer: {
@@ -340,13 +351,13 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
             </View>
           </View>
 
-          <View style={styles.inputRow}>
+          <View style={styles.inputRow_last}>
             <Text style={styles.inputLabelText}>Category</Text>
             <TouchableOpacity
               style={styles.inputValueArea}
               onPress={() => setCategoryModalVisible(true)}
             >
-              <View style={[styles.selectorButton, { borderColor: theme.border }]}>
+              <View style={styles.selectorContent}>
                 {selectedCategory ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={{ marginRight: 8, fontSize: 18 }}>{selectedCategory.icon_emoji}</Text>
@@ -359,7 +370,9 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
               </View>
             </TouchableOpacity>
           </View>
+        </View>
 
+        <View style={styles.inputGroupContainer}>
           <View style={styles.inputRow}>
             <Text style={styles.inputLabelText}>Amount</Text>
             <View style={styles.inputValueArea}>
@@ -390,33 +403,35 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
             </View>
           </View>
 
-          <View style={styles.inputRow}>
+          <View style={styles.inputRow_last}>
             <Text style={styles.inputLabelText}>Date</Text>
             <TouchableOpacity
               style={styles.inputValueArea}
               onPress={showDatePicker}
             >
-              <View style={[styles.selectorButton, { borderColor: theme.border }]}>
+              <View style={styles.selectorContent}>
                 <Text style={{ color: theme.foreground }}>{expenseDate.toLocaleDateString()}</Text>
                 <Calendar size={20} color={theme.mutedForeground} />
               </View>
             </TouchableOpacity>
           </View>
+        </View>
 
-          <View style={styles.inputRow_last}>
-            <Text style={styles.inputLabelText}>Description</Text>
-            <View style={styles.inputValueArea}>
-              <BottomSheetTextInput
-                style={styles.textInputStyled}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Optional notes..."
-                placeholderTextColor={theme.mutedForeground}
-                onFocus={handleFocus}
-                multiline
-                numberOfLines={2}
-              />
-            </View>
+        <View style={styles.inputGroupContainer}>
+          <View style={styles.descriptionInputContainer}>
+            <TextInput
+              style={[styles.descriptionInput, { 
+                color: theme.foreground
+              }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Description (optional)"
+              placeholderTextColor={theme.mutedForeground}
+              multiline={true}
+              textAlignVertical="top"
+              blurOnSubmit={true}
+              returnKeyType="done"
+            />
           </View>
         </View>
 
