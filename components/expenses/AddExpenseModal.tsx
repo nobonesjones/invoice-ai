@@ -11,6 +11,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 export interface AddExpenseModalRef {
   present: () => void;
   dismiss: () => void;
+  presentWithData?: (expense: any) => void;
 }
 
 export interface AddExpenseModalProps {
@@ -44,20 +45,61 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
+  
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+
+  const clearForm = () => {
+    setMerchant('');
+    setAmount('');
+    setTaxAmount('');
+    setDescription('');
+    setExpenseDate(new Date());
+    setSelectedCategory(null);
+    setIsSubmitting(false);
+    setIsEditMode(false);
+    setEditingExpenseId(null);
+  };
+
+  const populateFormWithExpense = (expense: any) => {
+    setMerchant(expense.merchant_name || '');
+    setAmount(expense.total_amount?.toString() || '');
+    setTaxAmount(expense.tax_amount?.toString() || '');
+    setDescription(expense.description || '');
+    setExpenseDate(expense.expense_date ? new Date(expense.expense_date) : new Date());
+    setIsEditMode(true);
+    setEditingExpenseId(expense.id);
+    
+    // Find and set the category from already loaded categories
+    if (expense.category_id && categories.length > 0) {
+      const category = categories.find(cat => cat.id === expense.category_id);
+      if (category) {
+        setSelectedCategory(category);
+      }
+    } else if (expense.category_id) {
+      // Set a temporary category from the expense data if categories aren't loaded yet
+      if (expense.expense_categories) {
+        setSelectedCategory({
+          id: expense.category_id,
+          category_name: expense.expense_categories.category_name,
+          icon_emoji: expense.expense_categories.icon_emoji
+        });
+      }
+    }
+  };
 
   React.useImperativeHandle(ref, () => ({
     present: () => {
       bottomSheetModalRef.current?.present();
-      // Clear form when opening
-      setMerchant('');
-      setAmount('');
-      setTaxAmount('');
-      setDescription('');
-      setExpenseDate(new Date());
-      setSelectedCategory(null);
-      setIsSubmitting(false);
-      // Load categories when opening
+      clearForm();
       loadCategories();
+    },
+    presentWithData: (expense: any) => {
+      bottomSheetModalRef.current?.present();
+      loadCategories().then(() => {
+        populateFormWithExpense(expense);
+      });
     },
     dismiss: () => {
       bottomSheetModalRef.current?.dismiss();
@@ -121,7 +163,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('expenses').insert({
+      const expenseData = {
         user_id: user.id,
         merchant_name: merchant,
         total_amount: parseFloat(amount),
@@ -132,19 +174,37 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
         receipt_image_url: null,
         is_reimbursable: false,
         reimbursement_status: 'pending',
-      });
+      };
+      
+      console.log(`${isEditMode ? 'Updating' : 'Saving'} expense:`, expenseData);
+      
+      let error;
+      if (isEditMode && editingExpenseId) {
+        // Update existing expense
+        const result = await supabase
+          .from('expenses')
+          .update(expenseData)
+          .eq('id', editingExpenseId);
+        error = result.error;
+      } else {
+        // Create new expense
+        const result = await supabase.from('expenses').insert(expenseData);
+        error = result.error;
+      }
 
+      console.log('Expense save result:', { error });
+      
       if (error) throw error;
 
-      Alert.alert('Success', 'Expense added successfully');
+      Alert.alert('Success', `Expense ${isEditMode ? 'updated' : 'added'} successfully`);
       bottomSheetModalRef.current?.dismiss();
       onExpenseAdded?.();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add expense');
+      Alert.alert('Error', error.message || `Failed to ${isEditMode ? 'update' : 'add'} expense`);
     } finally {
       setIsSubmitting(false);
     }
-  }, [merchant, amount, taxAmount, description, expenseDate, selectedCategory, user, supabase, onExpenseAdded]);
+  }, [merchant, amount, taxAmount, description, expenseDate, selectedCategory, user, supabase, onExpenseAdded, isEditMode, editingExpenseId]);
 
   const renderCategoryItem = ({ item }: { item: Category }) => (
     <TouchableOpacity
@@ -310,6 +370,27 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       height: 10,
       borderRadius: 5,
     },
+    // Image placeholder styles
+    imagePlaceholderContainer: {
+      paddingVertical: 12,
+      paddingHorizontal: 15,
+    },
+    imagePlaceholder: {
+      height: 100,
+      borderWidth: 2,
+      borderStyle: 'dashed',
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imagePlaceholderText: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    imagePlaceholderSubtext: {
+      fontSize: 14,
+    },
   });
 
   return (
@@ -333,7 +414,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
           <X size={22} color={theme.mutedForeground} />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Add Expense</Text>
+        <Text style={styles.title}>{isEditMode ? 'Edit Expense' : 'Add Expense'}</Text>
 
         <View style={styles.inputGroupContainer}>
           <View style={styles.inputRow}>
@@ -346,7 +427,6 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
                 placeholder="e.g. Starbucks"
                 placeholderTextColor={theme.mutedForeground}
                 onFocus={handleFocus}
-                autoFocus
               />
             </View>
           </View>
@@ -435,6 +515,20 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
           </View>
         </View>
 
+        {/* Receipt Image Placeholder */}
+        <View style={styles.inputGroupContainer}>
+          <View style={styles.imagePlaceholderContainer}>
+            <View style={[styles.imagePlaceholder, { borderColor: theme.border, backgroundColor: theme.muted }]}>
+              <Text style={[styles.imagePlaceholderText, { color: theme.mutedForeground }]}>
+                Receipt Image
+              </Text>
+              <Text style={[styles.imagePlaceholderSubtext, { color: theme.mutedForeground }]}>
+                Coming Soon
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <TouchableOpacity
           style={[styles.button, styles.saveButton]}
           onPress={handleSave}
@@ -443,10 +537,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
           {isSubmitting ? (
             <ActivityIndicator color={theme.primaryForeground} />
           ) : (
-            <>
-              <Save size={20} color={theme.primaryForeground} style={{ marginRight: 8 }} />
-              <Text style={[styles.buttonText, styles.saveButtonText]}>Save Expense</Text>
-            </>
+            <Text style={[styles.buttonText, styles.saveButtonText]}>{isEditMode ? 'Update Expense' : 'Save Expense'}</Text>
           )}
         </TouchableOpacity>
       </BottomSheetScrollView>

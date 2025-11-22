@@ -34,7 +34,7 @@ type Expense = {
 	expense_date: string;
 	category_id: string;
 	description?: string;
-	category?: {
+	expense_categories?: {
 		category_name: string;
 		icon_emoji: string;
 	};
@@ -49,6 +49,7 @@ export default function ExpensesScreen() {
 	const [expenses, setExpenses] = useState<Expense[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
+	const [debugInfo, setDebugInfo] = useState<string>('');
 
 	// Bottom Sheet Refs
 	const bottomSheetModalRef = useRef<BottomSheetModal>(null);
@@ -64,21 +65,46 @@ export default function ExpensesScreen() {
 	);
 
 	const loadExpenses = async () => {
-		if (!user || !supabase) return;
+		if (!user || !supabase) {
+			setDebugInfo('No user or supabase');
+			return;
+		}
 		try {
-			const { data, error } = await supabase
+			setDebugInfo(`Loading for user: ${user.id}`);
+			
+			// First load expenses
+			const { data: expensesData, error: expensesError } = await supabase
 				.from('expenses')
-				.select(`
-					*,
-					category:expense_categories(category_name, icon_emoji)
-				`)
+				.select('*')
 				.eq('user_id', user.id)
 				.order('expense_date', { ascending: false });
 
-			if (error) throw error;
-			setExpenses(data || []);
+			if (expensesError) throw expensesError;
+
+			// Then load categories to join manually
+			const { data: categoriesData, error: categoriesError } = await supabase
+				.from('expense_categories')
+				.select('*')
+				.eq('is_active', true);
+
+			if (categoriesError) throw categoriesError;
+
+			// Manually join the data
+			const expensesWithCategories = expensesData?.map(expense => {
+				const category = categoriesData?.find(cat => cat.id === expense.category_id);
+				return {
+					...expense,
+					expense_categories: category ? {
+						category_name: category.category_name,
+						icon_emoji: category.icon_emoji
+					} : null
+				};
+			}) || [];
+
+			setDebugInfo(`Found ${expensesWithCategories.length} expenses with categories`);
+			setExpenses(expensesWithCategories);
 		} catch (error) {
-			console.error('Error loading expenses:', error);
+			setDebugInfo(`Error: ${(error as any)?.message}`);
 		} finally {
 			setIsLoading(false);
 			setRefreshing(false);
@@ -122,38 +148,55 @@ export default function ExpensesScreen() {
 		[]
 	);
 
+	// Helper to format date like "Jan 6" or "Nov 11"
+	const formatDisplayDate = (dateString: string | null): string => {
+		if (!dateString) return '';
+		try {
+			const date = new Date(dateString);
+			return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+		} catch (e) {
+			return '';
+		}
+	};
+
+	const handleExpensePress = (expense: Expense) => {
+		// Open the edit modal with pre-filled data
+		addExpenseModalRef.current?.presentWithData?.(expense);
+	};
+
 	const renderExpenseItem = ({ item }: { item: Expense }) => (
 		<TouchableOpacity
-			style={[styles.expenseItem, { backgroundColor: theme.card, borderColor: theme.border }]}
-			onPress={() => {
-				router.push(`/(app)/(protected)/expenses/${item.id}`);
-			}}
+			style={[
+				styles.expenseItemContainer,
+				{
+					backgroundColor: theme.card,
+					borderBottomColor: theme.border,
+				},
+			]}
+			onPress={() => handleExpensePress(item)}
 		>
-			<View style={styles.expenseIconContainer}>
+			<View style={styles.iconContainer}>
 				<Text style={styles.categoryEmoji}>
-					{item.category?.icon_emoji || '🧾'}
+					{item.expense_categories?.icon_emoji || '🧾'}
 				</Text>
 			</View>
 			<View style={styles.expenseDetails}>
-				<Text style={[styles.merchantText, { color: theme.foreground }]}>{item.merchant_name}</Text>
-				<View style={styles.metaContainer}>
-					<Text style={[styles.categoryText, { color: theme.mutedForeground }]}>
-						{item.category?.category_name || 'Uncategorized'}
+				<View style={styles.topRow}>
+					<Text style={[styles.merchantText, { color: theme.foreground }]}>
+						{item.merchant_name}
 					</Text>
-					<Text style={[styles.dateText, { color: theme.mutedForeground }]}>
-						• {new Date(item.expense_date).toLocaleDateString()}
+					<Text style={[styles.expenseAmount, { color: theme.foreground }]}>
+						${item.total_amount.toFixed(2)}
 					</Text>
 				</View>
-			</View>
-			<View style={{ alignItems: 'flex-end' }}>
-				<Text style={[styles.amountText, { color: theme.foreground }]}>
-					${item.total_amount.toFixed(2)}
-				</Text>
-				{item.tax_amount > 0 && (
-					<Text style={[styles.taxText, { color: theme.mutedForeground }]}>
-						Tax: ${item.tax_amount.toFixed(2)}
+				<View style={styles.bottomRow}>
+					<Text style={[styles.categoryText, { color: theme.mutedForeground }]}>
+						{item.expense_categories?.category_name || 'No Category'}
 					</Text>
-				)}
+					<Text style={[styles.dateText, { color: theme.mutedForeground }]}>
+						{formatDisplayDate(item.expense_date)}
+					</Text>
+				</View>
 			</View>
 		</TouchableOpacity>
 	);
@@ -185,6 +228,13 @@ export default function ExpensesScreen() {
 						</Text>
 					</TouchableOpacity>
 				</View>
+
+				{/* Debug Info */}
+				{debugInfo && (
+					<View style={{ padding: 16, backgroundColor: '#f0f0f0', margin: 16, borderRadius: 8 }}>
+						<Text style={{ color: '#000', fontSize: 12 }}>Debug: {debugInfo}</Text>
+					</View>
+				)}
 
 				{/* Content */}
 				{isLoading ? (
@@ -338,59 +388,64 @@ const styles = StyleSheet.create({
 		marginBottom: 24,
 	},
 	listContent: {
-		padding: 16,
+		paddingHorizontal: 16,
+		paddingBottom: 20,
 	},
-	expenseItem: {
+	expenseItemContainer: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		padding: 16,
-		borderRadius: 12,
-		marginBottom: 12,
-		borderWidth: 1,
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 2 },
-		shadowOpacity: 0.05,
-		shadowRadius: 4,
-		elevation: 2,
+		paddingVertical: 16,
+		paddingHorizontal: 16,
+		borderBottomWidth: StyleSheet.hairlineWidth,
 	},
-	expenseIconContainer: {
-		width: 48,
-		height: 48,
-		borderRadius: 24,
-		backgroundColor: 'rgba(0,0,0,0.03)',
+	iconContainer: {
+		width: 50,
+		height: 50,
+		borderRadius: 25,
 		justifyContent: 'center',
 		alignItems: 'center',
-		marginRight: 12,
+		marginRight: 16,
+		backgroundColor: '#FFFFFF',
+		// Heavy drop shadow for icon only
+		shadowColor: '#000',
+		shadowOffset: { width: 0, height: 3 },
+		shadowOpacity: 0.3,
+		shadowRadius: 6,
+		elevation: 10,
 	},
 	categoryEmoji: {
-		fontSize: 24,
+		fontSize: 22,
 	},
 	expenseDetails: {
 		flex: 1,
 	},
+	topRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		marginBottom: 4,
+	},
+	bottomRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+	},
 	merchantText: {
 		fontSize: 16,
 		fontWeight: '600',
-		marginBottom: 4,
+		flex: 1,
 	},
-	metaContainer: {
-		flexDirection: 'row',
-		alignItems: 'center',
+	expenseAmount: {
+		fontSize: 16,
+		fontWeight: '600',
+		marginLeft: 8,
 	},
 	categoryText: {
 		fontSize: 14,
+		flex: 1,
 	},
 	dateText: {
 		fontSize: 14,
-		marginLeft: 4,
-	},
-	amountText: {
-		fontSize: 16,
-		fontWeight: '700',
-	},
-	taxText: {
-		fontSize: 12,
-		marginTop: 2,
 	},
 	// Modal Styles - Updated to match app style guide
 	modalContent: {
