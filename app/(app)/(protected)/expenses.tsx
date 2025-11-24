@@ -1,5 +1,8 @@
 import { useRouter, useFocusEffect } from "expo-router";
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { ChevronLeft, Plus, Receipt, Camera, Upload, Edit3, X } from "lucide-react-native";
+import * as LucideIcons from 'lucide-react-native';
 import { useCallback, useState, useRef, useMemo } from "react";
 import {
 	View,
@@ -25,6 +28,7 @@ import { useTheme } from "@/context/theme-provider";
 import { useTabBarVisibility } from "@/context/TabBarVisibilityContext";
 import { useSupabase } from "@/context/supabase-provider";
 import AddExpenseModal, { AddExpenseModalRef } from "@/components/expenses/AddExpenseModal";
+import { ReceiptScanningService } from "@/services/receiptScanningService";
 
 type Expense = {
 	id: string;
@@ -47,7 +51,8 @@ export default function ExpensesScreen() {
 	const { supabase, user } = useSupabase();
 
 	const [expenses, setExpenses] = useState<Expense[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
+	const [isLoading, setIsLoading] = useState(false);
+	const [currencySymbol, setCurrencySymbol] = useState('$');
 	const [refreshing, setRefreshing] = useState(false);
 	const [debugInfo, setDebugInfo] = useState<string>('');
 
@@ -60,6 +65,7 @@ export default function ExpensesScreen() {
 		useCallback(() => {
 			setIsTabBarVisible(false);
 			loadExpenses();
+			loadUserCurrency();
 			return () => setIsTabBarVisible(true);
 		}, [setIsTabBarVisible])
 	);
@@ -71,7 +77,7 @@ export default function ExpensesScreen() {
 		}
 		try {
 			setDebugInfo(`Loading for user: ${user.id}`);
-			
+
 			// First load expenses
 			const { data: expensesData, error: expensesError } = await supabase
 				.from('expenses')
@@ -111,6 +117,30 @@ export default function ExpensesScreen() {
 		}
 	};
 
+	const loadUserCurrency = async () => {
+		try {
+			const { data: profile } = await supabase
+				.from('user_profiles')
+				.select('currency_symbol, currency')
+				.eq('id', user?.id)
+				.single();
+
+			if (profile?.currency_symbol) {
+				setCurrencySymbol(profile.currency_symbol);
+			} else if (profile?.currency) {
+				// Fallback: map currency code to symbol
+				const currencyMap: Record<string, string> = {
+					'USD': '$', 'GBP': '£', 'EUR': '€', 'JPY': '¥',
+					'AUD': 'A$', 'CAD': 'C$', 'CHF': 'CHF', 'CNY': '¥',
+					'INR': '₹', 'AED': 'د.إ'
+				};
+				setCurrencySymbol(currencyMap[profile.currency] || '$');
+			}
+		} catch (error) {
+			console.error('Error loading currency:', error);
+		}
+	};
+
 	const onRefresh = () => {
 		setRefreshing(true);
 		loadExpenses();
@@ -120,16 +150,187 @@ export default function ExpensesScreen() {
 		bottomSheetModalRef.current?.present();
 	}, []);
 
-	const handleOptionPress = (option: 'scan' | 'upload' | 'manual') => {
+	const handleOptionPress = async (option: 'scan' | 'upload' | 'manual') => {
 		bottomSheetModalRef.current?.dismiss();
-		// Small delay to allow sheet to close
-		setTimeout(() => {
-			if (option === 'manual') {
+
+		if (option === 'manual') {
+			// Small delay to allow sheet to close
+			setTimeout(() => {
 				addExpenseModalRef.current?.present();
-			} else {
-				Alert.alert('Coming Soon', 'This feature is currently being built.');
+			}, 100);
+		} else if (option === 'scan') {
+			// Request permission and open camera
+			const { status } = await ImagePicker.requestCameraPermissionsAsync();
+			if (status !== 'granted') {
+				Alert.alert('Permission needed', 'Camera permission is required to scan receipts');
+				return;
 			}
-		}, 100);
+
+			const result = await ImagePicker.launchCameraAsync({
+				mediaTypes: ImagePicker.MediaTypeOptions.Images,
+				quality: 0.7,
+				allowsEditing: false,
+			});
+
+			if (!result.canceled && result.assets[0]) {
+				try {
+					setIsLoading(true);
+
+					const imageUri = result.assets[0].uri;
+
+					// 1. Upload image to Supabase Storage
+					const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+					const filePath = `${user?.id}/${fileName}`;
+
+					// Read file as base64 and convert to blob
+					const base64 = await FileSystem.readAsStringAsync(imageUri, {
+						encoding: FileSystem.EncodingType.Base64,
+					});
+
+					// Convert base64 to blob
+					const byteCharacters = atob(base64);
+					const byteNumbers = new Array(byteCharacters.length);
+					for (let i = 0; i < byteCharacters.length; i++) {
+						byteNumbers[i] = byteCharacters.charCodeAt(i);
+					}
+					const byteArray = new Uint8Array(byteNumbers);
+					const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+					const { data: uploadData, error: uploadError } = await supabase.storage
+						.from('receipt-images')
+						.upload(filePath, blob, {
+							contentType: 'image/jpeg',
+							upsert: false
+						});
+
+					if (uploadError) {
+						throw new Error(`Upload failed: ${uploadError.message}`);
+					}
+
+					// 2. Get public URL
+					const { data: { publicUrl } } = supabase.storage
+						.from('receipt-images')
+						.getPublicUrl(filePath);
+
+					// 3. Get categories for AI context
+					const { data: categoriesData } = await supabase
+						.from('expense_categories')
+						.select('id, category_name')
+						.eq('is_active', true);
+
+					const mappedCategories = categoriesData?.map(c => ({
+						id: c.id,
+						name: c.category_name
+					})) || [];
+
+					// 4. Scan receipt
+					const scannedData = await ReceiptScanningService.scanReceipt(
+						imageUri,
+						supabase,
+						mappedCategories
+					);
+
+					// 5. Open modal with scanned data + image URL
+					addExpenseModalRef.current?.presentWithData?.({
+						...scannedData,
+						receipt_url: publicUrl
+					});
+
+				} catch (error: any) {
+					console.error('Scanning error:', error);
+					Alert.alert('Scanning Failed', error.message || 'Could not extract details from the receipt.');
+				} finally {
+					setIsLoading(false);
+				}
+			}
+		} else if (option === 'upload') {
+			// Request permission and open photo library
+			const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+			if (status !== 'granted') {
+				Alert.alert('Permission needed', 'Photo library permission is required to upload receipts');
+				return;
+			}
+
+			const result = await ImagePicker.launchImageLibraryAsync({
+				mediaTypes: ImagePicker.MediaTypeOptions.Images,
+				quality: 0.7,
+				allowsEditing: false,
+			});
+
+			if (!result.canceled && result.assets[0]) {
+				try {
+					setIsLoading(true);
+
+					const imageUri = result.assets[0].uri;
+
+					// 1. Upload image to Supabase Storage
+					const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+					const filePath = `${user?.id}/${fileName}`;
+
+					// Read file as base64 and convert to blob
+					const base64 = await FileSystem.readAsStringAsync(imageUri, {
+						encoding: FileSystem.EncodingType.Base64,
+					});
+
+					// Convert base64 to blob
+					const byteCharacters = atob(base64);
+					const byteNumbers = new Array(byteCharacters.length);
+					for (let i = 0; i < byteCharacters.length; i++) {
+						byteNumbers[i] = byteCharacters.charCodeAt(i);
+					}
+					const byteArray = new Uint8Array(byteNumbers);
+					const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+					const { data: uploadData, error: uploadError } = await supabase.storage
+						.from('receipt-images')
+						.upload(filePath, blob, {
+							contentType: 'image/jpeg',
+							upsert: false
+						});
+
+					if (uploadError) {
+						throw new Error(`Upload failed: ${uploadError.message}`);
+					}
+
+					// 2. Get public URL
+					const { data: { publicUrl } } = supabase.storage
+						.from('receipt-images')
+						.getPublicUrl(filePath);
+
+					// 3. Get categories for AI context
+					const { data: categoriesData } = await supabase
+						.from('expense_categories')
+						.select('id, category_name')
+						.eq('is_active', true);
+
+					const mappedCategories = categoriesData?.map(c => ({
+						id: c.id,
+						name: c.category_name
+					})) || [];
+
+					// 4. Scan receipt
+					const scannedData = await ReceiptScanningService.scanReceipt(
+						imageUri,
+						supabase,
+						mappedCategories
+					);
+
+					// 5. Open modal with scanned data + image URL
+					addExpenseModalRef.current?.presentWithData?.({
+						...scannedData,
+						receipt_url: publicUrl
+					});
+
+				} catch (error: any) {
+					console.error('Upload error:', error);
+					Alert.alert('Upload Failed', error.message || 'Could not extract details from the receipt.');
+				} finally {
+					setIsLoading(false);
+				}
+			}
+		} else {
+			Alert.alert('Coming Soon', 'This feature is currently being built.');
+		}
 	};
 
 	const handleExpenseAdded = () => {
@@ -169,16 +370,25 @@ export default function ExpensesScreen() {
 			style={[
 				styles.expenseItemContainer,
 				{
-					backgroundColor: theme.card,
+					backgroundColor: theme.isDark ? theme.card : '#FFFFFF',
 					borderBottomColor: theme.border,
 				},
 			]}
 			onPress={() => handleExpensePress(item)}
 		>
 			<View style={styles.iconContainer}>
-				<Text style={styles.categoryEmoji}>
-					{item.expense_categories?.icon_emoji || '🧾'}
-				</Text>
+				{item.expense_categories?.icon_emoji ? (
+					(() => {
+						const IconComponent = (LucideIcons as any)[item.expense_categories.icon_emoji];
+						return IconComponent ? (
+							<IconComponent size={24} color={theme.foreground} />
+						) : (
+							<Receipt size={24} color={theme.foreground} />
+						);
+					})()
+				) : (
+					<Receipt size={24} color={theme.foreground} />
+				)}
 			</View>
 			<View style={styles.expenseDetails}>
 				<View style={styles.topRow}>
@@ -186,7 +396,7 @@ export default function ExpensesScreen() {
 						{item.merchant_name}
 					</Text>
 					<Text style={[styles.expenseAmount, { color: theme.foreground }]}>
-						${item.total_amount.toFixed(2)}
+						{currencySymbol}{item.total_amount.toFixed(2)}
 					</Text>
 				</View>
 				<View style={styles.bottomRow}>
@@ -328,7 +538,7 @@ export default function ExpensesScreen() {
 				</BottomSheetModal>
 
 				{/* Add Expense Modal */}
-				<AddExpenseModal 
+				<AddExpenseModal
 					ref={addExpenseModalRef}
 					onExpenseAdded={handleExpenseAdded}
 				/>
@@ -399,19 +609,11 @@ const styles = StyleSheet.create({
 		borderBottomWidth: StyleSheet.hairlineWidth,
 	},
 	iconContainer: {
-		width: 50,
-		height: 50,
-		borderRadius: 25,
+		width: 40,
+		height: 40,
 		justifyContent: 'center',
 		alignItems: 'center',
 		marginRight: 16,
-		backgroundColor: '#FFFFFF',
-		// Heavy drop shadow for icon only
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 3 },
-		shadowOpacity: 0.3,
-		shadowRadius: 6,
-		elevation: 10,
 	},
 	categoryEmoji: {
 		fontSize: 22,

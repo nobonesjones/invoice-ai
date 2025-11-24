@@ -1,10 +1,11 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList, TextInput, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList, TextInput, Platform, Image } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/theme-provider';
 import { Text } from '@/components/ui/text';
 import { X, Save, Calendar, ChevronDown } from 'lucide-react-native';
+import * as LucideIcons from 'lucide-react-native';
 import { useSupabase } from '@/context/supabase-provider';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
@@ -37,18 +38,21 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
   const [description, setDescription] = useState('');
   const [expenseDate, setExpenseDate] = useState(new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Date picker state
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
-  
+
   // Category state
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
-  
+
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+
+  // Receipt image state
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
   const clearForm = () => {
     setMerchant('');
@@ -60,6 +64,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     setIsSubmitting(false);
     setIsEditMode(false);
     setEditingExpenseId(null);
+    setReceiptUrl(null);
   };
 
   const populateFormWithExpense = (expense: any) => {
@@ -68,9 +73,10 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     setTaxAmount(expense.tax_amount?.toString() || '');
     setDescription(expense.description || '');
     setExpenseDate(expense.expense_date ? new Date(expense.expense_date) : new Date());
-    setIsEditMode(true);
-    setEditingExpenseId(expense.id);
-    
+    setReceiptUrl(expense.receipt_url || null);
+    setIsEditMode(!!expense.id);
+    setEditingExpenseId(expense.id || null);
+
     // Find and set the category from already loaded categories
     if (expense.category_id && categories.length > 0) {
       const category = categories.find(cat => cat.id === expense.category_id);
@@ -134,7 +140,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
 
   const handleFocus = () => {
     setTimeout(() => {
-      try { scrollRef.current?.scrollToEnd?.({ animated: true }); } catch {}
+      try { scrollRef.current?.scrollToEnd?.({ animated: true }); } catch { }
     }, 50);
   };
 
@@ -143,6 +149,16 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
   const handleConfirmDate = (selectedDate: Date) => {
     setExpenseDate(selectedDate);
     hideDatePicker();
+  };
+
+  // Helper to render Lucide icon from icon name
+  const renderCategoryIcon = (iconName: string, size: number = 20, color?: string) => {
+    const IconComponent = (LucideIcons as any)[iconName];
+    if (IconComponent) {
+      return <IconComponent size={size} color={color || theme.foreground} />;
+    }
+    // Fallback to a default icon if not found
+    return <LucideIcons.Package size={size} color={color || theme.foreground} />;
   };
 
   const handleSave = useCallback(async () => {
@@ -175,9 +191,9 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
         is_reimbursable: false,
         reimbursement_status: 'pending',
       };
-      
+
       console.log(`${isEditMode ? 'Updating' : 'Saving'} expense:`, expenseData);
-      
+
       let error;
       if (isEditMode && editingExpenseId) {
         // Update existing expense
@@ -193,7 +209,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       }
 
       console.log('Expense save result:', { error });
-      
+
       if (error) throw error;
 
       Alert.alert('Success', `Expense ${isEditMode ? 'updated' : 'added'} successfully`);
@@ -214,7 +230,9 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
         setCategoryModalVisible(false);
       }}
     >
-      <Text style={styles.categoryEmoji}>{item.icon_emoji}</Text>
+      <View style={styles.categoryIconContainer}>
+        {renderCategoryIcon(item.icon_emoji, 20)}
+      </View>
       <Text style={[styles.categoryName, { color: theme.foreground }]}>{item.category_name}</Text>
       {selectedCategory?.id === item.id && (
         <View style={[styles.selectedIndicator, { backgroundColor: theme.primary }]} />
@@ -223,74 +241,74 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
   );
 
   const styles = StyleSheet.create({
-    container: { 
-      flex: 1, 
-      paddingHorizontal: 20 
+    container: {
+      flex: 1,
+      paddingHorizontal: 20
     },
-    contentContainerStyle: { 
-      paddingBottom: 40, 
-      paddingTop: Platform.OS === 'ios' ? 10 : 15 
+    contentContainerStyle: {
+      paddingBottom: 40,
+      paddingTop: Platform.OS === 'ios' ? 10 : 15
     },
-    modalBackground: { 
-      backgroundColor: theme.background 
+    modalBackground: {
+      backgroundColor: theme.background
     },
-    handleIndicator: { 
-      backgroundColor: theme.mutedForeground 
+    handleIndicator: {
+      backgroundColor: theme.mutedForeground
     },
-    closeButton: { 
-      position: 'absolute', 
-      top: Platform.OS === 'ios' ? 10 : 15, 
-      right: 15, 
-      padding: 5, 
-      zIndex: 1 
+    closeButton: {
+      position: 'absolute',
+      top: Platform.OS === 'ios' ? 10 : 15,
+      right: 15,
+      padding: 5,
+      zIndex: 1
     },
-    title: { 
-      fontSize: 22, 
-      fontWeight: 'bold', 
-      color: theme.foreground, 
-      marginBottom: 20, 
-      textAlign: 'center' 
+    title: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: theme.foreground,
+      marginBottom: 20,
+      textAlign: 'center'
     },
-    inputGroupContainer: { 
-      backgroundColor: theme.card, 
-      borderRadius: 12, 
-      marginBottom: 20, 
-      paddingHorizontal: 0, 
-      shadowColor: '#000', 
-      shadowOffset: { width: 0, height: 1 }, 
-      shadowOpacity: 0.05, 
-      shadowRadius: 2, 
-      elevation: 2 
+    inputGroupContainer: {
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      marginBottom: 20,
+      paddingHorizontal: 0,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 2
     },
-    inputRow: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      paddingVertical: 12, 
-      paddingHorizontal: 15, 
-      borderBottomWidth: 1, 
-      borderBottomColor: theme.border 
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 15,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border
     },
-    inputRow_last: { 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      paddingVertical: 12, 
-      paddingHorizontal: 15 
+    inputRow_last: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 15
     },
-    inputLabelText: { 
-      fontSize: 16, 
-      fontWeight: 'bold', 
-      color: theme.foreground, 
-      marginRight: 10, 
-      minWidth: '25%' 
+    inputLabelText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.foreground,
+      marginRight: 10,
+      minWidth: '25%'
     },
-    inputValueArea: { 
-      flex: 1 
+    inputValueArea: {
+      flex: 1
     },
-    textInputStyled: { 
-      fontSize: 16, 
-      color: theme.foreground, 
-      paddingVertical: 0, 
-      backgroundColor: 'transparent' 
+    textInputStyled: {
+      fontSize: 16,
+      color: theme.foreground,
+      paddingVertical: 0,
+      backgroundColor: 'transparent'
     },
     selectorContent: {
       flexDirection: 'row',
@@ -298,10 +316,10 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       justifyContent: 'space-between',
       paddingVertical: 0,
     },
-    descriptionInputContainer: { 
-      paddingVertical: 12, 
-      paddingHorizontal: 15, 
-      minHeight: 0 
+    descriptionInputContainer: {
+      paddingVertical: 12,
+      paddingHorizontal: 15,
+      minHeight: 0
     },
     descriptionInput: {
       fontSize: 16,
@@ -311,23 +329,23 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       minHeight: 80,
       textAlignVertical: 'top',
     },
-    button: { 
-      paddingVertical: 15, 
-      borderRadius: 8, 
-      alignItems: 'center', 
-      marginTop: 10 
+    button: {
+      paddingVertical: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 10
     },
-    saveButton: { 
+    saveButton: {
       backgroundColor: theme.primary,
       flexDirection: 'row',
       justifyContent: 'center'
     },
-    buttonText: { 
-      fontSize: 17, 
-      fontWeight: '600' 
+    buttonText: {
+      fontSize: 17,
+      fontWeight: '600'
     },
-    saveButtonText: { 
-      color: theme.primaryForeground 
+    saveButtonText: {
+      color: theme.primaryForeground
     },
     // Modal Styles
     modalContainer: {
@@ -354,12 +372,21 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     categoryItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
       borderBottomWidth: StyleSheet.hairlineWidth,
     },
-    categoryEmoji: {
-      fontSize: 24,
-      marginRight: 16,
+    categoryIconContainer: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    categorySelectButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     categoryName: {
       fontSize: 16,
@@ -390,6 +417,17 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     },
     imagePlaceholderSubtext: {
       fontSize: 14,
+    },
+    receiptImageContainer: {
+      width: '100%',
+      height: 120,
+      borderRadius: 8,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    receiptThumbnail: {
+      width: '100%',
+      height: '100%',
     },
   });
 
@@ -439,8 +477,10 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
             >
               <View style={styles.selectorContent}>
                 {selectedCategory ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ marginRight: 8, fontSize: 18 }}>{selectedCategory.icon_emoji}</Text>
+                  <View style={styles.categorySelectButton}>
+                    <View style={{ marginRight: 8 }}>
+                      {selectedCategory && renderCategoryIcon(selectedCategory.icon_emoji, 18)}
+                    </View>
                     <Text style={{ color: theme.foreground, fontSize: 16 }}>{selectedCategory.category_name}</Text>
                   </View>
                 ) : (
@@ -500,7 +540,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
         <View style={styles.inputGroupContainer}>
           <View style={styles.descriptionInputContainer}>
             <TextInput
-              style={[styles.descriptionInput, { 
+              style={[styles.descriptionInput, {
                 color: theme.foreground
               }]}
               value={description}
@@ -515,17 +555,27 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
           </View>
         </View>
 
-        {/* Receipt Image Placeholder */}
+        {/* Receipt Image */}
         <View style={styles.inputGroupContainer}>
           <View style={styles.imagePlaceholderContainer}>
-            <View style={[styles.imagePlaceholder, { borderColor: theme.border, backgroundColor: theme.muted }]}>
-              <Text style={[styles.imagePlaceholderText, { color: theme.mutedForeground }]}>
-                Receipt Image
-              </Text>
-              <Text style={[styles.imagePlaceholderSubtext, { color: theme.mutedForeground }]}>
-                Coming Soon
-              </Text>
-            </View>
+            {receiptUrl ? (
+              <View style={[styles.receiptImageContainer, { borderColor: theme.border }]}>
+                <Image
+                  source={{ uri: receiptUrl }}
+                  style={styles.receiptThumbnail}
+                  resizeMode="cover"
+                />
+              </View>
+            ) : (
+              <View style={[styles.imagePlaceholder, { borderColor: theme.border, backgroundColor: theme.muted }]}>
+                <Text style={[styles.imagePlaceholderText, { color: theme.mutedForeground }]}>
+                  Receipt Image
+                </Text>
+                <Text style={[styles.imagePlaceholderSubtext, { color: theme.mutedForeground }]}>
+                  Coming Soon
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -537,7 +587,9 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
           {isSubmitting ? (
             <ActivityIndicator color={theme.primaryForeground} />
           ) : (
-            <Text style={[styles.buttonText, styles.saveButtonText]}>{isEditMode ? 'Update Expense' : 'Save Expense'}</Text>
+            <Text style={[styles.buttonText, styles.saveButtonText]}>
+              {editingExpenseId ? 'Update Expense' : receiptUrl ? 'Save' : 'Save Expense'}
+            </Text>
           )}
         </TouchableOpacity>
       </BottomSheetScrollView>
