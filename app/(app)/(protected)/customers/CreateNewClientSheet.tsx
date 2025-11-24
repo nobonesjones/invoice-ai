@@ -262,12 +262,9 @@ const CreateNewClientSheet = forwardRef<
 
 	const handleSelectContact = (contact: Contacts.Contact) => {
 		// Fill form with selected contact data
-		setFormData(prev => ({
-			...prev,
-			fullName: contact.name || '',
-			email: contact.emails?.[0]?.email || '',
-			phone: contact.phoneNumbers?.[0]?.number || '',
-		}));
+		setFullName(contact.name || '');
+		setEmail(contact.emails?.[0]?.email || '');
+		setPhone(contact.phoneNumbers?.[0]?.number || '');
 		setShowContactPicker(false);
 		setSearchQuery('');
 	};

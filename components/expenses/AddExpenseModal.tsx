@@ -53,6 +53,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
 
   // Receipt image state
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [isImageModalVisible, setImageModalVisible] = useState(false);
 
   const clearForm = () => {
     setMerchant('');
@@ -73,7 +74,8 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
     setTaxAmount(expense.tax_amount?.toString() || '');
     setDescription(expense.description || '');
     setExpenseDate(expense.expense_date ? new Date(expense.expense_date) : new Date());
-    setReceiptUrl(expense.receipt_url || null);
+    console.log('Populating form with receipt URL:', expense.receipt_image_url);
+    setReceiptUrl(expense.receipt_image_url || null);
     setIsEditMode(!!expense.id);
     setEditingExpenseId(expense.id || null);
 
@@ -187,7 +189,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
         category_id: selectedCategory.id,
         description: description || null,
         expense_date: expenseDate.toISOString(),
-        receipt_image_url: null,
+        receipt_image_url: receiptUrl,
         is_reimbursable: false,
         reimbursement_status: 'pending',
       };
@@ -429,6 +431,23 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       width: '100%',
       height: '100%',
     },
+    fullScreenImageContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.9)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    fullScreenCloseButton: {
+      position: 'absolute',
+      top: 50,
+      right: 20,
+      zIndex: 1,
+      padding: 10,
+    },
+    fullScreenImage: {
+      width: '100%',
+      height: '80%',
+    },
   });
 
   return (
@@ -548,9 +567,8 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
               placeholder="Description (optional)"
               placeholderTextColor={theme.mutedForeground}
               multiline={true}
+              numberOfLines={3}
               textAlignVertical="top"
-              blurOnSubmit={true}
-              returnKeyType="done"
             />
           </View>
         </View>
@@ -560,11 +578,13 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
           <View style={styles.imagePlaceholderContainer}>
             {receiptUrl ? (
               <View style={[styles.receiptImageContainer, { borderColor: theme.border }]}>
-                <Image
-                  source={{ uri: receiptUrl }}
-                  style={styles.receiptThumbnail}
-                  resizeMode="cover"
-                />
+                <TouchableOpacity onPress={() => setImageModalVisible(true)}>
+                  <Image
+                    source={{ uri: receiptUrl }}
+                    style={styles.receiptThumbnail}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
               </View>
             ) : (
               <View style={[styles.imagePlaceholder, { borderColor: theme.border, backgroundColor: theme.muted }]}>
@@ -623,6 +643,30 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.categoryList}
           />
+        </View>
+      </Modal>
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={isImageModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <View style={styles.fullScreenImageContainer}>
+          <TouchableOpacity
+            style={styles.fullScreenCloseButton}
+            onPress={() => setImageModalVisible(false)}
+          >
+            <X size={30} color="#fff" />
+          </TouchableOpacity>
+          {receiptUrl && (
+            <Image
+              source={{ uri: receiptUrl }}
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+          )}
         </View>
       </Modal>
 

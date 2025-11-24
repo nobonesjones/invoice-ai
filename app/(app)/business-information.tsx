@@ -146,8 +146,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     paddingBottom: 10, 
   },
   headerTitle: {
-    fontSize: 20, 
-    fontWeight: 'bold', 
+    fontSize: 25,
+    fontWeight: 'bold',
     marginLeft: 10, // Spacing between icon and title
   },
 });

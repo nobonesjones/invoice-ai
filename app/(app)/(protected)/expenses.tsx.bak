@@ -793,12 +793,6 @@ export default function ExpensesScreen() {
 					onApplyFilter={handleApplyExpenseFilters}
 					onClose={() => { }}
 				/>
-
-			{/* Scanning Loader */}
-			<ScanningLoader
-				visible={scanningStage !== null}
-				stage={scanningStage || 'uploading'}
-			/>
 			</SafeAreaView>
 		</BottomSheetModalProvider>
 	);

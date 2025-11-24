@@ -20,7 +20,7 @@ interface ReceiptOCRResult {
         tax_amount?: number
         transaction_date: string
         category_suggestion: string
-        item_category: string
+        spend_description: string
     }
     error?: string
 }
@@ -32,7 +32,9 @@ serve(async (req) => {
     }
 
     try {
+        console.log('Processing receipt request...');
         const { base64Image, mimeType, categories = [] }: ReceiptOCRRequest = await req.json()
+        console.log(`Received request with mimeType: ${mimeType}, base64 length: ${base64Image?.length}`);
 
         if (!base64Image || !mimeType) {
             throw new Error('Missing required fields: base64Image and mimeType')
@@ -59,12 +61,12 @@ serve(async (req) => {
 3. Tax Amount (if visible)
 4. Transaction Date (in YYYY-MM-DD format)
 5. Category Suggestion (MUST choose one from these categories: ${categoryList})
-6. Item Category (general description of what was purchased - e.g., "food", "household items", "building materials", "car parts", "clothing", "electronics", etc.)
+6. Spend Description (general description of what was purchased - e.g., "food", "household items", "building materials", "car parts", "clothing", "electronics", etc.)
 
 IMPORTANT RULES:
 - You MUST always provide a category_suggestion from the list above
 - Match the category name EXACTLY as it appears in the list
-- The item_category should be a simple, general description of the type of goods purchased
+- The spend_description should be a simple, general description of the type of goods purchased
 - If the receipt is unclear, make your best estimate rather than leaving fields empty
 
 Return ONLY a valid JSON object with these exact keys:
@@ -74,13 +76,14 @@ Return ONLY a valid JSON object with these exact keys:
   "tax_amount": number or null,
   "transaction_date": "YYYY-MM-DD",
   "category_suggestion": "string (REQUIRED - must match one from the list)",
-  "item_category": "string (e.g., food, household items, etc.)"
+  "spend_description": "string (e.g., food, household items, etc.)"
 }
 
 Do not include any markdown formatting or additional text.`
 
+        console.log('Sending request to OpenAI with model: gpt-4.1-nano');
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4.1-nano",
             messages: [
                 {
                     role: "user",
@@ -99,6 +102,7 @@ Do not include any markdown formatting or additional text.`
         })
 
         const content = response.choices[0]?.message?.content
+        console.log('OpenAI Response Content:', content);
         if (!content) {
             throw new Error('No content received from OpenAI')
         }
@@ -124,9 +128,9 @@ Do not include any markdown formatting or additional text.`
             parsedData.category_suggestion = 'General'
         }
 
-        // Ensure item_category is present
-        if (!parsedData.item_category) {
-            parsedData.item_category = 'items'
+        // Ensure spend_description is present
+        if (!parsedData.spend_description) {
+            parsedData.spend_description = parsedData.item_category || 'items'
         }
 
         const result: ReceiptOCRResult = {
@@ -143,7 +147,7 @@ Do not include any markdown formatting or additional text.`
                     : undefined,
                 transaction_date: parsedData.transaction_date || new Date().toISOString().split('T')[0],
                 category_suggestion: parsedData.category_suggestion,
-                item_category: parsedData.item_category,
+                spend_description: parsedData.spend_description,
             },
         }
 
