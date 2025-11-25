@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, TextInput, Switch, Alert, ActivityIndicator, TouchableOpacity, Platform, SafeAreaView } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSupabase } from '@/context/supabase-provider';
 import { useTheme } from '@/context/theme-provider';
@@ -233,13 +234,26 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   modalSeparator: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 16, 
+    marginLeft: 16,
     // backgroundColor set by theme
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 25,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 
 export default function TaxCurrencyScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { theme, isLightMode } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { supabase, user } = useSupabase(); // Get Supabase client and user
@@ -477,18 +491,34 @@ export default function TaxCurrencyScreen() {
   , [currencySearch]);
 
   const renderSelectionItem = (
-    item: { id: string; name: string }, 
+    item: { id: string; name: string },
     onPress: () => void,
     isSelected: boolean
   ) => (
-    <TouchableOpacity 
-      style={styles.modalListItem} 
+    <TouchableOpacity
+      style={styles.modalListItem}
       onPress={onPress}
     >
       <Text style={[styles.modalListItemText, isSelected && styles.modalListItemTextSelected]}>{item.name}</Text>
       {isSelected && <ChevronRight size={20} color={theme.primary} />}
     </TouchableOpacity>
   );
+
+  useEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Tax & Currency</Text>
+          </View>
+        </SafeAreaView>
+      ),
+      headerShown: true,
+    });
+  }, [navigation, router, theme, styles]);
 
   if (isLoadingSettings) {
     return (
@@ -502,25 +532,6 @@ export default function TaxCurrencyScreen() {
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen
-          options={{
-            title: 'Tax & Currency',
-            headerShown: true,
-            animation: 'slide_from_right',
-            headerStyle: {
-              backgroundColor: isLightMode ? theme.background : theme.card,
-            },
-            headerTintColor: theme.foreground,
-            headerTitleStyle: {
-              fontFamily: 'Roboto-Medium',
-            },
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0 }}>
-                <ChevronLeft size={24} color={theme.foreground} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
         <ScrollView contentContainerStyle={styles.scrollContentContainer}>
           {/* Region Selector */}
           <View style={[styles.sectionContainer, { backgroundColor: theme.card, marginTop: 16 }]}>

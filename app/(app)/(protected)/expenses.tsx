@@ -581,7 +581,7 @@ export default function ExpensesScreen() {
 				style={[
 					styles.expenseItemContainer,
 					{
-						backgroundColor: theme.isDark ? theme.card : '#FFFFFF',
+						backgroundColor: theme.card,
 						borderBottomColor: theme.border,
 					},
 				]}
@@ -637,9 +637,10 @@ export default function ExpensesScreen() {
 					>
 						<ChevronLeft size={24} color={theme.foreground} />
 					</TouchableOpacity>
-					<H1 style={{ color: theme.foreground, flex: 1, textAlign: 'center' }}>
+					<Text style={[styles.title, { color: theme.foreground }]}>
 						Expenses
-					</H1>
+					</Text>
+					<View style={{ flex: 1 }} />
 					<TouchableOpacity
 						style={[styles.addButton, { backgroundColor: theme.primary }]}
 						onPress={handleAddPress}
@@ -812,6 +813,11 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 16,
 		paddingTop: 12,
 		paddingBottom: 16,
+	},
+	title: {
+		fontSize: 25,
+		fontWeight: "bold",
+		marginLeft: 8,
 	},
 	backButton: {
 		padding: 8,

@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import {
   ChevronLeft,
   CreditCard,
@@ -172,8 +173,20 @@ const getStyles = (theme: any) =>
       color: theme.mutedForeground,
       marginTop: 8,
     },
+    headerContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 16,
+    },
+    headerTitle: {
+      fontSize: 25,
+      fontWeight: 'bold',
+      marginLeft: 8,
+    },
     headerTitleStyle: {
-      fontSize: 20,
+      fontSize: 25,
       fontWeight: 'bold',
       marginLeft: 10,
     },
@@ -385,6 +398,7 @@ const getStyles = (theme: any) =>
 
 export default function PaymentOptionsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
   const isLightMode = colorScheme === 'light';
@@ -967,12 +981,21 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
     []
   );
 
-  // Re-define HeaderLeft for the back button
-  const HeaderLeft = () => (
-    <TouchableOpacity onPress={() => router.back()} style={{ paddingLeft: 16, paddingRight:10, paddingVertical: 5 }}>
-      <ChevronLeft size={26} color={theme.foreground} />
-    </TouchableOpacity>
-  );
+  useEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Payment Options</Text>
+          </View>
+        </SafeAreaView>
+      ),
+      headerShown: true,
+    });
+  }, [navigation, router, theme, styles]);
 
   if (!user) {
     return <Text>Loading or user not found...</Text>;
@@ -984,24 +1007,8 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? (64 + 20) : 0} // Adjust if header height is different or not needed
+          keyboardVerticalOffset={Platform.OS === 'ios' ? (64 + 20) : 0}
         >
-          <Stack.Screen 
-            options={{
-              headerTitle: () => (
-                <Text style={[styles.headerTitleStyle, { color: theme.foreground }]}>
-                  Payment Options
-                </Text>
-              ),
-              headerShown: true,
-              headerStyle: { 
-                backgroundColor: theme.card,
-              },
-              headerLeft: () => <HeaderLeft />,
-              headerShadowVisible: false, // To match previous appearance
-              animation: 'slide_from_right', // Optional: restore animation if desired
-            }}
-          />
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={styles.scrollContentContainer}

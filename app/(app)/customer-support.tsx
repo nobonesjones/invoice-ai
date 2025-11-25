@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  ScrollView, 
-  TouchableOpacity, 
-  Platform, 
-  StyleSheet, 
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  StyleSheet,
   KeyboardAvoidingView,
   Alert,
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
   Linking
 } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Send, MessageSquare, RefreshCcw } from 'lucide-react-native';
 import * as Updates from 'expo-updates';
 import { useTheme } from '@/context/theme-provider';
@@ -29,6 +30,7 @@ interface SupportFormData {
 
 export default function CustomerSupportScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { theme, isLightMode } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { user, supabase } = useSupabase();
@@ -46,7 +48,7 @@ export default function CustomerSupportScreen() {
   useFocusEffect(
     React.useCallback(() => {
       setIsTabBarVisible(false);
-      return () => {};
+      return () => { };
     }, [setIsTabBarVisible])
   );
 
@@ -109,21 +111,20 @@ export default function CustomerSupportScreen() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('customer_support_tickets')
-        .insert([
-          {
-            user_id: user.id,
-            name: formData.name.trim(),
-            email: formData.email.trim(),
-            subject: formData.subject.trim() || null,
-            message: formData.message.trim(),
-            status: 'open',
-            priority: 'medium'
-          }
-        ]);
+      const { data, error } = await supabase.functions.invoke('send-support-ticket', {
+        body: {
+          user_id: user?.id,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          subject: formData.subject.trim() || undefined,
+          message: formData.message.trim(),
+        }
+      });
+
+      console.log('Edge Function Response:', { data, error });
 
       if (error) {
+        console.error('Edge Function Error:', error);
         throw error;
       }
 
@@ -150,7 +151,7 @@ export default function CustomerSupportScreen() {
       console.error('Error submitting support request:', error);
       Alert.alert(
         'Error',
-        'Failed to submit your support request. Please try again.',
+        `Failed to submit your support request: ${error.message || JSON.stringify(error)}`,
         [{ text: 'OK' }]
       );
     } finally {
@@ -291,31 +292,35 @@ export default function CustomerSupportScreen() {
       color: theme.mutedForeground,
       textAlign: 'center',
     },
+    headerContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 16,
+    },
   });
+
+  useEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.foreground }]}>Customer Support</Text>
+          </View>
+        </SafeAreaView>
+      ),
+      headerShown: true,
+    });
+  }, [navigation, router, theme, styles]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <Stack.Screen
-        options={{
-          title: 'Customer Support',
-          headerShown: true,
-          animation: 'slide_from_right',
-          headerStyle: {
-            backgroundColor: isLightMode ? theme.background : theme.card,
-          },
-          headerTintColor: theme.foreground,
-          headerTitleStyle: {
-            fontFamily: 'Roboto-Medium',
-          },
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0 }}>
-              <ChevronLeft size={24} color={theme.foreground} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         style={styles.scrollContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -338,7 +343,7 @@ export default function CustomerSupportScreen() {
           {/* Manual Update Section removed for production */}
 
           <View style={styles.faqSection}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.faqButton}
               onPress={() => Linking.openURL('https://www.getsuperinvoice.com/faq')}
             >
@@ -416,8 +421,8 @@ export default function CustomerSupportScreen() {
 
           {showUpdateButton && (
             <View style={styles.updateRow}>
-              <TouchableOpacity 
-                style={styles.updateButton} 
+              <TouchableOpacity
+                style={styles.updateButton}
                 onPress={handleCheckForUpdates}
                 disabled={isCheckingUpdate}
                 accessibilityLabel="Check for updates"

@@ -24,7 +24,20 @@ serve(async (req) => {
     }
 
     try {
-        const { name, email, subject, message, priority = "normal", user_id } = await req.json() as SupportTicketRequest;
+        const { name, email, subject, message, priority = "medium", user_id } = await req.json() as SupportTicketRequest;
+        console.log('Received support ticket request:', { name, email, subject, message, user_id });
+
+        // Validate required fields
+        if (!name || !email || !message) {
+            console.error('Validation failed: Missing required fields');
+            return new Response(
+                JSON.stringify({ error: 'Name, email, and message are required.' }),
+                {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    status: 400,
+                }
+            );
+        }
 
         // 1. Insert into Supabase Database
         const supabase = createClient(
@@ -32,13 +45,15 @@ serve(async (req) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
         );
 
+        console.log('Inserting ticket into database...');
+
         const { data: ticket, error: dbError } = await supabase
             .from("customer_support_tickets")
             .insert({
-                user_id: user_id || null, // Optional if user is not logged in
+                user_id: user_id || null,
                 name,
                 email,
-                subject,
+                subject: subject || "Support Request",
                 message,
                 priority,
                 status: "open",
@@ -48,7 +63,8 @@ serve(async (req) => {
 
         if (dbError) {
             console.error("Database Error:", dbError);
-            throw new Error("Failed to save support ticket.");
+            console.error("Insert attempted with:", { user_id, name, email, subject, message, priority });
+            throw new Error(`Failed to save support ticket: ${dbError.message}`);
         }
 
         // 2. Send Email via Resend

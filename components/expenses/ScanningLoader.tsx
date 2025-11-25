@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 23,
     fontWeight: '600',
     marginBottom: 8,
     textAlign: 'center',

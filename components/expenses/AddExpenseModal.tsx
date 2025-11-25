@@ -319,17 +319,16 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       paddingVertical: 0,
     },
     descriptionInputContainer: {
-      paddingVertical: 12,
-      paddingHorizontal: 15,
-      minHeight: 0
+      paddingVertical: 14,
+      paddingHorizontal: 16,
     },
     descriptionInput: {
       fontSize: 16,
       color: theme.foreground,
-      paddingVertical: 0,
       backgroundColor: 'transparent',
       minHeight: 80,
       textAlignVertical: 'top',
+      width: '100%',
     },
     button: {
       paddingVertical: 15,

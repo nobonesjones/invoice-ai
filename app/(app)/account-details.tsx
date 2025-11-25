@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, TextInput, Alert, ActivityIndicator, TouchableOpacity, Platform, SafeAreaView, Modal } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, ChevronRight, User, Mail, Phone, LogOut, Trash2 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
@@ -116,13 +117,26 @@ const getStyles = (theme: any) => StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
-  }
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 25,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
 });
 
 export default function AccountDetailsScreen() {
   const router = useRouter();
-  const { user, signOut, session } = useSupabase(); 
-  const { theme } = useTheme(); 
+  const navigation = useNavigation();
+  const { user, signOut, session } = useSupabase();
+  const { theme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
 
   const styles = useMemo(() => {
@@ -403,30 +417,24 @@ export default function AccountDetailsScreen() {
     }
   };
 
-  const headerLeft = () => (
-    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0 }}>
-      <ChevronLeft size={24} color={theme.foreground} />
-    </TouchableOpacity>
-  );
+  useEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Account Details</Text>
+          </View>
+        </SafeAreaView>
+      ),
+      headerShown: true,
+    });
+  }, [navigation, router, theme, styles]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Account Details',
-          headerShown: true,
-          animation: 'slide_from_right',
-          headerStyle: {
-            backgroundColor: theme.background, 
-          },
-          headerTintColor: theme.foreground,
-          headerTitleStyle: {
-            fontFamily: 'Roboto-Medium',
-          },
-          headerLeft: headerLeft,
-          headerShadowVisible: false,
-        }}
-      />
       <ScrollView contentContainerStyle={styles.scrollContentContainer}>
         <View style={styles.sectionContainer}>
           <View style={styles.inputRow}>

@@ -109,14 +109,14 @@ const getStyles = (theme: any) => StyleSheet.create({
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10, 
-    paddingTop: Platform.OS === 'ios' ? 50 : 40, 
-    paddingBottom: 10, 
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   headerTitle: {
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    marginLeft: 10,
+    fontSize: 25,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   comingSoonContainer: {
     padding: 16,
@@ -850,18 +850,20 @@ export default function InvoiceSettingsScreen() {
   useEffect(() => {
     navigation.setOptions({
       header: () => (
-        <View style={[styles.headerContainer, { backgroundColor: theme.card, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border}]}>
-          <TouchableOpacity onPress={() => {
-            if (!handleBackPress()) {
-              router.back();
-            }
-          }} style={{ padding: 6 }}>
-            <ChevronLeft size={26} color={theme.foreground} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, {color: theme.foreground}]}>Invoice Settings</Text>
-        </View>
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => {
+              if (!handleBackPress()) {
+                router.back();
+              }
+            }} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Invoice Settings</Text>
+          </View>
+        </SafeAreaView>
       ),
-      headerShown: true, 
+      headerShown: true,
     });
   }, [navigation, router, theme, styles, handleBackPress]);
 

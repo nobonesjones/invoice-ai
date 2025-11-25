@@ -141,14 +141,14 @@ const getStyles = (theme: any) => StyleSheet.create({
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10, 
-    paddingTop: Platform.OS === 'ios' ? 50 : 40, 
-    paddingBottom: 10, 
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   headerTitle: {
     fontSize: 25,
     fontWeight: 'bold',
-    marginLeft: 10, // Spacing between icon and title
+    marginLeft: 8,
   },
 });
 
@@ -406,14 +406,16 @@ export default function BusinessInformationScreen() {
   useEffect(() => {
     navigation.setOptions({
       header: () => (
-        <View style={[styles.headerContainer, { backgroundColor: theme.card, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border}]}>
-          <TouchableOpacity onPress={() => router.back()} style={{ padding: 6 }}>
-            <ChevronLeft size={26} color={theme.foreground} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, {color: theme.foreground}]}>Business Information</Text>
-        </View>
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Business Information</Text>
+          </View>
+        </SafeAreaView>
       ),
-      headerShown: true, 
+      headerShown: true,
     });
   }, [navigation, router, theme, styles]);
 
