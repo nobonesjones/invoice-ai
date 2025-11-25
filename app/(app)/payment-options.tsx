@@ -56,6 +56,9 @@ interface PaymentOption {
   bank_transfer_enabled: boolean;
   bank_details: string | null;
   invoice_terms_notes?: string | null;
+  gocardless_connected?: boolean;
+  gocardless_creditor_id?: string | null;
+  gocardless_verification_status?: string | null;
 }
 
 const getStyles = (theme: any) =>
@@ -462,6 +465,12 @@ export default function PaymentOptionsScreen() {
   const [bankTransferSettingsChanged, setBankTransferSettingsChanged] = useState(false);
   const [isLoadingBankTransferSettings, setIsLoadingBankTransferSettings] = useState(false);
   const [isBankTransferActiveOnScreen, setIsBankTransferActiveOnScreen] = useState(false);
+
+  // GoCardless state
+  const [isGoCardlessConnected, setIsGoCardlessConnected] = useState(false);
+  const [goCardlessVerificationStatus, setGoCardlessVerificationStatus] = useState<string | null>(null);
+  const [isLoadingGoCardless, setIsLoadingGoCardless] = useState(false);
+  const [isGoCardlessActiveOnScreen, setIsGoCardlessActiveOnScreen] = useState(false);
 
   const [invoiceTermsNotes, setInvoiceTermsNotes] = useState<string>('');
   const [initialInvoiceTermsNotes, setInitialInvoiceTermsNotes] = useState<string>('');
@@ -916,13 +925,14 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
           setIsPayPalActiveOnScreen(false);
           setIsStripeActiveOnScreen(false);
           setIsBankTransferActiveOnScreen(false);
+          setIsGoCardlessActiveOnScreen(false);
           return;
         }
         setIsLoadingScreenStatus(true);
         try {
           const { data, error } = await supabase
             .from('payment_options')
-            .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, invoice_terms_notes, id')
+            .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, invoice_terms_notes, id, gocardless_connected, gocardless_verification_status')
             .eq('user_id', user.id)
             .maybeSingle();
 
@@ -931,10 +941,14 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
             setIsPayPalActiveOnScreen(false);
             setIsStripeActiveOnScreen(false);
             setIsBankTransferActiveOnScreen(false);
+            setIsGoCardlessActiveOnScreen(false);
           } else if (data) {
             setIsPayPalActiveOnScreen(data.paypal_enabled);
             setIsStripeActiveOnScreen(data.stripe_enabled);
             setIsBankTransferActiveOnScreen(data.bank_transfer_enabled);
+            setIsGoCardlessActiveOnScreen(data.gocardless_connected || false);
+            setIsGoCardlessConnected(data.gocardless_connected || false);
+            setGoCardlessVerificationStatus(data.gocardless_verification_status || null);
             setInvoiceTermsNotes(data.invoice_terms_notes || '');
             setInitialInvoiceTermsNotes(data.invoice_terms_notes || '');
             if (!paymentOptionsId && data.id) setPaymentOptionsId(data.id);
@@ -942,12 +956,14 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
             setIsPayPalActiveOnScreen(false);
             setIsStripeActiveOnScreen(false);
             setIsBankTransferActiveOnScreen(false);
+            setIsGoCardlessActiveOnScreen(false);
           }
         } catch (err) {
           console.error('Unexpected error fetching screen payment status:', err);
           setIsPayPalActiveOnScreen(false);
           setIsStripeActiveOnScreen(false);
           setIsBankTransferActiveOnScreen(false);
+          setIsGoCardlessActiveOnScreen(false);
         } finally {
           setIsLoadingScreenStatus(false);
         }
@@ -967,6 +983,109 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
 
   const handleBankTransferPress = () => {
     openBankTransferModal();
+  };
+
+  const handleGoCardlessPress = async () => {
+    if (isGoCardlessConnected) {
+      // Already connected, show disconnect option
+      Alert.alert(
+        'GoCardless Connected',
+        `Status: ${goCardlessVerificationStatus === 'successful' ? 'Verified ✓' : goCardlessVerificationStatus === 'in_review' ? 'Under Review' : 'Verification Needed'}\n\nWould you like to disconnect?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Disconnect',
+            style: 'destructive',
+            onPress: () => handleDisconnectGoCardless(),
+          },
+        ]
+      );
+    } else {
+      // Not connected, start OAuth flow
+      await initiateGoCardlessOAuth();
+    }
+  };
+
+  const initiateGoCardlessOAuth = async () => {
+    try {
+      setIsLoadingGoCardless(true);
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session) {
+        throw new Error('Not authenticated');
+      }
+
+      // Call edge function to generate OAuth URL
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/gocardless-generate-oauth-url`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+          },
+          body: JSON.stringify({
+            environment: 'sandbox', // TODO: Make configurable
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to generate OAuth URL');
+      }
+
+      const data = await response.json();
+
+      // Open OAuth URL in browser
+      const supported = await Linking.canOpenURL(data.oauth_url);
+      if (supported) {
+        await Linking.openURL(data.oauth_url);
+      } else {
+        throw new Error('Cannot open GoCardless authorization page');
+      }
+
+    } catch (error) {
+      console.error('[GoCardless] OAuth initiation error:', error);
+      Alert.alert(
+        'Connection Failed',
+        error instanceof Error ? error.message : 'Failed to connect GoCardless',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsLoadingGoCardless(false);
+    }
+  };
+
+  const handleDisconnectGoCardless = async () => {
+    try {
+      if (!user) return;
+
+      const supabaseAdmin = supabase;
+
+      const { error } = await supabaseAdmin
+        .from('payment_options')
+        .update({
+          gocardless_connected: false,
+          gocardless_access_token: null,
+          gocardless_refresh_token: null,
+          gocardless_token_expires_at: null,
+          gocardless_creditor_id: null,
+          gocardless_verification_status: null,
+        })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setIsGoCardlessConnected(false);
+      setIsGoCardlessActiveOnScreen(false);
+      setGoCardlessVerificationStatus(null);
+
+      Alert.alert('Disconnected', 'GoCardless has been disconnected successfully.');
+    } catch (error) {
+      console.error('[GoCardless] Disconnect error:', error);
+      Alert.alert('Error', 'Failed to disconnect GoCardless. Please try again.');
+    }
   };
 
   const renderBackdrop = useCallback(
@@ -1051,13 +1170,31 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
               <SettingsListItem
                 icon={<Landmark size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
                 label="Bank Transfers"
-                onPress={handleBankTransferPress} 
+                onPress={handleBankTransferPress}
                 rightContent={
                   isLoadingScreenStatus ? (
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
                   ) : (
                     <Text style={{ color: isBankTransferActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isBankTransferActiveOnScreen ? 'bold' : 'normal' }}>
                       {isBankTransferActiveOnScreen ? 'On' : 'Off'}
+                    </Text>
+                  )
+                }
+              />
+              <SettingsListItem
+                icon={<Landmark size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
+                label="GoCardless"
+                subtitle={goCardlessVerificationStatus === 'action_required' ? 'Verification needed' : goCardlessVerificationStatus === 'in_review' ? 'Under review' : goCardlessVerificationStatus === 'successful' ? 'Verified' : undefined}
+                onPress={handleGoCardlessPress}
+                rightContent={
+                  isLoadingScreenStatus ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{
+                      color: isGoCardlessActiveOnScreen ? theme.primary : theme.mutedForeground,
+                      fontWeight: isGoCardlessActiveOnScreen ? 'bold' : 'normal'
+                    }}>
+                      {isGoCardlessActiveOnScreen ? 'Connected' : 'Not Connected'}
                     </Text>
                   )
                 }
