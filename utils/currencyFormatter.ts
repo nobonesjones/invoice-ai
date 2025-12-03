@@ -26,10 +26,29 @@ const CURRENCY_LOCALE_MAP: Record<string, string> = {
   'RON': 'ro-RO',  // 1.000,00 (Romanian)
   'BGN': 'bg-BG',  // 1 000,00 (Bulgarian)
 
-  // Middle East & South Asia
+  // Middle East
   'AED': 'ar-AE',  // 1,000.00 (UAE)
+  'SAR': 'ar-SA',  // 1,000.00 (Saudi Arabia)
+  'BHD': 'ar-BH',  // 1,000.000 (Bahrain - 3 decimals)
+
+  // South Asia
   'INR': 'en-IN',  // 1,00,000.00 (Indian - special grouping)
-  'PKR': 'en-PK',  // 1,000.00 (Pakistani)
+  'PKR': 'en-PK',  // 1,000.00 (Pakistan)
+  'LKR': 'si-LK',  // 1,000.00 (Sri Lanka)
+
+  // Southeast Asia
+  'KHR': 'km-KH',  // 1,000.00 (Cambodia)
+
+  // East Asia
+  'KRW': 'ko-KR',  // 1,000 (South Korea - no decimals)
+
+  // Central Asia
+  'AZN': 'az-AZ',  // 1.000,00 (Azerbaijan)
+
+  // Africa
+  'EGP': 'ar-EG',  // 1,000.00 (Egypt)
+  'GHS': 'en-GH',  // 1,000.00 (Ghana)
+  'KES': 'en-KE',  // 1,000.00 (Kenya)
 };
 
 /**

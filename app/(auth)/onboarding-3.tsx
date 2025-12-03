@@ -70,10 +70,30 @@ const REGIONS = [
   
   // Middle East
   { label: '🇦🇪 United Arab Emirates', value: 'AE', flag: '🇦🇪' },
+  { label: '🇸🇦 Saudi Arabia', value: 'SA', flag: '🇸🇦' },
+  { label: '🇧🇭 Bahrain', value: 'BH', flag: '🇧🇭' },
 
   // South Asia
   { label: '🇮🇳 India', value: 'IN', flag: '🇮🇳' },
   { label: '🇵🇰 Pakistan', value: 'PK', flag: '🇵🇰' },
+  { label: '🇱🇰 Sri Lanka', value: 'LK', flag: '🇱🇰' },
+
+  // Southeast Asia
+  { label: '🇰🇭 Cambodia', value: 'KH', flag: '🇰🇭' },
+
+  // East Asia
+  { label: '🇰🇷 South Korea', value: 'KR', flag: '🇰🇷' },
+
+  // Central Asia
+  { label: '🇦🇿 Azerbaijan', value: 'AZ', flag: '🇦🇿' },
+
+  // Africa
+  { label: '🇪🇬 Egypt', value: 'EG', flag: '🇪🇬' },
+  { label: '🇬🇭 Ghana', value: 'GH', flag: '🇬🇭' },
+  { label: '🇰🇪 Kenya', value: 'KE', flag: '🇰🇪' },
+
+  // Central America
+  { label: '🇵🇦 Panama', value: 'PA', flag: '🇵🇦' },
 
   { label: '🌍 Other', value: 'OTHER', flag: '🌍' },
 ];
