@@ -28,10 +28,10 @@ export default function VoiceChatButton({
   const [pulseAnim] = useState(new Animated.Value(1));
 
   const styles = getStyles(theme);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize voice service on mount
+  // Cleanup on unmount
   useEffect(() => {
-    initializeVoice();
     return () => {
       VoiceService.disconnect();
     };
@@ -66,18 +66,23 @@ export default function VoiceChatButton({
       const audioInitialized = await VoiceService.initialize();
       if (!audioInitialized) {
         Alert.alert('Permission Required', 'Please enable microphone access to use voice features.');
-        return;
+        return false;
       }
 
       const connected = await VoiceService.connectRealtime(handleRealtimeMessage);
       setIsConnected(connected);
-      
+      setIsInitialized(true);
+
       if (!connected) {
         Alert.alert('Connection Error', 'Failed to connect to voice service. Please try again.');
+        return false;
       }
+
+      return true;
     } catch (error) {
       console.error('[VoiceChatButton] Failed to initialize voice:', error);
       Alert.alert('Error', 'Failed to initialize voice features.');
+      return false;
     }
   };
 
@@ -134,10 +139,20 @@ export default function VoiceChatButton({
   };
 
   const handlePress = async () => {
-    if (disabled || !isConnected) {
-      if (!isConnected) {
-        Alert.alert('Not Connected', 'Voice service is not connected. Please try again.');
+    if (disabled) {
+      return;
+    }
+
+    // Lazy initialization - only request permission when user clicks the button
+    if (!isInitialized) {
+      const initialized = await initializeVoice();
+      if (!initialized) {
+        return;
       }
+    }
+
+    if (!isConnected) {
+      Alert.alert('Not Connected', 'Voice service is not connected. Please try again.');
       return;
     }
 
@@ -188,7 +203,7 @@ export default function VoiceChatButton({
   };
 
   const getButtonStyle = () => {
-    if (disabled || !isConnected) {
+    if (disabled) {
       return [styles.button, styles.buttonDisabled];
     } else if (isRecording) {
       return [styles.button, styles.buttonRecording];
@@ -206,7 +221,7 @@ export default function VoiceChatButton({
       <TouchableOpacity
         style={getButtonStyle()}
         onPress={handlePress}
-        disabled={disabled || !isConnected}
+        disabled={disabled}
         activeOpacity={0.8}
       >
         {getButtonIcon()}

@@ -106,7 +106,11 @@ const REGION_CURRENCY_TAX_MAP: Record<string, { currency: string; taxName: strin
   
   // Middle East
   'AE': { currency: 'AED', taxName: 'VAT', defaultTaxRate: 5.0 },
-  
+
+  // South Asia
+  'IN': { currency: 'INR', taxName: 'GST', defaultTaxRate: 18.0 },
+  'PK': { currency: 'PKR', taxName: 'Sales Tax', defaultTaxRate: 18.0 },
+
   // Default
   'OTHER': { currency: 'USD', taxName: 'Tax', defaultTaxRate: 0.0 },
 };

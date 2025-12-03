@@ -70,7 +70,11 @@ const REGIONS = [
   
   // Middle East
   { label: '🇦🇪 United Arab Emirates', value: 'AE', flag: '🇦🇪' },
-  
+
+  // South Asia
+  { label: '🇮🇳 India', value: 'IN', flag: '🇮🇳' },
+  { label: '🇵🇰 Pakistan', value: 'PK', flag: '🇵🇰' },
+
   { label: '🌍 Other', value: 'OTHER', flag: '🌍' },
 ];
 
@@ -289,13 +293,15 @@ export default function OnboardingScreen3() {
                 }
               }}
               style={styles.picker}
+              itemStyle={{ color: theme.foreground }}
             >
               {REGIONS.map((region) => (
-                <Picker.Item 
-                  key={region.value} 
-                  label={region.label} 
+                <Picker.Item
+                  key={region.value}
+                  label={region.label}
                   value={region.value}
                   enabled={region.value !== ''}
+                  color={theme.foreground}
                 />
               ))}
             </Picker>

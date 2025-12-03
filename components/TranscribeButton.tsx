@@ -39,6 +39,7 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
   const [spinAnim] = useState(new Animated.Value(0));
   const recordingRef = useRef<Audio.Recording | null>(null);
   const audioLevelInterval = useRef<any>(null);
+  const [isPermissionGranted, setIsPermissionGranted] = useState(false);
 
   const styles = getStyles(theme);
 
@@ -148,6 +149,17 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
     try {
       console.log('[TranscribeButton] *** startRecording called ***');
 
+      // Request permission on first use (lazy initialization)
+      if (!isPermissionGranted) {
+        console.log('[TranscribeButton] Requesting audio permission...');
+        const { status } = await Audio.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please enable microphone access to use voice features.');
+          return;
+        }
+        setIsPermissionGranted(true);
+      }
+
       if (recordingRef.current) {
         console.log('[TranscribeButton] Cleaning up existing recording before starting new one');
         await recordingRef.current.stopAndUnloadAsync();
@@ -183,7 +195,7 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
       onRecordingStateChange?.(false);
       Alert.alert('Error', 'Failed to start recording. Please try again.');
     }
-  }, [onRecordingStateChange, startAudioLevelMonitoring]);
+  }, [onRecordingStateChange, startAudioLevelMonitoring, isPermissionGranted]);
 
   const stopRecording = useCallback(async () => {
     try {
@@ -275,21 +287,6 @@ const TranscribeButton = forwardRef<TranscribeButtonRef, TranscribeButtonProps>(
     stopRecording,
     startRecording,
   }), [cancelRecording, stopRecording, startRecording]);
-
-  // Initialize audio permissions
-  useEffect(() => {
-    const initializeAudio = async () => {
-      try {
-        const { status } = await Audio.requestPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Please enable microphone access to use voice features.');
-        }
-      } catch (error: any) {
-        console.error('[TranscribeButton] Failed to get audio permissions:', error);
-      }
-    };
-    initializeAudio();
-  }, []);
 
   // Pulse animation for recording state
   useEffect(() => {

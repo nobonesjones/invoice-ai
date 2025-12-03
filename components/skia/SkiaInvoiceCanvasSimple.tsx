@@ -1,6 +1,7 @@
 import React, { useMemo, forwardRef, RefObject } from 'react';
 import { Canvas, Rect, Text, Skia, matchFont, Circle, Paragraph, TextAlign, Image, useImage, Group } from '@shopify/react-native-skia';
 import { View, StyleSheet, Platform } from 'react-native';
+import { formatCurrency } from '@/utils/currencyFormatter';
 
 interface SkiaInvoiceCanvasProps {
   invoice?: any;
@@ -42,6 +43,13 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
       show_notes_section: true,
     }
   } = props;
+
+  // Get currency code for locale-aware formatting
+  const currencyCode = business?.currency_code || 'GBP';
+
+  // Helper function to format currency with commas
+  const fmt = (amount: number) => formatCurrency(amount, currencyCode);
+
   
   // Get the correct document title based on type and user preference
   const getDocumentTitle = () => {
@@ -697,7 +705,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${currencySymbol}${(invoice?.subtotal_amount || 400.00).toFixed(2)}`)
+      .addText(`${currencySymbol}${fmt(invoice?.subtotal_amount || 400.00)}`)
       .build();
 
       // Discount paragraphs (conditional - only if discount exists)
@@ -722,7 +730,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`-${currencySymbol}${discountAmount.toFixed(2)}`)
+      .addText(`-${currencySymbol}${fmt(discountAmount)}`)
       .build() : null;
 
       const taxLabelParagraph = Skia.ParagraphBuilder.Make({
@@ -746,7 +754,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${currencySymbol}${(((invoice?.subtotal_amount || 400.00) - discountAmount) * ((invoice?.tax_percentage || business?.default_tax_rate || 0) / 100)).toFixed(2)}`)
+      .addText(`${currencySymbol}${fmt(((invoice?.subtotal_amount || 400.00) - discountAmount) * ((invoice?.tax_percentage || business?.default_tax_rate || 0) / 100))}`)
       .build();
 
       const totalLabelParagraph = Skia.ParagraphBuilder.Make({
@@ -770,7 +778,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${currencySymbol}${(invoice?.total_amount || 480.00).toFixed(2)}`)
+      .addText(`${currencySymbol}${fmt(invoice?.total_amount || 480.00)}`)
       .build();
 
       // Payment status paragraphs (conditional - only if payment has been made)
@@ -798,7 +806,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`-${currencySymbol}${(invoice?.paid_amount || 0).toFixed(2)}`)
+      .addText(`-${currencySymbol}${fmt(invoice?.paid_amount || 0)}`)
       .build() : null;
 
       // Balance Due as regular line item (conditional - only if payment exists)
@@ -823,7 +831,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 9, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${currencySymbol}${((invoice?.total_amount || 0) - (invoice?.paid_amount || 0)).toFixed(2)}`)
+      .addText(`${currencySymbol}${fmt((invoice?.total_amount || 0) - (invoice?.paid_amount || 0))}`)
       .build() : null;
 
       return { 
@@ -1116,7 +1124,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
               fontSize: 9, 
               fontStyle: { weight: 400 }
             })
-            .addText(`${currencySymbol}${item.unit_price.toFixed(2)}`)
+            .addText(`${currencySymbol}${fmt(item.unit_price)}`)
             .build();
 
             const totalParagraph = Skia.ParagraphBuilder.Make({
@@ -1128,7 +1136,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
               fontSize: 9, 
               fontStyle: { weight: 400 }
             })
-            .addText(`${currencySymbol}${item.total_price.toFixed(2)}`)
+            .addText(`${currencySymbol}${fmt(item.total_price)}`)
             .build();
             
             return (
@@ -1259,7 +1267,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                       fontSize: 9, 
                       fontStyle: { weight: 400 }
                     })
-                    .addText(`${currencySymbol}${item.unit_price.toFixed(2)}`)
+                    .addText(`${currencySymbol}${fmt(item.unit_price)}`)
                     .build();
 
                     const totalParagraph = Skia.ParagraphBuilder.Make({
@@ -1271,7 +1279,7 @@ const SkiaInvoiceCanvasSimple = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                       fontSize: 9, 
                       fontStyle: { weight: 400 }
                     })
-                    .addText(`${currencySymbol}${item.total_price.toFixed(2)}`)
+                    .addText(`${currencySymbol}${fmt(item.total_price)}`)
                     .build();
                     
                     return (
