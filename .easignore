@@ -34,10 +34,6 @@ build/
 *.pyc
 __pycache__/
 
-# Large video files (use smaller versions or host externally)
-assets/videos/
-*.mp4
-
 # Scripts and development files
 *.py
 *.sh
