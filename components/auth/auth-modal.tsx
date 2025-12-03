@@ -336,15 +336,15 @@ export function AuthModal({
                 )}
                 <Button
                   onPress={handleAppleAuth}
-                  style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                  style={[styles.choiceButton, { backgroundColor: '#2c2c2e', borderColor: '#3a3a3c' }]}
                   disabled={isAppleLoading}
                 >
                   {isAppleLoading ? (
-                    <ActivityIndicator color="#000000" />
+                    <ActivityIndicator color="#FFFFFF" />
                   ) : (
                     <>
-                      <Ionicons name="logo-apple" size={24} color="#000000" style={styles.appleIcon} />
-                      <Text style={[styles.appleButtonText, { color: "#000000" }]}>
+                      <Ionicons name="logo-apple" size={24} color="#FFFFFF" style={styles.appleIcon} />
+                      <Text style={[styles.appleButtonText, { color: "#FFFFFF" }]}>
                         Sign In With Apple
                       </Text>
                     </>

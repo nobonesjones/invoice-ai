@@ -986,6 +986,15 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
   };
 
   const handleGoCardlessPress = async () => {
+    // Temporary: Show "Coming Soon" message
+    Alert.alert(
+      'GoCardless Payments',
+      'Direct bank payments via GoCardless are coming soon! This feature will allow you to accept instant bank transfers with lower fees.',
+      [{ text: 'OK' }]
+    );
+
+    // TODO: Remove above and uncomment below when ready to launch
+    /*
     if (isGoCardlessConnected) {
       // Already connected, show disconnect option
       Alert.alert(
@@ -1004,6 +1013,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
       // Not connected, start OAuth flow
       await initiateGoCardlessOAuth();
     }
+    */
   };
 
   const initiateGoCardlessOAuth = async () => {

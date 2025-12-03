@@ -853,7 +853,7 @@ export const InvoicePreviewModal = forwardRef(
                     /* Design/Color Selectors */
                     <>
                       {activeTab === 'design' ? (
-                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: 'white' }}>
+                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: themeColors.background }}>
                           <InvoiceDesignSelector
                             designs={availableDesigns}
                             selectedDesignId={currentDesign.id}
@@ -862,7 +862,7 @@ export const InvoicePreviewModal = forwardRef(
                           />
                         </View>
                       ) : (
-                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: 'white' }}>
+                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: themeColors.background }}>
                           <ColorSelector
                             selectedColor={currentAccentColor}
                             onColorSelect={selectAccentColor}

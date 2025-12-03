@@ -737,7 +737,7 @@ export default function ExpensesScreen() {
 
 						<View style={styles.modalBody}>
 							<TouchableOpacity
-								style={styles.optionButton}
+								style={[styles.optionButton, { backgroundColor: theme.background }]}
 								onPress={() => handleOptionPress('scan')}
 							>
 								<View style={styles.optionButtonRow}>
@@ -751,7 +751,7 @@ export default function ExpensesScreen() {
 							</TouchableOpacity>
 
 							<TouchableOpacity
-								style={styles.optionButton}
+								style={[styles.optionButton, { backgroundColor: theme.background }]}
 								onPress={() => handleOptionPress('upload')}
 							>
 								<View style={styles.optionButtonRow}>
@@ -765,7 +765,7 @@ export default function ExpensesScreen() {
 							</TouchableOpacity>
 
 							<TouchableOpacity
-								style={styles.optionButton}
+								style={[styles.optionButton, { backgroundColor: theme.background }]}
 								onPress={() => handleOptionPress('manual')}
 							>
 								<View style={styles.optionButtonRow}>
@@ -955,7 +955,6 @@ const styles = StyleSheet.create({
 	optionButton: {
 		borderRadius: 10,
 		marginBottom: 16,
-		backgroundColor: '#F9F9F9',
 		shadowColor: '#000',
 		shadowOffset: { width: 0, height: 1 },
 		shadowOpacity: 0.08,

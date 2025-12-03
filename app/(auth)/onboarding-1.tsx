@@ -277,8 +277,8 @@ export default function OnboardingScreen1() {
           <View style={styles.contentArea}>
             {/* App Logo & Name */}
             <View style={styles.logoSection}>
-              <Text style={[styles.appName, { color: theme.foreground }]}>SuperInvoice</Text>
-              <Text style={[styles.tagline, { color: theme.mutedForeground }]}>
+              <Text style={[styles.appName, { color: '#000000' }]}>SuperInvoice</Text>
+              <Text style={[styles.tagline, { color: '#666666' }]}>
                 The fastest way to create invoices and get paid.
               </Text>
             </View>
@@ -309,9 +309,9 @@ export default function OnboardingScreen1() {
                 ) : (
                   <>
                     <View style={styles.appleIconContainer}>
-                      <Ionicons name="logo-apple" size={24} color="#000000" />
+                      <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
                     </View>
-                    <Text style={[styles.authButtonText, { color: "#000000" }]}>Continue with Apple</Text>
+                    <Text style={[styles.authButtonText, { color: "#FFFFFF" }]}>Continue with Apple</Text>
                   </>
                 )}
               </Pressable>
