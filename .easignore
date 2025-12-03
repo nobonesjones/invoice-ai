@@ -1,0 +1,57 @@
+# EAS Build ignore file
+# Exclude files and directories from EAS Build uploads
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Dependencies (will be installed on EAS)
+node_modules/
+
+# Build outputs
+ios/build/
+android/build/
+android/.gradle/
+dist/
+build/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary and backup files
+*.bak
+*.tmp
+*.log
+*.pyc
+__pycache__/
+
+# Scripts and development files
+*.py
+*.sh
+
+# Documentation
+README.md
+CLAUDE.md
+docs/
+
+# Test files
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Environment files (should use EAS Secrets instead)
+.env.local
+.env.*.local
+
+# Cache directories
+.expo/
+.cache/
+.turbo/
