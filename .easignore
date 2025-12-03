@@ -14,7 +14,10 @@ ios/build/
 android/build/
 android/.gradle/
 dist/
+dist-test/
 build/
+*.map
+*.hbc
 
 # IDE and editor files
 .vscode/
@@ -30,6 +33,10 @@ build/
 *.log
 *.pyc
 __pycache__/
+
+# Large video files (use smaller versions or host externally)
+assets/videos/
+*.mp4
 
 # Scripts and development files
 *.py
