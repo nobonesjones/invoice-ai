@@ -472,6 +472,11 @@ export default function PaymentOptionsScreen() {
   const [isLoadingGoCardless, setIsLoadingGoCardless] = useState(false);
   const [isGoCardlessActiveOnScreen, setIsGoCardlessActiveOnScreen] = useState(false);
 
+  // Polar state
+  const [isPolarConnected, setIsPolarConnected] = useState(false);
+  const [isLoadingPolar, setIsLoadingPolar] = useState(false);
+  const [isPolarActiveOnScreen, setIsPolarActiveOnScreen] = useState(false);
+
   const [invoiceTermsNotes, setInvoiceTermsNotes] = useState<string>('');
   const [initialInvoiceTermsNotes, setInitialInvoiceTermsNotes] = useState<string>('');
   const [isLoadingInvoiceTermsNotes, setIsLoadingInvoiceTermsNotes] = useState<boolean>(false);
@@ -1098,6 +1103,144 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
     }
   };
 
+  // Polar OAuth handlers
+  const handlePolarPress = async () => {
+    if (isPolarConnected) {
+      Alert.alert(
+        'Polar Connected',
+        'Your Polar account is connected. You can now generate payment links for your invoices.',
+        [
+          { text: 'OK', style: 'default' },
+          {
+            text: 'Disconnect',
+            style: 'destructive',
+            onPress: () => handleDisconnectPolar(),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Start OAuth flow
+    await initiatePolarOAuth();
+  };
+
+  const initiatePolarOAuth = async () => {
+    if (!user) return;
+
+    try {
+      setIsLoadingPolar(true);
+
+      // Generate PKCE code_verifier (43-128 characters, URL-safe)
+      const generateCodeVerifier = (): string => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+        let result = '';
+        const randomValues = new Uint8Array(64);
+        crypto.getRandomValues(randomValues);
+        for (let i = 0; i < 64; i++) {
+          result += chars[randomValues[i] % chars.length];
+        }
+        return result;
+      };
+
+      // Generate code_challenge from code_verifier using SHA-256
+      const generateCodeChallenge = async (verifier: string): Promise<string> => {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(verifier);
+        const digest = await crypto.subtle.digest('SHA-256', data);
+        // Base64url encode the hash
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+        return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      };
+
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+      // Create state with user ID and code_verifier for the callback
+      const state = btoa(JSON.stringify({ userId: user.id, codeVerifier }));
+
+      const clientId = 'polar_ci_cCmoDRhfHruYcLNa9fQJ8PErsOYJRgreSX3hv4VjL4K';
+      const redirectUri = encodeURIComponent('https://wzpuzqzsjdizmpiobsuo.supabase.co/functions/v1/polar-oauth-callback');
+      const scope = encodeURIComponent('checkouts:read checkouts:write products:read organizations:read');
+
+      const authUrl = `https://polar.sh/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+
+      const canOpen = await Linking.canOpenURL(authUrl);
+      if (canOpen) {
+        await Linking.openURL(authUrl);
+      } else {
+        throw new Error('Cannot open Polar authorization page');
+      }
+    } catch (error) {
+      console.error('[Polar] OAuth initiation error:', error);
+      Alert.alert(
+        'Connection Failed',
+        error instanceof Error ? error.message : 'Failed to connect Polar. Please try again.'
+      );
+    } finally {
+      setIsLoadingPolar(false);
+    }
+  };
+
+  const handleDisconnectPolar = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          polar_connected: false,
+          polar_access_token: null,
+          polar_refresh_token: null,
+          polar_token_expires_at: null,
+          polar_organization_id: null,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setIsPolarConnected(false);
+      setIsPolarActiveOnScreen(false);
+
+      Alert.alert('Disconnected', 'Polar has been disconnected successfully.');
+    } catch (error) {
+      console.error('[Polar] Disconnect error:', error);
+      Alert.alert('Error', 'Failed to disconnect Polar. Please try again.');
+    }
+  };
+
+  // Fetch Polar status from user_profiles
+  const fetchPolarStatus = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('polar_connected')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[Polar] Error fetching status:', error);
+        return;
+      }
+
+      if (data) {
+        setIsPolarConnected(data.polar_connected || false);
+        setIsPolarActiveOnScreen(data.polar_connected || false);
+      }
+    } catch (err) {
+      console.error('[Polar] Unexpected error:', err);
+    }
+  }, [user, supabase]);
+
+  // Fetch Polar status on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchPolarStatus();
+    }, [fetchPolarStatus])
+  );
+
   const renderBackdrop = useCallback(
     (props: any) => (
       <BottomSheetBackdrop
@@ -1205,6 +1348,28 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       fontWeight: isGoCardlessActiveOnScreen ? 'bold' : 'normal'
                     }}>
                       {isGoCardlessActiveOnScreen ? 'Connected' : 'Not Connected'}
+                    </Text>
+                  )
+                }
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Payment Links</Text>
+            <View style={styles.sectionCard}>
+              <SettingsListItem
+                icon={<CreditCard size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
+                label="Polar"
+                subtitle="Generate payment links for invoices"
+                onPress={handlePolarPress}
+                rightContent={
+                  isLoadingPolar ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{
+                      color: isPolarActiveOnScreen ? theme.primary : theme.mutedForeground,
+                      fontWeight: isPolarActiveOnScreen ? 'bold' : 'normal'
+                    }}>
+                      {isPolarActiveOnScreen ? 'Connected' : 'Connect'}
                     </Text>
                   )
                 }
