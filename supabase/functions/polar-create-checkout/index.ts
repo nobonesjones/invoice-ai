@@ -4,6 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+// v2 - force redeploy
 
 interface CreateCheckoutRequest {
   invoiceId: string
@@ -31,7 +32,7 @@ serve(async (req) => {
     // Get user's Polar credentials
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('polar_connected, polar_access_token, polar_refresh_token, polar_token_expires_at, polar_organization_id')
+      .select('polar_connected, polar_access_token, polar_refresh_token, polar_token_expires_at, polar_organization_id, polar_product_id')
       .eq('id', userId)
       .single()
 
@@ -45,6 +46,13 @@ serve(async (req) => {
     if (!profile.polar_connected || !profile.polar_access_token) {
       return new Response(
         JSON.stringify({ error: 'Polar not connected. Please connect your Polar account first.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!profile.polar_product_id) {
+      return new Response(
+        JSON.stringify({ error: 'No Polar product configured. Please reconnect your Polar account.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -125,8 +133,7 @@ serve(async (req) => {
       )
     }
 
-    // Create Polar checkout session
-    // Note: Polar uses custom checkout for arbitrary amounts
+    // Create Polar checkout session using products API with ad-hoc pricing
     const amountInCents = Math.round((invoice.total_amount - (invoice.paid_amount || 0)) * 100)
 
     if (amountInCents <= 0) {
@@ -136,24 +143,11 @@ serve(async (req) => {
       )
     }
 
-    // Map currency codes to Polar-supported currencies
-    const currencyMap: Record<string, string> = {
-      'USD': 'usd',
-      'EUR': 'eur',
-      'GBP': 'gbp',
-      '$': 'usd',
-      '€': 'eur',
-      '£': 'gbp',
-    }
-
-    const currency = currencyMap[invoice.currency_code?.toUpperCase()] ||
-                     currencyMap[invoice.currency_symbol] ||
-                     'usd'
-
+    // Polar currently only supports USD
+    // We'll use USD regardless of invoice currency (user is warned in the app)
     const checkoutPayload = {
-      payment_processor: 'stripe',
+      product_price_id: profile.polar_product_id,
       amount: amountInCents,
-      currency: currency,
       customer_email: invoice.clients?.email || undefined,
       customer_name: invoice.clients?.name || undefined,
       success_url: `https://getsuperinvoice.com/payment/success?invoice_id=${invoiceId}`,
@@ -167,13 +161,59 @@ serve(async (req) => {
 
     console.log('Creating Polar checkout with payload:', checkoutPayload)
 
-    const checkoutResponse = await fetch('https://api.polar.sh/v1/checkouts/custom/', {
+    // First, get the price ID from the product
+    const productResponse = await fetch(`https://api.polar.sh/v1/products/${profile.polar_product_id}`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!productResponse.ok) {
+      const errorText = await productResponse.text()
+      console.error('Failed to get Polar product:', errorText)
+      return new Response(
+        JSON.stringify({ error: 'Failed to get Polar product', details: errorText }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const productData = await productResponse.json()
+    console.log('Polar product data:', productData)
+
+    // Get the first price ID from the product (should be our custom amount price)
+    const priceId = productData.prices?.[0]?.id
+    if (!priceId) {
+      return new Response(
+        JSON.stringify({ error: 'No price found for Polar product' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Create checkout with product and custom amount
+    const finalCheckoutPayload = {
+      product_price_id: priceId,
+      amount: amountInCents,
+      customer_email: invoice.clients?.email || undefined,
+      customer_name: invoice.clients?.name || undefined,
+      success_url: `https://getsuperinvoice.com/payment/success?invoice_id=${invoiceId}`,
+      metadata: {
+        invoice_id: invoiceId,
+        invoice_number: invoice.invoice_number,
+        user_id: userId,
+        source: 'superinvoice'
+      }
+    }
+
+    console.log('Creating Polar checkout with final payload:', finalCheckoutPayload)
+
+    const checkoutResponse = await fetch('https://api.polar.sh/v1/checkouts/', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(checkoutPayload)
+      body: JSON.stringify(finalCheckoutPayload)
     })
 
     if (!checkoutResponse.ok) {

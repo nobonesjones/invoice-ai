@@ -16,7 +16,7 @@ import {
   KeyboardAvoidingView, // Added
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { Stack, useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import {
   ChevronLeft,
@@ -46,6 +46,7 @@ import { supabase } from '@/config/supabase';
 import { useSupabase } from '@/context/supabase-provider';
 import { usePaywall } from '@/context/paywall-provider';
 import { usePlacement } from 'expo-superwall';
+import * as Crypto from 'expo-crypto';
 
 interface PaymentOption {
   id?: string;
@@ -403,6 +404,7 @@ export default function PaymentOptionsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { theme } = useTheme();
+  const { polarSuccess, polarError } = useLocalSearchParams<{ polarSuccess?: string; polarError?: string }>();
   const colorScheme = useColorScheme();
   const isLightMode = colorScheme === 'light';
   const styles = useMemo(() => getStyles(theme), [theme]);
@@ -435,6 +437,7 @@ export default function PaymentOptionsScreen() {
   const paypalBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const stripeBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const bankTransferBottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const polarBottomSheetModalRef = useRef<BottomSheetModal>(null);
   // Bank Transfer sheet does not require a scroll ref with stable keyboard handling
 
   const [isPayPalEnabled, setIsPayPalEnabled] = useState(false);
@@ -481,6 +484,38 @@ export default function PaymentOptionsScreen() {
   const [initialInvoiceTermsNotes, setInitialInvoiceTermsNotes] = useState<string>('');
   const [isLoadingInvoiceTermsNotes, setIsLoadingInvoiceTermsNotes] = useState<boolean>(false);
 
+  // Handle Polar OAuth callback params
+  useEffect(() => {
+    if (polarSuccess === 'true') {
+      // Refresh Polar connection status
+      const refreshPolarStatus = async () => {
+        if (!user) return;
+        try {
+          const { data } = await supabase
+            .from('user_profiles')
+            .select('polar_connected')
+            .eq('id', user.id)
+            .single();
+          if (data?.polar_connected) {
+            setIsPolarConnected(true);
+            setIsPolarActiveOnScreen(true);
+            Alert.alert('Success', 'Polar account connected successfully!');
+          }
+        } catch (err) {
+          console.error('Error refreshing Polar status:', err);
+        }
+      };
+      refreshPolarStatus();
+    } else if (polarError) {
+      const errorMessages: Record<string, string> = {
+        token_exchange_failed: 'Failed to complete authorization. Please try again.',
+        database_error: 'Failed to save connection. Please try again.',
+        unexpected_error: 'An unexpected error occurred. Please try again.',
+      };
+      Alert.alert('Connection Failed', errorMessages[polarError] || `Error: ${polarError}`);
+    }
+  }, [polarSuccess, polarError, user]);
+
   // PayPal modal now uses fixed snap points with extend behavior; no dynamic swap needed
 
   // No special focus tracking needed for bank transfer modal
@@ -493,7 +528,7 @@ export default function PaymentOptionsScreen() {
     { name: 'GooglePay', source: require('../../assets/googlepayicon.png') },
   ];
 
-  const stripeSnapPoints = useMemo(() => ['75%', '90%'], []);
+  const polarSnapPoints = useMemo(() => ['85%', '95%'], []);
   const bankTransferSnapPoints = useMemo(() => ['60%', '90%'], []);
 
   // No keyboard listeners needed; rely on keyboardBehavior="extend" inside sheets
@@ -1103,26 +1138,24 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
     }
   };
 
-  // Polar OAuth handlers
-  const handlePolarPress = async () => {
-    if (isPolarConnected) {
-      Alert.alert(
-        'Polar Connected',
-        'Your Polar account is connected. You can now generate payment links for your invoices.',
-        [
-          { text: 'OK', style: 'default' },
-          {
-            text: 'Disconnect',
-            style: 'destructive',
-            onPress: () => handleDisconnectPolar(),
-          },
-        ]
-      );
-      return;
-    }
+  // Polar modal handlers
+  const openPolarModal = useCallback(() => {
+    polarBottomSheetModalRef.current?.present();
+  }, []);
 
-    // Start OAuth flow
-    await initiatePolarOAuth();
+  const closePolarModal = useCallback(() => {
+    polarBottomSheetModalRef.current?.dismiss();
+  }, []);
+
+  const handlePolarPress = () => {
+    Alert.alert(
+      'USD Only',
+      'Card payments currently only support USD invoices. Support for other currencies is coming soon.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => openPolarModal() }
+      ]
+    );
   };
 
   const initiatePolarOAuth = async () => {
@@ -1132,29 +1165,17 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
       setIsLoadingPolar(true);
 
       // Generate PKCE code_verifier (43-128 characters, URL-safe)
-      const generateCodeVerifier = (): string => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-        let result = '';
-        const randomValues = new Uint8Array(64);
-        crypto.getRandomValues(randomValues);
-        for (let i = 0; i < 64; i++) {
-          result += chars[randomValues[i] % chars.length];
-        }
-        return result;
-      };
+      const codeVerifier = Crypto.getRandomBytes(32)
+        .reduce((acc, byte) => acc + byte.toString(16).padStart(2, '0'), '');
 
       // Generate code_challenge from code_verifier using SHA-256
-      const generateCodeChallenge = async (verifier: string): Promise<string> => {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(verifier);
-        const digest = await crypto.subtle.digest('SHA-256', data);
-        // Base64url encode the hash
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
-        return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      };
-
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = await generateCodeChallenge(codeVerifier);
+      const hash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        codeVerifier,
+        { encoding: Crypto.CryptoEncoding.BASE64 }
+      );
+      // Convert base64 to base64url
+      const codeChallenge = hash.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
       // Create state with user ID and code_verifier for the callback
       const state = btoa(JSON.stringify({ userId: user.id, codeVerifier }));
@@ -1257,8 +1278,13 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
     navigation.setOptions({
       header: () => (
         <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
-          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
-            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background, zIndex: 10 }]}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ padding: 12, marginLeft: -8 }}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+              activeOpacity={0.6}
+            >
               <ChevronLeft size={24} color={theme.foreground} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, {color: theme.foreground}]}>Payment Options</Text>
@@ -1288,6 +1314,30 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
           >
             <Text style={styles.sectionTitle}>Online payments</Text>
             <View style={styles.sectionCard}>
+              {/* Polar Card Payments - Temporarily Hidden */}
+              {/* <SettingsListItem
+                icon={
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                    <Image source={require('../../assets/visaicon.png')} style={{ width: 24, height: 24, resizeMode: 'contain', marginRight: 2 }} />
+                    <Image source={require('../../assets/mastercardicon.png')} style={{ width: 24, height: 24, resizeMode: 'contain' }} />
+                  </View>
+                }
+                label="Card Payments"
+                subtitle="Accept Visa, Mastercard, Apple Pay & more"
+                onPress={handlePolarPress}
+                rightContent={
+                  isLoadingPolar ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{
+                      color: isPolarActiveOnScreen ? theme.primary : theme.mutedForeground,
+                      fontWeight: isPolarActiveOnScreen ? 'bold' : 'normal'
+                    }}>
+                      {isPolarActiveOnScreen ? 'Connected' : 'Connect'}
+                    </Text>
+                  )
+                }
+              /> */}
               <SettingsListItem
                 icon={<Image source={require('../../assets/stripeicon.png')} style={styles.listItemIconStyle} />}
                 label="Stripe Payments"
@@ -1348,28 +1398,6 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       fontWeight: isGoCardlessActiveOnScreen ? 'bold' : 'normal'
                     }}>
                       {isGoCardlessActiveOnScreen ? 'Connected' : 'Not Connected'}
-                    </Text>
-                  )
-                }
-              />
-            </View>
-
-            <Text style={styles.sectionTitle}>Payment Links</Text>
-            <View style={styles.sectionCard}>
-              <SettingsListItem
-                icon={<CreditCard size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
-                label="Polar"
-                subtitle="Generate payment links for invoices"
-                onPress={handlePolarPress}
-                rightContent={
-                  isLoadingPolar ? (
-                    <ActivityIndicator size="small" color={theme.mutedForeground} />
-                  ) : (
-                    <Text style={{
-                      color: isPolarActiveOnScreen ? theme.primary : theme.mutedForeground,
-                      fontWeight: isPolarActiveOnScreen ? 'bold' : 'normal'
-                    }}>
-                      {isPolarActiveOnScreen ? 'Connected' : 'Connect'}
                     </Text>
                   )
                 }
@@ -1483,58 +1511,58 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
           <BottomSheetModal
             ref={stripeBottomSheetModalRef}
             index={0}
-            snapPoints={stripeSnapPoints} 
-            onChange={handleSheetChanges} 
+            snapPoints={polarSnapPoints}
+            onChange={handleSheetChanges}
             backdropComponent={renderBackdrop}
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
           >
             <BottomSheetScrollView
-              contentContainerStyle={styles.modalContentContainer}
+              contentContainerStyle={[styles.modalContentContainer, { paddingTop: 5 }]}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.modalHeader}>
+              <View style={[styles.modalHeader, { paddingTop: 10, paddingBottom: 8 }]}>
                 <Text style={styles.modalTitle}>Activate Stripe Payments</Text>
                 <TouchableOpacity onPress={closeStripeModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <XIcon size={24} color={theme.mutedForeground} />
                 </TouchableOpacity>
               </View>
-              <View style={styles.modalInnerContent}>
-                <View style={styles.logoRowContainer}>
+              <View style={[styles.modalInnerContent, { padding: 12 }]}>
+                <View style={[styles.logoRowContainer, { marginVertical: 10, paddingHorizontal: 0 }]}>
                   {paymentIcons.map((icon) => (
                     <Image
                       key={icon.name}
                       source={icon.source}
-                      style={styles.paymentMethodIconStyle}
+                      style={[styles.paymentMethodIconStyle, { width: 50, height: 32, marginHorizontal: 3 }]}
                     />
                   ))}
                 </View>
 
-                <View style={styles.positiveBulletsContainer}>
-                  <View style={styles.bulletItem}>
-                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={styles.bulletText}>Customers pay 5 times faster with card payments</Text>
+                <View style={[styles.positiveBulletsContainer, { marginTop: 8, marginBottom: 12, paddingHorizontal: 4 }]}>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Customers pay 5 times faster with card payments</Text>
                   </View>
-                  <View style={styles.bulletItem}>
-                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={styles.bulletText}>Easily send card payment links in a flash</Text>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Easily send card payment links in a flash</Text>
                   </View>
-                  <View style={styles.bulletItem}>
-                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={styles.bulletText}>Fast and easy setup</Text>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Fast and easy setup</Text>
                   </View>
                 </View>
 
-                <View style={styles.importantStepsContainer}>
-                  <Text style={styles.importantStepsTitle}>Important Steps</Text>
-                  <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: theme.foreground }}>15 minutes</Text></Text>
-                  <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: theme.foreground }}>daily or weekly</Text>, first one takes seven days.</Text>
-                  <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: theme.foreground }}>most competitive</Text> in the world.</Text>
+                <View style={[styles.importantStepsContainer, { marginTop: 6, marginBottom: 16, paddingHorizontal: 4 }]}>
+                  <Text style={[styles.importantStepsTitle, { fontSize: 16, marginBottom: 8 }]}>Important Steps</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: theme.foreground }}>15 minutes</Text></Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>2. Payouts <Text style={{ fontWeight: 'bold', color: theme.foreground }}>daily or weekly</Text>, first one takes seven days.</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: theme.foreground }}>most competitive</Text> in the world.</Text>
                 </View>
 
                 {!isStripeEnabled && (
                   <TouchableOpacity
-                    style={[styles.connectButton, { backgroundColor: theme.primary }]} 
+                    style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
                     onPress={openStripeConnectionModal}
                   >
                     <Text style={styles.connectButtonText}>Connect with Stripe</Text>
@@ -1542,12 +1570,12 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                 )}
 
                 <TouchableOpacity
-                  style={styles.moreInfoButton}
+                  style={[styles.moreInfoButton, { paddingVertical: 8, marginBottom: 10 }]}
                   onPress={() => Linking.openURL('https://stripe.com').catch(err => console.error('Failed to open URL:', err))}
                 >
                   <Text style={styles.moreInfoButtonText}>More about Stripe</Text>
                 </TouchableOpacity>
-                
+
                 {stripeSettingsChanged && (
                   <View style={styles.saveButtonContainer}>
                     <TouchableOpacity
@@ -1566,6 +1594,98 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
               </View>
             </BottomSheetScrollView>
           </BottomSheetModal>
+
+          {/* Polar Card Payments Modal - Temporarily Hidden */}
+          {/* <BottomSheetModal
+            ref={polarBottomSheetModalRef}
+            index={0}
+            snapPoints={polarSnapPoints}
+            onChange={handleSheetChanges}
+            backdropComponent={renderBackdrop}
+            handleIndicatorStyle={styles.handleIndicator}
+            backgroundStyle={styles.modalBackground}
+          >
+            <BottomSheetScrollView
+              contentContainerStyle={[styles.modalContentContainer, { paddingTop: 5 }]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={[styles.modalHeader, { paddingTop: 10, paddingBottom: 8 }]}>
+                <Text style={styles.modalTitle}>Activate Card Payments</Text>
+                <TouchableOpacity onPress={closePolarModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <XIcon size={24} color={theme.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.modalInnerContent, { padding: 12 }]}>
+                <View style={[styles.logoRowContainer, { marginVertical: 10, paddingHorizontal: 0 }]}>
+                  {paymentIcons.map((icon) => (
+                    <Image
+                      key={icon.name}
+                      source={icon.source}
+                      style={[styles.paymentMethodIconStyle, { width: 50, height: 32, marginHorizontal: 3 }]}
+                    />
+                  ))}
+                </View>
+
+                <View style={[styles.positiveBulletsContainer, { marginTop: 8, marginBottom: 12, paddingHorizontal: 4 }]}>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Customers pay 5 times faster with card payments</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Easily send card payment links in a flash</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Fast and easy setup - under 2 minutes</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.importantStepsContainer, { marginTop: 6, marginBottom: 16, paddingHorizontal: 4 }]}>
+                  <Text style={[styles.importantStepsTitle, { fontSize: 16, marginBottom: 8 }]}>How it works</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>1. Connect your Polar account <Text style={{ fontWeight: 'bold', color: theme.foreground }}>in seconds</Text></Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>2. Generate <Text style={{ fontWeight: 'bold', color: theme.foreground }}>payment links</Text> for any invoice</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Get paid directly to your <Text style={{ fontWeight: 'bold', color: theme.foreground }}>bank account</Text></Text>
+                </View>
+
+                {!isPolarConnected ? (
+                  <TouchableOpacity
+                    style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
+                    onPress={initiatePolarOAuth}
+                    disabled={isLoadingPolar}
+                  >
+                    {isLoadingPolar ? (
+                      <ActivityIndicator size="small" color={theme.primaryForeground} />
+                    ) : (
+                      <Text style={styles.connectButtonText}>Connect with Polar</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ alignItems: 'center', marginTop: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                      <CheckCircle size={22} color={theme.primary} />
+                      <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: 'bold', color: theme.foreground }}>
+                        Connected
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.moreInfoButton, { borderColor: '#dc3545', paddingVertical: 8, marginBottom: 10 }]}
+                      onPress={handleDisconnectPolar}
+                    >
+                      <Text style={[styles.moreInfoButtonText, { color: '#dc3545' }]}>Disconnect Polar</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.moreInfoButton, { paddingVertical: 8, marginBottom: 10 }]}
+                  onPress={() => Linking.openURL('https://polar.sh').catch(err => console.error('Failed to open URL:', err))}
+                >
+                  <Text style={styles.moreInfoButtonText}>More about Polar</Text>
+                </TouchableOpacity>
+              </View>
+            </BottomSheetScrollView>
+          </BottomSheetModal> */}
 
           {/* Bank Transfer Modal */}
           <BottomSheetModal
@@ -1610,8 +1730,8 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                 </View>
 
                 {isBankTransferEnabled && (
-                  <View style={[styles.sectionCard, styles.emailInputCard]}> 
-                    <View style={[styles.inputRow]}> 
+                  <View style={[styles.sectionCard, styles.emailInputCard]}>
+                    <View style={[styles.inputRow]}>
                       <Text style={styles.label}>Bank Account Details</Text>
                     </View>
                     <BottomSheetTextInput
@@ -1619,6 +1739,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       value={bankAccountName}
                       onChangeText={onChangeBankAccountName}
                       placeholder="Account Holder Name"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
                       autoCapitalize="words"
                       editable={!isLoadingBankTransferSettings}
                       returnKeyType="next"
@@ -1628,6 +1749,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       value={bankName}
                       onChangeText={onChangeBankName}
                       placeholder="Bank Name"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
                       autoCapitalize="words"
                       editable={!isLoadingBankTransferSettings}
                       returnKeyType="next"
@@ -1637,6 +1759,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       value={accountIban}
                       onChangeText={onChangeAccountIban}
                       placeholder="Account Number / IBAN"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
                       autoCapitalize="characters"
                       editable={!isLoadingBankTransferSettings}
                       returnKeyType="next"
@@ -1646,6 +1769,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       value={routingSwift}
                       onChangeText={onChangeRoutingSwift}
                       placeholder="Routing Number / SWIFT / BIC"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
                       autoCapitalize="characters"
                       editable={!isLoadingBankTransferSettings}
                       returnKeyType="next"
@@ -1655,6 +1779,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                       value={bankNotes}
                       onChangeText={onChangeBankNotes}
                       placeholder="Notes (optional)"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
                       autoCapitalize="sentences"
                       editable={!isLoadingBankTransferSettings}
                       returnKeyType="done"

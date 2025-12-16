@@ -336,7 +336,11 @@ export function AuthModal({
                 )}
                 <Button
                   onPress={handleAppleAuth}
-                  style={[styles.choiceButton, { backgroundColor: '#2c2c2e', borderColor: '#3a3a3c' }]}
+                  style={[
+                    styles.choiceButton,
+                    styles.appleButton,
+                    { backgroundColor: '#000000', borderColor: '#000000' }
+                  ]}
                   disabled={isAppleLoading}
                 >
                   {isAppleLoading ? (
@@ -526,6 +530,10 @@ const getStyles = (theme: any) => StyleSheet.create({
     }),
   },
   emailButton: {
+    borderWidth: 0,
+  },
+  appleButton: {
+    backgroundColor: '#000000',
     borderWidth: 0,
   },
   appleIcon: {

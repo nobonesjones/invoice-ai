@@ -209,6 +209,7 @@ function InvoiceViewerScreen() {
   const exportCanvasRefs = useRef<any[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [exportTotalPages, setExportTotalPages] = useState(1);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
 
@@ -250,118 +251,84 @@ function InvoiceViewerScreen() {
   }, [navigation, setIsTabBarVisible]);
 
   const handleSendByEmail = async () => {
-    if (!invoice || !businessSettings) {
-      Alert.alert('Error', 'Invoice or business data is not available.');
+    // 1. Validate client email exists
+    if (!invoice?.clients?.email) {
+      Alert.alert(
+        'Email Required',
+        'This client has no email address. Would you like to add one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Email',
+            onPress: () => {
+              handleCloseSendModal();
+              router.push(`/(app)/(protected)/clients/edit/${invoice?.client_id}`);
+            }
+          }
+        ]
+      );
       return;
     }
 
-    if (!supabase) {
+    if (!invoice || !supabase || !user) {
       Alert.alert('Error', 'Unable to send invoice at this time.');
       return;
     }
 
     try {
-      // Generating Skia PDF for email sharing
-      
-      // Use Skia canvas to generate PDF (same as handleSendPDF)
-      const image = skiaInvoiceRef.current?.makeImageSnapshot();
-      
-      if (!image) {
-        throw new Error('Failed to create image snapshot from invoice canvas');
+      setIsSendingEmail(true);
+      handleCloseSendModal(); // Close modal immediately for better UX
+
+      // 2. Upload PDF to storage and create share link
+      const result = await InvoiceShareService.generateShareLinkFromCanvas(
+        invoice.id,
+        user.id,
+        skiaInvoiceRef,
+        30 // Expires in 30 days
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to prepare invoice');
       }
-      
-      // Skia canvas captured successfully
-      
-      // Encode to bytes and convert to base64
-      const bytes = image.encodeToBytes();
-      
-      const chunkSize = 8192;
-      let binaryString = '';
-      
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.slice(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      
-      const base64String = btoa(binaryString);
-      
-             // Create HTML that uses the exact canvas dimensions (no scaling or margins)
-       const htmlContent = `
-         <!DOCTYPE html>
-         <html>
-         <head>
-           <meta charset="utf-8">
-           <style>
-             @page {
-               margin: 0;
-               size: ${image.width()}px ${image.height()}px;
-             }
-             body {
-               margin: 0;
-               padding: 0;
-               width: ${image.width()}px;
-               height: ${image.height()}px;
-               overflow: hidden;
-             }
-             .invoice-image {
-               width: ${image.width()}px;
-               height: ${image.height()}px;
-               display: block;
-               object-fit: none;
-             }
-           </style>
-         </head>
-         <body>
-           <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoice.invoice_number}" />
-         </body>
-         </html>
-       `;
-      
-      // Generating PDF with Skia image
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
+
+      // 3. Call the edge function to send email
+      const { data, error } = await supabase.functions.invoke('send-invoice-email', {
+        body: {
+          invoiceId: invoice.id,
+        }
       });
-      // PDF generated successfully
 
-      // Update invoice status to sent
-      const { error: updateError } = await supabase
-        .from('invoices')
-        .update({ status: 'sent' })
-        .eq('id', invoice.id);
-
-      if (updateError) {
-        // Error updating status
-        Alert.alert('Error', 'Failed to update invoice status.');
-        return;
+      if (error) {
+        throw new Error(error.message || 'Failed to send email');
       }
 
-      // Log the send activity
-      await logInvoiceSent(invoice.id, invoice.invoice_number, 'email');
-
-      // Update local state
+      // 4. Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
-      // Share the PDF directly - user can choose email from the share dialog
-      await Sharing.shareAsync(uri, { 
-        mimeType: 'application/pdf', 
-        dialogTitle: 'Send Invoice via Email' 
-      });
+      // 5. Success message
+      Alert.alert(
+        '✉️ Email Sent!',
+        `Invoice ${invoice.invoice_number} has been sent to ${invoice.clients.email}`,
+        [{ text: 'OK' }]
+      );
 
-      Alert.alert('Invoice Ready', 'Choose your email app from the share options to send the invoice.');
-      handleCloseSendModal(); // Close the send modal
-      
-      // Refresh invoice data to reflect status change
+      // 6. Refresh invoice data
       if (invoiceId) {
         const refreshedInvoice = await fetchInvoiceData(invoiceId);
         if (refreshedInvoice) {
           setInvoice(refreshedInvoice);
         }
       }
-      
+
     } catch (error: any) {
-      // Error generating PDF or sharing
-      Alert.alert('Error', `Failed to prepare invoice for email: ${error.message}`);
+      console.error('Error sending email:', error);
+      Alert.alert(
+        'Error Sending Email',
+        error.message || 'Failed to send email. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
@@ -824,6 +791,10 @@ function InvoiceViewerScreen() {
         due_date: invoiceData.due_date ?? null,
         // Ensure custom_headline is never undefined - convert undefined to null
         custom_headline: invoiceData.custom_headline ?? null,
+        // Polar payment fields
+        polar_checkout_id: (invoiceData as any).polar_checkout_id ?? null,
+        polar_payment_link: (invoiceData as any).polar_payment_link ?? null,
+        polar_payment_status: (invoiceData as any).polar_payment_status ?? null,
       };
       
       // Constructed fetchedInvoiceForTemplate
@@ -1590,11 +1561,125 @@ function InvoiceViewerScreen() {
     );
   };
 
-  const handlePaymentLink = () => {
+  const [isGeneratingPaymentLink, setIsGeneratingPaymentLink] = useState(false);
+
+  const handlePaymentLink = async () => {
     moreOptionsSheetRef.current?.dismiss();
-    // Payment link pressed
-    // TODO: Implement payment link functionality
-    Alert.alert('Coming Soon', 'Payment link functionality will be implemented soon.');
+
+    if (!invoice || !user || !supabase) {
+      Alert.alert('Error', 'Unable to generate payment link at this time.');
+      return;
+    }
+
+    // Check if invoice already has a payment link
+    if (invoice.polar_payment_link) {
+      Alert.alert(
+        'Payment Link',
+        'This invoice already has a payment link.',
+        [
+          { text: 'Copy Link', onPress: () => {
+            Clipboard.setString(invoice.polar_payment_link!);
+            Alert.alert('Copied', 'Payment link copied to clipboard.');
+          }},
+          { text: 'Open Link', onPress: () => {
+            Linking.openURL(invoice.polar_payment_link!);
+          }},
+          { text: 'Generate New', onPress: () => generatePaymentLink() },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    // Show USD warning before generating
+    Alert.alert(
+      'USD Only',
+      'Card payments currently only support USD. The payment link will be generated in USD.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => generatePaymentLink() }
+      ]
+    );
+  };
+
+  const generatePaymentLink = async () => {
+    if (!invoice || !user || !supabase) return;
+
+    setIsGeneratingPaymentLink(true);
+
+    try {
+      // Use supabase.functions.invoke() for proper auth handling
+      const { data: result, error: invokeError } = await supabase.functions.invoke('polar-create-checkout', {
+        body: {
+          invoiceId: invoice.id,
+          userId: user.id
+        }
+      });
+
+      if (invokeError) {
+        console.error('Function invoke error:', invokeError);
+        if (invokeError.message?.includes('not connected') || invokeError.message?.includes('No Polar product')) {
+          Alert.alert(
+            'Polar Not Connected',
+            'Please connect your Polar account in Settings > Payment Options to generate payment links.',
+            [
+              { text: 'Go to Settings', onPress: () => router.push('/(app)/payment-options') },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        } else {
+          Alert.alert('Error', invokeError.message || 'Failed to generate payment link');
+        }
+        setIsGeneratingPaymentLink(false);
+        return;
+      }
+
+      if (!result || result.error) {
+        const errorMsg = result?.error || 'Failed to generate payment link';
+        if (errorMsg.includes('not connected') || errorMsg.includes('No Polar product')) {
+          Alert.alert(
+            'Polar Not Connected',
+            'Please connect your Polar account in Settings > Payment Options to generate payment links.',
+            [
+              { text: 'Go to Settings', onPress: () => router.push('/(app)/payment-options') },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        } else {
+          Alert.alert('Error', errorMsg);
+        }
+        setIsGeneratingPaymentLink(false);
+        return;
+      }
+
+      // Update local state with the new payment link
+      setInvoice(prev => prev ? {
+        ...prev,
+        polar_payment_link: result.paymentLink,
+        polar_checkout_id: result.checkoutId,
+        polar_payment_status: 'pending'
+      } : null);
+
+      Alert.alert(
+        'Payment Link Generated',
+        'Your payment link has been created successfully.',
+        [
+          { text: 'Copy Link', onPress: () => {
+            Clipboard.setString(result.paymentLink);
+            Alert.alert('Copied', 'Payment link copied to clipboard.');
+          }},
+          { text: 'Open Link', onPress: () => {
+            Linking.openURL(result.paymentLink);
+          }},
+          { text: 'OK' }
+        ]
+      );
+    } catch (error) {
+      console.error('Error generating payment link:', error);
+      Alert.alert('Error', 'An unexpected error occurred while generating the payment link.');
+    } finally {
+      setIsGeneratingPaymentLink(false);
+    }
   };
 
   const handleRefundCreditNote = async () => {

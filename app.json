@@ -3,7 +3,7 @@
     "name": "SuperInvoice",
     "slug": "meetings",
     "scheme": "superinvoice",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/superinvoiceicon.png",
     "userInterfaceStyle": "automatic",
@@ -125,6 +125,6 @@
       "EXPO_PUBLIC_GEMINI_API_KEY": ""
     },
     "owner": "indianabones",
-    "runtimeVersion": "1.0.5"
+    "runtimeVersion": "1.0.6"
   }
 }

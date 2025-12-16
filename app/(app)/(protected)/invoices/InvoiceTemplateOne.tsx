@@ -40,6 +40,10 @@ export interface InvoiceForTemplate {
   paid_amount?: number;
   payment_date?: string | null;
   payment_notes?: string | null;
+  // Polar payment fields
+  polar_checkout_id?: string | null;
+  polar_payment_link?: string | null;
+  polar_payment_status?: string | null;
 }
 
 // Change to a direct type alias for simplicity and to avoid extension conflicts

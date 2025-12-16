@@ -131,6 +131,48 @@ serve(async (req) => {
 
     const expiresAt = new Date(Date.now() + (expires_in * 1000)).toISOString()
 
+    // Create an "Invoice Payment" product for this user in their Polar account
+    let polarProductId: string | null = null
+
+    if (organizationId) {
+      try {
+        console.log('Creating Invoice Payment product for organization:', organizationId)
+
+        const createProductResponse = await fetch('https://api.polar.sh/v1/products/', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: 'Invoice Payment',
+            description: 'One-time payment for invoice via SuperInvoice',
+            organization_id: organizationId,
+            prices: [{
+              type: 'one_time',
+              amount_type: 'custom',
+              price_currency: 'usd',
+              minimum_amount: 100,  // $1.00 minimum
+              preset_amount: 10000  // $100.00 default
+            }]
+          })
+        })
+
+        if (createProductResponse.ok) {
+          const productData = await createProductResponse.json()
+          polarProductId = productData.id
+          console.log('Created Polar product:', polarProductId)
+        } else {
+          const errorText = await createProductResponse.text()
+          console.error('Failed to create Polar product:', errorText)
+          // Continue anyway - product creation is optional, we can create it later
+        }
+      } catch (productError) {
+        console.error('Error creating Polar product:', productError)
+        // Continue anyway
+      }
+    }
+
     const { error: updateError } = await supabase
       .from('user_profiles')
       .update({
@@ -138,7 +180,8 @@ serve(async (req) => {
         polar_organization_id: organizationId,
         polar_access_token: access_token,
         polar_refresh_token: refresh_token,
-        polar_token_expires_at: expiresAt
+        polar_token_expires_at: expiresAt,
+        polar_product_id: polarProductId
       })
       .eq('id', userId)
 
@@ -147,7 +190,7 @@ serve(async (req) => {
       return Response.redirect('superinvoice://polar-callback?error=database_error')
     }
 
-    console.log('Polar connected successfully for user:', userId)
+    console.log('Polar connected successfully for user:', userId, 'with product:', polarProductId)
 
     // Redirect back to the app with success
     return Response.redirect('superinvoice://polar-callback?success=true')

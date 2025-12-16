@@ -124,6 +124,7 @@ function EstimateViewerScreen() {
   const [isEstimateReady, setIsEstimateReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   // Modal refs
   const sendEstimateModalRef = useRef<BottomSheetModal>(null);
@@ -529,40 +530,86 @@ function EstimateViewerScreen() {
   };
 
   const handleSendByEmail = async () => {
+    // 1. Validate client email exists
+    if (!estimate?.clients?.email) {
+      Alert.alert(
+        'Email Required',
+        'This client has no email address. Would you like to add one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Email',
+            onPress: () => {
+              sendEstimateModalRef.current?.dismiss();
+              router.push(`/(app)/(protected)/clients/edit/${estimate?.client_id}`);
+            }
+          }
+        ]
+      );
+      return;
+    }
 
     if (!estimate || !supabase || !user) {
-      Alert.alert('Error', 'Cannot send estimate - data not available');
+      Alert.alert('Error', 'Unable to send estimate at this time.');
       return;
     }
 
     try {
-      const uri = await exportEstimatePdf();
+      setIsSendingEmail(true);
+      sendEstimateModalRef.current?.dismiss(); // Close modal immediately for better UX
 
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Send Estimate via Email'
-      });
-
-      const sendResult = await EstimateSenderService.sendEstimateByEmail(
-        estimate.id,
+      // 2. Upload PDF to storage and create share link
+      const result = await EstimateShareService.generateShareLinkFromCanvas(
+        estimateId,
         user.id,
-        estimate.estimate_number || 'Unknown',
-        supabase
+        skiaEstimateRef,
+        30 // Expires in 30 days
       );
 
-      if (sendResult.success) {
-        // Update local state
-        setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
-        Alert.alert('Success', sendResult.message || 'Estimate sent successfully');
-      } else {
-        Alert.alert('Error', sendResult.error || 'Failed to send estimate');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to prepare estimate');
       }
 
-      sendEstimateModalRef.current?.dismiss();
-      
+      // 3. Call the edge function to send email
+      const { data, error } = await supabase.functions.invoke('send-estimate-email', {
+        body: {
+          estimateId: estimate.id,
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to send email');
+      }
+
+      // 4. Update local state
+      setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
+
+      // 5. Determine document terminology
+      const terminology = businessSettings?.estimate_terminology || 'estimate';
+      const documentLabel = terminology === 'quote' ? 'Quote' : 'Estimate';
+
+      // 6. Success message
+      Alert.alert(
+        `✉️ Email Sent!`,
+        `${documentLabel} ${estimate.estimate_number} has been sent to ${estimate.clients.email}`,
+        [{ text: 'OK' }]
+      );
+
+      // 7. Refresh estimate data
+      const refreshedEstimate = await fetchEstimateData(estimateId);
+      if (refreshedEstimate) {
+        setEstimate(refreshedEstimate);
+      }
+
     } catch (error: any) {
-      // Error in handleSendByEmail
-      Alert.alert('Error', `Failed to send estimate: ${error.message}`);
+      console.error('Error sending email:', error);
+      Alert.alert(
+        'Error Sending Email',
+        error.message || 'Failed to send email. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 

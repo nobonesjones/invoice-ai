@@ -59,6 +59,8 @@ function RootLayoutNav() {
 		const inAppProtectedRoute = segments[0] === "(app)" && segments[1] === "(protected)";
 		// Check if the current route is within the public group (for shared invoices)
 		const inPublicGroup = segments[0] === "(public)" || segments[0] === "shared" || segments[0] === "invoice" || segments[0] === "test";
+		// Check if the current route is the polar-callback deep link handler
+		const isPolarCallbackScreen = segments[0] === "polar-callback";
 		// Check if the current route is the welcome screen
 		const isWelcomeScreen =
 			segments[0] === "(app)" &&
@@ -126,7 +128,8 @@ function RootLayoutNav() {
       isPaymentOptionsScreen ||
       isPaymentRemindersScreen ||
       isSoftPaywallScreen ||
-      inPublicGroup
+      inPublicGroup ||
+      isPolarCallbackScreen
     );
 
     const shouldGoProtected = !!session && (
