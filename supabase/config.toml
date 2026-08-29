@@ -308,6 +308,16 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 s3_secret_key = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 
 [functions]
+
+# Public by design: Stripe redirects the browser here after hosted onboarding,
+# with no Authorization header to send. It holds no secrets and writes nothing.
+[functions."stripe-connect-return"]
+verify_jwt = false
+
+# Public by design: Stripe sends no Authorization header. The signature
+# check inside the function is what authenticates the request.
+[functions."stripe-webhook"]
+verify_jwt = false
 # [functions."*"]
 # # Uncomment to set the JWT verification secret.
 # # verify_jwt = false

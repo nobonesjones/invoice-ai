@@ -24,8 +24,7 @@ import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './I
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader'; // Import the skeleton loader
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { Mail, Link, FileText, X as XIcon } from 'lucide-react-native';
-import RNHTMLtoPDF from 'react-native-html-to-pdf'; // Added import
-import Share from 'react-native-share'; // Added import
+import { getRNHTMLtoPDF, getShare, canGeneratePdf } from '../../../utils/nativePdf';
 import { generateInvoiceHtml } from '../../../utils/generateInvoiceHtml'; // Corrected import path
 
 type ClientRow = Tables<'clients'>;
@@ -155,8 +154,8 @@ function InvoiceViewerScreen() {
         fileName: `Invoice-${invoice.invoice_number || 'details'}`,
         directory: 'Invoices',
       };
-      const file = await RNHTMLtoPDF.convert(pdfOptions);
-      await Share.open({ url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, title: 'Share Invoice PDF' });
+      const file = await getRNHTMLtoPDF().convert(pdfOptions);
+      await getShare().open({ url: Platform.OS === 'android' ? 'file://' + file.filePath : file.filePath, title: 'Share Invoice PDF' });
     } catch (error: any) { 
       console.error('Error in handleSendPDF:', error);
       Alert.alert('PDF Error', `Failed: ${error.message}`);

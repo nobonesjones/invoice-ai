@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Alert, Platform } from 'react-native';
-import RNHTMLtoPDF from 'react-native-html-to-pdf';
-import Share from 'react-native-share';
+import { getRNHTMLtoPDF, getShare, canGeneratePdf } from '../app/utils/nativePdf';
 import { generateInvoiceHtml, PdfInvoiceData } from '../app/utils/generateInvoiceHtml'; // Adjusted path
 import { InvoiceForTemplate, BusinessSettingsRow } from '../app/(app)/(protected)/invoices/InvoiceTemplateOne'; // Adjusted path
 
@@ -54,7 +53,7 @@ const useInvoiceSender = ({ invoice, businessSettings }: UseInvoiceSenderProps):
         base64: true,
       };
 
-      const pdf = await RNHTMLtoPDF.convert(options);
+      const pdf = await getRNHTMLtoPDF().convert(options);
 
       const shareOptions = {
         title: `Invoice ${invoice.invoice_number}`,
@@ -64,7 +63,7 @@ const useInvoiceSender = ({ invoice, businessSettings }: UseInvoiceSenderProps):
         subject: `Invoice ${invoice.invoice_number}`,
       };
 
-      await Share.open(shareOptions);
+      await getShare().open(shareOptions);
     } catch (e: any) {
       console.error('Failed to send PDF:', e);
       Alert.alert('Error', `Failed to generate or share PDF. ${e.message || ''}`);

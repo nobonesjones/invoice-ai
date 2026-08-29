@@ -43,6 +43,7 @@ import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { supabase } from '@/lib/supabase';
 import { useSupabase } from '@/context/supabase-provider';
+import { useStripeConnect, describeStripeStatus } from '@/hooks/useStripeConnect';
 
 interface PaymentOption {
   id?: string;
@@ -397,6 +398,11 @@ export default function PaymentOptionsScreen() {
   const [stripeSettingsChanged, setStripeSettingsChanged] = useState(false);
   const [isLoadingStripeSettings, setIsLoadingStripeSettings] = useState(false);
   const [isStripeActiveOnScreen, setIsStripeActiveOnScreen] = useState(false);
+
+  // The real connection state, read from Stripe rather than from our own
+  // stripe_enabled flag. stripe_enabled is only the user's preference — it can
+  // be true against an account that cannot take a penny.
+  const stripeConnect = useStripeConnect();
 
   const [isBankTransferEnabled, setIsBankTransferEnabled] = useState(false);
   const [bankDetails, setBankDetails] = useState('');
@@ -759,9 +765,31 @@ export default function PaymentOptionsScreen() {
     // setCurrentSnapIndex(index); 
   }, []);
 
-  const openStripeConnectionModal = () => {
-    console.log('Attempting to open Stripe Connection Modal...');
-    Alert.alert("Connect with Stripe", "This will open the Stripe connection flow. (Not yet implemented)");
+  const openStripeConnectionModal = async () => {
+    // Use the returned result, not stripeConnect.* — reading hook state straight
+    // after an await gives this render's stale values.
+    const result = await stripeConnect.connect();
+
+    if (result.error) {
+      Alert.alert('Stripe setup', result.error);
+      return;
+    }
+
+    if (result.canAcceptPayments) {
+      setIsStripeActiveOnScreen(true);
+      Alert.alert('Stripe connected', 'You can now take card payments on your invoices.');
+      return;
+    }
+
+    // Returning from the browser does not mean onboarding finished — Stripe
+    // sends the user back whenever they leave the flow, including via "Save for
+    // later".
+    if (result.connected) {
+      Alert.alert(
+        'Almost there',
+        'Stripe still needs a few details before you can take card payments. Tap Connect with Stripe again to finish.',
+      );
+    }
   };
 
   const handleSaveInvoiceTermsNotes = async () => {
@@ -936,11 +964,11 @@ export default function PaymentOptionsScreen() {
                 label="Stripe Payments"
                 onPress={handleStripePress}
                 rightContent={
-                  isLoadingScreenStatus ? (
+                  isLoadingScreenStatus || stripeConnect.loading ? (
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
                   ) : (
-                    <Text style={{ color: isStripeActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isStripeActiveOnScreen ? 'bold' : 'normal' }}>
-                      {isStripeActiveOnScreen ? 'On' : 'Off'}
+                    <Text style={{ color: stripeConnect.canAcceptPayments ? theme.primary : theme.mutedForeground, fontWeight: stripeConnect.canAcceptPayments ? 'bold' : 'normal' }}>
+                      {describeStripeStatus(stripeConnect)}
                     </Text>
                   )
                 }
@@ -1131,13 +1159,35 @@ export default function PaymentOptionsScreen() {
                   <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: '#000000' }}>most competitive</Text> in the world.</Text>
                 </View>
 
-                {!isStripeEnabled && (
+                {/* Gated on the real capability, not stripe_enabled — the local
+                    flag can be on against an account that cannot take money. */}
+                {!stripeConnect.canAcceptPayments && (
                   <TouchableOpacity
-                    style={[styles.connectButton, { backgroundColor: theme.primary }]} 
+                    style={[
+                      styles.connectButton,
+                      { backgroundColor: theme.primary },
+                      stripeConnect.connecting && styles.disabledButton,
+                    ]}
                     onPress={openStripeConnectionModal}
+                    disabled={stripeConnect.connecting}
                   >
-                    <Text style={styles.connectButtonText}>Connect with Stripe</Text>
+                    {stripeConnect.connecting ? (
+                      <ActivityIndicator size="small" color={theme.primaryForeground} />
+                    ) : (
+                      <Text style={styles.connectButtonText}>
+                        {stripeConnect.connected ? 'Finish Stripe setup' : 'Connect with Stripe'}
+                      </Text>
+                    )}
                   </TouchableOpacity>
+                )}
+
+                {stripeConnect.canAcceptPayments && (
+                  <View style={styles.importantStepsContainer}>
+                    <Text style={styles.importantStepsTitle}>Stripe connected</Text>
+                    <Text style={styles.importantStepText}>
+                      Card payments are on. Turn them on per invoice when you create one.
+                    </Text>
+                  </View>
                 )}
 
                 <TouchableOpacity
