@@ -52,18 +52,41 @@ serve(async (req) => {
       })
       .eq("user_id", user.id);
 
+    // Requirements carry who is blocked: 'stripe' means Stripe is verifying and
+    // the user can do nothing, 'user' means they must supply something. Counting
+    // all entries alike is what produces "finish onboarding" prompts for accounts
+    // where there is nothing left to finish.
+    const entries: any[] = account?.requirements?.entries ?? [];
+    const awaitingUser = entries.filter((e) => e.awaiting_action_from === "user");
+
+    // Capability status is 'active' | 'pending' | 'restricted' | 'unsupported'.
+    // Only 'active' can take money, but the other three mean very different
+    // things to a user and must not share one message.
+    let state: "active" | "verifying" | "action_required" | "unsupported";
+    if (canAcceptPayments) {
+      state = "active";
+    } else if (status === "unsupported") {
+      state = "unsupported";
+    } else if (awaitingUser.length > 0) {
+      state = "action_required";
+    } else {
+      // pending or restricted with nothing owed by the user: Stripe is working.
+      state = "verifying";
+    }
+
     return json({
       connected: true,
       canAcceptPayments,
       status,
+      state,
       // For rendering "Connected · sandbox" with the account id, mirroring how
       // the GoCardless row shows its creditor ID.
       accountId: options.stripe_account_id,
       livemode: account?.livemode ?? false,
-      // Present when Stripe still needs something. The app should send the user
-      // back through onboarding rather than trying to interpret these.
-      requirementsOutstanding:
-        (account?.requirements?.entries?.length ?? 0) > 0,
+      // Only requirements the USER can act on. Empty while Stripe verifies.
+      requirementsOutstanding: awaitingUser.length > 0,
+      requirementsAwaitingUser: awaitingUser.length,
+      requirementsAwaitingStripe: entries.length - awaitingUser.length,
     });
   } catch (err) {
     console.error("stripe-connect-status failed", err);
