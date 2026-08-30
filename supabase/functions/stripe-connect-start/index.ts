@@ -163,15 +163,48 @@ serve(async (req) => {
 });
 
 /**
- * ISO-3166 alpha-2 or nothing.
+ * business_settings.region holds whatever each surface happened to write, and
+ * they disagree. The mobile app's Tax & Currency screen stores the display NAME
+ * ("United Kingdom"), the website has stored ISO codes and, in older rows,
+ * continent names. None of that is Stripe-ready.
  *
- * Returned lowercase to match Stripe's v2 Accounts examples. "OTHER" — the
- * literal string signup stores for the "Other" option — is rejected by the
- * length check, but is named here because it is real data, not a hypothetical.
+ * Rather than migrate two surfaces' worth of historic rows, normalise here:
+ * accept an alpha-2 code or a known country name, reject everything else. This
+ * is the only place both surfaces pass through.
  */
+const COUNTRY_NAMES: Record<string, string> = {
+  "UNITED STATES": "us",
+  "UNITED STATES OF AMERICA": "us",
+  "USA": "us",
+  "CANADA": "ca",
+  "UNITED KINGDOM": "gb",
+  "GREAT BRITAIN": "gb",
+  "UK": "gb",
+  "AUSTRALIA": "au",
+  "GERMANY": "de",
+  "FRANCE": "fr",
+  "JAPAN": "jp",
+  "INDIA": "in",
+  "BRAZIL": "br",
+  "SOUTH AFRICA": "za",
+  "UNITED ARAB EMIRATES": "ae",
+  "UAE": "ae",
+  "IRELAND": "ie",
+  "NEW ZEALAND": "nz",
+  "SINGAPORE": "sg",
+  "NETHERLANDS": "nl",
+  "SPAIN": "es",
+  "ITALY": "it",
+};
+
 function normaliseCountry(region: string | null | undefined): string | null {
   if (!region) return null;
   const trimmed = region.trim().toUpperCase();
+
+  // "Other" is a real option in both signup flows and is not a country.
   if (trimmed === "OTHER") return null;
-  return /^[A-Z]{2}$/.test(trimmed) ? trimmed.toLowerCase() : null;
+
+  if (/^[A-Z]{2}$/.test(trimmed)) return trimmed.toLowerCase();
+
+  return COUNTRY_NAMES[trimmed] ?? null;
 }

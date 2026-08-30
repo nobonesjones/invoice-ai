@@ -781,14 +781,32 @@ export default function PaymentOptionsScreen() {
       return;
     }
 
+    if (!result.connected) return;
+
     // Returning from the browser does not mean onboarding finished — Stripe
     // sends the user back whenever they leave the flow, including via "Save for
-    // later".
-    if (result.connected) {
-      Alert.alert(
-        'Almost there',
-        'Stripe still needs a few details before you can take card payments. Tap Connect with Stripe again to finish.',
-      );
+    // later". And "not finished" is not one thing: card_payments activates
+    // asynchronously, so there is a window where Stripe has said "you're done"
+    // and the capability is still switching on. Telling someone to finish setup
+    // there sends them back to press a button that changes nothing.
+    switch (result.state) {
+      case 'verifying':
+        Alert.alert(
+          'Almost there',
+          "Stripe is verifying your details. This usually takes a few minutes and there's nothing else for you to do — we'll switch card payments on automatically.",
+        );
+        break;
+      case 'unsupported':
+        Alert.alert(
+          'Card payments unavailable',
+          'Stripe cannot enable card payments for this account. Contact Stripe support for the reason.',
+        );
+        break;
+      default:
+        Alert.alert(
+          'A few more details needed',
+          'Stripe still needs some information from you. Tap Connect with Stripe to pick up where you left off.',
+        );
     }
   };
 

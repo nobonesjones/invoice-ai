@@ -3,9 +3,38 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 
+/**
+ * supabase-js collapses every non-2xx from an edge function into the same
+ * generic "Edge Function returned a non-2xx status code", discarding the JSON
+ * body that says what actually went wrong. The real message is on
+ * error.context, which is a Response that has to be read.
+ */
+async function functionErrorMessage(error: any, fallback: string): Promise<string> {
+  try {
+    const body = await error?.context?.json?.();
+    if (body?.error) return body.error as string;
+  } catch {
+    // Body already consumed or not JSON — fall through.
+  }
+  return error?.message ?? fallback;
+}
+
+/**
+ * What the user should actually be told. Derived server-side from Stripe's
+ * four-valued capability status plus who each outstanding requirement is
+ * blocked on.
+ *
+ * "verifying" is the one that matters: Stripe says onboarding is done, the
+ * capability is still activating, and there is nothing the user can do. Showing
+ * them a "finish setup" button here sends them back to Stripe to press a button
+ * that changes nothing.
+ */
+export type ConnectPhase = "active" | "verifying" | "action_required" | "unsupported";
+
 export type StripeConnectState = {
   /** An account exists at Stripe for this user. Says nothing about whether it works. */
   connected: boolean;
+  state: ConnectPhase | null;
   /** The only flag that may gate a pay button: the account can actually take money. */
   canAcceptPayments: boolean;
   /** Raw capability status, e.g. 'active' | 'pending' | 'inactive'. */
@@ -17,6 +46,7 @@ export type StripeConnectResult = StripeConnectState & { error: string | null };
 
 const IDLE: StripeConnectState = {
   connected: false,
+  state: null,
   canAcceptPayments: false,
   status: null,
   requirementsOutstanding: false,
@@ -45,9 +75,10 @@ export function useStripeConnect() {
     setError(null);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('stripe-connect-status');
-      if (fnError) throw fnError;
+      if (fnError) throw new Error(await functionErrorMessage(fnError, 'Could not check your Stripe status.'));
       const next: StripeConnectState = {
         connected: !!data?.connected,
+        state: (data?.state as ConnectPhase) ?? null,
         canAcceptPayments: !!data?.canAcceptPayments,
         status: data?.status ?? null,
         requirementsOutstanding: !!data?.requirementsOutstanding,
@@ -73,7 +104,7 @@ export function useStripeConnect() {
     setError(null);
     try {
       const { data, error: fnError } = await supabase.functions.invoke('stripe-connect-start');
-      if (fnError) throw fnError;
+      if (fnError) throw new Error(await functionErrorMessage(fnError, 'Could not start Stripe setup.'));
       if (!data?.url) throw new Error('Stripe did not return an onboarding link.');
 
       // Derived from the `scheme` in app.json, so this stays correct if the app
@@ -96,9 +127,15 @@ export function useStripeConnect() {
   return { ...state, loading, connecting, error, connect, refresh };
 }
 
-/** Human-readable status for the payments screen. */
-export function describeStripeStatus(s: Pick<StripeConnectState, 'connected' | 'canAcceptPayments'>): string {
+/** Human-readable status for the payments screen row. */
+export function describeStripeStatus(
+  s: Pick<StripeConnectState, 'connected' | 'canAcceptPayments' | 'state'>,
+): string {
   if (s.canAcceptPayments) return 'On';
-  if (s.connected) return 'Setup incomplete';
-  return 'Off';
+  if (!s.connected) return 'Off';
+  switch (s.state) {
+    case 'verifying': return 'Verifying';
+    case 'unsupported': return 'Unavailable';
+    default: return 'Setup incomplete';
+  }
 }
