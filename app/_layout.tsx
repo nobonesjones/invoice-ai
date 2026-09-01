@@ -37,12 +37,6 @@ function RootLayoutNav() {
 		const inAppProtectedRoute = segments[0] === "(app)" && segments[1] === "(protected)";
 		// Check if the current route is within the public group (for shared invoices)
 		const inPublicGroup = segments[0] === "(public)" || segments[0] === "shared" || segments[0] === "invoice" || segments[0] === "test";
-		// Check if the current route is the welcome screen
-		const isWelcomeScreen =
-			segments[0] === "(app)" &&
-			segments.length === 2 &&
-			segments[1] === "welcome";
-			
 		// Check if the current route is the soft paywall screen
 		const isSoftPaywallScreen =
 			segments[0] === "(app)" &&
@@ -107,9 +101,9 @@ function RootLayoutNav() {
 			router.replace("/(app)/(protected)");
 		} else if (
 			!session &&
-			!(inAuthGroup || inAppAuthGroup || inPublicGroup || isWelcomeScreen || isSoftPaywallScreen)
+			!(inAuthGroup || inAppAuthGroup || inPublicGroup || isSoftPaywallScreen)
 		) {
-			// User is not logged in AND is not on any allowed auth/onboarding/welcome/public screen.
+			// User is not logged in AND is not on any allowed auth/onboarding/public screen.
 			// Redirect to the start of the onboarding flow.
 			// console.log("[Auth Effect] Redirecting to /(auth)/onboarding-1"); // Log redirection case 2
 			router.replace("/(auth)/onboarding-1");
