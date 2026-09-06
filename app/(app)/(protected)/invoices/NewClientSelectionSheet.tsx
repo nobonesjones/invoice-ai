@@ -298,6 +298,11 @@ const NewClientSelectionSheet = forwardRef<
 			snapPoints={snapPoints}
 			backdropComponent={renderBackdrop}
 			enableDynamicSizing={false}
+			keyboardBehavior="extend"
+			keyboardBlurBehavior="restore"
+			android_keyboardInputMode="adjustResize"
+			enablePanDownToClose={false}
+			enableContentPanningGesture={false}
 			onDismiss={() => {
 				console.log('[NewClientSelectionSheet] 📤 MODAL DISMISSED');
 				if (onClose) onClose();

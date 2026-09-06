@@ -61,6 +61,8 @@ function RootLayoutNav() {
 		const inPublicGroup = segments[0] === "(public)" || segments[0] === "shared" || segments[0] === "invoice" || segments[0] === "test";
 		// Check if the current route is the polar-callback deep link handler
 		const isPolarCallbackScreen = segments[0] === "polar-callback";
+		// Check if the current route is the gocardless-callback deep link handler
+		const isGoCardlessCallbackScreen = segments[0] === "gocardless-callback";
 		// Check if the current route is the welcome screen
 		const isWelcomeScreen =
 			segments[0] === "(app)" &&
@@ -129,7 +131,8 @@ function RootLayoutNav() {
       isPaymentRemindersScreen ||
       isSoftPaywallScreen ||
       inPublicGroup ||
-      isPolarCallbackScreen
+      isPolarCallbackScreen ||
+      isGoCardlessCallbackScreen
     );
 
     const shouldGoProtected = !!session && (

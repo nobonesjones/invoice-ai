@@ -292,10 +292,10 @@ export default function OnboardingScreen1() {
               <Pressable
                 onPress={handleAppleAuth}
                 style={[
-                  styles.authButton, 
-                  { 
-                    backgroundColor: theme.card, 
-                    borderColor: theme.border,
+                  styles.authButton,
+                  {
+                    backgroundColor: '#000000',
+                    borderColor: '#000000',
                     opacity: isAppleLoading ? 0.6 : 1
                   }
                 ]}
@@ -303,8 +303,8 @@ export default function OnboardingScreen1() {
               >
                 {isAppleLoading ? (
                   <>
-                    <ActivityIndicator color="#000000" />
-                    <Text style={[styles.authButtonText, { color: "#000000", marginLeft: 12 }]}>Signing in...</Text>
+                    <ActivityIndicator color="#FFFFFF" />
+                    <Text style={[styles.authButtonText, { color: "#FFFFFF", marginLeft: 12 }]}>Signing in...</Text>
                   </>
                 ) : (
                   <>

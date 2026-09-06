@@ -279,22 +279,75 @@ function InvoiceViewerScreen() {
       setIsSendingEmail(true);
       handleCloseSendModal(); // Close modal immediately for better UX
 
-      // 2. Upload PDF to storage and create share link
-      const result = await InvoiceShareService.generateShareLinkFromCanvas(
-        invoice.id,
-        user.id,
-        skiaInvoiceRef,
-        30 // Expires in 30 days
-      );
+      // 2. Generate PDF as base64 from Skia canvas
+      const image = skiaInvoiceRef.current?.makeImageSnapshot();
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to prepare invoice');
+      if (!image) {
+        throw new Error('Failed to create image snapshot from canvas');
       }
 
-      // 3. Call the edge function to send email
-      const { data, error } = await supabase.functions.invoke('send-invoice-email', {
+      // Encode to PNG bytes
+      const imageBytes = image.encodeToBytes();
+
+      // Convert to base64 for HTML embedding
+      const chunkSize = 8192;
+      let binaryString = '';
+
+      for (let i = 0; i < imageBytes.length; i += chunkSize) {
+        const chunk = imageBytes.slice(i, i + chunkSize);
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+
+      const base64String = btoa(binaryString);
+
+      // Convert image to PDF using Print API
+      const { uri: pdfUri } = await Print.printToFileAsync({
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              @page {
+                margin: 0;
+                size: ${image.width()}px ${image.height()}px;
+              }
+              body {
+                margin: 0;
+                padding: 0;
+                width: ${image.width()}px;
+                height: ${image.height()}px;
+                overflow: hidden;
+              }
+              .invoice-image {
+                width: ${image.width()}px;
+                height: ${image.height()}px;
+                display: block;
+                object-fit: none;
+              }
+            </style>
+          </head>
+          <body>
+            <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice" />
+          </body>
+          </html>
+        `,
+        base64: false,
+      });
+
+      // Read PDF file as base64
+      const pdfBase64 = await FileSystem.readAsStringAsync(pdfUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Clean up temporary PDF file
+      await FileSystem.deleteAsync(pdfUri, { idempotent: true });
+
+      // 3. Call the correct edge function to send email via Resend
+      const { data, error } = await supabase.functions.invoke('send-invoice', {
         body: {
-          invoiceId: invoice.id,
+          invoice_id: invoice.id,
+          pdf_base64: pdfBase64,
         }
       });
 

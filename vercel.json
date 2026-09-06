@@ -1,9 +1,13 @@
 {
-  "buildCommand": "npx expo export -p web",
+  "buildCommand": "npx expo export -p web && cp public/gocardless-callback.html dist/gocardless-callback.html",
   "outputDirectory": "dist",
   "framework": null,
 
   "rewrites": [
+    {
+      "source": "/gocardless-callback",
+      "destination": "/gocardless-callback.html"
+    },
     {
       "source": "/((?!_expo|.*\\.).*)",
       "destination": "/"

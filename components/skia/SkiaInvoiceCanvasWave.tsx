@@ -880,6 +880,7 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
   const visaIcon = useImage(require('../../assets/visaicon.png'));
   const mastercardIcon = useImage(require('../../assets/mastercardicon.png'));
   const paypalIcon = useImage(require('../../assets/paypalicon.png'));
+  const gocardlessIcon = useImage('https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png');
 
   // Wave design colors - using gradient shades of accent color
   const colors = {
@@ -1446,86 +1447,116 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
                   )}
                   
                   {/* Payment Methods - Dynamic based on invoice flags */}
-                  {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
+                  {(invoice?.gocardless_active || invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
                     <>
                       <Text x={27} y={paymentMethodsY} text="Payment Methods" font={scaledFonts.bodyBold} color={colors.text} />
-                      
-                      {/* Stripe Payment Method */}
-                      {invoice?.stripe_active && (
+
+                      {/* GoCardless Payment Method - FIRST as primary online payment */}
+                      {invoice?.gocardless_active && (
                         <>
-                          <Text x={27} y={paymentMethodsY + 14} text="Pay Online" font={scaledFonts.body} color={colors.text} />
-                          
-                          {/* Add Visa icon - inline with Pay Online text */}
-                          {visaIcon && (
-                            <Image 
-                              image={visaIcon} 
-                              x={85} 
-                              y={paymentMethodsY + 6} 
-                              width={24} 
-                              height={14} 
+                          <Text x={27} y={paymentMethodsY + 14} text="GoCardless" font={scaledFonts.body} color={colors.text} />
+
+                          {/* GoCardless icon inline with text */}
+                          {gocardlessIcon && (
+                            <Image
+                              image={gocardlessIcon}
+                              x={85}
+                              y={paymentMethodsY + 6}
+                              width={24}
+                              height={14}
                               fit="contain"
                             />
                           )}
-                          
-                          {/* Add Mastercard icon - inline with Pay Online text */}
-                          {mastercardIcon && (
-                            <Image 
-                              image={mastercardIcon} 
-                              x={110} 
-                              y={paymentMethodsY + 6} 
-                              width={24} 
-                              height={14} 
-                              fit="contain"
-                            />
-                          )}
-                          
-                          <Text x={27} y={paymentMethodsY + 26} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
+
+                          <Text x={27} y={paymentMethodsY + 26} text='Instant bank payment - click "Pay Now"' font={scaledFonts.body} color={colors.text} />
                         </>
                       )}
-                      
+
                       {/* PayPal Payment Method */}
                       {invoice?.paypal_active && (
                         <>
-                          <Text x={27} y={paymentMethodsY + (invoice?.stripe_active ? 40 : 14)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
-                          
+                          <Text x={27} y={paymentMethodsY + (invoice?.gocardless_active ? 40 : 14)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
+
                           {/* PayPal icon inline with text */}
                           {paypalIcon && (
-                            <Image 
-                              image={paypalIcon} 
-                              x={109} 
-                              y={paymentMethodsY + (invoice?.stripe_active ? 32 : 6)} 
-                              width={24} 
-                              height={16} 
+                            <Image
+                              image={paypalIcon}
+                              x={109}
+                              y={paymentMethodsY + (invoice?.gocardless_active ? 32 : 6)}
+                              width={24}
+                              height={16}
                               fit="contain"
                             />
                           )}
-                          
+
                           {(() => {
                             const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
                             const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
                             return (
-                              <Text 
+                              <Text
                                 key="paypal-email"
-                                x={27} 
-                                y={paymentMethodsY + (invoice?.stripe_active ? 52 : 26)} 
-                                text={constrainedEmail} 
-                                font={scaledFonts.body} 
-                                color={colors.text} 
+                                x={27}
+                                y={paymentMethodsY + (invoice?.gocardless_active ? 52 : 26)}
+                                text={constrainedEmail}
+                                font={scaledFonts.body}
+                                color={colors.text}
                               />
                             );
                           })()}
                         </>
                       )}
-                      
+
+                      {/* Stripe Payment Method */}
+                      {invoice?.stripe_active && (
+                        <>
+                          <Text x={27} y={paymentMethodsY + 14 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)} text="Pay Online" font={scaledFonts.body} color={colors.text} />
+
+                          {/* Add Visa icon - inline with Pay Online text */}
+                          {visaIcon && (
+                            <Image
+                              image={visaIcon}
+                              x={85}
+                              y={paymentMethodsY + 6 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)}
+                              width={24}
+                              height={14}
+                              fit="contain"
+                            />
+                          )}
+
+                          {/* Add Mastercard icon - inline with Pay Online text */}
+                          {mastercardIcon && (
+                            <Image
+                              image={mastercardIcon}
+                              x={110}
+                              y={paymentMethodsY + 6 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)}
+                              width={24}
+                              height={14}
+                              fit="contain"
+                            />
+                          )}
+
+                          <Text x={27} y={paymentMethodsY + 26 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
+                        </>
+                      )}
+
                       {/* Bank Transfer Payment Method */}
                       {invoice?.bank_account_active && (
                         <>
                           {(() => {
-                            const baseY = paymentMethodsY + 14 + 
-                              (invoice?.stripe_active ? 26 : 0) + 
-                              (invoice?.paypal_active ? 38 : 0);
+                            const baseY = paymentMethodsY + 14 +
+                              (invoice?.gocardless_active ? 26 : 0) +
+                              (invoice?.paypal_active ? 38 : 0) +
+                              (invoice?.stripe_active ? 26 : 0);
                             
-                            const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
+                            // Handle bank_details - convert object to string if needed
+                            let bankDetails = 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
+                            if (business?.bank_details) {
+                              if (typeof business.bank_details === 'string') {
+                                bankDetails = business.bank_details;
+                              } else if (typeof business.bank_details === 'object') {
+                                bankDetails = Object.values(business.bank_details).join('');
+                              }
+                            }
                             const bankLines = bankDetails.split('\n');
                             
                             return (
@@ -1675,86 +1706,116 @@ const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: an
                   )}
                   
                   {/* Payment Methods on last page */}
-                  {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
+                  {(invoice?.gocardless_active || invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
                     <>
                       <Text x={27} y={lastPagePaymentMethodsY} text="Payment Methods" font={scaledFonts.bodyBold} color={colors.text} />
-                      
-                      {/* Stripe Payment Method */}
-                      {invoice?.stripe_active && (
+
+                      {/* GoCardless Payment Method - FIRST as primary online payment */}
+                      {invoice?.gocardless_active && (
                         <>
-                          <Text x={27} y={lastPagePaymentMethodsY + 14} text="Pay Online" font={scaledFonts.body} color={colors.text} />
-                          
-                          {/* Add Visa icon - inline with Pay Online text */}
-                          {visaIcon && (
-                            <Image 
-                              image={visaIcon} 
-                              x={85} 
-                              y={lastPagePaymentMethodsY + 6} 
-                              width={24} 
-                              height={14} 
+                          <Text x={27} y={lastPagePaymentMethodsY + 14} text="GoCardless" font={scaledFonts.body} color={colors.text} />
+
+                          {/* GoCardless icon inline with text */}
+                          {gocardlessIcon && (
+                            <Image
+                              image={gocardlessIcon}
+                              x={85}
+                              y={lastPagePaymentMethodsY + 6}
+                              width={24}
+                              height={14}
                               fit="contain"
                             />
                           )}
-                          
-                          {/* Add Mastercard icon - inline with Pay Online text */}
-                          {mastercardIcon && (
-                            <Image 
-                              image={mastercardIcon} 
-                              x={110} 
-                              y={lastPagePaymentMethodsY + 6} 
-                              width={24} 
-                              height={14} 
-                              fit="contain"
-                            />
-                          )}
-                          
-                          <Text x={27} y={lastPagePaymentMethodsY + 26} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
+
+                          <Text x={27} y={lastPagePaymentMethodsY + 26} text='Instant bank payment - click "Pay Now"' font={scaledFonts.body} color={colors.text} />
                         </>
                       )}
-                      
+
                       {/* PayPal Payment Method */}
                       {invoice?.paypal_active && (
                         <>
-                          <Text x={27} y={lastPagePaymentMethodsY + (invoice?.stripe_active ? 40 : 14)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
-                          
+                          <Text x={27} y={lastPagePaymentMethodsY + (invoice?.gocardless_active ? 40 : 14)} text="Pay with PayPal" font={scaledFonts.body} color={colors.text} />
+
                           {/* PayPal icon inline with text */}
                           {paypalIcon && (
-                            <Image 
-                              image={paypalIcon} 
-                              x={109} 
-                              y={lastPagePaymentMethodsY + (invoice?.stripe_active ? 32 : 6)} 
-                              width={24} 
-                              height={16} 
+                            <Image
+                              image={paypalIcon}
+                              x={109}
+                              y={lastPagePaymentMethodsY + (invoice?.gocardless_active ? 32 : 6)}
+                              width={24}
+                              height={16}
                               fit="contain"
                             />
                           )}
-                          
+
                           {(() => {
                             const paypalEmail = business?.paypal_email || 'nobones@gmail.com';
                             const constrainedEmail = paypalEmail.length > 25 ? paypalEmail.substring(0, 22) + '...' : paypalEmail;
                             return (
-                              <Text 
+                              <Text
                                 key="paypal-email"
-                                x={27} 
-                                y={lastPagePaymentMethodsY + (invoice?.stripe_active ? 52 : 26)} 
-                                text={constrainedEmail} 
-                                font={scaledFonts.body} 
-                                color={colors.text} 
+                                x={27}
+                                y={lastPagePaymentMethodsY + (invoice?.gocardless_active ? 52 : 26)}
+                                text={constrainedEmail}
+                                font={scaledFonts.body}
+                                color={colors.text}
                               />
                             );
                           })()}
                         </>
                       )}
-                      
+
+                      {/* Stripe Payment Method */}
+                      {invoice?.stripe_active && (
+                        <>
+                          <Text x={27} y={lastPagePaymentMethodsY + 14 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)} text="Pay Online" font={scaledFonts.body} color={colors.text} />
+
+                          {/* Add Visa icon - inline with Pay Online text */}
+                          {visaIcon && (
+                            <Image
+                              image={visaIcon}
+                              x={85}
+                              y={lastPagePaymentMethodsY + 6 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)}
+                              width={24}
+                              height={14}
+                              fit="contain"
+                            />
+                          )}
+
+                          {/* Add Mastercard icon - inline with Pay Online text */}
+                          {mastercardIcon && (
+                            <Image
+                              image={mastercardIcon}
+                              x={110}
+                              y={lastPagePaymentMethodsY + 6 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)}
+                              width={24}
+                              height={14}
+                              fit="contain"
+                            />
+                          )}
+
+                          <Text x={27} y={lastPagePaymentMethodsY + 26 + (invoice?.gocardless_active ? 26 : 0) + (invoice?.paypal_active ? 38 : 0)} text="www.stripelink.com" font={scaledFonts.body} color={colors.text} />
+                        </>
+                      )}
+
                       {/* Bank Transfer Payment Method */}
                       {invoice?.bank_account_active && (
                         <>
                           {(() => {
-                            const baseY = lastPagePaymentMethodsY + 14 + 
-                              (invoice?.stripe_active ? 26 : 0) + 
-                              (invoice?.paypal_active ? 38 : 0);
+                            const baseY = lastPagePaymentMethodsY + 14 +
+                              (invoice?.gocardless_active ? 26 : 0) +
+                              (invoice?.paypal_active ? 38 : 0) +
+                              (invoice?.stripe_active ? 26 : 0);
                             
-                            const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
+                            // Handle bank_details - convert object to string if needed
+                            let bankDetails = 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
+                            if (business?.bank_details) {
+                              if (typeof business.bank_details === 'string') {
+                                bankDetails = business.bank_details;
+                              } else if (typeof business.bank_details === 'object') {
+                                bankDetails = Object.values(business.bank_details).join('');
+                              }
+                            }
                             const bankLines = bankDetails.split('\n');
                             
                             return (

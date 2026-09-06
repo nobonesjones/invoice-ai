@@ -1,5 +1,5 @@
 import React, { useMemo, forwardRef, RefObject } from 'react';
-import { Canvas, Rect, Text, Skia, matchFont, Circle, Paragraph, TextAlign, Image, useImage, Group } from '@shopify/react-native-skia';
+import { Canvas, Rect, Text, Skia, matchFont, Circle, Paragraph, TextAlign, Image, useImage, Group, Path, LinearGradient, vec, RoundedRect } from '@shopify/react-native-skia';
 import { View, StyleSheet, Platform } from 'react-native';
 import { formatCurrency } from '@/utils/currencyFormatter';
 
@@ -23,7 +23,7 @@ interface SkiaInvoiceCanvasProps {
   };
 }
 
-const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) => {
+const SkiaInvoiceCanvasWave = forwardRef((props: SkiaInvoiceCanvasProps, ref: any) => {
   const { 
     invoice, 
     business, 
@@ -32,7 +32,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     style,
     renderSinglePage,
     exportPageNumber,
-    accentColor = '#1E40AF', // Default navy
+    accentColor = '#8B5CF6', // Default purple for wave
     documentType = 'invoice', // Default to invoice for backward compatibility
     estimateTerminology = 'estimate', // Default to estimate
     displaySettings = {
@@ -79,8 +79,6 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   
   
   const canvasWidth = baseCanvasWidth;
-  // Reduce individual page section height for multi-page invoices to fit better in PDF
-  const canvasHeight = actualNeedsPagination ? 480 : baseCanvasHeight; // 80px shorter sections for multi-page
   
   // Pagination calculations with original spacing
   const itemRowHeight = 20;
@@ -89,9 +87,9 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   const firstItemY = 210;
   const footerStartY = 410; // Back to original footer position that looked good
   
-  // Calculate how many items fit on first page
+  // Calculate how many items fit on first page - now we have more room!
   const availableSpaceFirstPage = footerStartY - firstItemY;
-  const maxItemsFirstPage = Math.floor(availableSpaceFirstPage / itemRowHeight); // Restored proper calculation - was: 5
+  const maxItemsFirstPage = Math.floor(availableSpaceFirstPage / itemRowHeight); // More items will fit now
   
   // Get dynamic line items from invoice data
   const lineItems = invoice?.invoice_line_items || [
@@ -239,6 +237,16 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   // Calculate total canvas height for all pages
   const separatorHeight = actualNeedsPagination ? 30 * (totalPages - 1) : 0; // 30px separator between each page
   
+  // Reduce individual page section height for multi-page invoices to fit better in PDF
+  const canvasHeight = actualNeedsPagination ? 480 : baseCanvasHeight; // 80px shorter sections for multi-page
+  
+  // EXPORT TEST: Force single page if renderSinglePage is provided, otherwise use pagination logic
+  const totalCanvasHeight = exportPageNumber ? 560 : // Use export height if in export mode
+    (false ? baseCanvasHeight : // TEMP: Always enable pagination for testing
+    (actualNeedsPagination ? 
+      ((totalPages * canvasHeight) + separatorHeight + 30) : 
+      (totalItems >= 12 ? 800 : 560)));
+
   // EXPORT MODE: Override canvas dimensions and pagination for export
   let finalCanvasHeight = totalCanvasHeight;
   let exportFirstPageItems = actualFirstPageItems;
@@ -269,12 +277,6 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
     }
   }
   
-  // EXPORT TEST: Force single page if renderSinglePage is provided, otherwise use pagination logic
-  const totalCanvasHeight = exportPageNumber ? finalCanvasHeight : // Use export height if in export mode
-    (false ? baseCanvasHeight : // TEMP: Always enable pagination for testing
-    (actualNeedsPagination ? 
-      ((totalPages * canvasHeight) + separatorHeight + 30) : 
-      (totalItems >= 12 ? 800 : 560)));
   
 
   // Calculate discount values outside useMemo so they can be used in both places
@@ -324,7 +326,6 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         });
       } catch (e) {
         // Keep critical error logs
-        console.log(`[SkiaInvoiceCanvas] CRITICAL ERROR: Font system failure`, e);
         return null;
       }
     };
@@ -390,7 +391,6 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         });
       } catch (e) {
         // Keep critical error logs
-        console.log(`[SkiaInvoiceCanvas] CRITICAL ERROR: Scaled font system failure`, e);
         return null;
       }
     };
@@ -418,9 +418,9 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         textAlign: TextAlign.Right,
       })
       .pushStyle({ 
-        color: Skia.Color('white'), // Changed from black to white
+        color: Skia.Color('white'), // White text for wave header
         fontFamilies: ['Helvetica'], 
-        fontSize: 32, // Made even bigger for maximum impact
+        fontSize: 20, // Smaller than Modern's 32px
         fontStyle: { weight: 700 }
       })
       .addText(`${documentTitle}`)
@@ -582,7 +582,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${client?.tax_number ? `${business?.tax_name || 'Tax'}: ${client.tax_number}` : ''}`)
+      .addText(client?.tax_number ? `${business?.tax_name || 'Tax'}: ${client.tax_number}` : '')
       .build();
 
       // From section paragraphs
@@ -607,7 +607,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 16, // Made bigger for prominence in header
         fontStyle: { weight: 700 }
       })
-      .addText(`${displaySettings.show_business_name ? (business?.business_name || 'Hello mate') : ''}`)
+      .addText(displaySettings.show_business_name ? (business?.business_name || 'Hello mate') : '')
       .build();
 
       // Business address for header - single line, same width as INVOICE, smaller text
@@ -620,7 +620,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 8, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.replace(/\n/g, ', ') : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? business.business_address.replace(/\n/g, ', ') : '')
       .build();
 
       const businessAddress1Paragraph = Skia.ParagraphBuilder.Make({
@@ -632,7 +632,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[0] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[0] || '') : '')
       .build();
 
       const businessAddress2Paragraph = Skia.ParagraphBuilder.Make({
@@ -644,7 +644,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[1] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[1] || '') : '')
       .build();
 
       const businessAddress3Paragraph = Skia.ParagraphBuilder.Make({
@@ -656,7 +656,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[2] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[2] || '') : '')
       .build();
 
       const businessAddress4Paragraph = Skia.ParagraphBuilder.Make({
@@ -668,7 +668,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_address && business?.business_address ? business.business_address.split('\n')[3] || '' : ''}`)
+      .addText(displaySettings.show_business_address && business?.business_address ? (business.business_address.split('\n')[3] || '') : '')
       .build();
 
       const businessTaxNumberParagraph = Skia.ParagraphBuilder.Make({
@@ -680,7 +680,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         fontSize: 10, 
         fontStyle: { weight: 400 }
       })
-      .addText(`${displaySettings.show_business_tax_number && business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : ''}`)
+      .addText(displaySettings.show_business_tax_number && business?.tax_number ? `${business?.tax_name || 'Tax'}: ${business.tax_number}` : '')
       .build();
 
       // Totals paragraphs - separate labels and values for better spacing
@@ -869,7 +869,6 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
       };
     } catch (e) {
       // Keep critical error logs
-      console.log('[SkiaInvoiceCanvas] CRITICAL ERROR: Paragraph creation failed:', e);
       return null;
     }
   }, [scaledFonts, invoice, business, client, hasDiscount, discountAmount]);
@@ -883,15 +882,15 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   const paypalIcon = useImage(require('../../assets/paypalicon.png'));
   const gocardlessIcon = useImage('https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png');
 
-  // Modern design colors - Light black theme with header block
+  // Wave design colors - using gradient shades of accent color
   const colors = {
     background: '#fff',
     text: 'black',
     border: '#eee',
-    greenAccent: accentColor, // Dynamic accent color from props
+    waveGradientStart: accentColor, // Main accent color
+    waveGradientEnd: `${accentColor}CC`, // Slightly lighter shade
     shadow: '#f0f0f0',
-    orange: accentColor, // Dynamic accent color for logo instead of orange
-    headerBlock: '#333333' // Light black header block
+    lightAccent: accentColor ? `${accentColor}15` : '#8B5CF615' // Very light version of accent color (15% opacity in hex)
   };
 
   if (!scaledFonts.body || !scaledFonts.title || !scaledFonts.small) {
@@ -949,7 +948,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
   const singlePageNotesHeight = invoice?.notes ? (15 + (notesLineCount * 12) + 10) : 0; // Header + lines + spacing
   const paymentMethodsY = footerY + 20 + singlePageNotesHeight;
 
-  // Compute visible container width for single-page thumbnail contexts
+  // Compute the visible container width for centering the Canvas when using a higher internal render scale
   const visibleWidth = renderSinglePage !== undefined ? (baseCanvasWidth / renderScale) : baseCanvasWidth;
 
   return (
@@ -982,59 +981,81 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
         <Canvas 
           style={{ width: canvasWidth, height: totalCanvasHeight, backgroundColor: 'transparent' }} 
           ref={ref}
-          mode="default"
         >
           {/* === PAGE 1 === */}
           {/* Container background */}
           <Rect x={0} y={0} width={canvasWidth} height={canvasHeight} color={colors.background} />
           
-          {/* === MODERN HEADER BLOCK === */}
-          {/* Large header block spanning full width */}
-          <Rect x={0} y={0} width={canvasWidth} height={95} color={colors.headerBlock} />
-
-          {/* Slim turquoise accent line under header */}
-          <Rect x={0} y={95} width={canvasWidth} height={3} color={colors.greenAccent} />
+          {/* === WAVE HEADER DESIGN === */}
+          {/* Create seamless flowing wave with upward curve on left */}
+          <Path
+            path={(() => {
+              const path = Skia.Path.Make();
+              path.moveTo(0, 0);
+              path.lineTo(0, 15); // Start thicker on left
+              
+              // ONE seamless curve - LEFT SIDE curves UP (toward top)
+              path.cubicTo(
+                canvasWidth * 0.15, 5,   // Control point 1 - curve UP toward top (smaller y)
+                canvasWidth * 0.35, 90,  // Control point 2 - then dip down dramatically
+                canvasWidth * 0.6, 85    // Control point 3 - maintain depth
+              );
+              
+              path.cubicTo(
+                canvasWidth * 0.8, 80,   // Control point 4 - continue smooth flow
+                canvasWidth * 0.95, 75,  // Control point 5 - approach end smoothly
+                canvasWidth, 85          // End point - thick on right
+              );
+              
+              path.lineTo(canvasWidth, 0);
+              path.close();
+              return path;
+            })()}
+          >
+            <LinearGradient
+              start={vec(0, 0)}
+              end={vec(canvasWidth, 80)}
+              colors={[colors.waveGradientStart, colors.waveGradientEnd]}
+            />
+          </Path>
           
           {/* === HEADER SECTION === */}
           
-          {/* Left: Business Logo - Centered in header block */}
-          {displaySettings.show_business_logo && (
+          {/* Left: Business Logo - Adjusted down for wave */}
+          {displaySettings.show_business_logo ? (
             logoImage && business?.business_logo_url ? (
-            <Image 
-              image={logoImage} 
-              x={OFFSET_X + 27} 
-              y={15} 
-              width={65} 
-              height={65} 
-              fit="contain"
-            />
-          ) : (
-            <>
-              {/* Fallback logo with dynamic business initials - Centered in header block */}
-              <Circle cx={OFFSET_X + 59} cy={47} r={32} color={colors.orange} />
-              <Text 
-                x={OFFSET_X + (businessInitials.length === 1 ? 51 : 45)} 
-                y={56} 
-                text={businessInitials} 
-                font={businessInitials.length === 1 ? scaledFonts.title : scaledFonts.large} 
-                color="white" 
+              <Image 
+                image={logoImage} 
+                x={OFFSET_X + 27} 
+                y={35} // Moved down from 15 to accommodate wave
+                width={55} // Reduced from 65
+                height={55} // Reduced from 65
+                fit="contain"
               />
-            </>
+            ) : (
+              <>
+                {/* Fallback logo with dynamic business initials - Adjusted for wave */}
+                <Circle cx={OFFSET_X + 54} cy={62} r={27} color="white" /> {/* Smaller and moved down */}
+                <Text 
+                  x={OFFSET_X + (businessInitials.length === 1 ? 47 : 42)} 
+                  y={70} 
+                  text={businessInitials} 
+                  font={businessInitials.length === 1 ? scaledFonts.large : scaledFonts.medium} 
+                  color={colors.waveGradientStart} 
+                />
+              </>
             )
-          )}
+          ) : null}
           
           {/* Right: Invoice title and RIGHT-ALIGNED details using Paragraph */}
-          {/* Remove old text element - now using paragraph */}
-          
-          {/* INVOICE title in header with business name and address below */}
           {rightAlignedParagraphs && (
             <>
-              {/* Large right-aligned INVOICE title - Centered in header */}
-              <Paragraph paragraph={rightAlignedParagraphs.invoiceParagraph} x={OFFSET_X + 180} y={25} width={190} />
-              {/* Business name under INVOICE in header - Centered */}
-              <Paragraph paragraph={rightAlignedParagraphs.businessNameParagraph} x={OFFSET_X + 180} y={60} width={190} />
-              {/* Business address under business name in header - single line */}
-              <Paragraph paragraph={rightAlignedParagraphs.businessAddressHeaderParagraph} x={OFFSET_X + 180} y={75} width={190} />
+              {/* Smaller right-aligned INVOICE title - Moved up 10px */}
+              <Paragraph paragraph={rightAlignedParagraphs.invoiceParagraph} x={OFFSET_X + 180} y={15} width={190} />
+              {/* Business name under INVOICE in header - Moved up 10px */}
+              <Paragraph paragraph={rightAlignedParagraphs.businessNameParagraph} x={OFFSET_X + 180} y={40} width={190} />
+              {/* Business address under business name in header - Moved up 10px */}
+              <Paragraph paragraph={rightAlignedParagraphs.businessAddressHeaderParagraph} x={OFFSET_X + 180} y={60} width={190} />
             </>
           )}
           
@@ -1074,22 +1095,40 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
           )}
           
           {/* === LINE ITEMS TABLE - PAGE 1 === */}
-                     {/* Table header with green background - Full width */}
-           <Rect x={0} y={195} width={canvasWidth} height={18} color={colors.greenAccent} />
-           
-           {/* Table headers - PERFECTLY ALIGNED */}
-           {scaledFonts.bodyBold && (
-             <>
-           <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color="white" />
-           <Text x={descX + 30} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
-           <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color="white" />
-           <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
-             </>
-           )}
+          {/* Table container with rounded corners */}
+          <RoundedRect
+            x={tableX + 15}
+            y={193}
+            width={tableWidth - 35}
+            height={(actualFirstPageItems.length * scaledRowHeight) + 22} // Dynamic height based on items
+            r={8} // 8px border radius
+            color={colors.background}
+          />
           
-          {/* Line items for the first page */}
+          {/* Table header with accent color - rounded top corners */}
+          <RoundedRect
+            x={tableX + 15}
+            y={195}
+            width={tableWidth - 35}
+            height={18}
+            r={8} // Will only show top corners due to overlap
+            color={colors.waveGradientStart}
+          />
+          
+          {/* Table headers - PERFECTLY ALIGNED */}
+          {scaledFonts.bodyBold && (
+            <>
+          <Text x={qtyX + 20} y={208} text="QTY" font={scaledFonts.bodyBold} color="white" />
+          <Text x={descX + 15} y={208} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
+          <Text x={priceX + 65} y={208} text="PRICE" font={scaledFonts.bodyBold} color="white" />
+          <Text x={totalX + 62} y={208} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
+            </>
+          )}
+          
+          {/* Line items for the first page with alternating background colors */}
           {exportFirstPageItems.map((item: any, index: number) => {
             const rowY = scaledFirstItemY + (index * scaledRowHeight);
+            const isEvenRow = index % 2 === 0;
             
             // Create paragraphs with same font as business address (fontSize: 9, weight: 400)
             const qtyParagraph = Skia.ParagraphBuilder.Make({
@@ -1142,28 +1181,39 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
             
             return (
               <React.Fragment key={index}>
+                {/* Alternating row background */}
+                {!isEvenRow && (
+                  <Rect 
+                    x={tableX + 15} 
+                    y={rowY + 4} 
+                    width={tableWidth - 35} 
+                    height={scaledRowHeight - 1} 
+                    color={colors.lightAccent} 
+                  />
+                )}
+                
                 {/* QTY - center aligned in column using Paragraph */}
                 <Paragraph 
                   paragraph={qtyParagraph} 
                   x={qtyX + 10} 
-                  y={rowY + textOffsetY - 4} 
+                  y={rowY + textOffsetY - 2} 
                   width={30} 
                 />
                 
                 {/* Description - left aligned using Paragraph */}
                 <Paragraph 
                   paragraph={nameParagraph} 
-                  x={descX + 30} 
-                  y={rowY + textOffsetY - 4} 
+                  x={descX + 15} 
+                  y={rowY + textOffsetY - 2} 
                   width={160} 
                 />
                 
                 {/* Item description subtitle - smaller gray text */}
                 {item.item_description && (
                   <Text 
-                    x={descX + 30 + (item.item_name.length * 6) + 2} 
-                    y={rowY + textOffsetY + 3} 
-                    text={` (${item.item_description})`} 
+                    x={descX + 15 + (item.item_name.length * 6) + 2} 
+                    y={rowY + textOffsetY + 5} 
+                    text={item.item_description ? ` (${item.item_description})` : ''} 
                     font={scaledFonts.tiny} 
                     color="#999" 
                   />
@@ -1173,7 +1223,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                 <Paragraph 
                   paragraph={priceParagraph} 
                   x={priceX + 65} 
-                  y={rowY + textOffsetY - 4} 
+                  y={rowY + textOffsetY - 2} 
                   width={80} 
                 />
                 
@@ -1181,7 +1231,7 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                 <Paragraph 
                   paragraph={totalParagraph} 
                   x={totalX + 62} 
-                  y={rowY + textOffsetY - 4} 
+                  y={rowY + textOffsetY - 2} 
                   width={80} 
                 />
               </React.Fragment>
@@ -1222,16 +1272,34 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                   {/* Page separator line */}
                   <Rect x={0} y={pageYOffset - 15} width={canvasWidth} height={1} color="#ddd" />
                   
+                  {/* Table container with rounded corners */}
+                  <RoundedRect
+                    x={tableX + 15}
+                    y={pageHeaderY - 2}
+                    width={tableWidth - 35}
+                    height={(itemsThisPage.length * scaledRowHeight) + 22}
+                    r={8}
+                    color={colors.background}
+                  />
+                  
                   {/* Table header for this page */}
-                  <Rect x={tableX + 15} y={pageHeaderY} width={tableWidth - 35} height={18} color={colors.greenAccent} />
+                  <RoundedRect
+                    x={tableX + 15}
+                    y={pageHeaderY}
+                    width={tableWidth - 35}
+                    height={18}
+                    r={8}
+                    color={colors.waveGradientStart}
+                  />
                   <Text x={qtyX + 20} y={pageHeaderY + 13} text="QTY" font={scaledFonts.bodyBold} color="white" />
-                  <Text x={descX + 30} y={pageHeaderY + 13} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
+                  <Text x={descX + 15} y={pageHeaderY + 13} text="DESCRIPTION" font={scaledFonts.bodyBold} color="white" />
                   <Text x={priceX + 65} y={pageHeaderY + 13} text="PRICE" font={scaledFonts.bodyBold} color="white" />
                   <Text x={totalX + 62} y={pageHeaderY + 13} text="TOTAL" font={scaledFonts.bodyBold} color="white" />
                   
                   {/* Line items for this page */}
                   {itemsThisPage.map((item: any, index: number) => {
                     const rowY = pageFirstItemY + (index * scaledRowHeight);
+                    const isEvenRow = index % 2 === 0;
                     
                     // Create paragraphs for this page's items
                     const qtyParagraph = Skia.ParagraphBuilder.Make({
@@ -1284,25 +1352,36 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                     
                     return (
                       <React.Fragment key={`page-${currentPage}-item-${index}`}>
-                        <Paragraph paragraph={qtyParagraph} x={qtyX + 10} y={rowY + textOffsetY - 4} width={30} />
-                        <Paragraph paragraph={nameParagraph} x={descX + 30} y={rowY + textOffsetY - 4} width={160} />
+                        {/* Alternating row background */}
+                        {!isEvenRow && (
+                          <Rect 
+                            x={tableX + 15} 
+                            y={rowY + 4} 
+                            width={tableWidth - 35} 
+                            height={scaledRowHeight - 1} 
+                            color={colors.lightAccent} 
+                          />
+                        )}
+                        
+                        <Paragraph paragraph={qtyParagraph} x={qtyX + 10} y={rowY + textOffsetY - 2} width={30} />
+                        <Paragraph paragraph={nameParagraph} x={descX + 15} y={rowY + textOffsetY - 2} width={160} />
                         {item.item_description && (
                           <Text 
-                            x={descX + 30 + (item.item_name.length * 6) + 2} 
-                            y={rowY + textOffsetY + 3} 
-                            text={` (${item.item_description})`} 
+                            x={descX + 15 + (item.item_name.length * 6) + 2} 
+                            y={rowY + textOffsetY + 5} 
+                            text={item.item_description ? ` (${item.item_description})` : ''} 
                             font={scaledFonts.tiny} 
                             color="#999" 
                           />
                         )}
-                        <Paragraph paragraph={priceParagraph} x={priceX + 65} y={rowY + textOffsetY - 4} width={80} />
-                        <Paragraph paragraph={totalParagraph} x={totalX + 62} y={rowY + textOffsetY - 4} width={80} />
+                        <Paragraph paragraph={priceParagraph} x={priceX + 65} y={rowY + textOffsetY - 2} width={80} />
+                        <Paragraph paragraph={totalParagraph} x={totalX + 62} y={rowY + textOffsetY - 2} width={80} />
                       </React.Fragment>
                     );
                   })}
                   
                   {/* Page number */}
-                  <Text x={canvasWidth - 65} y={pageYOffset + canvasHeight - 35} text={`Page ${currentPage}`} font={scaledFonts.bodyBold} color="black" />
+                  <Text x={canvasWidth - 65} y={pageYOffset + canvasHeight - 35} text={`Page ${currentPage || 1}`} font={scaledFonts.bodyBold} color="black" />
                 </React.Fragment>
               );
               
@@ -1468,18 +1547,10 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                               (invoice?.gocardless_active ? 26 : 0) +
                               (invoice?.paypal_active ? 38 : 0) +
                               (invoice?.stripe_active ? 26 : 0);
-
-                            // Handle bank_details - convert object to string if needed
-                            let bankDetails = 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
-                            if (business?.bank_details) {
-                              if (typeof business.bank_details === 'string') {
-                                bankDetails = business.bank_details;
-                              } else if (typeof business.bank_details === 'object') {
-                                bankDetails = Object.values(business.bank_details).join('');
-                              }
-                            }
+                            
+                            const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
                             const bankLines = bankDetails.split('\n');
-
+                            
                             return (
                               <>
                                 <Text x={27} y={baseY} text="Bank Transfer" font={scaledFonts.bodyBold} color="black" />
@@ -1504,6 +1575,17 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                       )}
                     </>
                   )}
+                  
+                  
+                  {/* Totals section with rounded corners */}
+                  <RoundedRect
+                    x={totalX - 30}
+                    y={footerY + 10}
+                    width={134}
+                    height={(hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 40 : 0) + 25}
+                    r={8}
+                    color={colors.shadow}
+                  />
                   
                   {/* Totals section for single page */}
                   {rightAlignedParagraphs ? (
@@ -1538,15 +1620,23 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                     </>
                   ) : null}
                   
-                  {/* Grand Total Box with green background - positioned after Balance Due line if present */}
-                  <Rect x={totalX - 26} y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
+                  {/* Grand Total Box with wave gradient background - positioned after Balance Due line if present */}
+                  <RoundedRect
+                    x={totalX - 26}
+                    y={footerY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)}
+                    width={129}
+                    height={20}
+                    r={8}
+                    color={colors.waveGradientStart}
+                  />
                   
                   {rightAlignedParagraphs ? (
                     <>
                       <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 24} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 34} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 36} y={footerY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                     </>
                   ) : null}
+                  
                 </>
               );
             } else {
@@ -1708,18 +1798,10 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                               (invoice?.gocardless_active ? 26 : 0) +
                               (invoice?.paypal_active ? 38 : 0) +
                               (invoice?.stripe_active ? 26 : 0);
-
-                            // Handle bank_details - convert object to string if needed
-                            let bankDetails = 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
-                            if (business?.bank_details) {
-                              if (typeof business.bank_details === 'string') {
-                                bankDetails = business.bank_details;
-                              } else if (typeof business.bank_details === 'object') {
-                                bankDetails = Object.values(business.bank_details).join('');
-                              }
-                            }
+                            
+                            const bankDetails = business?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA';
                             const bankLines = bankDetails.split('\n');
-
+                            
                             return (
                               <>
                                 <Text x={27} y={baseY} text="Bank Transfer" font={scaledFonts.bodyBold} color="black" />
@@ -1744,6 +1826,16 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                       )}
                     </>
                   )}
+                  
+                  {/* Totals section with rounded corners on last page */}
+                  <RoundedRect
+                    x={totalX - 30}
+                    y={lastPageFooterY + 10}
+                    width={134}
+                    height={(hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 40 : 0) + 25}
+                    r={8}
+                    color={colors.shadow}
+                  />
                   
                   {/* Totals section on last page */}
                   {rightAlignedParagraphs ? (
@@ -1778,13 +1870,20 @@ const SkiaInvoiceCanvasModern = forwardRef((props: SkiaInvoiceCanvasProps, ref: 
                     </>
                   ) : null}
                   
-                  {/* Grand Total Box with green background on last page */}
-                  <Rect x={totalX - 26} y={lastPageFooterY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={127} height={20} color={colors.greenAccent} />
+                  {/* Grand Total Box with wave gradient background on last page */}
+                  <RoundedRect
+                    x={totalX - 26}
+                    y={lastPageFooterY + (hasDiscount ? 95 : 75) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)}
+                    width={129}
+                    height={20}
+                    r={8}
+                    color={colors.waveGradientStart}
+                  />
                   
                   {rightAlignedParagraphs ? (
                     <>
                       <Paragraph paragraph={rightAlignedParagraphs.totalLabelParagraph} x={totalX - 24} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={70} />
-                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 34} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
+                      <Paragraph paragraph={rightAlignedParagraphs.totalValueParagraph} x={totalX + 36} y={lastPageFooterY + (hasDiscount ? 100 : 80) + (rightAlignedParagraphs?.paidLabelParagraph ? 25 : 10)} width={65} />
                     </>
                   ) : null}
                 </>
@@ -1817,4 +1916,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default SkiaInvoiceCanvasModern;
+export default SkiaInvoiceCanvasWave;

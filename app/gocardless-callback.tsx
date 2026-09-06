@@ -50,18 +50,18 @@ export default function GoCardlessCallback() {
       }
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/gocardless-exchange-token`,
+        `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/gocardless-payments-oauth`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.session.access_token}`,
-            'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
           },
           body: JSON.stringify({
+            action: 'exchange-code',
             code: params.code,
-            state: params.state || '',
-            environment: 'sandbox', // TODO: Make this configurable
+            redirect_uri: 'https://getsuperinvoice.com/gocardless-callback',
+            environment: 'sandbox',
           }),
         }
       );

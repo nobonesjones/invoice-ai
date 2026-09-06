@@ -132,6 +132,7 @@ interface InvoiceFormData {
   bank_account_active_on_invoice: boolean;
   paypal_active_on_invoice: boolean;
   stripe_active_on_invoice: boolean; // Added for Stripe
+  gocardless_active_on_invoice: boolean; // Added for GoCardless
 }
 
 interface InvoiceLineItem {
@@ -339,6 +340,7 @@ export default function CreateInvoiceScreen() {
       bank_account_active_on_invoice: false,
       paypal_active_on_invoice: false,
       stripe_active_on_invoice: false, // Initialize in defaultValues for react-hook-form
+      gocardless_active_on_invoice: false, // Initialize for GoCardless
     }
   });
 
@@ -663,6 +665,7 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
+        gocardless_active: formData.gocardless_active_on_invoice,
         // Add payment information
         paid_amount: currentTotalPaid,
         payment_date: currentTotalPaid > 0 ? new Date().toISOString() : null,
@@ -673,6 +676,13 @@ export default function CreateInvoiceScreen() {
           accent_color: defaultAccentColor,
         }),
       };
+
+      console.log('[DEBUG] Saving invoice with payment methods:', {
+        stripe_active: invoiceData.stripe_active,
+        paypal_active: invoiceData.paypal_active,
+        bank_account_active: invoiceData.bank_account_active,
+        gocardless_active: invoiceData.gocardless_active,
+      });
 
       let savedInvoice;
 
@@ -866,6 +876,7 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
+        gocardless_active: formData.gocardless_active_on_invoice,
       };
 
       let savedInvoice;
@@ -1018,8 +1029,16 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice || false,
         paypal_active: formData.paypal_active_on_invoice || false,
         bank_account_active: formData.bank_account_active_on_invoice || false,
+        gocardless_active: formData.gocardless_active_on_invoice || false,
       };
-      
+
+      console.log('[DEBUG] Preview payment methods:', {
+        stripe_active: enhancedFormData.stripe_active,
+        paypal_active: enhancedFormData.paypal_active,
+        bank_account_active: enhancedFormData.bank_account_active,
+        gocardless_active: enhancedFormData.gocardless_active,
+      });
+
       // Set preview data and open modal
       setPreviewData({
         invoiceData: enhancedFormData,
@@ -1474,7 +1493,7 @@ export default function CreateInvoiceScreen() {
 
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
-  const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
+  const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account' | 'gocardless', newValue: boolean) => {
     
     // Block all toggles if payment options are still loading
     if (paymentOptionsLoading) {
@@ -1505,6 +1524,9 @@ export default function CreateInvoiceScreen() {
       } else if (methodKey === 'bank_account') {
         isEnabledInSettings = paymentOptionsData?.bank_transfer_enabled === true;
         settingName = 'Bank Transfer';
+      } else if (methodKey === 'gocardless') {
+        isEnabledInSettings = paymentOptionsData?.gocardless_connected === true;
+        settingName = 'GoCardless';
       }
       
       
@@ -1600,10 +1622,17 @@ export default function CreateInvoiceScreen() {
       setValue('totalAmount', invoiceData.total_amount || 0);
       
       // 3. Populate payment method toggles
+      console.log('[DEBUG] Loading invoice payment methods from DB:', {
+        stripe_active: invoiceData.stripe_active,
+        paypal_active: invoiceData.paypal_active,
+        bank_account_active: invoiceData.bank_account_active,
+        gocardless_active: invoiceData.gocardless_active,
+      });
       setValue('stripe_active_on_invoice', invoiceData.stripe_active || false);
       setValue('paypal_active_on_invoice', invoiceData.paypal_active || false);
       setValue('bank_account_active_on_invoice', invoiceData.bank_account_active || false);
-      
+      setValue('gocardless_active_on_invoice', invoiceData.gocardless_active || false);
+
       // 4. Set client information
       if (invoiceData.clients) {
         const clientInfo = {
@@ -1976,12 +2005,29 @@ export default function CreateInvoiceScreen() {
             />
             <ActionRow
               label={paymentOptionsLoading ? "Bank Transfer (Loading...)" : "Bank Transfer"}
-              icon={Landmark} 
-              themeColors={themeColors} 
+              icon={Landmark}
+              themeColors={themeColors}
               showSwitch={true}
               switchValue={getValues('bank_account_active_on_invoice')}
               onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
               onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active_on_invoice'))}
+              disabled={paymentOptionsLoading}
+            />
+            <ActionRow
+              label={
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ color: paymentOptionsLoading ? themeColors.mutedForeground : themeColors.foreground, fontSize: 16 }}>
+                    GoCardless {paymentOptionsLoading ? '(Loading...)' : ''}
+                  </Text>
+                  <Image source={{ uri: 'https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png' }} style={[iconStyle, paymentOptionsLoading && {opacity: 0.5}]} />
+                </View>
+              }
+              icon={Landmark}
+              themeColors={themeColors}
+              showSwitch={true}
+              switchValue={getValues('gocardless_active_on_invoice')}
+              onSwitchChange={(newValue) => handlePaymentMethodToggle('gocardless', newValue)}
+              onPress={() => handlePaymentMethodToggle('gocardless', !getValues('gocardless_active_on_invoice'))}
               disabled={paymentOptionsLoading}
             />
           </FormSection>

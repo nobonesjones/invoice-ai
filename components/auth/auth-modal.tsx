@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
+  Pressable,
   Platform,
   Alert,
   Image,
@@ -334,26 +335,32 @@ export function AuthModal({
                     <Text style={[styles.planBadgeText, { color: theme.primary }]}>PRO PLAN</Text>
                   </View>
                 )}
-                <Button
+                <Pressable
                   onPress={handleAppleAuth}
                   style={[
                     styles.choiceButton,
-                    styles.appleButton,
-                    { backgroundColor: '#000000', borderColor: '#000000' }
+                    {
+                      backgroundColor: '#000000',
+                      borderColor: '#000000',
+                      opacity: isAppleLoading ? 0.6 : 1
+                    }
                   ]}
                   disabled={isAppleLoading}
                 >
                   {isAppleLoading ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <>
+                      <ActivityIndicator color="#FFFFFF" />
+                      <Text style={[styles.appleButtonText, { color: "#FFFFFF", marginLeft: 12 }]}>Signing in...</Text>
+                    </>
                   ) : (
                     <>
-                      <Ionicons name="logo-apple" size={24} color="#FFFFFF" style={styles.appleIcon} />
-                      <Text style={[styles.appleButtonText, { color: "#FFFFFF" }]}>
-                        Sign In With Apple
-                      </Text>
+                      <View style={styles.appleIconContainer}>
+                        <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
+                      </View>
+                      <Text style={[styles.appleButtonText, { color: "#FFFFFF" }]}>Sign In With Apple</Text>
                     </>
                   )}
-                </Button>
+                </Pressable>
                 {/* Google Sign-In temporarily disabled */}
                 <Button
                   onPress={handleContinueWithEmail}
@@ -534,10 +541,17 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   appleButton: {
     backgroundColor: '#000000',
+    borderColor: '#000000',
     borderWidth: 0,
   },
   appleIcon: {
     marginRight: 12,
+  },
+  appleIconContainer: {
+    marginRight: 10,
+    position: 'relative',
+    left: -3,
+    top: -3,
   },
   googleIcon: {
     width: 20,

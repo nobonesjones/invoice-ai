@@ -1,6 +1,6 @@
 import React, { forwardRef, useMemo, useCallback, useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, TextInput, ActivityIndicator, FlatList } from 'react-native'; 
-import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet'; 
+import { View, Text, StyleSheet, TouchableOpacity, Platform, TextInput, ActivityIndicator } from 'react-native';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
@@ -393,7 +393,7 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
           </View>
 
           {isOpen ? (
-            <FlatList
+            <BottomSheetFlatList
               key={listRenderKey}
               data={filteredSavedItems}
               renderItem={({ item }) => (

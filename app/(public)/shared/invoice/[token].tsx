@@ -33,6 +33,7 @@ export default function SharedInvoiceView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -177,14 +178,59 @@ export default function SharedInvoiceView() {
     try {
       const currentUrl = window?.location?.href || `https://your-app.com/shared/invoice/${token}`;
       await Clipboard.setStringAsync(currentUrl);
-      
+
       // Track copy link event
       await trackEvent('copy_link');
-      
+
       Alert.alert('Success', 'Invoice link copied to clipboard!');
     } catch (err) {
       console.error('Error copying link:', err);
       Alert.alert('Error', 'Failed to copy link. Please try again.');
+    }
+  };
+
+  const handlePayNow = async () => {
+    if (!invoiceData) return;
+
+    // Check if GoCardless is enabled for this invoice
+    if (!invoiceData.invoice.gocardless_active) {
+      Alert.alert('Payment Not Available', 'Online payment is not enabled for this invoice.');
+      return;
+    }
+
+    setPaying(true);
+
+    try {
+      const response = await fetch(
+        'https://wzpuzqzsjdizmpiobsuo.supabase.co/functions/v1/gocardless-create-payment',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.EXPO_PUBLIC_ANON_KEY!,
+          },
+          body: JSON.stringify({
+            invoice_id: invoiceData.invoice.id,
+            return_url: `superinvoice://payment-complete?invoice_id=${invoiceData.invoice.id}`,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initiate payment');
+      }
+
+      if (data.authorisation_url) {
+        // Open in browser - customer completes bank payment there
+        await Linking.openURL(data.authorisation_url);
+      }
+    } catch (err) {
+      console.error('[GoCardless] Payment error:', err);
+      Alert.alert('Payment Error', err instanceof Error ? err.message : 'Failed to initiate payment. Please try again.');
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -208,6 +254,7 @@ export default function SharedInvoiceView() {
       stripe_active: data.invoice.stripe_active,
       bank_account_active: data.invoice.bank_account_active,
       paypal_active: data.invoice.paypal_active,
+      gocardless_active: data.invoice.gocardless_active,
       created_at: data.invoice.created_at,
       updated_at: data.invoice.updated_at,
       due_date_option: data.invoice.due_date_option,
@@ -341,6 +388,23 @@ export default function SharedInvoiceView() {
                 {downloadLoading ? 'Downloading...' : 'Download'}
               </Text>
             </Button>
+
+            {invoiceData.invoice.gocardless_active && invoiceData.invoice.status !== 'paid' && (
+              <Button
+                variant="default"
+                size="sm"
+                onPress={handlePayNow}
+                disabled={paying}
+                style={{ backgroundColor: theme.primary }}
+              >
+                {paying ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : null}
+                <Text style={{ marginLeft: paying ? 4 : 0, color: 'white', fontWeight: '600' }}>
+                  {paying ? 'Processing...' : `Pay £${Number(invoiceData.invoice.total_amount).toFixed(2)}`}
+                </Text>
+              </Button>
+            )}
           </View>
         </View>
 

@@ -26,6 +26,7 @@ export interface InvoiceForTemplate {
   stripe_active: boolean;
   bank_account_active: boolean;
   paypal_active: boolean;
+  gocardless_active: boolean;
   created_at: string;
   updated_at: string;
   due_date_option?: string | null;
@@ -122,7 +123,7 @@ const calculateTaxAmount = (invoice: InvoiceForTemplate) => {
   return 0;
 };
 
-const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({ 
+const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
   invoice,
   clientName,
   businessSettings,
@@ -136,6 +137,13 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
     highlightBackground: '#f0f8ff',
     headerText: 'black',
   };
+
+  console.log('[DEBUG] InvoiceTemplateOne received invoice payment methods:', {
+    stripe_active: invoice?.stripe_active,
+    paypal_active: invoice?.paypal_active,
+    bank_account_active: invoice?.bank_account_active,
+    gocardless_active: invoice?.gocardless_active,
+  });
 
   if (!invoice) {
     return (
@@ -250,10 +258,33 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
             <Text style={styles.paymentTermsBody}>{invoice.payment_terms}</Text>
           </View>
           )}
-          {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active) && (
+          {(invoice?.stripe_active || invoice?.paypal_active || invoice?.bank_account_active || invoice?.gocardless_active) && (
           <View style={styles.footerBlock}>
             <Text style={styles.paymentTermsHeader}>Payment Methods</Text>
-            
+
+            {/* GoCardless - Show FIRST as primary online payment */}
+            {invoice?.gocardless_active && (
+              <View style={styles.paymentMethodItem}>
+                <View style={styles.paymentMethodRow}>
+                  <Text style={styles.paymentMethodText}>GoCardless</Text>
+                  <Image source={{ uri: 'https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png' }} style={styles.paymentIcon} />
+                </View>
+                <Text style={styles.paymentMethodText}>Instant bank payment - click "Pay Now" button below</Text>
+              </View>
+            )}
+
+            {invoice?.paypal_active && (
+              <View style={styles.paymentMethodItem}>
+                <View style={styles.paymentMethodRow}>
+                  <Text style={styles.paymentMethodText}>Pay with PayPal</Text>
+                  <Image source={require('../../../../assets/paypalicon.png')} style={styles.paymentIcon} />
+                </View>
+                <Text style={styles.paymentMethodText}>
+                  {businessSettings?.paypal_email || 'nobones@gmail.com'}
+                </Text>
+              </View>
+            )}
+
             {invoice?.stripe_active && (
               <View style={styles.paymentMethodItem}>
                 <View style={styles.paymentMethodRow}>
@@ -266,24 +297,16 @@ const InvoiceTemplateOne: React.FC<InvoiceTemplateOneProps> = ({
                 <Text style={styles.paymentMethodText}>www.stripelink.com</Text>
               </View>
             )}
-            
-            {invoice?.paypal_active && (
-              <View style={styles.paymentMethodItem}>
-                <View style={styles.paymentMethodRow}>
-                  <Text style={styles.paymentMethodText}>Pay with PayPal</Text>
-                  <Image source={require('../../../../assets/paypalicon.png')} style={styles.paymentIcon} />
-                </View>
-                <Text style={styles.paymentMethodText}>
-                  {businessSettings?.paypal_email || 'nobones@gmail.com'}
-                </Text>
-              </View>
-            )}
-            
+
             {invoice?.bank_account_active && (
               <View style={styles.paymentMethodItem}>
                 <Text style={styles.paymentMethodText}>Bank Transfer</Text>
                 <Text style={styles.paymentMethodText}>
-                  {businessSettings?.bank_details || 'Bank 1\n1 2457 5 6 5 500598 32\nU EA'}
+                  {businessSettings?.bank_details && typeof businessSettings.bank_details === 'string'
+                    ? businessSettings.bank_details
+                    : businessSettings?.bank_details && typeof businessSettings.bank_details === 'object'
+                    ? Object.values(businessSettings.bank_details as any).join('')
+                    : 'Bank 1\n1 2457 5 6 5 500598 32\nU EA'}
                 </Text>
               </View>
             )}
