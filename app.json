@@ -11,7 +11,6 @@
       "**/*"
     ],
     "newArchEnabled": false,
-    "jsEngine": "jsc",
     "plugins": [
       "expo-router",
       "expo-secure-store",
