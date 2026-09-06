@@ -63,6 +63,10 @@ function RootLayoutNav() {
 		const isPolarCallbackScreen = segments[0] === "polar-callback";
 		// Check if the current route is the gocardless-callback deep link handler
 		const isGoCardlessCallbackScreen = segments[0] === "gocardless-callback";
+		// Landing point for Stripe Connect onboarding. Exempt for the same reason as
+		// the callbacks above: it is reached by an external redirect, and bouncing it
+		// to (protected) would drop the user on the invoice list instead of payments.
+		const isStripeConnectScreen = segments[0] === "stripe-connect";
 		// Check if the current route is the soft paywall screen
 		const isSoftPaywallScreen =
 			segments[0] === "(app)" &&
@@ -126,7 +130,8 @@ function RootLayoutNav() {
       isSoftPaywallScreen ||
       inPublicGroup ||
       isPolarCallbackScreen ||
-      isGoCardlessCallbackScreen
+      isGoCardlessCallbackScreen ||
+      isStripeConnectScreen
     );
 
     const shouldGoProtected = !!session && (

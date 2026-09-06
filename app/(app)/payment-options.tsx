@@ -48,6 +48,7 @@ import { useSupabase } from '@/context/supabase-provider';
 import { usePaywall } from '@/context/paywall-provider';
 import { usePlacement } from 'expo-superwall';
 import * as Crypto from 'expo-crypto';
+import { useStripeConnect, describeStripeStatus } from '@/hooks/useStripeConnect';
 
 interface PaymentOption {
   id?: string;
@@ -402,6 +403,10 @@ const getStyles = (theme: any) =>
   });
 
 export default function PaymentOptionsScreen() {
+  // Live Stripe Connect state. Sourced from Stripe on every mount rather than
+  // from payment_options, because the stored capability status goes stale
+  // whenever an account-lifecycle webhook is missed.
+  const stripe = useStripeConnect();
   const router = useRouter();
   const navigation = useNavigation();
   const { theme } = useTheme();
@@ -904,8 +909,26 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
       return;
     }
 
-    Alert.alert('Connect with Stripe', 'This will open the Stripe connection flow. (Not yet implemented)');
-  }, [isSubscribed, presentPaywall]);
+    // Stripe-hosted onboarding, opened in a real browser by the hook. The result
+    // is read back from Stripe rather than inferred from the browser closing —
+    // the user can dismiss the sheet at any point without finishing.
+    const result = await stripe.connect();
+
+    if (result.error) {
+      Alert.alert('Stripe', result.error);
+      return;
+    }
+    if (result.canAcceptPayments) {
+      Alert.alert('Stripe connected', 'You can now take card payments on your invoices.');
+    } else if (result.state === 'verifying') {
+      Alert.alert(
+        'Almost there',
+        'Stripe is still verifying your details. Nothing more is needed from you — card payments will switch on automatically.',
+      );
+    } else if (result.connected) {
+      Alert.alert('Setup incomplete', 'Stripe still needs a few more details before you can take card payments.');
+    }
+  }, [isSubscribed, presentPaywall, stripe]);
 
   const handleSaveInvoiceTermsNotes = async () => {
     if (!user) {
@@ -1398,8 +1421,8 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                   isLoadingScreenStatus ? (
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
                   ) : (
-                    <Text style={{ color: isStripeActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isStripeActiveOnScreen ? 'bold' : 'normal' }}>
-                      {isStripeActiveOnScreen ? 'On' : 'Off'}
+                    <Text style={{ color: stripe.canAcceptPayments ? theme.primary : theme.mutedForeground, fontWeight: stripe.canAcceptPayments ? 'bold' : 'normal' }}>
+                      {describeStripeStatus(stripe)}
                     </Text>
                   )
                 }
@@ -1612,12 +1635,30 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                   <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: theme.foreground }}>most competitive</Text> in the world.</Text>
                 </View>
 
-                {!isStripeEnabled && (
+                {stripe.loading ? (
+                  <ActivityIndicator size="small" color={theme.mutedForeground} style={{ marginBottom: 10 }} />
+                ) : stripe.canAcceptPayments ? (
+                  <View style={[styles.bulletItem, { marginBottom: 10 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14 }]}>Connected — you can take card payments.</Text>
+                  </View>
+                ) : stripe.state === 'verifying' ? (
+                  <Text style={[styles.bulletText, { fontSize: 14, marginBottom: 10 }]}>
+                    Stripe is verifying your details. Nothing more is needed from you.
+                  </Text>
+                ) : (
                   <TouchableOpacity
                     style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
                     onPress={openStripeConnectionModal}
+                    disabled={stripe.connecting}
                   >
-                    <Text style={styles.connectButtonText}>Connect with Stripe</Text>
+                    {stripe.connecting ? (
+                      <ActivityIndicator size="small" color={theme.primaryForeground} />
+                    ) : (
+                      <Text style={styles.connectButtonText}>
+                        {stripe.connected ? 'Finish Stripe setup' : 'Connect with Stripe'}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 )}
 
