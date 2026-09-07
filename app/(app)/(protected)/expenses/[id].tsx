@@ -26,7 +26,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 const expenseSchema = z.object({
     merchant_name: z.string().min(1, 'Merchant is required'),
     total_amount: z.string().min(1, 'Amount is required').regex(/^\d+(\.\d{1,2})?$/, 'Invalid amount'),
-    tax_amount: z.string().optional().regex(/^(\d+(\.\d{1,2})?)?$/, 'Invalid tax amount'),
+    tax_amount: z.string().regex(/^(\d+(\.\d{1,2})?)?$/, 'Invalid tax amount').optional(),
     category_id: z.string().min(1, 'Category is required'),
     description: z.string().optional(),
     expense_date: z.date(),
