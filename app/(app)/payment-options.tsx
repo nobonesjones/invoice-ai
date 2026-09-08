@@ -356,6 +356,42 @@ const getStyles = (theme: any) =>
       flexShrink: 1,
       lineHeight: 20,
     },
+    // Placeholder for the Stripe status while the first read from Stripe is in
+    // flight — see the `hydrated` note in useStripeConnect.
+    statusSkeleton: {
+      width: 34,
+      height: 14,
+      borderRadius: 7,
+      backgroundColor: theme.muted ?? '#E5E7EB',
+      opacity: 0.6,
+    },
+    successBox: {
+      backgroundColor: 'rgba(40, 167, 69, 0.08)',
+      borderColor: 'rgba(40, 167, 69, 0.35)',
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 12,
+      gap: 8,
+    },
+    successHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    successTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#1B7A32',
+    },
+    successBody: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.foreground,
+    },
+    successChecking: {
+      fontSize: 13,
+      color: '#1B7A32',
+    },
     importantStepsContainer: {
       marginTop: 10,
       marginBottom: 25,
@@ -1421,9 +1457,16 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                   isLoadingScreenStatus ? (
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
                   ) : (
-                    <Text style={{ color: stripe.canAcceptPayments ? theme.primary : theme.mutedForeground, fontWeight: stripe.canAcceptPayments ? 'bold' : 'normal' }}>
-                      {describeStripeStatus(stripe)}
-                    </Text>
+                    !stripe.hydrated ? (
+                      // Before the first read lands the hook still reports IDLE, which
+                      // renders as "Off" and then flips to "On" a moment later. A
+                      // placeholder is honest; a wrong answer is not.
+                      <View style={styles.statusSkeleton} />
+                    ) : (
+                      <Text style={{ color: stripe.canAcceptPayments ? theme.primary : theme.mutedForeground, fontWeight: stripe.canAcceptPayments ? 'bold' : 'normal' }}>
+                        {describeStripeStatus(stripe)}
+                      </Text>
+                    )
                   )
                 }
               />
@@ -1638,14 +1681,32 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                 {stripe.loading ? (
                   <ActivityIndicator size="small" color={theme.mutedForeground} style={{ marginBottom: 10 }} />
                 ) : stripe.canAcceptPayments ? (
-                  <View style={[styles.bulletItem, { marginBottom: 10 }]}>
-                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={[styles.bulletText, { fontSize: 14 }]}>Connected — you can take card payments.</Text>
+                  <View style={styles.successBox}>
+                    <View style={styles.successHeaderRow}>
+                      <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                      <Text style={styles.successTitle}>You're connected</Text>
+                    </View>
+                    <Text style={styles.successBody}>
+                      Card payments are live. Add a payment link to any invoice and your
+                      customer can pay it straight away.
+                    </Text>
                   </View>
                 ) : stripe.state === 'verifying' ? (
-                  <Text style={[styles.bulletText, { fontSize: 14, marginBottom: 10 }]}>
-                    Stripe is verifying your details. Nothing more is needed from you.
-                  </Text>
+                  <View style={styles.successBox}>
+                    <View style={styles.successHeaderRow}>
+                      <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                      <Text style={styles.successTitle}>Details submitted</Text>
+                    </View>
+                    <Text style={styles.successBody}>
+                      Stripe is verifying your details — this usually takes under a minute.
+                      Nothing more is needed from you. We'll email you the moment card
+                      payments are live, and this screen updates on its own.
+                    </Text>
+                    <View style={styles.successHeaderRow}>
+                      <ActivityIndicator size="small" color={'#28A745'} style={{ marginRight: 8 }} />
+                      <Text style={styles.successChecking}>Checking with Stripe…</Text>
+                    </View>
+                  </View>
                 ) : (
                   <TouchableOpacity
                     style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}

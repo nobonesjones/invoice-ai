@@ -44,6 +44,15 @@ export type StripeConnectState = {
 
 export type StripeConnectResult = StripeConnectState & { error: string | null };
 
+/**
+ * Whether the first read from Stripe has landed. Before it has, the state is
+ * still IDLE, and IDLE is indistinguishable from a genuinely disconnected
+ * account — rendering it shows "Off" for a beat on every mount, then flips to
+ * "On". Callers should show a placeholder until this is true rather than
+ * publish a value they are about to contradict.
+ */
+export type StripeConnectHydration = { hydrated: boolean };
+
 const IDLE: StripeConnectState = {
   connected: false,
   state: null,
@@ -51,6 +60,18 @@ const IDLE: StripeConnectState = {
   status: null,
   requirementsOutstanding: false,
 };
+
+/**
+ * "verifying" resolves on Stripe's schedule with nothing for the user to do —
+ * in practice tens of seconds. Without polling the row sits on "Verifying" until
+ * the screen is remounted, which reads as broken.
+ *
+ * Capped rather than indefinite: if it has not cleared in three minutes it is no
+ * longer a quick activation, and hammering Stripe adds nothing. The next mount
+ * picks it up.
+ */
+const POLL_INTERVAL_MS = 5_000;
+const POLL_TIMEOUT_MS = 3 * 60 * 1_000;
 
 /**
  * Drives Stripe-hosted Connect onboarding.
@@ -67,6 +88,7 @@ const IDLE: StripeConnectState = {
 export function useStripeConnect() {
   const [state, setState] = useState<StripeConnectState>(IDLE);
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,12 +114,30 @@ export function useStripeConnect() {
       return { ...IDLE, error: message };
     } finally {
       setLoading(false);
+      setHydrated(true);
     }
   }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Poll only while verifying. Any other state is either terminal or waiting on
+  // the user, and polling those would be a request loop that never resolves.
+  useEffect(() => {
+    if (state.state !== "verifying") return;
+
+    const startedAt = Date.now();
+    const id = setInterval(() => {
+      if (Date.now() - startedAt >= POLL_TIMEOUT_MS) {
+        clearInterval(id);
+        return;
+      }
+      refresh();
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, [state.state, refresh]);
 
   const connect = useCallback(async (): Promise<StripeConnectResult> => {
     setConnecting(true);
@@ -124,7 +164,7 @@ export function useStripeConnect() {
     }
   }, [refresh]);
 
-  return { ...state, loading, connecting, error, connect, refresh };
+  return { ...state, loading, hydrated, connecting, error, connect, refresh };
 }
 
 /** Human-readable status for the payments screen row. */
