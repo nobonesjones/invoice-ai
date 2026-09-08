@@ -77,6 +77,7 @@ import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 // PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
 import { PDFDocument } from 'pdf-lib';
 import { functionErrorMessage } from '@/hooks/useStripeConnect';
+import { SendStatusOverlay, SendStatus } from '@/components/SendStatusOverlay';
 
 type ClientRow = Tables<'clients'>;
 
@@ -211,6 +212,10 @@ function InvoiceViewerScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportTotalPages, setExportTotalPages] = useState(1);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  // Drives SendStatusOverlay. isSendingEmail is kept because other code reads it,
+  // but it was never rendered — the send had no visible progress at all.
+  const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
+  const [sendDetail, setSendDetail] = useState<string | null>(null);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
 
@@ -278,6 +283,8 @@ function InvoiceViewerScreen() {
 
     try {
       setIsSendingEmail(true);
+      setSendDetail(invoice.clients.email);
+      setSendStatus('sending');
       handleCloseSendModal(); // Close modal immediately for better UX
 
       // 2. Generate PDF as base64 from Skia canvas
@@ -378,12 +385,9 @@ function InvoiceViewerScreen() {
       // 4. Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
-      // 5. Success message
-      Alert.alert(
-        '✉️ Email Sent!',
-        `Invoice ${invoice.invoice_number} has been sent to ${invoice.clients.email}`,
-        [{ text: 'OK' }]
-      );
+      // 5. Success — shown in the overlay rather than an alert, so the whole send
+      // reads as one continuous action instead of nothing-then-a-dialog.
+      setSendStatus('success');
 
       // 6. Refresh invoice data
       if (invoiceId) {
@@ -395,6 +399,7 @@ function InvoiceViewerScreen() {
 
     } catch (error: any) {
       console.error('Error sending email:', error);
+      setSendStatus('idle');
       Alert.alert(
         'Error Sending Email',
         error.message || 'Failed to send email. Please try again.',
@@ -2810,6 +2815,16 @@ function InvoiceViewerScreen() {
         invoiceId={invoiceId}
         onClose={handleDesignModalClose}
         onSaveComplete={handleDesignModalClose}
+      />
+
+      {/* Progress + confirmation for sending. Mounted last so it sits above the
+          bottom sheets, which otherwise render over it. */}
+      <SendStatusOverlay
+        status={sendStatus}
+        sendingTitle="Sending invoice"
+        successTitle="Invoice sent"
+        detail={sendDetail}
+        onDone={() => setSendStatus('idle')}
       />
     </SafeAreaView>
   );
