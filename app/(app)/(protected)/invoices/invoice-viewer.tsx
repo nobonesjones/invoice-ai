@@ -257,6 +257,16 @@ function InvoiceViewerScreen() {
   }, [navigation, setIsTabBarVisible]);
 
   const handleSendByEmail = async () => {
+    // First line of the handler on purpose: every later log sits behind a guard
+    // or an await, so without this there is no way to tell "the button never
+    // reached this code" from "it ran and bailed early".
+    console.log('[SendInvoice] send by email pressed', {
+      invoiceId: invoice?.id,
+      hasClientEmail: !!invoice?.clients?.email,
+      stripeActive: (invoice as any)?.stripe_active,
+      hasPaymentLink: !!(invoice as any)?.stripe_payment_link_url,
+    });
+
     // 1. Validate client email exists
     if (!invoice?.clients?.email) {
       Alert.alert(
