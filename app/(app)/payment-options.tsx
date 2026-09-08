@@ -49,6 +49,7 @@ import { usePaywall } from '@/context/paywall-provider';
 import { usePlacement } from 'expo-superwall';
 import * as Crypto from 'expo-crypto';
 import { useStripeConnect, describeStripeStatus } from '@/hooks/useStripeConnect';
+import { useGoCardlessConnect, describeGoCardlessStatus } from '@/hooks/useGoCardlessConnect';
 
 interface PaymentOption {
   id?: string;
@@ -443,6 +444,9 @@ export default function PaymentOptionsScreen() {
   // from payment_options, because the stored capability status goes stale
   // whenever an account-lifecycle webhook is missed.
   const stripe = useStripeConnect();
+  // Same shape for GoCardless, read off payment_options: the OAuth exchange
+  // writes the row, and the row is what invoice creation already trusts.
+  const gocardless = useGoCardlessConnect();
   const router = useRouter();
   const navigation = useNavigation();
   const { theme } = useTheme();
@@ -1105,139 +1109,53 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
     openGoCardlessModal();
   };
 
-  const initiateGoCardlessOAuth = async () => {
-    try {
-      setIsLoadingGoCardless(true);
-
-      const { data: session, error: sessionError } = await supabase.auth.getSession();
-
-      console.log('[GoCardless] Session check:', {
-        hasSession: !!session,
-        hasSessionSession: !!session?.session,
-        hasAccessToken: !!session?.session?.access_token,
-        sessionError: sessionError,
-        userId: session?.session?.user?.id,
-      });
-
-      if (!session?.session) {
-        console.error('[GoCardless] No session found!');
-        throw new Error('Not authenticated - please log in again');
+  const openGoCardlessConnection = useCallback(async () => {
+    // Same gate as Stripe: online payments are a Pro feature.
+    if (!isSubscribed) {
+      try {
+        await presentPaywall({ event: 'gocardless_button', params: { source: 'gocardless_connect' } });
+      } catch (error) {
+        console.error('[PaymentOptions] Failed to present GoCardless paywall:', error);
+        Alert.alert(
+          'Upgrade Required',
+          'GoCardless payments are part of the SuperInvoice Pro plan. Upgrade to unlock this feature.'
+        );
       }
-
-      if (!session.session.access_token) {
-        console.error('[GoCardless] No access token in session!');
-        throw new Error('No access token found');
-      }
-
-      console.log('[GoCardless] Access token length:', session.session.access_token.length);
-      console.log('[GoCardless] Access token preview:', session.session.access_token.substring(0, 20) + '...');
-
-      console.log('[GoCardless] Calling edge function with:', {
-        action: 'generate-oauth-url',
-        redirect_uri: 'https://getsuperinvoice.com/gocardless-callback',
-        environment: 'sandbox',
-        url: `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/gocardless-payments-oauth`,
-      });
-
-      // Call edge function to generate OAuth URL
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/gocardless-payments-oauth`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
-            action: 'generate-oauth-url',
-            redirect_uri: 'https://getsuperinvoice.com/gocardless-callback',
-            environment: 'sandbox',
-          }),
-        }
-      );
-
-      console.log('[GoCardless] Edge function response status:', response.status);
-      console.log('[GoCardless] Edge function response headers:', {
-        contentType: response.headers.get('content-type'),
-      });
-
-      const responseText = await response.text();
-      console.log('[GoCardless] Raw response:', responseText);
-
-      if (!response.ok) {
-        let errorData;
-        try {
-          errorData = JSON.parse(responseText);
-        } catch {
-          errorData = { error: responseText };
-        }
-        console.error('[GoCardless] Edge function error response:', errorData);
-        throw new Error(errorData.error || errorData.message || 'Failed to generate OAuth URL');
-      }
-
-      const data = JSON.parse(responseText);
-      console.log('[GoCardless] OAuth URL response:', JSON.stringify(data, null, 2));
-      console.log('[GoCardless] URL being opened:', data.url);
-
-      // Open OAuth URL in browser
-      const supported = await Linking.canOpenURL(data.url);
-      if (supported) {
-        await Linking.openURL(data.url);
-      } else {
-        throw new Error('Cannot open GoCardless authorization page');
-      }
-
-    } catch (error) {
-      console.error('[GoCardless] OAuth initiation error:', error);
-      Alert.alert(
-        'Connection Failed',
-        error instanceof Error ? error.message : 'Failed to connect GoCardless',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsLoadingGoCardless(false);
+      return;
     }
-  };
+
+    // GoCardless-hosted consent, opened in a real browser by the hook. The
+    // result is read back from our own row after the exchange rather than
+    // inferred from the browser closing.
+    const result = await gocardless.connect();
+
+    if (result.error) {
+      Alert.alert('GoCardless', result.error);
+      return;
+    }
+    if (result.canAcceptPayments) {
+      Alert.alert('GoCardless connected', 'You can now take instant bank payments on your invoices.');
+    } else if (result.verification === 'in_review') {
+      Alert.alert(
+        'Almost there',
+        'GoCardless is reviewing your details. Nothing more is needed from you — bank payments will switch on automatically.',
+      );
+    } else if (result.verification === 'action_required') {
+      Alert.alert(
+        'One more step',
+        'GoCardless needs a few more details before you can take payments. Open your GoCardless dashboard to finish verification.',
+      );
+    }
+  }, [isSubscribed, presentPaywall, gocardless]);
 
   const handleDisconnectGoCardless = async () => {
-    try {
-      if (!user) return;
-
-      const { data: session } = await supabase.auth.getSession();
-      if (!session?.session) {
-        throw new Error('Not authenticated');
-      }
-
-      // Call edge function to disconnect
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/gocardless-payments-oauth`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
-            action: 'disconnect',
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to disconnect');
-      }
-
-      setIsGoCardlessConnected(false);
-      setIsGoCardlessActiveOnScreen(false);
-      setGoCardlessVerificationStatus(null);
-
-      Alert.alert('Disconnected', 'GoCardless has been disconnected successfully.');
-      closeGoCardlessModal();
-    } catch (error) {
-      console.error('[GoCardless] Disconnect error:', error);
-      Alert.alert('Error', 'Failed to disconnect GoCardless. Please try again.');
+    const result = await gocardless.disconnect();
+    if (result.error) {
+      Alert.alert('Error', result.error);
+      return;
     }
+    Alert.alert('Disconnected', 'GoCardless has been disconnected.');
+    closeGoCardlessModal();
   };
 
   // Polar modal handlers
@@ -1505,17 +1423,18 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
               <SettingsListItem
                 icon={<Image source={{ uri: 'https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png' }} style={styles.listItemIconStyle} />}
                 label="GoCardless"
-                subtitle={goCardlessVerificationStatus === 'action_required' ? 'Verification needed' : goCardlessVerificationStatus === 'in_review' ? 'Under review' : goCardlessVerificationStatus === 'successful' ? 'Verified' : undefined}
                 onPress={handleGoCardlessPress}
                 rightContent={
-                  isLoadingScreenStatus ? (
-                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  !gocardless.hydrated ? (
+                    // Placeholder until the first read lands: rendering the
+                    // idle state shows "Off" for a beat, then flips to "On".
+                    <View style={styles.statusSkeleton} />
                   ) : (
                     <Text style={{
-                      color: isGoCardlessActiveOnScreen ? theme.primary : theme.mutedForeground,
-                      fontWeight: isGoCardlessActiveOnScreen ? 'bold' : 'normal'
+                      color: gocardless.canAcceptPayments ? theme.primary : theme.mutedForeground,
+                      fontWeight: gocardless.canAcceptPayments ? 'bold' : 'normal'
                     }}>
-                      {isGoCardlessActiveOnScreen ? 'Connected' : 'Not Connected'}
+                      {describeGoCardlessStatus(gocardless)}
                     </Text>
                   )
                 }
@@ -2016,30 +1935,53 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
                   <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Customers pay directly from their <Text style={{ fontWeight: 'bold', color: theme.foreground }}>bank account</Text></Text>
                 </View>
 
-                {!isGoCardlessConnected ? (
+                {!gocardless.connected ? (
                   <TouchableOpacity
                     style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
-                    onPress={initiateGoCardlessOAuth}
-                    disabled={isLoadingGoCardless}
+                    onPress={openGoCardlessConnection}
+                    disabled={gocardless.connecting}
                   >
-                    {isLoadingGoCardless ? (
+                    {gocardless.connecting ? (
                       <ActivityIndicator size="small" color={theme.primaryForeground} />
                     ) : (
                       <Text style={styles.connectButtonText}>Connect with GoCardless</Text>
                     )}
                   </TouchableOpacity>
                 ) : (
-                  <View style={{ alignItems: 'center', marginTop: 6 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                      <CheckCircle size={22} color={theme.primary} />
-                      <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: 'bold', color: theme.foreground }}>
-                        Connected
-                      </Text>
-                    </View>
-                    {goCardlessVerificationStatus && (
-                      <Text style={{ fontSize: 14, color: theme.mutedForeground, marginBottom: 12 }}>
-                        Status: {goCardlessVerificationStatus === 'successful' ? 'Verified ✓' : goCardlessVerificationStatus === 'in_review' ? 'Under Review' : 'Verification Needed'}
-                      </Text>
+                  <View style={{ marginTop: 6 }}>
+                    {gocardless.canAcceptPayments ? (
+                      <View style={styles.successBox}>
+                        <View style={styles.successHeaderRow}>
+                          <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                          <Text style={styles.successTitle}>You're connected</Text>
+                        </View>
+                        <Text style={styles.successBody}>
+                          Instant bank payments are live. Turn GoCardless on for any invoice and
+                          your customer can pay it from their bank.
+                        </Text>
+                      </View>
+                    ) : gocardless.verification === 'in_review' ? (
+                      <View style={styles.successBox}>
+                        <View style={styles.successHeaderRow}>
+                          <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                          <Text style={styles.successTitle}>Connected — under review</Text>
+                        </View>
+                        <Text style={styles.successBody}>
+                          GoCardless is checking your details. Nothing more is needed from you;
+                          this usually takes a few minutes and this screen updates itself.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.successBox}>
+                        <View style={styles.successHeaderRow}>
+                          <CheckCircle size={20} color={'#F59E0B'} style={{ marginRight: 8 }} />
+                          <Text style={styles.successTitle}>Connected — one more step</Text>
+                        </View>
+                        <Text style={styles.successBody}>
+                          GoCardless needs a few more details before you can take payments.
+                          Finish verification in your GoCardless dashboard.
+                        </Text>
+                      </View>
                     )}
                     <TouchableOpacity
                       style={[styles.moreInfoButton, { borderColor: '#dc3545', paddingVertical: 8, marginBottom: 10 }]}
