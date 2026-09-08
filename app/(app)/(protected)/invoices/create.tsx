@@ -1493,6 +1493,19 @@ export default function CreateInvoiceScreen() {
 
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
+  // Once Stripe can genuinely accept payments, card should be on by default for
+  // a new invoice — connecting it is the opt-in, and asking again per invoice is
+  // a step nobody wants. Applied once, and only for new invoices: in edit mode
+  // loadInvoiceForEdit sets these from the saved row, and overriding that would
+  // silently re-enable a method the user had deliberately turned off.
+  const appliedStripeDefault = useRef(false);
+  useEffect(() => {
+    if (isEditMode || appliedStripeDefault.current) return;
+    if (paymentOptionsData?.stripe_card_payments_status !== 'active') return;
+    appliedStripeDefault.current = true;
+    setValue('stripe_active_on_invoice', true);
+  }, [isEditMode, paymentOptionsData?.stripe_card_payments_status, setValue]);
+
   const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account' | 'gocardless', newValue: boolean) => {
     
     // Block all toggles if payment options are still loading
@@ -1516,7 +1529,13 @@ export default function CreateInvoiceScreen() {
       let settingName = '';
       
       if (methodKey === 'stripe') {
-        isEnabledInSettings = paymentOptionsData?.stripe_enabled === true;
+        // Gate on the capability, not the old stripe_enabled boolean. That flag
+        // was the manual pre-Connect toggle and nothing writes it any more:
+        // connecting sets stripe_account_id and stripe_card_payments_status, so
+        // a properly connected merchant read as "not configured". This is also
+        // exactly what stripe-create-payment-link checks server-side, so the
+        // button and the mint agree.
+        isEnabledInSettings = paymentOptionsData?.stripe_card_payments_status === 'active';
         settingName = 'Pay With Card (Stripe)';
       } else if (methodKey === 'paypal') {
         isEnabledInSettings = paymentOptionsData?.paypal_enabled === true;
