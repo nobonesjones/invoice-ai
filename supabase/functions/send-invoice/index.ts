@@ -250,10 +250,12 @@ function generateInvoiceEmail(invoice: any, lineItems: any[], clientName: string
                     <span style="color: #6b7280; font-size: 14px;">Invoice Date:</span>
                     <span style="color: #1f2937; font-weight: 500; margin-left: 8px;">${new Date(invoice.invoice_date).toLocaleDateString()}</span>
                   </td>
+                  ${invoice.due_date ? `
                   <td style="padding-bottom: 8px; text-align: right;">
                     <span style="color: #6b7280; font-size: 14px;">Due Date:</span>
                     <span style="color: #1f2937; font-weight: 500; margin-left: 8px;">${new Date(invoice.due_date).toLocaleDateString()}</span>
                   </td>
+                  ` : ''}
                 </tr>
               </table>
             </td>
@@ -306,8 +308,29 @@ function generateInvoiceEmail(invoice: any, lineItems: any[], clientName: string
             </td>
           </tr>
 
-          ${invoice.gocardless_active ? `
-          <!-- Pay Now Button -->
+          ${invoice.stripe_payment_link_url ? `
+          <!-- Pay Now Button (Stripe) -->
+          <!-- A Stripe link is minted for this specific invoice, so it wins over
+               the account-level GoCardless flag when both are present. -->
+          <tr>
+            <td style="padding: 0 40px 32px;">
+              <table role="presentation" style="width: 100%;">
+                <tr>
+                  <td align="center">
+                    <a href="${invoice.stripe_payment_link_url}"
+                       style="display: inline-block; background-color: #10b981; color: #ffffff; font-size: 16px; font-weight: 600; padding: 16px 48px; text-decoration: none; border-radius: 8px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
+                      Pay Now
+                    </a>
+                    <p style="margin: 12px 0 0; color: #6b7280; font-size: 13px;">
+                      Secure card payment powered by Stripe
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ` : invoice.gocardless_active ? `
+          <!-- Pay Now Button (GoCardless) -->
           <tr>
             <td style="padding: 0 40px 32px;">
               <table role="presentation" style="width: 100%;">
