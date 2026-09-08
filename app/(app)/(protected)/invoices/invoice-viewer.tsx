@@ -417,8 +417,10 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      // Generating shareable PDF link for invoice
-      
+      // Same reason as the email send: the shared invoice page reads the pay
+      // link off the invoice row, so it has to exist before the link goes out.
+      await ensureStripePaymentLink();
+
       // Generate shareable PDF link using the Skia canvas
       const result = await InvoiceShareService.generateShareLinkFromCanvas(
         invoice.id, 
