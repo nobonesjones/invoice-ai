@@ -395,6 +395,11 @@ function InvoiceViewerScreen() {
       // 4. Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
 
+      // The link and PDF sends have always logged this; the email send never
+      // did, which left the most common send route missing from both the
+      // invoice history sheet and the client's activity feed.
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'email');
+
       // 5. Success — shown in the overlay rather than an alert, so the whole send
       // reads as one continuous action instead of nothing-then-a-dialog.
       setSendStatus('success');
@@ -1168,7 +1173,8 @@ function InvoiceViewerScreen() {
         invoice.id,
         invoice.invoice_number,
         newPaidAmount,
-        notes || 'Payment update'
+        notes || 'Payment update',
+        invoice.currency_symbol,
       );
 
       // Update local state
@@ -1238,7 +1244,8 @@ function InvoiceViewerScreen() {
           invoice.id,
           invoice.invoice_number,
           invoice.total_amount,
-          'Toggle - marked as paid'
+          'Toggle - marked as paid',
+          invoice.currency_symbol,
         );
       }
 
@@ -1508,7 +1515,8 @@ function InvoiceViewerScreen() {
         invoice.id,
         invoice.invoice_number,
         paymentAmount,
-        `${paymentData.paymentMethod} payment recorded`
+        `${paymentData.paymentMethod} payment recorded`,
+        invoice.currency_symbol,
       );
 
       // Update local state
