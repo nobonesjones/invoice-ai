@@ -1667,8 +1667,18 @@ function InvoiceViewerScreen() {
   const ensureStripePaymentLink = async (): Promise<string | null> => {
     if (!invoice || !supabase) return null;
     const existing = (invoice as any).stripe_payment_link_url as string | null;
-    if (existing) return existing;
-    if (!(invoice as any).stripe_active) return null;
+    if (existing) {
+      console.log('[SendInvoice] payment link already on the invoice');
+      return existing;
+    }
+    // Logged rather than returning quietly: a silent skip here and a failed mint
+    // produce the same outcome (an email with no pay button) but need different
+    // fixes, and without this there was nothing to tell them apart.
+    if (!(invoice as any).stripe_active) {
+      console.log('[SendInvoice] no payment link: card payments are off for this invoice');
+      return null;
+    }
+    console.log('[SendInvoice] minting payment link…');
 
     try {
       const { data, error } = await supabase.functions.invoke('stripe-create-payment-link', {
@@ -1679,9 +1689,11 @@ function InvoiceViewerScreen() {
         return null;
       }
       if (data?.url) {
+        console.log('[SendInvoice] payment link ready', data.reused ? '(reused)' : '(new)');
         setInvoice(prev => (prev ? ({ ...prev, stripe_payment_link_url: data.url } as any) : prev));
         return data.url as string;
       }
+      console.warn('[SendInvoice] no payment link: function returned no url');
     } catch (e: any) {
       console.warn('[SendInvoice] payment link not minted:', e?.message ?? e);
     }
