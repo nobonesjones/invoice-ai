@@ -353,7 +353,10 @@ function InvoiceViewerScreen() {
       });
 
       if (error) {
-        throw new Error(error.message || 'Failed to send email');
+        // supabase-js reports every non-2xx as the same generic string and drops
+        // the body. Read the real message off error.context so a missing function
+        // or a mail-provider failure is distinguishable from each other.
+        throw new Error(await functionErrorMessage(error, 'Failed to send email'));
       }
 
       // 4. Update local state
