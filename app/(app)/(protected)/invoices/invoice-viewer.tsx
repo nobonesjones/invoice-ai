@@ -59,6 +59,7 @@ import { StatusSelectorSheet } from '@/components/StatusSelectorSheet';
 import { PaymentAmountSheet } from '@/components/PaymentAmountSheet';
 import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } from '@/constants/invoice-status';
 import { useInvoiceActivityLogger } from '@/hooks/invoices/useInvoiceActivityLogger';
+import { useInvoiceRealtime } from '@/hooks/useInvoiceRealtime';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
 import { InvoiceShareService } from '@/services/invoiceShareService';
@@ -997,6 +998,15 @@ function InvoiceViewerScreen() {
     }, [invoiceId, supabase])
   );
 
+  // Live updates for this invoice: a Stripe or GoCardless payment landing while
+  // the owner is looking at it flips the screen to Paid without a navigation.
+  useInvoiceRealtime(
+    () => {
+      if (invoiceId) fetchInvoiceData(invoiceId);
+    },
+    { invoiceId: invoiceId ?? null },
+  );
+
   const getCurrencySymbol = (currencyCode: string): string => {
     // Handles both codes and full names from the DB, e.g. 'GBP - British Pound'
     if (!currencyCode) return '$';
@@ -1238,16 +1248,12 @@ function InvoiceViewerScreen() {
         return;
       }
 
-      // Log the payment activity
-      if (isPaid) {
-        await logPaymentAdded(
-          invoice.id,
-          invoice.invoice_number,
-          invoice.total_amount,
-          'Toggle - marked as paid',
-          invoice.currency_symbol,
-        );
-      }
+      // No activity row is written here on purpose. The on_invoice_paid trigger
+      // records the 'paid' milestone for every route into paid, so logging it
+      // from the app as well would show the same tap twice in the history.
+      // Partial payments (handlePaymentUpdate, the payment sheet) still log
+      // payment_added themselves, because those are payment records, not the
+      // paid transition.
 
       // Update local state
       setInvoice(prev => prev ? { 
@@ -1496,7 +1502,7 @@ function InvoiceViewerScreen() {
         status: newStatus,
         paid_amount: newTotalPaid,
         payment_date: new Date().toISOString(),
-        payment_notes: `${paymentData.paymentMethod}: $${paymentAmount.toFixed(2)}`
+        payment_notes: `${paymentData.paymentMethod}: ${invoice.currency_symbol}${paymentAmount.toFixed(2)}`
       };
 
       const { error: updateError } = await supabase

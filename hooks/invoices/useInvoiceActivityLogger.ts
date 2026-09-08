@@ -6,6 +6,7 @@ export type InvoiceActivityType =
   | 'sent'
   | 'viewed'
   | 'payment_added'
+  | 'paid'         // Written by the on_invoice_paid DB trigger when status flips to paid, whatever the method
   | 'payment_removed'
   | 'status_changed'
   | 'note_added'

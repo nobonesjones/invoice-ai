@@ -33,6 +33,7 @@ import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useInvoiceStatusUpdater } from '@/hooks/useInvoiceStatusUpdater';
+import { useInvoiceRealtime } from '@/hooks/useInvoiceRealtime';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import type { Database } from "../../../../supabase/types/database.types"; 
 
@@ -288,7 +289,10 @@ export default function InvoiceDashboardScreen() {
     }
   }, [user?.id, supabase]);
 
-  const loadInvoicesAndSummary = useCallback(async (isPullToRefresh = false) => {
+  // `silent` refreshes the data without touching either loader: used when a
+  // server-side change arrives over realtime, where a spinner the user did not
+  // ask for would read as something going wrong.
+  const loadInvoicesAndSummary = useCallback(async (isPullToRefresh = false, silent = false) => {
     if (!user?.id) {
       setError("User not authenticated.");
       setLoading(false);
@@ -296,7 +300,9 @@ export default function InvoiceDashboardScreen() {
       return;
     }
 
-    if (!isPullToRefresh) {
+    if (silent) {
+      // no loader
+    } else if (!isPullToRefresh) {
       setLoading(true); // Show loader for initial load or filter/search change
     } else {
       setIsRefreshing(true); // Show pull-to-refresh indicator
@@ -390,6 +396,13 @@ export default function InvoiceDashboardScreen() {
   const onRefresh = useCallback(() => {
     loadInvoicesAndSummary(true); // Pass true to indicate it's a pull-to-refresh
   }, [loadInvoicesAndSummary]);
+
+  // A payment landing (Stripe, GoCardless, or another device) updates the row
+  // on the server; without this the list showed the old status until the next
+  // focus.
+  useInvoiceRealtime(() => {
+    loadInvoicesAndSummary(false, true);
+  });
 
 	const renderInvoiceItem = ({ item }: { item: InvoiceData }) => (
 		<TouchableOpacity

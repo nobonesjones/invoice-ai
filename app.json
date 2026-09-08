@@ -30,7 +30,8 @@
         {
           "contactsPermission": "The app accesses your contacts to allow you to quickly add clients from your address book."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "ios": {
       "supportsTablet": true,

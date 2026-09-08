@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from '
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
-import { X as XIcon, Clock, CreditCard, Edit, Send, Eye, FileText, Printer, Link, Globe, Download } from 'lucide-react-native'; 
+import { X as XIcon, Clock, CreditCard, Edit, Send, Eye, FileText, Printer, Link, Globe, Download, CheckCircle2 } from 'lucide-react-native'; 
 import { useInvoiceActivityLogger, InvoiceActivityType } from '@/hooks/invoices/useInvoiceActivityLogger';
 
 export interface InvoiceHistorySheetProps {
@@ -106,6 +106,8 @@ const InvoiceHistorySheet = forwardRef<InvoiceHistorySheetRef, InvoiceHistoryShe
         return <Link {...iconProps} />;
       case 'payment_added':
         return <CreditCard {...iconProps} />;
+      case 'paid':
+        return <CheckCircle2 {...iconProps} />;
       default:
         return <Clock {...iconProps} />;
     }
@@ -116,6 +118,7 @@ const InvoiceHistorySheet = forwardRef<InvoiceHistorySheetRef, InvoiceHistoryShe
       case 'created':
         return themeColors.primary;
       case 'payment_added':
+      case 'paid':
         return '#10B981'; // Green
       case 'sent':
       case 'email_sent':
