@@ -344,6 +344,17 @@ function InvoiceViewerScreen() {
       // Clean up temporary PDF file
       await FileSystem.deleteAsync(pdfUri, { idempotent: true });
 
+      // The body is a full-resolution canvas snapshot wrapped in a PDF and then
+      // base64'd, so it is megabytes, not kilobytes — and base64 adds a further
+      // third. That is large enough to be rejected by the platform before it
+      // reaches the function, which surfaces as an opaque non-2xx with nothing
+      // in the function logs. Record the size so a failure is diagnosable.
+      const payloadBytes = pdfBase64.length;
+      const payloadMb = (payloadBytes / (1024 * 1024)).toFixed(2);
+      console.log(
+        `[SendInvoice] canvas ${image.width()}x${image.height()}, png ${(imageBytes.length / 1024).toFixed(0)}KB, pdf base64 ${payloadMb}MB`,
+      );
+
       // 3. Call the correct edge function to send email via Resend
       const { data, error } = await supabase.functions.invoke('send-invoice', {
         body: {
@@ -356,7 +367,8 @@ function InvoiceViewerScreen() {
         // supabase-js reports every non-2xx as the same generic string and drops
         // the body. Read the real message off error.context so a missing function
         // or a mail-provider failure is distinguishable from each other.
-        throw new Error(await functionErrorMessage(error, 'Failed to send email'));
+        const decoded = await functionErrorMessage(error, 'Failed to send email');
+        throw new Error(`${decoded} (attachment ${payloadMb}MB)`);
       }
 
       // 4. Update local state
