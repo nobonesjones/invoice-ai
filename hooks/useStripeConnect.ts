@@ -9,7 +9,7 @@ import { supabase } from '@/config/supabase';
  * body that says what actually went wrong. The real message is on
  * error.context, which is a Response that has to be read.
  */
-async function functionErrorMessage(error: any, fallback: string): Promise<string> {
+export async function functionErrorMessage(error: any, fallback: string): Promise<string> {
   try {
     const body = await error?.context?.json?.();
     if (body?.error) return body.error as string;

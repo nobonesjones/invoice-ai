@@ -76,6 +76,7 @@ import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 
 // PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
 import { PDFDocument } from 'pdf-lib';
+import { functionErrorMessage } from '@/hooks/useStripeConnect';
 
 type ClientRow = Tables<'clients'>;
 
@@ -848,6 +849,7 @@ function InvoiceViewerScreen() {
         polar_checkout_id: (invoiceData as any).polar_checkout_id ?? null,
         polar_payment_link: (invoiceData as any).polar_payment_link ?? null,
         polar_payment_status: (invoiceData as any).polar_payment_status ?? null,
+        stripe_payment_link_url: (invoiceData as any).stripe_payment_link_url ?? null,
       };
       
       // Constructed fetchedInvoiceForTemplate
@@ -1615,6 +1617,87 @@ function InvoiceViewerScreen() {
   };
 
   const [isGeneratingPaymentLink, setIsGeneratingPaymentLink] = useState(false);
+
+  /**
+   * Mint (or re-surface) a Stripe payment link for this invoice.
+   *
+   * The link is minted server-side as the invoice owner and persisted to
+   * invoices.stripe_payment_link_url, so the payer only ever opens a stored URL
+   * — no anonymous endpoint is involved. stripe-create-payment-link reuses an
+   * existing link rather than minting duplicates, so calling this twice is safe.
+   */
+  const handleStripePaymentLink = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to generate a payment link right now.');
+      return;
+    }
+
+    const existing = (invoice as any).stripe_payment_link_url as string | null;
+    if (existing) {
+      shareStripeLink(existing, 'This invoice already has a payment link.');
+      return;
+    }
+
+    setIsGeneratingPaymentLink(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-create-payment-link', {
+        body: { invoiceId: invoice.id },
+      });
+
+      if (error) {
+        // supabase-js collapses every non-2xx into the same generic string and
+        // discards the body that says what actually went wrong. The server
+        // returns precise 409s here — already paid, Stripe not connected, not
+        // chargeable yet, no currency set — and those are worth showing.
+        const message = await functionErrorMessage(error, 'Could not create a payment link.');
+        const needsSetup = /not connected|currency/i.test(message);
+        Alert.alert(
+          'Payment Link',
+          message,
+          needsSetup
+            ? [
+                { text: 'Go to Settings', onPress: () => router.push('/(app)/payment-options') },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            : [{ text: 'OK' }],
+        );
+        return;
+      }
+
+      if (!data?.url) {
+        Alert.alert('Payment Link', 'Stripe did not return a payment link.');
+        return;
+      }
+
+      setInvoice(prev => (prev ? ({ ...prev, stripe_payment_link_url: data.url } as any) : prev));
+      shareStripeLink(
+        data.url,
+        data.reused
+          ? 'This invoice already had a payment link.'
+          : 'Your customer can pay this invoice by card.',
+      );
+    } catch (e: any) {
+      Alert.alert('Payment Link', e?.message ?? 'Could not create a payment link.');
+    } finally {
+      setIsGeneratingPaymentLink(false);
+    }
+  };
+
+  const shareStripeLink = (url: string, message: string) => {
+    Alert.alert('Payment Link', message, [
+      {
+        text: 'Copy Link',
+        onPress: () => {
+          Clipboard.setString(url);
+          Alert.alert('Copied', 'Payment link copied to clipboard.');
+        },
+      },
+      { text: 'Open Link', onPress: () => Linking.openURL(url) },
+      { text: 'Done', style: 'cancel' },
+    ]);
+  };
 
   const handlePaymentLink = async () => {
     moreOptionsSheetRef.current?.dismiss();
@@ -2589,8 +2672,8 @@ function InvoiceViewerScreen() {
             
             <MoreOptionItem
               icon={Link2}
-              title="Generate Payment Link"
-              onPress={handlePaymentLink}
+              title="Card Payment Link"
+              onPress={handleStripePaymentLink}
             />
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
