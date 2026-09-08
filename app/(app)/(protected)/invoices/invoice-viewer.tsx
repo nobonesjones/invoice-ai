@@ -344,6 +344,10 @@ function InvoiceViewerScreen() {
       // Clean up temporary PDF file
       await FileSystem.deleteAsync(pdfUri, { idempotent: true });
 
+      // Mint the payment link first: send-invoice reads stripe_payment_link_url
+      // off the invoice row, so it has to be persisted before the send, not after.
+      await ensureStripePaymentLink();
+
       // The body is a full-resolution canvas snapshot wrapped in a PDF and then
       // base64'd, so it is megabytes, not kilobytes — and base64 adds a further
       // third. That is large enough to be rejected by the platform before it
@@ -865,6 +869,7 @@ function InvoiceViewerScreen() {
         polar_payment_link: (invoiceData as any).polar_payment_link ?? null,
         polar_payment_status: (invoiceData as any).polar_payment_status ?? null,
         stripe_payment_link_url: (invoiceData as any).stripe_payment_link_url ?? null,
+        stripe_active: (invoiceData as any).stripe_active ?? false,
       };
       
       // Constructed fetchedInvoiceForTemplate
@@ -1641,6 +1646,43 @@ function InvoiceViewerScreen() {
    * — no anonymous endpoint is involved. stripe-create-payment-link reuses an
    * existing link rather than minting duplicates, so calling this twice is safe.
    */
+  /**
+   * Ensure a Stripe payment link exists before the invoice goes out, so the
+   * email can render a working Pay button.
+   *
+   * Gated on the per-invoice stripe_active flag, not just the merchant's
+   * capability: the server would happily mint a link for an invoice the user
+   * deliberately turned card payments off for.
+   *
+   * Failures are logged and swallowed on purpose. A missing payment link is a
+   * worse invoice, but a blocked send is a worse outcome — the customer still
+   * needs the invoice, and every failure mode here (not connected, no currency,
+   * already paid) is one the merchant can resolve and resend.
+   */
+  const ensureStripePaymentLink = async (): Promise<string | null> => {
+    if (!invoice || !supabase) return null;
+    const existing = (invoice as any).stripe_payment_link_url as string | null;
+    if (existing) return existing;
+    if (!(invoice as any).stripe_active) return null;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-create-payment-link', {
+        body: { invoiceId: invoice.id },
+      });
+      if (error) {
+        console.warn('[SendInvoice] payment link not minted:', await functionErrorMessage(error, 'unknown'));
+        return null;
+      }
+      if (data?.url) {
+        setInvoice(prev => (prev ? ({ ...prev, stripe_payment_link_url: data.url } as any) : prev));
+        return data.url as string;
+      }
+    } catch (e: any) {
+      console.warn('[SendInvoice] payment link not minted:', e?.message ?? e);
+    }
+    return null;
+  };
+
   const handleStripePaymentLink = async () => {
     moreOptionsSheetRef.current?.dismiss();
 
