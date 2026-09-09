@@ -101,35 +101,68 @@ regress production. Please commit the deployed versions to this branch:
 Also: `.gitignore` line 44 is `*.sql`, which ignores every migration by default.
 The 24 tracked ones were force-added. Worth changing to something narrower.
 
-## 8. GoCardless — questions before the payer side can work
+## 8. GoCardless — the webhook exists; it writes to a column that does not exist
 
-The app now has a complete onboarding flow (`hooks/useGoCardlessConnect.ts`),
-calling `gocardless-payments-oauth` with `action: generate-oauth-url | exchange-code | disconnect`,
-which is the contract the existing screen and callback route already used.
-Please confirm:
+Confirmed by the web-repo agent (2026-09-09). All of these are deployed and ACTIVE:
+`gocardless-payments-oauth` v15, `gocardless-create-payment` v13,
+`gocardless-check-payment` v9, `gocardless-webhook` v15, `gocardless-refund` v10.
+The app's hook targets `gocardless-payments-oauth`, which is the right one.
 
-1. Is `gocardless-payments-oauth` deployed? If not, the two repo functions
-   (`gocardless-generate-oauth-url`, `gocardless-exchange-token`) cover the first
-   two actions but with different names and `oauth_url` instead of `url` in the
-   response — the hook reads either key. Tell me which to target.
-2. Are `gocardless-create-payment` and `gocardless-check-payment` deployed? The
-   shared page and `payment-complete` call them.
-3. **There is no GoCardless webhook anywhere.** Nothing marks an invoice paid when
-   a GoCardless payment settles. That needs a `gocardless-webhook` function that
-   verifies the `Webhook-Signature` header, handles `payments.confirmed` /
-   `payments.paid_out`, and does `UPDATE invoices SET status='paid', paid_amount, payment_date`.
-   The trigger and `invoice-paid` then handle everything else — no emails or
-   activity rows needed in the webhook itself.
-4. The email's GoCardless button links to `https://getsuperinvoice.com/pay/{invoice.id}`.
-   No such route exists. It should point at the shared invoice page, same as Stripe.
-5. `payment_options.gocardless_*` columns are not in `types/database.types.ts` and
-   have no migration. Please regenerate types (`supabase gen types`) and commit.
+**The bug.** `gocardless-webhook` verifies signatures correctly and handles
+`payments.confirmed` / `payments.paid_out`, then runs:
+
+```ts
+.update({ status: 'paid', paid_at: new Date().toISOString(), gocardless_payment_id: paymentId, ... })
+```
+
+`invoices.paid_at` does not exist (the 20241216 migration that adds it was never
+applied). PostgREST rejects the whole update, the error is `console.error`'d, and
+the function returns 200 — so GoCardless records success and never retries.
+Zero GoCardless payments have ever been marked paid. `gocardless-check-payment`
+has the same bug.
+
+**The fix** (web repo, both functions):
+
+```ts
+.update({
+  status: 'paid',
+  payment_date: new Date().toISOString(),   // was paid_at
+  paid_amount: invoice.total_amount,        // was never written
+  payment_notes: 'GoCardless instant bank payment',
+  gocardless_payment_id: paymentId,
+  updated_at: new Date().toISOString(),
+})
+```
+
+Also **remove the webhook's own `invoice_activities` insert** in the success
+branch: `trg_on_invoice_paid` (§1) now writes the `paid` row for every route into
+paid, and `invoice-paid` (§2) sends the emails and push, so the webhook doing it
+too would double up. The webhook's only job is the status flip.
+
+And return non-200 when the update fails, so GoCardless retries instead of
+recording a success that never happened.
+
+**Smaller things, same area:**
+- `gocardless-refund` writes `gocardless_refund_id`, `gocardless_refund_status`,
+  `refunded_amount`, `refunded_at` — none exist. Same unapplied migration.
+- `create-payment` stores the billing-request id in `invoices.request_id`, which
+  carries a UNIQUE index meant for app-side idempotency. A second billing request
+  for the same invoice (a retry) will violate it.
+- The OAuth `state` parameter is generated and returned but never stored or
+  verified on callback. CSRF protection is nominal. The app hook passes it
+  through; the function should persist it on generate and check it on exchange.
+- `payment_options.gocardless_*` columns are not in `types/database.types.ts`.
+  Please regenerate (`supabase gen types`) and commit.
+
+**After the fix**, a sandbox GoCardless payment should: flip the invoice to paid
+→ trigger writes the history row → Database Webhook fires `invoice-paid` → payer
+thank-you, owner email, push → realtime flips the app. Same as Stripe.
 
 ## What each method now does
 
 | | Onboarding | Payer pays via | Marked paid by | Then (all methods) |
 |---|---|---|---|---|
 | Stripe | ✅ in-app, hosted | email/share pay link | Stripe webhook | trigger → history row · `invoice-paid` → thank-you email, owner email, push · realtime → screens flip live |
-| GoCardless | ✅ in-app, hosted | shared page → billing request | **missing webhook (§8.3)** | same |
+| GoCardless | ✅ in-app, hosted | getsuperinvoice.com/pay/{id} → billing request | GoCardless webhook, **once the paid_at bug is fixed (§8)** | same |
 | PayPal | email address in settings | pays PayPal directly | owner toggles Paid | same |
 | Bank transfer | details in settings | pays their bank directly | owner toggles Paid | same |

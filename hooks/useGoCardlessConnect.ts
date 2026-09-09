@@ -71,10 +71,15 @@ async function readState(): Promise<GoCardlessConnectState> {
   const row = data as any;
   const verification = (row.gocardless_verification_status as GoCardlessVerification) ?? null;
   const connected = !!row.gocardless_connected;
+  // The deployed gocardless-payments-oauth exchange writes gocardless_connected
+  // but never gocardless_verification_status, so a null there means "not
+  // reported", not "not verified". Only an explicit non-successful status
+  // withholds payments; that matches what the web app gates on.
+  const canAcceptPayments = connected && (verification === null || verification === 'successful');
   return {
     connected,
     verification,
-    canAcceptPayments: connected && verification === 'successful',
+    canAcceptPayments,
     environment: (row.gocardless_environment as 'sandbox' | 'live') ?? null,
   };
 }
