@@ -7,7 +7,10 @@
 
 export type ThemeId = 'classic' | 'modern' | 'clean' | 'simple' | 'wave';
 
-// preview: continuous scroll inside the app (WebView, later)
+// Geometry: print engines treat 1 CSS px as 1/96 in and 1 pt as 1/72 in, so an A4
+// page is 794 x 1123 CSS px (595 x 842 pt). Everything below is sized for that.
+//
+// preview: continuous document on a grey ground inside the app's WebView
 // print:   A4 pages via WebKit print (expo-print). Native page margins are used.
 // web:     the hosted page in a browser, with its own @page rule for Download PDF.
 export type RenderMode = 'preview' | 'print' | 'web';
@@ -135,89 +138,95 @@ const WAVE_SVG =
 
 // ---------- CSS ----------
 
+const PAGE_W = 794; // A4 width in CSS px at 96 dpi
+
 function css(t: Theme, mode: RenderMode): string {
   const pageRule =
     mode === 'print'
-      ? '@page { size: 595px 842px; margin: 0; }' // native margins come from expo-print
+      ? '@page { size: 595pt 842pt; margin: 0; }' // native margins come from expo-print
       : mode === 'web'
-        ? '@media print { @page { size: A4; margin: 12mm 0; } body { width: auto; } }'
+        ? '@media print { @page { size: A4; margin: 12mm 0; } body { background: #fff; } .doc { margin: 0; box-shadow: none; } }'
         : '';
+  const sheet =
+    mode === 'preview' || mode === 'web'
+      ? `body { background: #eceff3; } .doc { background: #fff; width: ${PAGE_W}px; margin: 16px auto; padding-top: 48px; padding-bottom: 56px; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.08); }`
+      : `body { width: ${PAGE_W}px; }`;
 
   return `
   ${pageRule}
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    width: 595px;
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 10.5px; line-height: 1.45; color: #111827;
+    font-size: 13px; line-height: 1.4; color: #111827;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
     font-variant-numeric: tabular-nums;
     background: #fff;
   }
-  .doc { padding: 0 44px 32px; }
+  ${sheet}
+  .doc { padding-left: 48px; padding-right: 48px; }
   .muted { color: #6b7280; }
-  .label { font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; font-weight: 600; }
+  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; font-weight: 600; }
   .num { text-align: right; white-space: nowrap; }
 
   /* ----- header ----- */
-  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 26px; }
-  .brand { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
-  .logo { width: 56px; height: 56px; object-fit: contain; border-radius: ${Math.min(t.radius, 8)}px; flex: none; }
-  .logo-tile { background: #fff; padding: 4px; }
-  .biz-name { font-size: 14px; font-weight: 700; line-height: 1.2; margin-bottom: 3px; }
-  .biz-lines { font-size: 9.5px; line-height: 1.4; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; margin-bottom: 26px; }
+  .brand { display: flex; gap: 18px; align-items: flex-start; min-width: 0; }
+  .logo { width: 64px; height: 64px; object-fit: contain; border-radius: ${Math.min(t.radius, 8)}px; flex: none; }
+  .logo-tile { background: #fff; padding: 5px; }
+  .biz-name { font-size: 17px; font-weight: 700; line-height: 1.2; margin-bottom: 3px; }
+  .biz-lines { font-size: 12px; line-height: 1.35; }
   .docblock { text-align: right; flex: none; }
-  .title { font-size: 22px; font-weight: 800; letter-spacing: .04em; line-height: 1; margin: 0 0 8px; }
+  .title { font-size: 26px; font-weight: 800; letter-spacing: .04em; line-height: 1; margin: 0 0 8px; }
   .meta { border-collapse: collapse; margin-left: auto; }
-  .meta td { padding: 1.5px 0 1.5px 14px; font-size: 9.5px; text-align: right; }
+  .meta td { padding: 1.5px 0 1.5px 18px; font-size: 12px; text-align: right; }
   .meta td:first-child { color: #6b7280; }
   .meta td:last-child { font-weight: 600; }
 
-  .head.card { background: ${t.accent}; color: ${t.accentInk}; border-radius: ${t.radius}px; padding: 20px 22px; margin: 0 -8px 26px; }
+  .head.card { background: ${t.accent}; color: ${t.accentInk}; border-radius: ${t.radius}px; padding: 22px 24px; margin: 0 -10px 26px; }
   .head.card .muted, .head.card .meta td:first-child { color: rgba(255,255,255,.75); }
   .head.card .title { color: ${t.accentInk}; }
-  .head.rule { border-top: 5px solid ${t.accent}; padding-top: 18px; }
+  .head.rule { border-top: 6px solid ${t.accent}; padding-top: 20px; }
   .head.rule .title { color: ${t.accent}; }
-  .head.split { padding-bottom: 18px; border-bottom: 2px solid ${t.accent}; }
+  .head.split { padding-bottom: 20px; border-bottom: 2px solid ${t.accent}; }
   .head.split .title { color: #111827; }
   .head.split .meta td:last-child { color: ${t.accent}; }
-  .head.minimal { padding-bottom: 18px; border-bottom: 1px solid #e5e7eb; }
-  .head.minimal .title { font-weight: 600; letter-spacing: .18em; font-size: 18px; color: #111827; }
-  .head.wave { position: relative; background: linear-gradient(135deg, ${t.accent} 0%, #a78bfa 100%); color: #fff; border-radius: ${t.radius}px; padding: 20px 22px 36px; margin: 0 -8px 26px; overflow: hidden; }
-  .head.wave::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 26px; background: url("${WAVE_SVG}") no-repeat; background-size: 100% 100%; }
+  .head.minimal { padding-bottom: 20px; border-bottom: 1px solid #e5e7eb; }
+  .head.minimal .title { font-weight: 600; letter-spacing: .18em; font-size: 24px; color: #111827; }
+  .head.wave { position: relative; background: linear-gradient(135deg, ${t.accent} 0%, #a78bfa 100%); color: #fff; border-radius: ${t.radius}px; padding: 22px 24px 44px; margin: 0 -10px 26px; overflow: hidden; }
+  .head.wave::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 34px; background: url("${WAVE_SVG}") no-repeat; background-size: 100% 100%; }
   .head.wave .muted, .head.wave .meta td:first-child { color: rgba(255,255,255,.78); }
   .head.wave .title { color: #fff; }
 
   /* ----- parties ----- */
-  .parties { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 22px; }
-  .party .label { margin-bottom: 5px; }
-  .party .name { font-size: 12px; font-weight: 700; margin-bottom: 2px; }
-  .party .lines { font-size: 10px; }
-  .due { min-width: 190px; text-align: right; padding: 12px 14px; border-radius: ${t.radius}px; background: ${t.tint}; }
-  .due .amount { font-size: 20px; font-weight: 800; color: ${t.accent}; line-height: 1.1; margin: 4px 0 3px; }
-  .due .when { font-size: 9.5px; }
-  .badge { display: inline-block; font-size: 8.5px; font-weight: 700; letter-spacing: .1em; padding: 3px 7px; border-radius: 3px; }
+  .parties { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; margin-bottom: 22px; }
+  .party .label { margin-bottom: 6px; }
+  .party .name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .party .lines { font-size: 12.5px; }
+  .due { min-width: 240px; text-align: right; padding: 14px 16px; border-radius: ${t.radius}px; background: ${t.tint}; }
+  .due .amount { font-size: 24px; font-weight: 800; color: ${t.accent}; line-height: 1.1; margin: 4px 0 3px; }
+  .due .when { font-size: 12.5px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .1em; padding: 4px 9px; border-radius: 4px; }
   .badge.paid { background: #dcfce7; color: #166534; }
   .badge.overdue { background: #fee2e2; color: #991b1b; }
   .badge.draft { background: #f3f4f6; color: #374151; }
 
   /* ----- items ----- */
-  table.items { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 14px; }
+  table.items { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 12px; }
   table.items thead { display: table-header-group; }
-  table.items th { font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; text-align: left; padding: 8px 10px; }
+  table.items th { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; text-align: left; padding: 8px 12px; }
   table.items th.num { text-align: right; }
-  table.items td { padding: 8px 10px; vertical-align: top; border-bottom: 1px solid #eceff3; }
+  table.items td { padding: 8px 12px; vertical-align: top; border-bottom: 1px solid #eceff3; }
   table.items tr { page-break-inside: avoid; break-inside: avoid; }
   table.items .item { font-weight: 600; }
-  table.items .desc { color: #6b7280; font-size: 9.5px; margin-top: 2px; }
-  table.items col.c-qty { width: 52px; }
-  table.items col.c-price { width: 92px; }
-  table.items col.c-amt { width: 96px; }
+  table.items .desc { color: #6b7280; font-size: 12px; margin-top: 2px; }
+  table.items col.c-qty { width: 60px; }
+  table.items col.c-price { width: 110px; }
+  table.items col.c-amt { width: 118px; }
   ${t.rows === 'zebra' ? 'table.items tbody tr:nth-child(even) td { background: #fafafa; }' : ''}
   ${
     t.totals === 'rule' || t.header === 'minimal'
-      ? `table.items th { border-bottom: 1.5px solid #111827; color: #111827; }`
+      ? `table.items th { border-bottom: 2px solid #111827; color: #111827; }`
       : t.header === 'split'
         ? `table.items thead tr { background: #f3f4f6; } table.items th { color: #374151; }`
         : t.header === 'rule'
@@ -226,12 +235,12 @@ function css(t: Theme, mode: RenderMode): string {
   }
 
   /* ----- totals ----- */
-  .totals-wrap { display: flex; justify-content: flex-end; page-break-inside: avoid; break-inside: avoid; margin-bottom: 26px; }
-  .totals { min-width: 260px; }
-  .trow { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding: 5px 10px; font-size: 10.5px; }
+  .totals-wrap { display: flex; justify-content: flex-end; page-break-inside: avoid; break-inside: avoid; margin-bottom: 24px; }
+  .totals { min-width: 330px; }
+  .trow { display: flex; justify-content: space-between; align-items: baseline; gap: 32px; padding: 5px 12px; font-size: 13px; }
   .trow .k { color: #6b7280; }
   .trow .num { font-weight: 600; }
-  .trow.total { font-size: 12.5px; font-weight: 800; padding: 9px 10px; margin: 3px 0; }
+  .trow.total { font-size: 16px; font-weight: 800; padding: 10px 12px; margin: 3px 0; }
   .trow.total .k { font-weight: 800; }
   ${
     t.totals === 'fill'
@@ -241,18 +250,18 @@ function css(t: Theme, mode: RenderMode): string {
   .trow.balance, .trow.balance .k { font-weight: 700; color: ${t.accent}; }
 
   /* ----- foot ----- */
-  .foot { display: flex; gap: 28px; page-break-inside: avoid; break-inside: avoid; }
+  .foot { display: flex; gap: 36px; page-break-inside: avoid; break-inside: avoid; }
   .foot > div { flex: 1; min-width: 0; }
-  .foot .label { margin-bottom: 5px; }
-  .foot p { margin: 0 0 6px; font-size: 9.5px; }
+  .foot .label { margin-bottom: 6px; }
+  .foot p { margin: 0 0 6px; font-size: 12px; }
   .pm { margin-bottom: 7px; }
   .pm .k { font-weight: 600; }
-  .pm .v { font-size: 9.5px; color: #374151; word-break: break-all; }
-  ${t.header === 'minimal' ? `.foot { background: ${t.tint}; padding: 14px 16px; margin: 0 -16px; }` : ''}
-  .btn { display: inline-block; background: ${t.accent}; color: ${t.accentInk}; text-decoration: none; font-weight: 700; padding: 8px 14px; border-radius: 6px; font-size: 11px; }
+  .pm .v { font-size: 12px; color: #374151; word-break: break-all; }
+  ${t.header === 'minimal' ? `.foot { background: ${t.tint}; padding: 18px 22px; margin: 0 -22px; }` : ''}
+  .btn { display: inline-block; background: ${t.accent}; color: ${t.accentInk}; text-decoration: none; font-weight: 700; padding: 10px 18px; border-radius: 8px; font-size: 14px; }
 
   /* ----- running footer ----- */
-  .running { font-size: 8.5px; color: #9ca3af; text-align: center; margin-top: 28px; padding-top: 10px; border-top: 1px solid #eceff3; page-break-inside: avoid; break-inside: avoid; }
+  .running { font-size: 10.5px; color: #9ca3af; text-align: center; margin-top: 24px; padding-top: 10px; border-top: 1px solid #eceff3; page-break-inside: avoid; break-inside: avoid; }
   `;
 }
 
@@ -401,7 +410,7 @@ export function renderInvoiceHtml(d: InvoiceDocument, opts: { mode: RenderMode }
 <html lang="${esc(locale)}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=595">
+<meta name="viewport" content="width=${opts.mode === 'print' ? PAGE_W : PAGE_W + 32}">
 <title>${esc(d.document.number)}</title>
 <style>${css(t, opts.mode)}</style>
 </head>

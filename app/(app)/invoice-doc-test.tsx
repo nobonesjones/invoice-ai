@@ -1,24 +1,36 @@
 // Invoice preview (test). A throwaway screen to look at the new HTML invoice
 // document on a real device before committing to the digital-first rebuild.
 //
-// The dev client has no WebView, so the document is shown through the iOS print
-// engine (real WebKit, real A4 pages) and can be shared as a PDF. The final app
-// preview will be the same HTML in a WebView; the PDF path is exactly this one.
+// "Open preview" shows the document in a WebView the way the real app will.
+// That needs react-native-webview in the dev client; until the client is rebuilt
+// the button explains that instead of crashing. "A4 pages" goes through the iOS
+// print engine, which is exactly the PDF path, and "Share as PDF" writes the file.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Modal, UIManager } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
-import { ChevronLeft, Eye, Share2 } from 'lucide-react-native';
+import { ChevronLeft, Eye, Share2, X, Printer } from 'lucide-react-native';
 import { useSupabase } from '@/context/supabase-provider';
 import { useTheme } from '@/context/theme-provider';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { Text } from '@/components/ui/text';
 import { renderInvoiceHtml, type ThemeId } from '@/supabase/functions/_shared/invoice-doc/render';
 import { buildTestDocument, type BusinessLike, type TestVariant } from '@/lib/invoice-doc/testDocument';
+
+// The JS package is always installed; the native view only exists once the dev
+// client has been rebuilt with it. Old architecture, so the view-manager registry
+// is the reliable check.
+let WebViewComponent: React.ComponentType<any> | null = null;
+try {
+  WebViewComponent = require('react-native-webview').WebView;
+} catch {
+  WebViewComponent = null;
+}
+const hasNativeWebView = !!WebViewComponent && !!UIManager.getViewManagerConfig?.('RNCWebView');
 
 const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'clean', label: 'Clean' },
@@ -52,6 +64,16 @@ async function fetchLogoDataUri(url: string): Promise<string | null> {
   }
 }
 
+class WebViewBoundary extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
 export default function InvoiceDocTestScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -64,7 +86,8 @@ export default function InvoiceDocTestScreen() {
   const [business, setBusiness] = useState<BusinessLike | null>(null);
   const [logo, setLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<'preview' | 'share' | null>(null);
+  const [busy, setBusy] = useState<'print' | 'share' | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -111,15 +134,14 @@ export default function InvoiceDocTestScreen() {
     };
   }, [supabase, user]);
 
-  const html = useMemo(
-    () => renderInvoiceHtml(buildTestDocument(variant, themeId, business, logo), { mode: 'print' }),
-    [variant, themeId, business, logo],
-  );
+  const doc = useMemo(() => buildTestDocument(variant, themeId, business, logo), [variant, themeId, business, logo]);
+  const printHtml = useMemo(() => renderInvoiceHtml(doc, { mode: 'print' }), [doc]);
+  const previewHtml = useMemo(() => renderInvoiceHtml(doc, { mode: 'preview' }), [doc]);
 
-  const onPreview = useCallback(async () => {
-    setBusy('preview');
+  const onPrintSheet = useCallback(async () => {
+    setBusy('print');
     try {
-      await Print.printAsync({ html, ...A4 });
+      await Print.printAsync({ html: printHtml, ...A4 });
     } catch (e) {
       // Cancelling the print sheet rejects; that is not an error worth showing.
       const msg = e instanceof Error ? e.message : String(e);
@@ -127,19 +149,19 @@ export default function InvoiceDocTestScreen() {
     } finally {
       setBusy(null);
     }
-  }, [html]);
+  }, [printHtml]);
 
   const onShare = useCallback(async () => {
     setBusy('share');
     try {
-      const { uri } = await Print.printToFileAsync({ html, ...A4 });
+      const { uri } = await Print.printToFileAsync({ html: printHtml, ...A4 });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Invoice PDF (test)' });
     } catch (e) {
       Alert.alert('Share failed', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
-  }, [html]);
+  }, [printHtml]);
 
   const chip = (active: boolean) => [
     styles.chip,
@@ -147,12 +169,22 @@ export default function InvoiceDocTestScreen() {
   ];
   const chipText = (active: boolean) => [styles.chipText, { color: active ? theme.primaryForeground : theme.foreground }];
 
+  const rebuildNotice = (
+    <View style={[styles.notice, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Text style={[styles.noticeTitle, { color: theme.foreground }]}>In-app preview needs a rebuild</Text>
+      <Text style={[styles.noticeBody, { color: theme.mutedForeground }]}>
+        The WebView module was added to the project but this dev client was built before that. Rebuild the dev client once
+        and this button will show the document exactly as the app will. Until then, use "A4 pages" below.
+      </Text>
+    </View>
+  );
+
   return (
     <SafeAreaView edges={['bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={[styles.intro, { color: theme.mutedForeground }]}>
           First look at the new invoice document. One HTML file drives the app preview, the hosted page and the PDF.
-          This screen renders it through the iOS print engine at A4, using your real business details and sample line items.
+          Your real business details, sample client and line items.
         </Text>
 
         <Text style={[styles.sectionLabel, { color: theme.mutedForeground }]}>DESIGN</Text>
@@ -187,9 +219,21 @@ export default function InvoiceDocTestScreen() {
           <ActivityIndicator style={{ marginTop: 24 }} color={theme.primary} />
         ) : (
           <>
-            <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={onPreview} disabled={busy !== null}>
-              {busy === 'preview' ? <ActivityIndicator color={theme.primaryForeground} /> : <Eye size={20} color={theme.primaryForeground} />}
-              <Text style={[styles.buttonText, { color: theme.primaryForeground }]}>Preview A4 pages</Text>
+            {hasNativeWebView ? (
+              <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={() => setShowPreview(true)}>
+                <Eye size={20} color={theme.primaryForeground} />
+                <Text style={[styles.buttonText, { color: theme.primaryForeground }]}>Open preview</Text>
+              </TouchableOpacity>
+            ) : (
+              rebuildNotice
+            )}
+            <TouchableOpacity
+              style={[styles.button, styles.buttonSecondary, { borderColor: theme.border, backgroundColor: theme.card }]}
+              onPress={onPrintSheet}
+              disabled={busy !== null}
+            >
+              {busy === 'print' ? <ActivityIndicator color={theme.foreground} /> : <Printer size={20} color={theme.foreground} />}
+              <Text style={[styles.buttonText, { color: theme.foreground }]}>A4 pages (print sheet)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.buttonSecondary, { borderColor: theme.border, backgroundColor: theme.card }]}
@@ -200,14 +244,47 @@ export default function InvoiceDocTestScreen() {
               <Text style={[styles.buttonText, { color: theme.foreground }]}>Share as PDF</Text>
             </TouchableOpacity>
             <Text style={[styles.note, { color: theme.mutedForeground }]}>
-              Preview opens the print sheet. Tap the page thumbnail to see it full size and swipe between pages. No printer needed, cancel when done.
-            </Text>
-            <Text style={[styles.note, { color: theme.mutedForeground }]}>
               Business: {business?.business_name || 'not found, using placeholder'}. Logo: {logo ? 'loaded' : 'none'}.
             </Text>
           </>
         )}
       </ScrollView>
+
+      <Modal visible={showPreview} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowPreview(false)}>
+        <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: '#eceff3' }}>
+          <View style={[styles.previewBar, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+            <TouchableOpacity onPress={() => setShowPreview(false)} style={{ padding: 8, marginLeft: -8 }}>
+              <X size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.foreground }]}>{doc.document.number}</Text>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={onShare} style={{ padding: 8, marginRight: -8 }} disabled={busy !== null}>
+              {busy === 'share' ? <ActivityIndicator color={theme.foreground} /> : <Share2 size={22} color={theme.foreground} />}
+            </TouchableOpacity>
+          </View>
+          {WebViewComponent && hasNativeWebView ? (
+            <WebViewBoundary fallback={rebuildNotice}>
+              <WebViewComponent
+                originWhitelist={['*']}
+                source={{ html: previewHtml }}
+                style={{ flex: 1, backgroundColor: '#eceff3' }}
+                bounces
+                showsVerticalScrollIndicator={false}
+                setSupportMultipleWindows={false}
+              />
+            </WebViewBoundary>
+          ) : (
+            rebuildNotice
+          )}
+          <View style={[styles.previewChips, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+            {THEMES.map((t) => (
+              <TouchableOpacity key={t.id} style={chip(themeId === t.id)} onPress={() => setThemeId(t.id)}>
+                <Text style={chipText(themeId === t.id)}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -232,4 +309,9 @@ const styles = StyleSheet.create({
   buttonSecondary: { borderWidth: StyleSheet.hairlineWidth },
   buttonText: { fontSize: 16, fontWeight: '600' },
   note: { fontSize: 13, lineHeight: 18, marginTop: 8 },
+  notice: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 16, marginBottom: 12 },
+  noticeTitle: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  noticeBody: { fontSize: 14, lineHeight: 20 },
+  previewBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  previewChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 12, borderTopWidth: StyleSheet.hairlineWidth },
 });
