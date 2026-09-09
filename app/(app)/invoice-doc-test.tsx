@@ -48,7 +48,7 @@ const VARIANTS: { id: TestVariant; label: string; hint: string }[] = [
 
 // A4 in points. Left/right margins are zero so the header cards can run wide;
 // the template pads horizontally itself. Top/bottom are native so every page gets them.
-const A4 = { width: 595, height: 842, margins: { top: 36, bottom: 36, left: 0, right: 0 } };
+const A4 = { width: 595, height: 842, margins: { top: 30, bottom: 30, left: 0, right: 0 } };
 
 async function fetchLogoDataUri(url: string): Promise<string | null> {
   try {
