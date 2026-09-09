@@ -121,3 +121,12 @@ The old renderer keeps working until WP3 swaps it, so nothing is broken mid-way.
 1. OK to add `react-native-webview` and do the dev-client rebuild (with push notifications)?
 2. Hosted URL stays `invoices.getsuperinvoice.com/<token>` served by the edge function,
    with `getsuperinvoice.com/pay/<id>` pointing at it. Confirm.
+
+## Test screen (shipped 2026-09-09, before committing to the build)
+Settings → **Invoice preview (test)** (`app/(app)/invoice-doc-test.tsx`). Renders the new
+document through the iOS print engine at A4 (`expo-print`, native margins 36pt top/bottom)
+with Harry's real business details and three fixtures; can share the PDF. The template is
+already in its final home, `supabase/functions/_shared/invoice-doc/render.ts` (zero imports),
+fixtures + `computeTotals()` in `lib/invoice-doc/testDocument.ts`. Interim choices in the
+test: CSS fragmentation for page breaks (no "Page n of N" yet), system font stack (Inter
+comes in WP2), static running footer. Remove the screen and menu entry in WP3.

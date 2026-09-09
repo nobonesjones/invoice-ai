@@ -6,7 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { 
   ChevronRight, Search, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
   Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell, Receipt,
-  Crown 
+  Crown,
+  FlaskConical,
 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text'; 
@@ -298,6 +299,16 @@ export default function NewSettingsScreen() {
             router.push('/expenses');
           },
           searchTerms: ['expenses', 'receipts', 'costs', 'spending', 'track']
+        },
+        {
+          id: 'invoice-doc-test',
+          icon: <FlaskConical color={theme.foreground} size={24} />,
+          label: 'Invoice preview (test)',
+          onPress: () => {
+            setIsTabBarVisible(false);
+            router.push('/invoice-doc-test');
+          },
+          searchTerms: ['test', 'preview', 'invoice', 'design', 'pdf', 'new']
         },
         // {
         //   id: 'payment-reminders',
