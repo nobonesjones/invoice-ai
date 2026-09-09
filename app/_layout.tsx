@@ -96,6 +96,8 @@ function RootLayoutNav() {
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-options";
     const isPaymentRemindersScreen =
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-reminders";
+    const isInvoiceDocTestScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "invoice-doc-test";
 
     // Detect onboarding routes inside (auth)
     const isOnboardingRoute = segments[0] === '(auth)' && segments.length >= 2 && String(segments[1] || '').startsWith('onboarding');
@@ -129,6 +131,7 @@ function RootLayoutNav() {
       isCustomerSupportScreen ||
       isPaymentOptionsScreen ||
       isPaymentRemindersScreen ||
+      isInvoiceDocTestScreen ||
       isSoftPaywallScreen ||
       inPublicGroup ||
       isPolarCallbackScreen ||

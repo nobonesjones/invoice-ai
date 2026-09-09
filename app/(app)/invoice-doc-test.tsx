@@ -6,7 +6,7 @@
 // preview will be the same HTML in a WebView; the PDF path is exactly this one.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
@@ -15,6 +15,7 @@ import * as FileSystem from 'expo-file-system';
 import { ChevronLeft, Eye, Share2 } from 'lucide-react-native';
 import { useSupabase } from '@/context/supabase-provider';
 import { useTheme } from '@/context/theme-provider';
+import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { Text } from '@/components/ui/text';
 import { renderInvoiceHtml, type ThemeId } from '@/supabase/functions/_shared/invoice-doc/render';
 import { buildTestDocument, type BusinessLike, type TestVariant } from '@/lib/invoice-doc/testDocument';
@@ -56,6 +57,7 @@ export default function InvoiceDocTestScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
   const { supabase, user } = useSupabase();
+  const { setIsTabBarVisible } = useTabBarVisibility();
 
   const [themeId, setThemeId] = useState<ThemeId>('clean');
   const [variant, setVariant] = useState<TestVariant>('typical');
@@ -63,6 +65,13 @@ export default function InvoiceDocTestScreen() {
   const [logo, setLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<'preview' | 'share' | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsTabBarVisible(false);
+      return () => setIsTabBarVisible(true);
+    }, [setIsTabBarVisible]),
+  );
 
   useEffect(() => {
     navigation.setOptions({
