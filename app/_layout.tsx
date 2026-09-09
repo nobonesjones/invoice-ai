@@ -67,6 +67,8 @@ function RootLayoutNav() {
 		// the callbacks above: it is reached by an external redirect, and bouncing it
 		// to (protected) would drop the user on the invoice list instead of payments.
 		const isStripeConnectScreen = segments[0] === "stripe-connect";
+		// Payer return from a GoCardless payment page; reached by redirect, same as the above.
+		const isPaymentCompleteScreen = segments[0] === "payment-complete";
 		// Check if the current route is the soft paywall screen
 		const isSoftPaywallScreen =
 			segments[0] === "(app)" &&
@@ -131,7 +133,8 @@ function RootLayoutNav() {
       inPublicGroup ||
       isPolarCallbackScreen ||
       isGoCardlessCallbackScreen ||
-      isStripeConnectScreen
+      isStripeConnectScreen ||
+      isPaymentCompleteScreen
     );
 
     const shouldGoProtected = !!session && (

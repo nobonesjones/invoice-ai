@@ -246,6 +246,10 @@ export default function ClientProfileScreen() {
 							type = 'payment';
 							status = 'completed';
 							break;
+						case 'paid':
+							type = 'payment';
+							status = 'paid';
+							break;
 						case 'sent':
 						case 'email_sent':
 							type = 'invoice';

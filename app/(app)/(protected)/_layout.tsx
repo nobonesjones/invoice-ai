@@ -18,6 +18,7 @@ import { colors } from "@/constants/colors";
 import { useTabBarVisibility } from "@/context/TabBarVisibilityContext";
 import { useSupabase } from "@/context/supabase-provider";
 import { useTheme } from "@/context/theme-provider";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 // Function to trigger haptic feedback
 const triggerHaptic = () => {
@@ -39,6 +40,9 @@ export default function ProtectedLayout() {
 	const { user } = useSupabase();
 	const router = useRouter();
 	const { isTabBarVisible } = useTabBarVisibility();
+	// Everything under (protected) has a signed-in user, which is what push
+	// registration and tap-routing need.
+	usePushNotifications();
 
 	return (
     // <BottomSheetModalProvider> {/* Added Provider here */}

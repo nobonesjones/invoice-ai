@@ -1,153 +1,80 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react-native';
+
 import { Text } from '@/components/ui/text';
 import { useTheme } from '@/context/theme-provider';
 import { useSupabase } from '@/context/supabase-provider';
-import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react-native';
+import { useGoCardlessConnect } from '@/hooks/useGoCardlessConnect';
 
+/**
+ * Cold-start landing for the GoCardless OAuth redirect.
+ *
+ * In the normal flow the payments screen opens the consent page in an auth
+ * session, the redirect closes it, and the hook exchanges the code there —
+ * this route never renders. It exists for the case where the redirect arrives
+ * when the app was not running (the user switched apps mid-flow and the OS
+ * killed us): then this is the first thing on screen, and it has to finish the
+ * exchange itself before handing over to the payments screen.
+ */
 export default function GoCardlessCallback() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { supabase, user } = useSupabase();
+  const { user } = useSupabase();
+  const gocardless = useGoCardlessConnect();
   const params = useLocalSearchParams<{ code?: string; state?: string; error?: string }>();
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'needs_verification'>('loading');
-  const [message, setMessage] = useState('Connecting your GoCardless account...');
-  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [message, setMessage] = useState('Connecting your GoCardless account…');
 
   useEffect(() => {
-    handleOAuthCallback();
-  }, []);
+    if (!user) return; // the auth guard will settle first
+    let cancelled = false;
 
-  const handleOAuthCallback = async () => {
-    try {
-      // Check for OAuth errors
-      if (params.error) {
-        throw new Error(`OAuth error: ${params.error}`);
-      }
+    (async () => {
+      try {
+        if (params.error) throw new Error(`GoCardless returned an error: ${params.error}`);
+        if (!params.code) throw new Error('No authorization code received');
 
-      // Validate required parameters
-      if (!params.code) {
-        throw new Error('No authorization code received');
-      }
+        await gocardless.exchangeCode(params.code, params.state ?? null);
+        const result = await gocardless.refresh();
+        if (cancelled) return;
 
-      if (!user) {
-        throw new Error('User not authenticated');
-      }
-
-      console.log('[GoCardless] Processing OAuth callback', {
-        hasCode: !!params.code,
-        hasState: !!params.state,
-      });
-
-      setMessage('Exchanging authorization code...');
-
-      // Call edge function to exchange code for access token
-      const { data: session } = await supabase.auth.getSession();
-      if (!session?.session) {
-        throw new Error('No active session');
-      }
-
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/functions/v1/gocardless-payments-oauth`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
-            action: 'exchange-code',
-            code: params.code,
-            redirect_uri: 'https://getsuperinvoice.com/gocardless-callback',
-            environment: 'sandbox',
-          }),
+        if (result.canAcceptPayments) {
+          setStatus('success');
+          setMessage('GoCardless connected. You can now take instant bank payments.');
+        } else if (result.verification === 'in_review') {
+          setStatus('success');
+          setMessage('GoCardless connected. Your details are under review — bank payments switch on automatically.');
+        } else {
+          setStatus('needs_verification');
+          setMessage('GoCardless connected. A few more details are needed before you can take payments.');
         }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to exchange authorization code');
+      } catch (e) {
+        if (cancelled) return;
+        console.error('[GoCardless] Callback error:', e);
+        setStatus('error');
+        setMessage(e instanceof Error ? e.message : 'Failed to connect GoCardless');
       }
-
-      const data = await response.json();
-
-      console.log('[GoCardless] Token exchange successful', {
-        verificationStatus: data.creditor?.verification_status,
-      });
-
-      // Check verification status
-      const verification = data.creditor?.verification_status;
-      setVerificationStatus(verification);
-
-      if (verification === 'action_required') {
-        setStatus('needs_verification');
-        setMessage('Account connected! Please complete verification to start accepting payments.');
-
-        // Redirect to verification after a short delay
-        setTimeout(() => {
-          router.replace('/gocardless-onboarding');
-        }, 2000);
-      } else if (verification === 'in_review') {
-        setStatus('success');
-        setMessage('Account connected! Your account is under review by GoCardless.');
-
-        // Redirect back to payment options
-        setTimeout(() => {
-          router.replace('/payment-options');
-        }, 3000);
-      } else if (verification === 'successful') {
-        setStatus('success');
-        setMessage('GoCardless account connected successfully! You can now accept payments.');
-
-        // Redirect back to payment options
-        setTimeout(() => {
-          router.replace('/payment-options');
-        }, 3000);
-      } else {
-        // Unknown status
-        setStatus('success');
-        setMessage('Account connected. Please check your verification status.');
-
-        setTimeout(() => {
-          router.replace('/payment-options');
-        }, 3000);
-      }
-
-    } catch (error) {
-      console.error('[GoCardless] Callback error:', error);
-      setStatus('error');
-      setMessage(error instanceof Error ? error.message : 'Failed to connect GoCardless account');
-
-      // Show alert and redirect back
+      // Either way the payments screen is where the user was heading; it
+      // shows the live status and any next step.
       setTimeout(() => {
-        Alert.alert(
-          'Connection Failed',
-          'Failed to connect your GoCardless account. Please try again.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/payment-options'),
-            },
-          ]
-        );
-      }, 1000);
-    }
-  };
+        if (!cancelled) router.replace('/(app)/payment-options');
+      }, 2200);
+    })();
 
-  const getIcon = () => {
-    switch (status) {
-      case 'success':
-        return <CheckCircle size={64} color="#22C55E" />;
-      case 'error':
-        return <XCircle size={64} color="#EF4444" />;
-      case 'needs_verification':
-        return <AlertTriangle size={64} color="#F59E0B" />;
-      default:
-        return null;
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, params.code]);
+
+  const icon =
+    status === 'success' ? <CheckCircle size={64} color="#22C55E" /> :
+    status === 'error' ? <XCircle size={64} color="#EF4444" /> :
+    status === 'needs_verification' ? <AlertTriangle size={64} color="#F59E0B" /> :
+    null;
 
   const styles = StyleSheet.create({
     container: {
@@ -157,21 +84,13 @@ export default function GoCardlessCallback() {
       alignItems: 'center',
       padding: 20,
     },
-    iconContainer: {
-      marginBottom: 24,
-    },
+    iconContainer: { marginBottom: 24 },
     message: {
       fontSize: 18,
       color: theme.foreground,
       textAlign: 'center',
       marginBottom: 16,
       lineHeight: 24,
-    },
-    statusText: {
-      fontSize: 14,
-      color: theme.mutedForeground,
-      textAlign: 'center',
-      marginTop: 8,
     },
   });
 
@@ -184,15 +103,8 @@ export default function GoCardlessCallback() {
         </>
       ) : (
         <>
-          <View style={styles.iconContainer}>
-            {getIcon()}
-          </View>
+          <View style={styles.iconContainer}>{icon}</View>
           <Text style={styles.message}>{message}</Text>
-          {verificationStatus && (
-            <Text style={styles.statusText}>
-              Verification status: {verificationStatus.replace('_', ' ')}
-            </Text>
-          )}
         </>
       )}
     </View>

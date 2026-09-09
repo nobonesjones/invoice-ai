@@ -6,6 +6,7 @@ export type InvoiceActivityType =
   | 'sent'
   | 'viewed'
   | 'payment_added'
+  | 'paid'         // Written by the on_invoice_paid DB trigger when status flips to paid, whatever the method
   | 'payment_removed'
   | 'status_changed'
   | 'note_added'
@@ -124,15 +125,25 @@ export const useInvoiceActivityLogger = () => {
     });
   };
 
-  const logPaymentAdded = (invoiceId: string, invoiceNumber?: string, amount?: number, method?: string) => {
+  // currencySymbol is passed in rather than assumed: this description was
+  // hardcoded to "$", so a AED or GBP invoice recorded its payment history in
+  // the wrong currency.
+  const logPaymentAdded = (
+    invoiceId: string,
+    invoiceNumber?: string,
+    amount?: number,
+    method?: string,
+    currencySymbol = '',
+  ) => {
     return logActivity({
       invoiceId,
       activityType: 'payment_added',
-      description: `Payment of ${amount ? `$${amount.toFixed(2)}` : 'unknown amount'} recorded${method ? ` via ${method}` : ''}`,
+      description: `Payment of ${amount != null ? `${currencySymbol}${amount.toFixed(2)}` : 'unknown amount'} recorded${method ? ` via ${method}` : ''}`,
       data: { 
         invoice_number: invoiceNumber, 
         payment_amount: amount, 
-        payment_method: method 
+        payment_method: method,
+        currency_symbol: currencySymbol || undefined
       }
     });
   };
