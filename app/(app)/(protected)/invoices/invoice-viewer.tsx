@@ -46,14 +46,13 @@ import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Database, Json, Tables } from '../../../types/database.types'; 
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
+import { InvoiceForTemplate, BusinessSettingsRow } from '@/types/invoiceTemplate';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
 import { Share } from 'react-native';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
-import { generateInvoiceTemplateOneHtml } from '@/utils/generateInvoiceTemplateOneHtml';
 import { StatusBadge } from '@/components/StatusBadge';
 import { StatusSelectorSheet } from '@/components/StatusSelectorSheet';
 import { PaymentAmountSheet } from '@/components/PaymentAmountSheet';
@@ -66,17 +65,10 @@ import { InvoiceShareService } from '@/services/invoiceShareService';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
-// NEW SKIA IMPORTS
-import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
-import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
-import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
-import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
-import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
-import { useCanvasRef } from '@shopify/react-native-skia';
-import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
-
-// PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
-import { PDFDocument } from 'pdf-lib';
+// The invoice as one shared HTML document: preview, PDF and email all render it.
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { fetchLogoDataUri, renderInvoicePdf, renderInvoicePdfBase64, renderInvoicePdfNamed } from '@/lib/invoice-doc/pdf';
 import { functionErrorMessage } from '@/hooks/useStripeConnect';
 import { SendStatusOverlay, SendStatus } from '@/components/SendStatusOverlay';
 
@@ -205,13 +197,8 @@ function InvoiceViewerScreen() {
   // Snap points for the Payment Amount Modal
   const paymentAmountSnapPoints = useMemo(() => ['75%', '90%'], []);
 
-  // Add ref for Skia canvas export
-  const skiaInvoiceRef = useCanvasRef();
-  
-  // Add refs and state for multi-page export
-  const exportCanvasRefs = useRef<any[]>([]);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportTotalPages, setExportTotalPages] = useState(1);
+  // Logo as a data URI so preview and PDF never wait on the network.
+  const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   // Drives SendStatusOverlay. isSendingEmail is kept because other code reads it,
   // but it was never rendered — the send had no visible progress at all.
@@ -298,69 +285,8 @@ function InvoiceViewerScreen() {
       setSendStatus('sending');
       handleCloseSendModal(); // Close modal immediately for better UX
 
-      // 2. Generate PDF as base64 from Skia canvas
-      const image = skiaInvoiceRef.current?.makeImageSnapshot();
-
-      if (!image) {
-        throw new Error('Failed to create image snapshot from canvas');
-      }
-
-      // Encode to PNG bytes
-      const imageBytes = image.encodeToBytes();
-
-      // Convert to base64 for HTML embedding
-      const chunkSize = 8192;
-      let binaryString = '';
-
-      for (let i = 0; i < imageBytes.length; i += chunkSize) {
-        const chunk = imageBytes.slice(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-
-      const base64String = btoa(binaryString);
-
-      // Convert image to PDF using Print API
-      const { uri: pdfUri } = await Print.printToFileAsync({
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              @page {
-                margin: 0;
-                size: ${image.width()}px ${image.height()}px;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                overflow: hidden;
-              }
-              .invoice-image {
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                display: block;
-                object-fit: none;
-              }
-            </style>
-          </head>
-          <body>
-            <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice" />
-          </body>
-          </html>
-        `,
-        base64: false,
-      });
-
-      // Read PDF file as base64
-      const pdfBase64 = await FileSystem.readAsStringAsync(pdfUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Clean up temporary PDF file
-      await FileSystem.deleteAsync(pdfUri, { idempotent: true });
+      // 2. Render the document to an A4 PDF: the same HTML the preview shows.
+      const { base64: pdfBase64 } = await renderInvoicePdfBase64(requireDoc());
 
       // Mint the payment link first: send-invoice reads stripe_payment_link_url
       // off the invoice row, so it has to be persisted before the send, not after.
@@ -373,9 +299,7 @@ function InvoiceViewerScreen() {
       // in the function logs. Record the size so a failure is diagnosable.
       const payloadBytes = pdfBase64.length;
       const payloadMb = (payloadBytes / (1024 * 1024)).toFixed(2);
-      console.log(
-        `[SendInvoice] canvas ${image.width()}x${image.height()}, png ${(imageBytes.length / 1024).toFixed(0)}KB, pdf base64 ${payloadMb}MB`,
-      );
+      console.log(`[SendInvoice] pdf base64 ${payloadMb}MB`);
 
       // 3. Call the correct edge function to send email via Resend
       const { data, error } = await supabase.functions.invoke('send-invoice', {
@@ -438,12 +362,7 @@ function InvoiceViewerScreen() {
       await ensureStripePaymentLink();
 
       // Generate shareable PDF link using the Skia canvas
-      const result = await InvoiceShareService.generateShareLinkFromCanvas(
-        invoice.id, 
-        user.id,
-        skiaInvoiceRef,
-        30 // Expires in 30 days
-      );
+      const result = await InvoiceShareService.generateShareLinkFromPdf(invoice.id, user.id, (await renderInvoicePdf(requireDoc())).uri, 30);
 
       if (!result.success) {
         Alert.alert('Error', result.error || 'Failed to generate share link');
@@ -515,236 +434,37 @@ function InvoiceViewerScreen() {
   };
 
   const handleSendPDF = async () => {
-    if (!invoice || !businessSettings) {
-      Alert.alert('Error', 'Cannot export PDF - invoice data or business settings not loaded');
+    if (!invoice || !invoiceDoc) {
+      Alert.alert('Error', 'Cannot export PDF - invoice not loaded');
       return;
     }
-
     try {
-      // Starting multi-page export for invoice
-      
-      // First, check if this invoice needs pagination using same logic as canvas
-      const lineItems = invoice?.invoice_line_items || [];
-      const totalItems = lineItems.length;
-      const maxItemsFirstPage = 10; // Same as canvas calculation
-      const adjustedMaxItemsFirstPage = 12; // Two-page special case
-      const needsPagination = totalItems > adjustedMaxItemsFirstPage;
-      
-      if (!needsPagination) {
-        // Single page invoice - using standard export
-        // Single page - use existing logic
-        const image = skiaInvoiceRef.current?.makeImageSnapshot();
-        
-        if (!image) {
-          throw new Error('Failed to create image snapshot from invoice canvas');
-        }
-        
-        const actualWidth = image.width();
-        const actualHeight = image.height();
-        const imageBytes = image.encodeToBytes();
-        
-        const pdfDoc = await PDFDocument.create();
-        const page = pdfDoc.addPage([actualWidth, actualHeight]);
-        const pdfImage = await pdfDoc.embedPng(imageBytes);
-        
-        page.drawImage(pdfImage, {
-          x: 0,
-          y: 0,
-          width: actualWidth,
-          height: actualHeight,
-        });
-        
-        const pdfBytes = await pdfDoc.save();
-        const fileName = `invoice-${invoice.invoice_number}.pdf`;
-        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        
-        const chunkSize = 8192;
-        let binaryString = '';
-        
-        for (let i = 0; i < pdfBytes.length; i += chunkSize) {
-          const chunk = pdfBytes.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-        }
-        
-        const base64String = btoa(binaryString);
-        
-        await FileSystem.writeAsStringAsync(
-          fileUri,
-          base64String,
-          { encoding: FileSystem.EncodingType.Base64 }
-        );
-        
-              // Update invoice status to sent
+      const { uri: fileUri } = await renderInvoicePdfNamed(invoiceDoc, `invoice-${invoice.invoice_number}.pdf`);
+
       const { error: updateError } = await supabase
         .from('invoices')
         .update({ status: 'sent' })
         .eq('id', invoice.id);
-
       if (updateError) {
-        // Error updating status
         Alert.alert('Error', 'Failed to update invoice status.');
         return;
       }
-
-      // Log the send activity
       await logInvoiceSent(invoice.id, invoice.invoice_number, 'pdf');
-
-      // Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
-        
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/pdf',
-          dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`
-        });
-        
-        handleCloseSendModal();
-      
-      // Refresh invoice data to reflect status change
-      if (invoiceId) {
-        const refreshedInvoice = await fetchInvoiceData(invoiceId);
-        if (refreshedInvoice) {
-          setInvoice(refreshedInvoice);
-        }
-      }
-        return;
-      }
-      
-      // Multi-page invoice - calculate pages
-      // Multi-page invoice detected
-      
-      const remainingItems = totalItems - adjustedMaxItemsFirstPage;
-      const itemsPerSubsequentPage = Math.floor((295 - 50) / 20); // Use actual display canvas height
-      const totalPages = remainingItems > 0 ? 
-        1 + Math.ceil(remainingItems / itemsPerSubsequentPage) : 1;
-      
-      // Calculated pages for export
-      
-      const pdfDoc = await PDFDocument.create();
-      const pageImages: any[] = [];
-      
-      // For now, we'll capture the full canvas and split it manually
-      // This is a temporary solution until we implement proper page-by-page rendering
-      // Capturing full canvas for splitting
-      const fullImage = skiaInvoiceRef.current?.makeImageSnapshot();
-      
-      if (!fullImage) {
-        throw new Error('Failed to create image snapshot from invoice canvas');
-      }
-      
-      const fullImageBytes = fullImage.encodeToBytes();
-      const canvasWidth = fullImage.width();
-      const fullCanvasHeight = fullImage.height();
-      
-      // CRITICAL FIX: Use actual captured dimensions, not display dimensions
-      // The captured canvas is scaled up (device pixel ratio = 3x in this case)
-      const actualSinglePageHeight = Math.round(fullCanvasHeight / totalPages); // Calculate from actual captured dimensions
-      
-      // === CANVAS ANALYSIS ===
-      // Full canvas dimensions analysis
-      // Single page height calculated
-      // Scale factor detected // 590 is logical canvas height per page
-      // Expected Page 1 Y-range analysis
-      // Expected Page 2 Y-range analysis
-      // Total pages to generate
-      // === PAGE NUMBER POSITIONING ANALYSIS ===
-      // Page 1 number positioning analysis
-      // Page 2 number positioning analysis
-      // Page 1 crop range analysis
-      // Page 2 crop range analysis
-      // === END ANALYSIS ===
-      
-      // For each page, we'll create a standard-sized PDF page
-      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        // Creating PDF page
-        
-        // Create a page with increased height (60px longer for multi-page invoices)
-        const page = pdfDoc.addPage([612, 852]);
-        const pdfImage = await pdfDoc.embedPng(fullImageBytes);
-        
-        // Use the same positioning method for ALL pages (it works perfectly for Page 2)
-        // FIXED: Invert the page logic since canvas structure is opposite of expected
-        const pageYOffset = (totalPages - pageNum) * actualSinglePageHeight; // Inverted: Page 1 gets last section, Page 2 gets first section
-        const scaleToFitWidth = 612 / canvasWidth;
-        const scaledWidth = canvasWidth * scaleToFitWidth;
-        const scaledHeight = fullCanvasHeight * scaleToFitWidth;
-        const scaledPageYOffset = pageYOffset * scaleToFitWidth;
-        
-        // Position image so the TOP of the relevant section appears at TOP of PDF page
-        // PDF coordinate system: Y=0 is bottom, Y=852 is top (increased by 60px)
-        // We want the section top to appear at PDF top (Y=852)
-        const scaledPageHeight = actualSinglePageHeight * scaleToFitWidth;
-        const yPosition = 852 - scaledPageHeight - scaledPageYOffset; // Position to show section top at PDF top
-        
-        // Page positioning calculations
-        
-        page.drawImage(pdfImage, {
-          x: 0,
-          y: yPosition,
-          width: scaledWidth,
-          height: scaledHeight, // Use full height for all pages
-        });
-        
-        // Added page to PDF
-      }
-      
-      // Finalizing PDF with pages
-      const pdfBytes = await pdfDoc.save();
-      const fileName = `invoice-${invoice.invoice_number}.pdf`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      
-      const chunkSize = 8192;
-      let binaryString = '';
-      
-      for (let i = 0; i < pdfBytes.length; i += chunkSize) {
-        const chunk = pdfBytes.slice(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      
-      const base64String = btoa(binaryString);
-      
-      await FileSystem.writeAsStringAsync(
-        fileUri,
-        base64String,
-        { encoding: FileSystem.EncodingType.Base64 }
-      );
-      
-      // Update invoice status to sent
-      const { error: updateError } = await supabase
-        .from('invoices')
-        .update({ status: 'sent' })
-        .eq('id', invoice.id);
 
-      if (updateError) {
-        // Error updating status
-        Alert.alert('Error', 'Failed to update invoice status.');
-        return;
-      }
-
-      // Log the send activity
-      await logInvoiceSent(invoice.id, invoice.invoice_number, 'pdf');
-
-      // Update local state
-      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
-      
       await Sharing.shareAsync(fileUri, {
         mimeType: 'application/pdf',
-        dialogTitle: `Share Invoice ${invoice.invoice_number} PDF (${totalPages} pages)`
+        dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`,
       });
-      
       handleCloseSendModal();
-      
-      // Refresh invoice data to reflect status change
+
       if (invoiceId) {
         const refreshedInvoice = await fetchInvoiceData(invoiceId);
         if (refreshedInvoice) {
           setInvoice(refreshedInvoice);
         }
       }
-      
-      // Export completed successfully
-      
-    } catch (error: any) { 
-      // PDF export error
+    } catch (error: any) {
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -1030,38 +750,34 @@ function InvoiceViewerScreen() {
   // Calculate currency symbol for Skia canvas
   const currencySymbol = invoice?.currency ? getCurrencySymbol(invoice.currency) : '$';
 
-  // Get the correct design component based on invoice-specific settings
-  const getInvoiceDesignComponent = () => {
-    const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-    // Selected design type for invoice
-    
-    switch (designType.toLowerCase()) {
-      case 'modern':
-        // Using SkiaInvoiceCanvasModern
-        return SkiaInvoiceCanvasModern;
-      case 'clean':
-        // Using SkiaInvoiceCanvasClean
-        return SkiaInvoiceCanvasClean;
-      case 'simple':
-        // Using SkiaInvoiceCanvasSimple
-        return SkiaInvoiceCanvasSimple;
-      case 'wave':
-        // Using SkiaInvoiceCanvasWave
-        return SkiaInvoiceCanvasWave;
-      case 'classic':
-      default:
-        // Using SkiaInvoiceCanvas (classic)
-        return SkiaInvoiceCanvas;
-    }
-  };
-
-  const InvoiceDesignComponent = getInvoiceDesignComponent();
 
   // Get the accent color from invoice-specific settings
   const getAccentColor = () => {
     const savedColor = invoice?.accent_color || '#1E40AF';
     // Using accent color for invoice
     return savedColor;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
+      if (!cancelled) setLogoDataUri(uri);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessSettings?.business_logo_url]);
+
+  const invoiceDoc = useMemo(
+    () =>
+      invoice && businessSettings
+        ? buildInvoiceDocument({ type: 'invoice', row: invoice, client, business: businessSettings, logoDataUri })
+        : null,
+    [invoice, client, businessSettings, logoDataUri],
+  );
+  const requireDoc = () => {
+    if (!invoiceDoc) throw new Error('Invoice is still loading');
+    return invoiceDoc;
   };
 
   const addAlpha = (color: string, opacity: number): string => {
@@ -2059,12 +1775,7 @@ function InvoiceViewerScreen() {
 
     try {
       // Generate shareable PDF link from Skia canvas
-      const result = await InvoiceShareService.generateShareLinkFromCanvas(
-        invoice.id, 
-        user.id,
-        skiaInvoiceRef,
-        30 // Expires in 30 days
-      );
+      const result = await InvoiceShareService.generateShareLinkFromPdf(invoice.id, user.id, (await renderInvoicePdf(requireDoc())).uri, 30);
 
       if (!result.success) {
         Alert.alert('Error', result.error || 'Failed to generate share link');
@@ -2525,69 +2236,25 @@ function InvoiceViewerScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={[
-          styles.scrollViewContent, 
-          { 
-            backgroundColor: themeColors.border, 
-            paddingTop: 10, // Restored to not affect header size
-            paddingBottom: 200,
-            paddingHorizontal: 10 // Add horizontal padding for better framing
-          }
-        ]} 
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={[styles.scrollView, { backgroundColor: themeColors.border }]}>
         {isLoading || (!isInvoiceReady && invoice && businessSettings) ? (
-          <View style={{ alignItems: 'center', paddingTop: -10 }}> 
+          <View style={{ alignItems: 'center', paddingTop: 10 }}>
             <InvoiceSkeletonLoader />
           </View>
         ) : error ? (
           <View style={styles.centeredMessageContainer}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
-        ) : invoice ? (
-          <View style={{ alignItems: 'center', marginTop: -30 }}>
-            <View style={{
-              transform: [{ scale: 0.882 }],
-              marginLeft: -175,
-            }}>
-              <InvoiceDesignComponent
-                ref={skiaInvoiceRef}
-                invoice={invoice}
-                client={client}
-                business={businessSettings}
-                currencySymbol={currencySymbol}
-                accentColor={getAccentColor()}
-                documentType="invoice"
-                renderSinglePage={0}
-                displaySettings={{
-                  show_business_logo: businessSettings?.show_business_logo ?? true,
-                  show_business_name: businessSettings?.show_business_name ?? true,
-                  show_business_address: businessSettings?.show_business_address ?? true,
-                  show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-                  show_notes_section: businessSettings?.show_notes_section ?? true,
-                }}
-                style={{ 
-                  width: 200, 
-                  height: 295,
-                  backgroundColor: 'white',
-                  borderRadius: 8,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 3,
-                }}
-              />
-            </View>
+        ) : invoiceDoc ? (
+          <View style={{ flex: 1, paddingBottom: 96 }}>
+            <InvoiceDocumentView doc={invoiceDoc} background={themeColors.border} />
           </View>
         ) : (
           <View style={styles.centeredMessageContainer}>
             <Text style={{ color: themeColors.mutedForeground }}>No invoice data available.</Text>
           </View>
         )}
-      </ScrollView>
+      </View>
 
       <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>
         <View style={styles.invoiceDetailsBottomContainer}>

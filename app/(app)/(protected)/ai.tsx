@@ -20,13 +20,9 @@ import { useAIChat } from "@/hooks/useAIChat";
 // import { useAnalytics } from "@/hooks/useAnalytics"; // Removed for App Store build
 import { ChatMessage } from "@/services/chatService";
 import UserContextService from "@/services/userContextService";
-import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
-import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
-import SkiaInvoiceCanvasModern from "@/components/skia/SkiaInvoiceCanvasModern";
-import SkiaInvoiceCanvasClean from "@/components/skia/SkiaInvoiceCanvasClean";
-import SkiaInvoiceCanvasSimple from "@/components/skia/SkiaInvoiceCanvasSimple";
-import SkiaInvoiceCanvasWave from "@/components/skia/SkiaInvoiceCanvasWave";
-import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
+import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
+import { buildInvoiceDocument } from "@/lib/invoice-doc/buildInvoiceDocument";
+import { BusinessSettingsRow } from "@/types/invoiceTemplate";
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
@@ -54,23 +50,6 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	const estimatePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
 
 	// Get the correct invoice design component based on estimate design type
-	const getEstimateDesignComponent = () => {
-		const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
-		
-		switch (designType.toLowerCase()) {
-			case 'modern':
-				return SkiaInvoiceCanvasModern;
-			case 'clean':
-				return SkiaInvoiceCanvasClean;
-			case 'simple':
-				return SkiaInvoiceCanvasSimple;
-			case 'wave':
-				return SkiaInvoiceCanvasWave;
-			case 'classic':
-			default:
-				return SkiaInvoiceCanvas;
-		}
-	};
 	
 	const { supabase } = useSupabase();
 	
@@ -340,7 +319,6 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	};
 
 	// Get the dynamic estimate component
-	const EstimateDesignComponent = getEstimateDesignComponent();
 
 	// Use the full client data from database but prefer current estimate client name if different
 	let transformedClient = null;
@@ -424,41 +402,8 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 						}}
 					>
 						{businessSettings && transformedEstimate ? (
-							<View style={{
-								// Reduce size by ~10% from 0.65 and nudge slightly more left
-								// New scale ≈ 0.585; center shift ~ -58.5; apply -70 to bias a touch left
-								// Further nudge left to visually center within the 200px container
-								// +10% larger and 9px left total
-								transform: [{ scale: 0.645 }, { translateX: -99 }],
-							}}>
-								<EstimateDesignComponent
-									renderSinglePage={0}
-									style={{
-										width: 200,
-										height: 280,
-										backgroundColor: 'white',
-										borderRadius: 8,
-										shadowColor: '#000',
-										shadowOffset: { width: 0, height: 4 },
-										shadowOpacity: 0.15,
-										shadowRadius: 8,
-										elevation: 5,
-									}}
-									invoice={transformedEstimate}
-									business={businessSettings}
-									client={transformedClient}
-									currencySymbol={businessSettings?.currency_symbol || '$'}
-									accentColor={estimate?.accent_color || '#1E40AF'}
-									documentType="estimate"
-									estimateTerminology={'estimate'}
-									displaySettings={{
-										show_business_logo: businessSettings?.show_business_logo ?? true,
-										show_business_name: businessSettings?.show_business_name ?? true,
-										show_business_address: businessSettings?.show_business_address ?? true,
-										show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-										show_notes_section: businessSettings?.show_notes_section ?? true,
-									}}
-								/>
+							<View style={{ width: 200, height: 280, borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }} pointerEvents="none">
+								<InvoiceDocumentView doc={buildInvoiceDocument({ type: 'estimate', row: transformedEstimate, client: transformedClient, business: businessSettings })} background="#ffffff" />
 							</View>
 						) : (
 							<View style={{
@@ -519,23 +464,6 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
 
 	// Get the correct invoice design component based on invoice design type
-	const getInvoiceDesignComponent = () => {
-		const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-		
-		switch (designType.toLowerCase()) {
-			case 'modern':
-				return SkiaInvoiceCanvasModern;
-			case 'clean':
-				return SkiaInvoiceCanvasClean;
-			case 'simple':
-				return SkiaInvoiceCanvasSimple;
-			case 'wave':
-				return SkiaInvoiceCanvasWave;
-			case 'classic':
-			default:
-				return SkiaInvoiceCanvas;
-		}
-	};
 	
 	const { supabase } = useSupabase();
 	
@@ -836,7 +764,6 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	};
 
 	// Get the dynamic invoice component
-	const InvoiceDesignComponent = getInvoiceDesignComponent();
 
 	// Use the full client data from database but prefer current invoice client name if different
 	let transformedClient = null;
@@ -941,41 +868,8 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 						}}
 					>
 						{businessSettings && transformedInvoice ? (
-							<View style={{
-								// Reduce size by ~10% from 0.65 and nudge slightly more left
-								// +10% larger and 9px left total
-								transform: [{ scale: 0.645 }, { translateX: -99 }],
-							}}>
-																	<InvoiceDesignComponent
-										renderSinglePage={0}
-										style={{
-											width: 200,
-											height: 280,
-											backgroundColor: 'white',
-											borderRadius: 8,
-											shadowColor: '#000',
-											shadowOffset: { width: 0, height: 4 },
-											shadowOpacity: 0.15,
-											shadowRadius: 8,
-											elevation: 5,
-										}}
-										invoice={transformedInvoice}
-										business={{
-											...businessSettings,
-											// Merge payment options bank details into business settings
-											bank_details: paymentOptions?.bank_details || businessSettings?.bank_details
-										}}
-										client={transformedClient}
-										currencySymbol={businessSettings?.currency_symbol || '$'}
-										accentColor={invoice?.accent_color || '#1E40AF'}
-										displaySettings={{
-											show_business_logo: businessSettings?.show_business_logo ?? true,
-											show_business_name: businessSettings?.show_business_name ?? true,
-											show_business_address: businessSettings?.show_business_address ?? true,
-											show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-											show_notes_section: businessSettings?.show_notes_section ?? true,
-										}}
-									/>
+							<View style={{ width: 200, height: 280, borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }} pointerEvents="none">
+								<InvoiceDocumentView doc={buildInvoiceDocument({ type: 'invoice', row: transformedInvoice, client: transformedClient, business: { ...businessSettings, bank_details: paymentOptions?.bank_details || businessSettings?.bank_details } })} background="#ffffff" />
 							</View>
 						) : (
 							<View style={{

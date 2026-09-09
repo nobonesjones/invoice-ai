@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -51,13 +51,9 @@ import { EstimateShareService } from '@/services/estimateShareService';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // SKIA IMPORTS for estimate rendering
-import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
-import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
-import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
-import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
-import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
-import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
-import { useCanvasRef } from '@shopify/react-native-skia';
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { fetchLogoDataUri, renderInvoicePdf } from '@/lib/invoice-doc/pdf';
 
 interface EstimateForTemplate {
   id: string;
@@ -133,7 +129,7 @@ function EstimateViewerScreen() {
   const previewModalRef = useRef<InvoicePreviewModalRef>(null);
 
   // Skia canvas ref for PDF export
-  const skiaEstimateRef = useCanvasRef();
+  const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
 
   // Disable default header to prevent flash (we use custom header in render)
   useEffect(() => {
@@ -334,29 +330,35 @@ function EstimateViewerScreen() {
   // Calculate currency symbol for Skia canvas
   const currencySymbol = estimate?.currency ? getCurrencySymbol(estimate.currency) : '$';
 
-  const getEstimateDesignComponent = () => {
-    const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
-    
-    switch (designType.toLowerCase()) {
-      case 'modern':
-        return SkiaInvoiceCanvasModern;
-      case 'clean':
-        return SkiaInvoiceCanvasClean;
-      case 'simple':
-        return SkiaInvoiceCanvasSimple;
-      case 'wave':
-        return SkiaInvoiceCanvasWave;
-      case 'classic':
-      default:
-        return SkiaInvoiceCanvas;
-    }
-  };
-
-  const EstimateDesignComponent = getEstimateDesignComponent();
 
   const getAccentColor = () => {
     return estimate?.accent_color || '#1E40AF';
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
+      if (!cancelled) setLogoDataUri(uri);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessSettings?.business_logo_url]);
+
+  const estimateDoc = useMemo(
+    () =>
+      estimate && businessSettings
+        ? buildInvoiceDocument({
+            type: 'estimate',
+            row: estimate,
+            client,
+            business: businessSettings,
+            terminology: businessSettings?.estimate_terminology || 'estimate',
+            logoDataUri,
+          })
+        : null,
+    [estimate, client, businessSettings, logoDataUri],
+  );
 
   const handleEdit = () => {
     if (!estimate) return;
@@ -462,40 +464,12 @@ function EstimateViewerScreen() {
   };
 
   const exportEstimatePdf = useCallback(async () => {
-    if (!estimate) {
+    if (!estimateDoc) {
       throw new Error('Estimate not loaded');
     }
-
-    const image = skiaEstimateRef.current?.makeImageSnapshot();
-
-    if (!image) {
-      throw new Error('Failed to create image snapshot');
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          @page { margin: 0; size: ${image.width()}px ${image.height()}px; }
-          body { margin: 0; padding: 0; width: ${image.width()}px; height: ${image.height()}px; overflow: hidden; }
-          .estimate-image { width: ${image.width()}px; height: ${image.height()}px; display: block; object-fit: none; }
-        </style>
-      </head>
-      <body>
-        <img src="data:image/png;base64,${image.encodeToBase64()}" class="estimate-image" alt="Estimate ${estimate.estimate_number}" />
-      </body>
-      </html>
-    `;
-
-    const { uri } = await Print.printToFileAsync({
-      html: htmlContent,
-      base64: false,
-    });
-
+    const { uri } = await renderInvoicePdf(estimateDoc);
     return uri;
-  }, [estimate, skiaEstimateRef]);
+  }, [estimateDoc]);
 
   const handleSendPDF = async () => {
     if (!estimate || !supabase || !user) {
@@ -559,12 +533,7 @@ function EstimateViewerScreen() {
       sendEstimateModalRef.current?.dismiss(); // Close modal immediately for better UX
 
       // 2. Upload PDF to storage and create share link
-      const result = await EstimateShareService.generateShareLinkFromCanvas(
-        estimateId,
-        user.id,
-        skiaEstimateRef,
-        30 // Expires in 30 days
-      );
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, await exportEstimatePdf(), 30);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to prepare estimate');
@@ -621,12 +590,7 @@ function EstimateViewerScreen() {
     }
 
     try {
-      const result = await EstimateShareService.generateShareLinkFromCanvas(
-        estimateId,
-        user.id,
-        skiaEstimateRef,
-        30
-      );
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, await exportEstimatePdf(), 30);
 
       if (!result.success || !result.shareUrl) {
         Alert.alert('Error', result.error || 'Failed to generate share link.');
@@ -668,12 +632,7 @@ function EstimateViewerScreen() {
 
     try {
       // Generate shareable PDF link from Skia canvas for estimate
-      const result = await EstimateShareService.generateShareLinkFromCanvas(
-        estimateId,
-        user.id,
-        skiaEstimateRef,
-        30 // Expires in 30 days
-      );
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, await exportEstimatePdf(), 30);
 
       if (result.success && result.shareUrl) {
         // Show success with development note
@@ -1280,61 +1239,17 @@ function EstimateViewerScreen() {
         </View>
 
         {/* Estimate Canvas */}
-        <ScrollView 
-          style={styles.scrollView} 
-          contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border }]} 
-          showsVerticalScrollIndicator={false}
-        >
-          {isEstimateReady ? (
-            <View style={{ alignItems: 'center', marginTop: -30 }}>
-              <View style={{
-                transform: [{ scale: 0.882 }],
-                marginLeft: -175,
-              }}>
-                <EstimateDesignComponent
-                  ref={skiaEstimateRef}
-                  invoice={{
-                    ...estimate,
-                    // Transform estimate fields to invoice fields for Skia canvas compatibility
-                    invoice_number: estimate?.estimate_number,
-                    invoice_date: estimate?.estimate_date,
-                    due_date: estimate?.valid_until_date,
-                    invoice_line_items: estimate?.estimate_line_items, // Key transformation
-                  }}
-                  client={client}
-                  business={businessSettings}
-                  currencySymbol={currencySymbol}
-                  accentColor={getAccentColor()}
-                  documentType="estimate"
-                  estimateTerminology={businessSettings?.estimate_terminology || 'estimate'}
-                  renderSinglePage={0}
-                  displaySettings={{
-                    show_business_logo: businessSettings?.show_business_logo ?? true,
-                    show_business_name: businessSettings?.show_business_name ?? true,
-                    show_business_address: businessSettings?.show_business_address ?? true,
-                    show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-                    show_notes_section: businessSettings?.show_notes_section ?? true,
-                  }}
-                  style={{ 
-                    width: 200, 
-                    height: 295,
-                    backgroundColor: 'white',
-                    borderRadius: 8,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3,
-                  }}
-                />
-              </View>
+        <View style={[styles.scrollView, { backgroundColor: themeColors.border }]}>
+          {isEstimateReady && estimateDoc ? (
+            <View style={{ flex: 1, paddingBottom: 96 }}>
+              <InvoiceDocumentView doc={estimateDoc} background={themeColors.border} />
             </View>
           ) : (
-            <View style={{ alignItems: 'center', paddingTop: -10 }}> 
+            <View style={{ alignItems: 'center', paddingTop: 10 }}>
               <InvoiceSkeletonLoader />
             </View>
           )}
-        </ScrollView>
+        </View>
 
         {/* Bottom Action Section */}
         <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>

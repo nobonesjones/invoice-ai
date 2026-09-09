@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, ScrollView, Alert, ActivityIndicator, Linking, Share } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Download, Eye, Share2, FileText, Copy } from 'lucide-react-native';
-import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 
@@ -11,8 +10,9 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { H1 } from '@/components/ui/typography';
 import { useTheme } from '@/context/theme-provider';
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from '../../../(app)/(protected)/invoices/InvoiceTemplateOne';
-import { generateInvoiceTemplateOneHtml } from '@/utils/generateInvoiceTemplateOneHtml';
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { renderInvoicePdf, printInvoice } from '@/lib/invoice-doc/pdf';
 import { InvoiceShareService } from '../../../../services/invoiceShareService';
 
 interface SharedInvoiceData {
@@ -34,6 +34,23 @@ export default function SharedInvoiceView() {
   const [error, setError] = useState<string | null>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [paying, setPaying] = useState(false);
+
+  const sharedDoc = useMemo(
+    () =>
+      invoiceData
+        ? buildInvoiceDocument({
+            type: 'invoice',
+            row: invoiceData.invoice,
+            client: invoiceData.invoice.clients,
+            business: {
+              ...invoiceData.businessSettings,
+              paypal_email: invoiceData.paymentOptions?.paypal_email,
+              bank_details: invoiceData.paymentOptions?.bank_details,
+            },
+          })
+        : null,
+    [invoiceData],
+  );
 
   useEffect(() => {
     if (token) {
@@ -106,26 +123,8 @@ export default function SharedInvoiceView() {
       // Track download event
       await trackEvent('download');
 
-      // Generate PDF HTML
-      const htmlContent = generateInvoiceTemplateOneHtml({
-        invoice: {
-          ...invoiceData.invoice,
-          invoice_line_items: invoiceData.invoice.invoice_line_items || [],
-          clients: invoiceData.invoice.clients,
-          currency_symbol: '£', // You might want to get this from business settings
-          currency: 'GBP',
-          invoice_tax_label: 'VAT',
-          paid_amount: 0,
-        },
-        businessSettings: invoiceData.businessSettings,
-        paymentOptions: invoiceData.paymentOptions,
-      });
-
-      // Generate PDF
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-      });
+      if (!sharedDoc) throw new Error('Invoice not loaded');
+      const { uri } = await renderInvoicePdf(sharedDoc);
 
       // Share the PDF file
       await Share.share({
@@ -148,25 +147,8 @@ export default function SharedInvoiceView() {
       // Track print event
       await trackEvent('print');
 
-      // Generate PDF HTML
-      const htmlContent = generateInvoiceTemplateOneHtml({
-        invoice: {
-          ...invoiceData.invoice,
-          invoice_line_items: invoiceData.invoice.invoice_line_items || [],
-          clients: invoiceData.invoice.clients,
-          currency_symbol: '£',
-          currency: 'GBP',
-          invoice_tax_label: 'VAT',
-          paid_amount: 0,
-        },
-        businessSettings: invoiceData.businessSettings,
-        paymentOptions: invoiceData.paymentOptions,
-      });
-
-      // Print the HTML
-      await Print.printAsync({
-        html: htmlContent,
-      });
+      if (!sharedDoc) throw new Error('Invoice not loaded');
+      await printInvoice(sharedDoc);
 
     } catch (err) {
       console.error('Error printing invoice:', err);
@@ -232,53 +214,6 @@ export default function SharedInvoiceView() {
     } finally {
       setPaying(false);
     }
-  };
-
-  const formatInvoiceForTemplate = (data: SharedInvoiceData): InvoiceForTemplate => {
-    return {
-      id: data.invoice.id,
-      user_id: data.invoice.user_id,
-      client_id: data.invoice.client_id,
-      invoice_number: data.invoice.invoice_number,
-      status: data.invoice.status,
-      invoice_date: data.invoice.invoice_date,
-      due_date: data.invoice.due_date,
-      po_number: data.invoice.po_number,
-      custom_headline: data.invoice.custom_headline,
-      subtotal_amount: data.invoice.subtotal_amount,
-      discount_type: data.invoice.discount_type,
-      discount_value: data.invoice.discount_value,
-      tax_percentage: data.invoice.tax_percentage,
-      total_amount: data.invoice.total_amount,
-      notes: data.invoice.notes,
-      stripe_active: data.invoice.stripe_active,
-      bank_account_active: data.invoice.bank_account_active,
-      paypal_active: data.invoice.paypal_active,
-      gocardless_active: data.invoice.gocardless_active,
-      created_at: data.invoice.created_at,
-      updated_at: data.invoice.updated_at,
-      due_date_option: data.invoice.due_date_option,
-      invoice_tax_label: 'VAT',
-      clients: data.invoice.clients,
-      invoice_line_items: data.invoice.invoice_line_items || [],
-      currency: 'GBP',
-      currency_symbol: '£',
-      paid_amount: 0,
-    };
-  };
-
-  const formatBusinessSettings = (data: SharedInvoiceData): BusinessSettingsRow => {
-    return {
-      ...data.businessSettings,
-      paypal_enabled: data.paymentOptions?.paypal_enabled || false,
-      paypal_email: data.paymentOptions?.paypal_email,
-      stripe_enabled: data.paymentOptions?.stripe_enabled || false,
-      bank_transfer_enabled: data.paymentOptions?.bank_transfer_enabled || false,
-      bank_details: data.paymentOptions?.bank_details,
-      invoice_terms_notes: data.paymentOptions?.invoice_terms_notes,
-      auto_apply_tax: data.businessSettings?.auto_apply_tax || false,
-      tax_name: data.businessSettings?.tax_name || 'VAT',
-    };
   };
 
   if (loading) {
@@ -410,11 +345,11 @@ export default function SharedInvoiceView() {
 
         {/* Invoice preview */}
         <View style={{ backgroundColor: theme.background }}>
-          <InvoiceTemplateOne
-            invoice={formatInvoiceForTemplate(invoiceData)}
-            businessSettings={formatBusinessSettings(invoiceData)}
-            isReadOnly={true}
-          />
+          {sharedDoc ? (
+            <View style={{ height: 1000 }}>
+              <InvoiceDocumentView doc={sharedDoc} />
+            </View>
+          ) : null}
         </View>
 
         {/* Expiration notice if applicable */}

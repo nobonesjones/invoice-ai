@@ -13,13 +13,13 @@ export interface ShareLinkResult {
 
 export class EstimateShareService {
   /**
-   * Generate a shareable link from Skia canvas for estimates
-   * Simplified version that just creates a database record
+   * Create a share record for an estimate. The rendered PDF is accepted for
+   * parity with invoices but not stored yet: the estimate web viewer does not exist.
    */
-  static async generateShareLinkFromCanvas(
+  static async generateShareLinkFromPdf(
     estimateId: string,
     userId: string,
-    canvasRef: any,
+    _pdfUri: string,
     expiresInDays?: number
   ): Promise<ShareLinkResult> {
     try {

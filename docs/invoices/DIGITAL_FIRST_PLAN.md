@@ -130,3 +130,19 @@ already in its final home, `supabase/functions/_shared/invoice-doc/render.ts` (z
 fixtures + `computeTotals()` in `lib/invoice-doc/testDocument.ts`. Interim choices in the
 test: CSS fragmentation for page breaks (no "Page n of N" yet), system font stack (Inter
 comes in WP2), static running footer. Remove the screen and menu entry in WP3.
+
+## Status 2026-09-09 (end of day)
+Done in the app: WP1 (contract, `lib/invoice-doc/buildInvoiceDocument.ts`), WP2 (template with
+its own paginator, seven themes: clean, classic, modern, simple, wave, swiss, ledger), WP3
+(`components/InvoiceDocumentView.tsx` wired into invoice-viewer, estimate-viewer,
+InvoicePreviewModal, the AI chat previews and the in-app shared page), WP4 (PDF via
+`lib/invoice-doc/pdf.ts`; email attaches it; share links upload it), WP6 (Skia canvases, the
+RN template, the HTML template, pdf-lib, html-to-pdf, view-shot, images-to-pdf and
+pdf-from-image deleted; ~12k lines).
+
+Not done: WP5, the hosted page. `shared-invoice` is a deployed function owned by the backend
+agent; see `BACKEND_HANDOFF.md` in this folder. Until then the hosted page keeps its old layout.
+The test screen (Settings → Invoice preview) is still in; remove once Harry has checked the
+real screens on a rebuilt client.
+
+Needs one dev-client rebuild: `react-native-webview` added, Skia and the PDF libraries removed.

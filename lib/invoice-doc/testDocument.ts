@@ -3,7 +3,7 @@
 // buildInvoiceDocument() / computeTotals() that the real screens will use later.
 import type { InvoiceDocument, InvoiceLine, ThemeId } from '@/supabase/functions/_shared/invoice-doc/render';
 
-export type TestVariant = 'short' | 'typical' | 'long';
+export type TestVariant = 'short' | 'typical' | 'long' | 'estimate';
 
 export interface BusinessLike {
   business_name?: string | null;
@@ -71,6 +71,8 @@ const LONG_NAMES = [
 
 function itemsFor(variant: TestVariant): InvoiceLine[] {
   if (variant === 'short') return [line('Massage', 'Full body, 60 minutes', 1, 150)];
+  if (variant === 'estimate')
+    return [line('Kitchen refit', 'Supply and fit, as per drawing K-02', 1, 6400), line('Electrical works', 'Certified, includes test certificate', 1, 1250), line('Skip hire', null, 2, 180)];
   if (variant === 'typical')
     return [
       line('Brand identity', 'Logo, colour palette and type system. Includes two rounds of revisions and final files in SVG, PNG and PDF.', 1, 1800),
@@ -104,12 +106,14 @@ export function buildTestDocument(
 
   return {
     document: {
-      type: 'invoice',
-      number: variant === 'short' ? 'INV-990690' : variant === 'typical' ? 'INV-990691' : 'INV-990692',
+      type: variant === 'estimate' ? 'estimate' : 'invoice',
+      terminology: 'quote',
+      number: variant === 'short' ? 'INV-990690' : variant === 'typical' ? 'INV-990691' : variant === 'estimate' ? 'EST-0042' : 'INV-990692',
       issueDate: issue.toISOString(),
       dueDate: due.toISOString(),
       poNumber: variant === 'typical' ? 'PO-4471' : null,
-      status: variant === 'short' ? 'paid' : 'sent',
+      status: variant === 'short' ? 'paid' : variant === 'estimate' ? 'sent' : 'sent',
+      dueOption: null,
       currencyCode: business?.currency_code || 'GBP',
       locale: 'en-GB',
     },
@@ -122,19 +126,21 @@ export function buildTestDocument(
       email: business?.business_email || null,
       phone: business?.business_phone || null,
       website: business?.business_website || null,
-      taxLabel: `${taxLabel} number`,
+      taxLabel,
       taxNumber: business?.tax_number || null,
       show: {
         logo: business?.show_business_logo ?? true,
         name: business?.show_business_name ?? true,
         address: business?.show_business_address ?? true,
         taxNumber: business?.show_business_tax_number ?? true,
+        notes: true,
       },
     },
     client: {
       name: 'Harrison Jones',
       addressLines: ['Space X', '12 Rocket Road', 'Boca Chica', 'Texas 78521', 'US'],
       email: 'harrison@example.com',
+      phone: null,
       taxNumber: null,
     },
     items,
@@ -146,6 +152,7 @@ export function buildTestDocument(
     payments: {
       stripeLinkUrl: variant === 'short' ? null : 'https://pay.stripe.com/invoice/example',
       gocardlessPayUrl: variant === 'long' ? 'https://getsuperinvoice.com/pay/example' : null,
+      gocardless: variant === 'long',
       paypalEmail: null,
       bankDetailLines: variant === 'typical' ? ['Anno Ltd', 'Sort code 04-00-04', 'Account 12345678'] : [],
     },

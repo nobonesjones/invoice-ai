@@ -38,6 +38,8 @@ const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'modern', label: 'Modern' },
   { id: 'simple', label: 'Simple' },
   { id: 'wave', label: 'Wave' },
+  { id: 'swiss', label: 'Swiss' },
+  { id: 'ledger', label: 'Ledger' },
 ];
 
 const VARIANTS: { id: TestVariant; label: string; hint: string }[] = [
@@ -48,7 +50,8 @@ const VARIANTS: { id: TestVariant; label: string; hint: string }[] = [
 
 // A4 in points. Left/right margins are zero so the header cards can run wide;
 // the template pads horizontally itself. Top/bottom are native so every page gets them.
-const A4 = { width: 595, height: 842, margins: { top: 30, bottom: 30, left: 0, right: 0 } };
+// The document paginates itself into A4 pages, so native margins stay at zero.
+const A4 = { width: 595, height: 842, margins: { top: 0, bottom: 0, left: 0, right: 0 } };
 
 async function fetchLogoDataUri(url: string): Promise<string | null> {
   try {

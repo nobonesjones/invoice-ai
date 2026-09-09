@@ -13,13 +13,14 @@ import { useColorScheme } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Send, Mail, FileText, Link2, X as XIcon } from 'lucide-react-native';
-import { useCanvasRef } from '@shopify/react-native-skia';
 import { useSupabase } from '@/context/supabase-provider';
 import * as Sharing from 'expo-sharing';
-import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { InvoiceShareService } from '@/services/invoiceShareService';
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { fetchLogoDataUri, renderInvoicePdf } from '@/lib/invoice-doc/pdf';
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoiceDesign';
 import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
@@ -137,7 +138,37 @@ export const InvoicePreviewModal = forwardRef(
     const updateDefaultForNewInvoices = hookResult.updateDefaultForNewInvoices;
     
     // Send modal refs and setup
-    const skiaInvoiceRef = useCanvasRef();
+    // The document being previewed, with the design and colour chosen in this modal.
+    const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+    React.useEffect(() => {
+      let cancelled = false;
+      fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
+        if (!cancelled) setLogoDataUri(uri);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [businessSettings?.business_logo_url]);
+    const previewDoc = useMemo(
+      () =>
+        invoiceData && businessSettings
+          ? buildInvoiceDocument({
+              type: documentType,
+              row: invoiceData,
+              client: clientData,
+              business: businessSettings,
+              designId: currentDesign.id,
+              accentColor: currentAccentColor,
+              terminology: businessSettings?.estimate_terminology || 'estimate',
+              logoDataUri,
+            })
+          : null,
+      [invoiceData, clientData, businessSettings, documentType, currentDesign.id, currentAccentColor, logoDataUri],
+    );
+    const requireDoc = () => {
+      if (!previewDoc) throw new Error('Invoice is still loading');
+      return previewDoc;
+    };
     
     // Paywall setup removed – manual sending is now free
 
@@ -319,59 +350,7 @@ export const InvoicePreviewModal = forwardRef(
       try {
         console.log('[Modal handleSendByEmail] Generating PDF for invoice:', invoiceData.invoice_number);
         
-        const image = skiaInvoiceRef.current?.makeImageSnapshot();
-        
-        if (!image) {
-          throw new Error('Failed to create image snapshot from invoice canvas');
-        }
-        
-        const bytes = image.encodeToBytes();
-        
-        const chunkSize = 8192;
-        let binaryString = '';
-        
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-        }
-        
-        const base64String = btoa(binaryString);
-        
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              @page {
-                margin: 0;
-                size: ${image.width()}px ${image.height()}px;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                overflow: hidden;
-              }
-              .invoice-image {
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                display: block;
-                object-fit: none;
-              }
-            </style>
-          </head>
-          <body>
-            <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoiceData.invoice_number}" />
-          </body>
-          </html>
-        `;
-        
-        const { uri } = await Print.printToFileAsync({
-          html: htmlContent,
-          base64: false,
-        });
+        const { uri } = await renderInvoicePdf(requireDoc());
 
         // Update invoice status to sent
         const { error: updateError } = await supabase
@@ -425,12 +404,7 @@ export const InvoicePreviewModal = forwardRef(
         console.log('[Modal handleSendLink] Generating shareable PDF link for invoice:', invoiceData.id);
         
         // Generate shareable PDF link using the Skia canvas
-        const result = await InvoiceShareService.generateShareLinkFromCanvas(
-          invoiceData.id, 
-          user.id,
-          skiaInvoiceRef,
-          30 // Expires in 30 days
-        );
+        const result = await InvoiceShareService.generateShareLinkFromPdf(invoiceData.id, user.id, (await renderInvoicePdf(requireDoc())).uri, 30);
 
         if (!result.success) {
           Alert.alert('Error', result.error || 'Failed to generate share link');
@@ -538,47 +512,7 @@ export const InvoicePreviewModal = forwardRef(
       try {
         console.log('[Modal handleSendPDF] Generating PDF for invoice:', invoiceData.invoice_number);
         
-        const image = skiaInvoiceRef.current?.makeImageSnapshot();
-        
-        if (!image) {
-          throw new Error('Failed to create image snapshot from invoice canvas');
-        }
-        
-        const imageBytes = image.encodeToBytes();
-        const fileName = `invoice-${invoiceData.invoice_number}.pdf`;
-        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        
-        const chunkSize = 8192;
-        let binaryString = '';
-        
-        for (let i = 0; i < imageBytes.length; i += chunkSize) {
-          const chunk = imageBytes.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-        }
-        
-        const base64String = btoa(binaryString);
-        
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              @page { margin: 0; }
-              body { margin: 0; padding: 0; }
-              img { width: 100%; height: auto; }
-            </style>
-          </head>
-          <body>
-            <img src="data:image/png;base64,${base64String}" alt="Invoice ${invoiceData.invoice_number}" />
-          </body>
-          </html>
-        `;
-        
-        const { uri } = await Print.printToFileAsync({
-          html: htmlContent,
-          base64: false,
-        });
+        const { uri } = await renderInvoicePdf(requireDoc());
         
         // Update invoice status to sent
         const { error: updateError } = await supabase
@@ -665,53 +599,9 @@ export const InvoicePreviewModal = forwardRef(
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              onTouchStart={() => console.log('[InvoicePreviewModal] ScrollView touched')}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { backgroundColor: themeColors.border }
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.previewContainer}>
-                <View style={{
-                  transform: [{ scale: 0.882 }],
-                  marginLeft: -175,
-                  position: 'relative',
-                }}>
-                  {React.createElement(currentDesign.component, {
-                    ref: skiaInvoiceRef,
-                    renderSinglePage: 0,
-                    style: {
-                      width: 200,
-                      height: 280,
-                      backgroundColor: 'white',
-                      borderRadius: 8,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 8 },
-                      shadowOpacity: 0.25,
-                      shadowRadius: 12,
-                      elevation: 10,
-                    },
-                    invoice: invoiceData,
-                    business: businessSettings,
-                    client: clientData,
-                    currencySymbol: businessSettings?.currency_symbol || '$',
-                    accentColor: currentAccentColor,
-                    documentType: documentType,
-                    estimateTerminology: businessSettings?.estimate_terminology || 'estimate',
-                    displaySettings: {
-                      show_business_logo: businessSettings?.show_business_logo ?? true,
-                      show_business_name: businessSettings?.show_business_name ?? true,
-                      show_business_address: businessSettings?.show_business_address ?? true,
-                      show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-                      show_notes_section: businessSettings?.show_notes_section ?? true,
-                    }
-                  })}
-                  
-                </View>
-              </View>
-            </ScrollView>
+            <View style={{ flex: 1, backgroundColor: themeColors.border }}>
+              {previewDoc ? <InvoiceDocumentView doc={previewDoc} background={themeColors.border} /> : null}
+            </View>
 
             {/* Design/Color Selector - Fixed bottom panel */}
             <PanGestureHandler
