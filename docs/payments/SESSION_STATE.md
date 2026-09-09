@@ -1,5 +1,10 @@
 # Payments work — state as of 2026-09-09
 
+> **Closed 2026-09-09.** Harry called the payments work done and moved on. The backend
+> steps in `PAID_EVENT_HANDOFF.md` were handled by the backend agent; their confirmation
+> details were not captured in this repo. Treat the "Not done / deliberately left" list
+> below as the only open items.
+
 Branch: `claude/stripe-app-integration` (20 commits on top of `wip/local-changes`).
 Companion doc: `PAID_EVENT_HANDOFF.md` in this folder — the backend checklist.
 
