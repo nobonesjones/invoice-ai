@@ -86,21 +86,36 @@ interface Theme {
   accent: string;
   accentInk: string; // text colour on top of the accent
   tint: string; // very light accent, for table heads and the amount card
-  header: 'card' | 'rule' | 'split' | 'minimal' | 'wave' | 'swiss' | 'ledger';
-  rows: 'zebra' | 'lines';
+  /**
+   * The layout is what makes one design differ from another. It is not a header
+   * style over one shared skeleton: each value places the brand, the document
+   * meta and the amount due differently, and the table and totals follow suit.
+   *
+   *   band        full-bleed solid colour band across the top of the page
+   *   wave        full-bleed gradient band with a wave bottom edge
+   *   letterhead  centred brand over a double rule, like printed stationery
+   *   sidebar     full-height colour column on the left carrying brand + meta
+   *   minimal     light type, no fills, hairlines only
+   *   swiss       oversized title, black rules, one small accent mark
+   *   ledger      serif, boxed table grid, double rules
+   */
+  layout: 'band' | 'wave' | 'letterhead' | 'sidebar' | 'minimal' | 'swiss' | 'ledger';
+  rows: 'zebra' | 'lines' | 'grid';
   totals: 'fill' | 'rule';
+  /** 'card' = tinted box; 'plain' = big number, no box */
+  due: 'card' | 'plain';
   radius: number;
   serif?: boolean;
 }
 
 const THEMES: Record<ThemeId, Theme> = {
-  clean: { accent: '#2563eb', accentInk: '#ffffff', tint: '#eff6ff', header: 'card', rows: 'zebra', totals: 'fill', radius: 8 },
-  classic: { accent: '#1d4ed8', accentInk: '#ffffff', tint: '#eef2ff', header: 'rule', rows: 'lines', totals: 'fill', radius: 4 },
-  modern: { accent: '#059669', accentInk: '#ffffff', tint: '#ecfdf5', header: 'split', rows: 'zebra', totals: 'fill', radius: 6 },
-  simple: { accent: '#111827', accentInk: '#ffffff', tint: '#f3f4f6', header: 'minimal', rows: 'lines', totals: 'rule', radius: 0 },
-  wave: { accent: '#7c3aed', accentInk: '#ffffff', tint: '#f5f3ff', header: 'wave', rows: 'zebra', totals: 'fill', radius: 12 },
-  swiss: { accent: '#e11d48', accentInk: '#ffffff', tint: '#fff1f2', header: 'swiss', rows: 'lines', totals: 'rule', radius: 0 },
-  ledger: { accent: '#14532d', accentInk: '#ffffff', tint: '#f0fdf4', header: 'ledger', rows: 'lines', totals: 'rule', radius: 2, serif: true },
+  clean: { accent: '#2563eb', accentInk: '#ffffff', tint: '#eff6ff', layout: 'band', rows: 'zebra', totals: 'fill', due: 'card', radius: 8 },
+  wave: { accent: '#7c3aed', accentInk: '#ffffff', tint: '#f5f3ff', layout: 'wave', rows: 'zebra', totals: 'fill', due: 'card', radius: 12 },
+  classic: { accent: '#1e3a8a', accentInk: '#ffffff', tint: '#eef2ff', layout: 'letterhead', rows: 'grid', totals: 'fill', due: 'card', radius: 2, serif: true },
+  modern: { accent: '#047857', accentInk: '#ffffff', tint: '#ecfdf5', layout: 'sidebar', rows: 'lines', totals: 'rule', due: 'plain', radius: 6 },
+  simple: { accent: '#111827', accentInk: '#ffffff', tint: '#f3f4f6', layout: 'minimal', rows: 'lines', totals: 'rule', due: 'plain', radius: 0 },
+  swiss: { accent: '#e11d48', accentInk: '#ffffff', tint: '#fff1f2', layout: 'swiss', rows: 'lines', totals: 'rule', due: 'plain', radius: 0 },
+  ledger: { accent: '#14532d', accentInk: '#ffffff', tint: '#f0fdf4', layout: 'ledger', rows: 'grid', totals: 'rule', due: 'plain', radius: 0, serif: true },
 };
 
 // ---------- helpers ----------
@@ -163,16 +178,20 @@ const MC_MARK =
 
 const PAGE_W = 794;
 const PAGE_H = 1123;
-const PAD_X = 52;
-const PAD_TOP = 36;
-const PAD_BOTTOM = 32;
+const PAD_X = 56;
+const PAD_TOP = 40;
+const PAD_BOTTOM = 34;
 const PFOOT_H = 22; // running page footer inside the bottom padding zone
+const SIDEBAR_W = 220; // sidebar layout: colour column width
+const SIDEBAR_GAP = 36; // gap between the column and the content
 
 // ---------- CSS ----------
 
 function css(t: Theme, mode: RenderMode): string {
   const serifStack = 'Georgia, "Times New Roman", Times, serif';
   const sansStack = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif';
+  const sidebar = t.layout === 'sidebar';
+  const padLeft = sidebar ? SIDEBAR_W + SIDEBAR_GAP : PAD_X;
   const pageRule =
     mode === 'print'
       ? `@page { size: 595pt 842pt; margin: 0; }
@@ -183,6 +202,7 @@ function css(t: Theme, mode: RenderMode): string {
     mode === 'print'
       ? `body { background: #fff; } .page { margin: 0; }`
       : `body { background: #e5e7eb; padding: 16px 0; } .page { margin: 0 auto 16px; box-shadow: 0 1px 2px rgba(0,0,0,.10), 0 10px 30px rgba(0,0,0,.10); }`;
+  const titleFont = t.serif ? `font-family: ${serifStack};` : '';
 
   return `
   ${pageRule}
@@ -190,7 +210,7 @@ function css(t: Theme, mode: RenderMode): string {
   html, body { margin: 0; padding: 0; }
   body {
     font-family: ${sansStack};
-    font-size: 12.5px; line-height: 1.4; color: #111827;
+    font-size: 12.5px; line-height: 1.45; color: #111827;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
     -webkit-font-smoothing: antialiased;
     font-variant-numeric: tabular-nums;
@@ -198,71 +218,120 @@ function css(t: Theme, mode: RenderMode): string {
   ${ground}
   /* source blocks are measured only after they move into a page */
   .paged #src { display: none; }
-  #src { width: ${PAGE_W}px; padding: 0 ${PAD_X}px; }
-  .page { position: relative; width: ${PAGE_W}px; height: ${PAGE_H}px; background: #fff; overflow: hidden; padding: ${PAD_TOP}px ${PAD_X}px ${PAD_BOTTOM}px; }
-  .page .content { max-height: ${PAGE_H - PAD_TOP - PAD_BOTTOM - PFOOT_H}px; overflow: hidden; }
-  .pfoot { position: absolute; left: ${PAD_X}px; right: ${PAD_X}px; bottom: 14px; height: ${PFOOT_H}px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10px; color: #9ca3af; }
+  #src { width: ${PAGE_W}px; padding: 0 ${PAD_X}px 0 ${padLeft}px; }
+  .page { position: relative; width: ${PAGE_W}px; height: ${PAGE_H}px; background: #fff; overflow: hidden; padding: ${PAD_TOP}px ${PAD_X}px ${PAD_BOTTOM}px ${padLeft}px; }
+  /* overflow stays visible here on purpose: full-bleed headers pull outside this box
+     with negative margins and the page itself does the clipping */
+  .page .content { max-height: ${PAGE_H - PAD_TOP - PAD_BOTTOM - PFOOT_H}px; }
+  .pfoot { position: absolute; left: ${padLeft}px; right: ${PAD_X}px; bottom: 14px; height: ${PFOOT_H}px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10px; color: #9ca3af; }
   .pfoot .num { font-variant-numeric: tabular-nums; }
+  ${sidebar ? `.page::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: ${SIDEBAR_W}px; background: ${t.accent}; }` : ''}
 
   .muted { color: #6b7280; }
-  .label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #6b7280; font-weight: 600; }
+  .label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6b7280; font-weight: 600; }
   .num { text-align: right; white-space: nowrap; }
 
-  /* ----- header ----- */
-  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; margin-bottom: 22px; }
-  .brand { display: flex; gap: 16px; align-items: flex-start; min-width: 0; }
-  .logo { width: 60px; height: 60px; object-fit: contain; border-radius: ${Math.min(t.radius, 8)}px; flex: none; }
-  .logo-tile { background: #fff; padding: 5px; }
-  .biz-name { font-size: 17px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; ${t.serif ? `font-family: ${serifStack};` : ''} }
-  .biz-lines { font-size: 11.5px; line-height: 1.45; }
+  /* ----- header: shared pieces ----- */
+  .brand { display: flex; gap: 18px; align-items: flex-start; min-width: 0; }
+  .logo { width: 64px; height: 64px; object-fit: contain; border-radius: ${Math.min(t.radius, 10)}px; flex: none; }
+  .logo-tile { background: #fff; padding: 6px; }
+  .biz-name { font-size: 18px; font-weight: 700; line-height: 1.2; margin-bottom: 5px; ${titleFont} }
+  .biz-lines { font-size: 11.5px; line-height: 1.5; }
   .docblock { text-align: right; flex: none; }
-  .title { font-size: 26px; font-weight: 800; letter-spacing: .04em; line-height: 1; margin: 0 0 10px; ${t.serif ? `font-family: ${serifStack}; font-weight: 700; letter-spacing: .08em;` : ''} }
+  .title { font-size: 28px; font-weight: 800; letter-spacing: .04em; line-height: 1; margin: 0 0 12px; ${t.serif ? `font-family: ${serifStack}; font-weight: 700; letter-spacing: .08em;` : ''} }
   .meta { border-collapse: collapse; margin-left: auto; }
-  .meta td { padding: 2px 0 2px 16px; font-size: 11.5px; line-height: 1.4; text-align: right; }
+  .meta td { padding: 2px 0 2px 18px; font-size: 11.5px; line-height: 1.45; text-align: right; }
   .meta td:first-child { color: #6b7280; }
   .meta td:last-child { font-weight: 600; }
 
-  .head.card { background: ${t.accent}; color: ${t.accentInk}; border-radius: ${t.radius}px; padding: 20px 24px; margin: 0 -12px 22px; }
-  .head.card .muted, .head.card .meta td:first-child { color: rgba(255,255,255,.75); }
-  .head.card .title { color: ${t.accentInk}; }
+  /* band: full-bleed solid colour across the top */
+  .head.band { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px;
+    background: ${t.accent}; color: ${t.accentInk};
+    margin: -${PAD_TOP}px -${PAD_X}px 28px; padding: 36px ${PAD_X}px 32px; }
+  .head.band .muted, .head.band .meta td:first-child { color: rgba(255,255,255,.72); }
+  .head.band .title, .head.band .meta td:last-child { color: ${t.accentInk}; }
 
-  .head.rule { border-top: 6px solid ${t.accent}; padding-top: 20px; }
-  .head.rule .title { color: ${t.accent}; }
-
-  .head.split { padding-bottom: 20px; border-bottom: 2px solid ${t.accent}; }
-  .head.split .title { color: #111827; }
-  .head.split .meta td:last-child { color: ${t.accent}; }
-
-  .head.minimal { padding-bottom: 20px; border-bottom: 1px solid #e5e7eb; }
-  .head.minimal .title { font-weight: 600; letter-spacing: .2em; font-size: 22px; color: #111827; }
-
-  .head.wave { position: relative; background: linear-gradient(135deg, ${t.accent} 0%, #a78bfa 100%); color: #fff; border-radius: ${t.radius}px; padding: 20px 24px 38px; margin: 0 -12px 22px; overflow: hidden; }
-  .head.wave::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 28px; background: url("${WAVE_SVG}") no-repeat; background-size: 100% 100%; }
+  /* wave: full-bleed gradient with a wave bottom edge */
+  .head.wave { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 32px;
+    background: linear-gradient(120deg, ${t.accent} 0%, #a78bfa 100%); color: #fff;
+    margin: -${PAD_TOP}px -${PAD_X}px 28px; padding: 34px ${PAD_X}px 60px; }
+  .head.wave::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 44px; background: url("${WAVE_SVG}") no-repeat; background-size: 100% 100%; }
   .head.wave .muted, .head.wave .meta td:first-child { color: rgba(255,255,255,.78); }
-  .head.wave .title { color: #fff; }
+  .head.wave .title, .head.wave .meta td:last-child { color: #fff; }
 
-  /* swiss: big type, black rules, one red accent */
-  .head.swiss { display: block; border-bottom: 2px solid #111827; padding-bottom: 14px; margin-bottom: 22px; }
-  .head.swiss .swiss-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
-  .head.swiss .title { font-size: 34px; letter-spacing: -.02em; font-weight: 800; margin: 0; color: #111827; }
-  .head.swiss .title::before { content: ""; display: inline-block; width: 12px; height: 12px; background: ${t.accent}; margin-right: 12px; vertical-align: 6px; }
-  .head.swiss .swiss-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; }
-  .head.swiss .docblock { text-align: left; }
-  .head.swiss .meta { margin-left: 0; }
-  .head.swiss .meta td { text-align: left; padding: 2px 24px 2px 0; }
+  /* letterhead: centred brand over a double rule, then the document line */
+  .head.letterhead { display: block; margin-bottom: 22px; }
+  .head.letterhead .brand { flex-direction: column; align-items: center; text-align: center; gap: 8px; padding-bottom: 14px; border-bottom: 3px double ${t.accent}; }
+  .head.letterhead .biz-name { font-size: 22px; margin-bottom: 3px; }
+  .head.letterhead .logo { width: 48px; height: 48px; }
+  .head.letterhead .meta, .head.ledger .meta { display: grid; grid-template-columns: auto auto auto auto; column-gap: 6px; }
+  .head.letterhead .meta tbody, .head.ledger .meta tbody, .head.letterhead .meta tr, .head.ledger .meta tr { display: contents; }
+  .head.letterhead .meta td, .head.ledger .meta td { display: block; padding: 2px 0 2px 20px; }
+  .head.letterhead .docline { display: flex; justify-content: space-between; align-items: center; gap: 32px; padding-top: 14px; }
+  .head.letterhead .title { color: ${t.accent}; margin: 0; font-size: 28px; }
+  .head.letterhead .docblock { text-align: right; }
 
-  /* ledger: serif, hairline double rule, quiet green */
-  .head.ledger { border-bottom: 3px double #111827; padding-bottom: 18px; }
-  .head.ledger .title { color: #111827; }
+  /* sidebar: the brand and meta live in the colour column, the page starts beside it */
+  .head.sidebar { position: absolute; left: 0; top: 0; width: ${SIDEBAR_W}px; height: ${PAGE_H}px; padding: 40px 24px 36px; color: #fff; display: flex; flex-direction: column; gap: 28px; }
+  .head.sidebar .brand { flex-direction: column; gap: 14px; }
+  .head.sidebar .logo { width: 72px; height: 72px; }
+  .head.sidebar .biz-name { font-size: 20px; }
+  .head.sidebar .muted { color: rgba(255,255,255,.75); }
+  .head.sidebar .docblock { text-align: left; }
+  .head.sidebar .title { color: #fff; font-size: 30px; margin-bottom: 14px; }
+  .head.sidebar .meta { margin-left: 0; }
+  .head.sidebar .meta tr { display: block; margin-bottom: 8px; }
+  .head.sidebar .meta td { display: block; text-align: left; padding: 0; }
+  .head.sidebar .meta td:first-child { color: rgba(255,255,255,.72); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; }
+  .head.sidebar .meta td:last-child { color: #fff; font-size: 12.5px; }
+  .head.sidebar .side-foot { margin-top: auto; font-size: 10.5px; color: rgba(255,255,255,.7); }
+
+  /* minimal: light type, no fills, hairlines only */
+  .head.minimal { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; padding-bottom: 20px; margin-bottom: 26px; border-bottom: 1px solid #d1d5db; }
+  .head.minimal .title { font-weight: 300; letter-spacing: .02em; font-size: 36px; color: #111827; margin: -4px 0 12px; text-transform: none; }
+  .head.minimal .brand { flex-direction: row-reverse; text-align: right; }
+  .head.minimal .logo { border-radius: 0; }
+  .head.minimal .meta td { text-align: left; padding: 2px 18px 2px 0; }
+  .head.minimal .meta { margin-left: 0; }
+  .head.minimal .docblock { text-align: left; }
+
+  /* swiss: oversized title, black rules, one small accent mark */
+  .head.swiss { display: block; margin-bottom: 26px; }
+  .head.swiss .swiss-top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 4px solid #111827; padding-bottom: 10px; margin-bottom: 16px; }
+  .head.swiss .title { font-size: 60px; letter-spacing: -.04em; font-weight: 800; margin: 0; line-height: .9; color: #111827; }
+  .head.swiss .title::before { content: ""; display: inline-block; width: 18px; height: 18px; background: ${t.accent}; margin-right: 14px; vertical-align: 12px; }
+  .head.swiss .swiss-row { display: flex; gap: 32px; align-items: flex-start; }
+  .head.swiss .swiss-row .brand { flex: 0 1 230px; }
+  .head.swiss .swiss-meta { display: flex; flex-wrap: wrap; gap: 12px 22px; margin-left: auto; justify-content: flex-end; }
+  .head.swiss .cell { min-width: 82px; }
+  .head.swiss .cell .label { margin-bottom: 4px; color: #111827; }
+  .head.swiss .cell .v { font-size: 12.5px; font-weight: 600; }
+  .head.swiss .brand { gap: 14px; }
+  .head.swiss .logo { width: 48px; height: 48px; border-radius: 0; }
+  .head.swiss .biz-name { font-size: 15px; }
+
+  /* ledger: serif, centred stationery header, double rules */
+  .head.ledger { display: block; margin-bottom: 22px; border-top: 1px solid #111827; border-bottom: 3px double #111827; padding: 12px 0 10px; }
+  .head.ledger .brand { flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+  .head.ledger .logo { width: 48px; height: 48px; border-radius: 0; }
+  .head.ledger .biz-name { font-size: 22px; letter-spacing: .04em; }
+  .head.ledger .biz-lines { font-size: 11px; }
+  .head.ledger .docline { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid #111827; }
+  .head.ledger .title { font-size: 22px; letter-spacing: .18em; margin: 0; color: #111827; font-weight: 700; }
+  .head.ledger .meta td { font-size: 11px; }
   .head.ledger .meta td:last-child { color: ${t.accent}; }
 
   /* ----- parties ----- */
-  .parties { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; margin-bottom: 20px; }
-  .party .label { margin-bottom: 6px; }
-  .party .name { font-size: 15px; font-weight: 700; margin-bottom: 3px; ${t.serif ? `font-family: ${serifStack};` : ''} }
-  .party .lines { font-size: 12px; line-height: 1.45; }
-  .due { min-width: 236px; text-align: right; padding: 14px 16px; border-radius: ${t.radius}px; background: ${t.tint}; }
-  .due .amount { font-size: 24px; font-weight: 800; color: ${t.accent}; line-height: 1.1; margin: 5px 0 4px; ${t.serif ? `font-family: ${serifStack}; font-weight: 700;` : ''} }
+  .parties { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; margin-bottom: 22px; }
+  .party .label { margin-bottom: 8px; }
+  .party .name { font-size: 16px; font-weight: 700; margin-bottom: 4px; ${titleFont} }
+  .party .lines { font-size: 12px; line-height: 1.5; }
+  .due { min-width: 240px; text-align: right; }
+  .due.card { padding: 14px 18px; border-radius: ${t.radius}px; background: ${t.tint}; }
+  .due .amount { font-size: 26px; font-weight: 800; color: ${t.accent}; line-height: 1.1; margin: 6px 0 4px; ${t.serif ? `font-family: ${serifStack}; font-weight: 700;` : ''} }
+  .due.plain .amount { font-size: 32px; color: #111827; letter-spacing: -.01em; }
+  ${t.layout === 'sidebar' ? `.due.plain .amount { color: ${t.accent}; }` : ''}
+  ${t.layout === 'swiss' ? `.due.plain .amount { font-size: 40px; letter-spacing: -.03em; }` : ''}
   .due .when { font-size: 11.5px; }
   .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 3px 8px; border-radius: 4px; }
   .badge.paid, .badge.accepted { background: #dcfce7; color: #166534; }
@@ -270,52 +339,68 @@ function css(t: Theme, mode: RenderMode): string {
   .badge.draft { background: #f3f4f6; color: #374151; }
 
   /* ----- items ----- */
-  table.items { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 10px; }
-  table.items th { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; text-align: left; padding: 9px 12px; }
+  table.items { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 14px; }
+  table.items th { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; text-align: left; padding: 9px 12px; }
   table.items th.num { text-align: right; }
-  table.items td { padding: 8px 12px; vertical-align: top; border-bottom: 1px solid #eceff3; line-height: 1.4; }
+  table.items td { padding: 9px 12px; vertical-align: top; border-bottom: 1px solid #e5e7eb; line-height: 1.45; }
   table.items .item { font-weight: 600; }
   table.items .desc { color: #6b7280; font-size: 11.5px; margin-top: 2px; }
   table.items col.c-qty { width: 64px; }
   table.items col.c-price { width: 112px; }
   table.items col.c-amt { width: 120px; }
-  ${t.rows === 'zebra' ? 'table.items tbody tr:nth-child(even) td { background: #fafafa; }' : ''}
+  ${t.rows === 'zebra' ? 'table.items tbody tr:nth-child(even) td { background: #f9fafb; }' : ''}
   ${
-    t.header === 'minimal' || t.header === 'swiss' || t.header === 'ledger'
-      ? `table.items th { border-bottom: 2px solid #111827; color: #111827; }`
-      : t.header === 'split'
-        ? `table.items thead tr { background: #f3f4f6; } table.items th { color: #374151; }`
-        : t.header === 'rule'
-          ? `table.items thead tr { background: ${t.accent}; } table.items th { color: ${t.accentInk}; }`
-          : `table.items thead tr { background: ${t.tint}; } table.items th { color: ${t.accent}; }`
+    t.rows === 'grid'
+      ? `table.items { border: 1px solid ${t.layout === 'ledger' ? '#111827' : '#cbd5e1'}; }
+         table.items th, table.items td { border-right: 1px solid ${t.layout === 'ledger' ? '#111827' : '#cbd5e1'}; }
+         table.items th:last-child, table.items td:last-child { border-right: 0; }
+         table.items td { border-bottom: 1px solid ${t.layout === 'ledger' ? '#111827' : '#cbd5e1'}; }
+         table.items tbody tr:last-child td { border-bottom: 0; }
+         table.items th { padding-top: 8px; padding-bottom: 8px; } table.items td { padding-top: 8px; padding-bottom: 8px; }`
+      : ''
   }
-  ${t.header === 'ledger' ? `table.items th { border-bottom: 1px solid #111827; font-weight: 600; }` : ''}
+  ${
+    t.layout === 'band' || t.layout === 'wave'
+      ? `table.items thead tr { background: ${t.tint}; } table.items th { color: ${t.accent}; }`
+      : t.layout === 'letterhead'
+        ? `table.items thead tr { background: ${t.accent}; } table.items th { color: ${t.accentInk}; border-right-color: rgba(255,255,255,.25); }`
+        : t.layout === 'sidebar'
+          ? `table.items th { color: ${t.accent}; border-bottom: 2px solid ${t.accent}; padding-left: 0; } table.items td { padding-left: 0; } table.items th.num, table.items td.num { padding-right: 0; }`
+          : t.layout === 'minimal'
+            ? `table.items th { color: #6b7280; font-weight: 600; border-bottom: 1px solid #111827; padding-left: 0; } table.items td { padding-left: 0; border-bottom-color: #e5e7eb; } table.items th.num, table.items td.num { padding-right: 0; }`
+            : t.layout === 'swiss'
+              ? `table.items th { color: #111827; border-bottom: 3px solid #111827; padding-left: 0; } table.items td { padding-left: 0; border-bottom: 1px solid #111827; } table.items th.num, table.items td.num { padding-right: 0; }`
+              : `table.items th { color: #111827; background: ${t.tint}; font-weight: 700; border-bottom: 1px solid #111827; }`
+  }
 
   /* ----- totals ----- */
-  .totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+  .totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 22px; }
   .totals { min-width: 320px; }
-  .trow { display: flex; justify-content: space-between; align-items: baseline; gap: 32px; padding: 4px 12px; font-size: 12.5px; }
+  .trow { display: flex; justify-content: space-between; align-items: baseline; gap: 32px; padding: 3px 12px; font-size: 12.5px; }
   .trow .k { color: #6b7280; }
   .trow .num { font-weight: 600; }
-  .trow.total { font-size: 16px; font-weight: 800; padding: 9px 12px; margin: 3px 0; }
+  .trow.total { font-size: 17px; font-weight: 800; padding: 9px 12px; margin: 4px 0; }
   .trow.total .k { font-weight: 800; }
   ${
     t.totals === 'fill'
       ? `.trow.total { background: ${t.accent}; color: ${t.accentInk}; border-radius: ${t.radius}px; } .trow.total .k { color: ${t.accentInk}; }`
-      : `.trow.total { border-top: 2px solid #111827; color: #111827; } .trow.total .k { color: #111827; }`
+      : `.trow.total { border-top: 2px solid #111827; border-bottom: ${t.layout === 'ledger' ? '3px double #111827' : '0'}; color: #111827; padding-left: 0; padding-right: 0; } .trow.total .k { color: #111827; }`
   }
+  ${t.totals === 'rule' ? `.trow { padding-left: 0; padding-right: 0; }` : ''}
   .trow.balance, .trow.balance .k { font-weight: 700; color: ${t.accent}; }
 
   /* ----- foot ----- */
-  .foot { display: flex; gap: 36px; }
+  .foot { display: flex; gap: 40px; padding-top: 18px; border-top: 1px solid #e5e7eb; }
   .foot > div { flex: 1; min-width: 0; }
-  .foot .label { margin-bottom: 6px; }
-  .foot p { margin: 0 0 6px; font-size: 11.5px; line-height: 1.5; }
-  .pm { margin-bottom: 9px; }
+  .foot .label { margin-bottom: 8px; }
+  .foot p { margin: 0 0 6px; font-size: 11.5px; line-height: 1.55; }
+  .pm { margin-bottom: 10px; }
   .pm .k { font-weight: 600; display: flex; align-items: center; gap: 6px; }
   .pm .v { font-size: 11.5px; color: #374151; word-break: break-all; line-height: 1.45; }
   .mark { width: 30px; height: 18px; vertical-align: middle; }
-  ${t.header === 'minimal' ? `.foot { background: ${t.tint}; padding: 16px 20px; margin: 0 -20px; }` : ''}
+  ${t.layout === 'minimal' ? `.foot { border-top: 1px solid #111827; }` : ''}
+  ${t.layout === 'swiss' ? `.foot { border-top: 3px solid #111827; }` : ''}
+  ${t.layout === 'ledger' ? `.foot { border-top: 1px solid #111827; }` : ''}
   .btn { display: inline-block; background: ${t.accent}; color: ${t.accentInk}; text-decoration: none; font-weight: 700; padding: 10px 18px; border-radius: 8px; font-size: 13px; }
   `;
 }
@@ -351,11 +436,18 @@ function brandHtml(d: InvoiceDocument, t: Theme): string {
   const b = d.business;
   const showLogo = b.show.logo && !!b.logo;
   const bizLines: string[] = [];
-  if (b.show.address) bizLines.push(...b.addressLines);
+  // Stationery-style centred headers run the address on one line, as printed
+  // letterheads do; the others stack it.
+  const oneLine = t.layout === 'letterhead' || t.layout === 'ledger';
+  if (b.show.address) {
+    if (oneLine && b.addressLines.length) bizLines.push(b.addressLines.join(', '));
+    else bizLines.push(...b.addressLines);
+  }
   const contact = [b.email, b.phone, b.website].filter(Boolean) as string[];
   if (contact.length) bizLines.push(contact.join('  ·  '));
   if (b.show.taxNumber && b.taxNumber) bizLines.push(`${b.taxLabel || 'Tax'} number ${b.taxNumber}`);
-  const logoClass = t.header === 'card' || t.header === 'wave' ? 'logo logo-tile' : 'logo';
+  const onColour = t.layout === 'band' || t.layout === 'wave' || t.layout === 'sidebar';
+  const logoClass = onColour ? 'logo logo-tile' : 'logo';
   return `
     <div class="brand">
       ${showLogo ? `<img class="${logoClass}" src="${esc(b.logo)}" alt="">` : ''}
@@ -367,27 +459,49 @@ function brandHtml(d: InvoiceDocument, t: Theme): string {
 }
 
 function headerHtml(d: InvoiceDocument, t: Theme, locale: string): string {
-  const meta = `<table class="meta">${metaRows(d, locale)
-    .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
-    .join('')}</table>`;
-  if (t.header === 'swiss') {
-    return `
+  const rows = metaRows(d, locale);
+  const meta = `<table class="meta">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
+  const docblock = `<div class="docblock"><h1 class="title">${docTitle(d)}</h1>${meta}</div>`;
+
+  switch (t.layout) {
+    case 'letterhead':
+    case 'ledger':
+      return `
+  <header class="head ${t.layout}" data-block="head">
+    ${brandHtml(d, t)}
+    <div class="docline"><h1 class="title">${docTitle(d)}</h1><div class="docblock">${meta}</div></div>
+  </header>`;
+    case 'sidebar':
+      return `
+  <header class="head sidebar" data-block="head">
+    ${brandHtml(d, t)}
+    ${docblock}
+    <div class="side-foot">${esc(d.business.name)}</div>
+  </header>`;
+    case 'swiss': {
+      const cells = rows.map(([k, v]) => `<div class="cell"><div class="label">${k}</div><div class="v">${v}</div></div>`).join('');
+      return `
   <header class="head swiss" data-block="head">
-    <div class="swiss-top"><h1 class="title">${docTitle(d)}</h1><div class="docblock">${meta}</div></div>
-    <div class="swiss-row">${brandHtml(d, t)}</div>
+    <div class="swiss-top"><h1 class="title">${docTitle(d)}</h1></div>
+    <div class="swiss-row">${brandHtml(d, t)}<div class="swiss-meta">${cells}</div></div>
+  </header>`;
+    }
+    case 'minimal':
+      return `
+  <header class="head minimal" data-block="head">
+    ${docblock}
+    ${brandHtml(d, t)}
+  </header>`;
+    default:
+      return `
+  <header class="head ${t.layout}" data-block="head">
+    ${brandHtml(d, t)}
+    ${docblock}
   </header>`;
   }
-  return `
-  <header class="head ${t.header}" data-block="head">
-    ${brandHtml(d, t)}
-    <div class="docblock">
-      <h1 class="title">${docTitle(d)}</h1>
-      ${meta}
-    </div>
-  </header>`;
 }
 
-function partiesHtml(d: InvoiceDocument, locale: string): string {
+function partiesHtml(d: InvoiceDocument, t: Theme, locale: string): string {
   const c = d.client;
   const cLines = [...c.addressLines];
   const contact = [c.email, c.phone].filter(Boolean) as string[];
@@ -396,15 +510,16 @@ function partiesHtml(d: InvoiceDocument, locale: string): string {
   const status = (d.document.status || '').toLowerCase();
   const isEst = d.document.type === 'estimate';
   const cur = d.document.currencyCode;
+  const dueCls = `due ${t.due}`;
 
   let card: string;
   if (isEst) {
     const accepted = status === 'accepted';
-    card = `<div class="due">${accepted ? '<span class="badge accepted">ACCEPTED</span>' : `<div class="label">${docNoun(d)} total</div>`}<div class="amount">${money(d.totals.total, cur, locale)}</div>${
+    card = `<div class="${dueCls}">${accepted ? '<span class="badge accepted">ACCEPTED</span>' : `<div class="label">${docNoun(d)} total</div>`}<div class="amount">${money(d.totals.total, cur, locale)}</div>${
       d.document.dueDate ? `<div class="when muted">Valid until ${date(d.document.dueDate, locale)}</div>` : ''
     }</div>`;
   } else if (status === 'paid') {
-    card = `<div class="due"><span class="badge paid">PAID</span><div class="amount">${money(d.totals.total, cur, locale)}</div><div class="when muted">Paid in full</div></div>`;
+    card = `<div class="${dueCls}"><span class="badge paid">PAID</span><div class="amount">${money(d.totals.total, cur, locale)}</div><div class="when muted">Paid in full</div></div>`;
   } else {
     const overdue = status === 'overdue';
     const when = d.document.dueDate
@@ -412,7 +527,7 @@ function partiesHtml(d: InvoiceDocument, locale: string): string {
       : d.document.dueOption === 'on_receipt'
         ? 'Due on receipt'
         : '';
-    card = `<div class="due"><div class="label">Amount due${overdue ? ' <span class="badge overdue">OVERDUE</span>' : ''}</div><div class="amount">${money(d.totals.balanceDue, cur, locale)}</div>${
+    card = `<div class="${dueCls}"><div class="label">Amount due${overdue ? ' <span class="badge overdue">OVERDUE</span>' : ''}</div><div class="amount">${money(d.totals.balanceDue, cur, locale)}</div>${
       when ? `<div class="when muted">${when}</div>` : ''
     }</div>`;
   }
@@ -488,7 +603,9 @@ function footHtml(d: InvoiceDocument, mode: RenderMode): string {
     );
   }
   if (p.paypalEmail) pm.push(`<div class="pm"><div class="k">PayPal</div><div class="v">${esc(p.paypalEmail)}</div></div>`);
-  if (p.bankDetailLines.length) pm.push(`<div class="pm"><div class="k">Bank transfer</div><div class="v">${p.bankDetailLines.map(esc).join('<br>')}</div></div>`);
+  // One line, dot-separated: four stacked lines here is what pushes a normal
+  // invoice onto a second page, and a sort code and account number read fine inline.
+  if (p.bankDetailLines.length) pm.push(`<div class="pm"><div class="k">Bank transfer</div><div class="v">${p.bankDetailLines.map(esc).join('  ·  ')}</div></div>`);
 
   const showNotes = d.business.show.notes && !!d.notes;
   const notes = showNotes ? `<div><div class="label">${d.document.type === 'estimate' ? 'Notes &amp; terms' : 'Notes &amp; terms'}</div><p>${lines(d.notes)}</p></div>` : '';
@@ -593,7 +710,7 @@ export function renderInvoiceHtml(d: InvoiceDocument, opts: { mode: RenderMode }
 <body>
 <div id="src" data-theme="${esc(d.theme.id)}">
   ${headerHtml(d, t, locale)}
-  ${partiesHtml(d, locale)}
+  ${partiesHtml(d, t, locale)}
   ${itemsHtml(d, locale)}
   ${totalsHtml(d, locale)}
   ${footHtml(d, opts.mode)}
