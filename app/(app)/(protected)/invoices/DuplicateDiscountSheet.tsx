@@ -74,7 +74,9 @@ const DuplicateDiscountSheet = forwardRef<DuplicateDiscountSheetRef, DuplicateDi
   const snapPoints = useMemo(() => ['60%'], []);
 
   const handleInternalSave = () => {
-    Keyboard.dismiss();
+    // No Keyboard.dismiss() here: with keyboardBlurBehavior="restore" the sheet
+    // would snap back to its snap point before closing. Dismissing the sheet
+    // takes the keyboard down with it in one motion.
 
     if (!discountType) {
       Alert.alert('No Discount Type', 'Please select a discount type (Percentage or Fixed Amount).');
@@ -213,6 +215,7 @@ const DuplicateDiscountSheet = forwardRef<DuplicateDiscountSheetRef, DuplicateDi
       backgroundStyle={styles.modalBackground}
       enablePanDownToClose={true} 
       keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
       keyboardBlurBehavior="restore"
     >
       <View style={styles.container}>

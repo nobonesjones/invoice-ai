@@ -460,6 +460,7 @@ const AddExpenseModal = forwardRef<AddExpenseModalRef, AddExpenseModalProps>(({ 
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
       keyboardBlurBehavior="restore"
       enablePanDownToClose={!isSubmitting}
       enableContentPanningGesture={!isSubmitting}

@@ -49,3 +49,25 @@ shared document, uploads it to the `shared-estimates` bucket (writing
    **Decline** buttons that set `estimates.status` and write an `estimate_activities` row; then an
    `estimate-responded` function/trigger that emails the owner, mirroring `invoice-paid`. Point
    `share_url` at it once it exists.
+
+# AI chat — backend handoff (2026-09-10)
+
+OpenAI removed the Assistants API on 2026-08-26. `ai-chat-assistants-poc` (the function the
+app calls) died on its first OpenAI call and returned 500 for every message. The repo copy now
+uses Chat Completions with the same prompt and the same 43 tools; the app payload and the
+response shape are unchanged, so no app build is needed.
+
+1. **Before deploying:** confirm the deployed `ai-chat-assistants-poc` matched the repo copy at
+   commit 4bb348b (2025-10-04). If it did not, send us the deployed source and we port the
+   diff; do not deploy over it blind.
+2. **Deploy `ai-chat-assistants-poc` from the repo.** Secrets unchanged: `OPENAI_API_KEY`,
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. `ASSISTANT_ID_OVERRIDE` and the
+   `system_config` assistant id are no longer read.
+3. **Smoke test** with a real user id: one message that reads ("show my recent invoices") and
+   one that creates ("invoice Test Client for 2 hours consulting at 50"). Both should return
+   200 with `success: true`; the second with one attachment. Paste the `[Assistants POC]`
+   log lines if either fails.
+4. `ai-chat-assistants-new`, `ai-chat` and `create-assistant` are dead for the same reason.
+   Nothing calls them from the app; leave them or delete them, your call.
+
+Answer with the deployed version number.

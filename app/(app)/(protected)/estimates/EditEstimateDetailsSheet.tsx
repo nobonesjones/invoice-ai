@@ -374,7 +374,8 @@ const EditEstimateDetailsSheet = forwardRef<
 			handleIndicatorStyle={styles.handleIndicator}
 			backgroundStyle={styles.modalBackground}
 			enablePanDownToClose
-			keyboardBehavior="extend" // Changed to extend for behavior like CreateNewClientSheet
+			keyboardBehavior="extend"
+			android_keyboardInputMode="adjustResize" // Changed to extend for behavior like CreateNewClientSheet
 			keyboardBlurBehavior="restore"
 			onDismiss={onClose} // Call onClose when sheet is dismissed by pan down etc.
 		>

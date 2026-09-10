@@ -1477,6 +1477,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
             keyboardBehavior="extend"
+            android_keyboardInputMode="adjustResize"
             enableDynamicSizing={false}
           >
             <BottomSheetScrollView
@@ -1770,6 +1771,7 @@ setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
             keyboardBehavior="extend"
+            android_keyboardInputMode="adjustResize"
             enableDynamicSizing={false}
           >
             <BottomSheetScrollView

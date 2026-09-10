@@ -176,7 +176,6 @@ const CreateNewClientSheet = forwardRef<
 				} else if (!updated || updated.length === 0) {
 					Alert.alert("Error", "Client not found or you don't have permission to update this client.");
 				} else {
-					Alert.alert("Success", "Client updated successfully!");
 					// Use the first (and should be only) updated record
 					if (onClientAdded && updated[0]) onClientAdded(updated[0]);
 					internalClose();
@@ -192,7 +191,6 @@ const CreateNewClientSheet = forwardRef<
 				if (insertError) {
 					Alert.alert("Error", `Could not save client. ${insertError.message}`);
 				} else {
-					Alert.alert("Success", "Client saved successfully!");
 					setFullName("");
 					setEmail("");
 					setPhone("");

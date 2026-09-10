@@ -210,6 +210,7 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
       enableOverDrag={false}
       enableDynamicSizing={false}
       keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
       keyboardBlurBehavior="restore"
       topInset={Math.max(12, insets.top)}
     >
