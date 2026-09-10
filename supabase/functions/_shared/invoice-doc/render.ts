@@ -93,13 +93,13 @@ interface Theme {
    *
    *   band        full-bleed solid colour band across the top of the page
    *   wave        full-bleed gradient band with a wave bottom edge
-   *   letterhead  centred brand over a double rule, like printed stationery
+   *   stripe      thin accent bar down the left edge, brand left, title right
    *   sidebar     full-height colour column on the left carrying brand + meta
    *   minimal     light type, no fills, hairlines only
    *   swiss       oversized title, black rules, one small accent mark
-   *   ledger      serif, boxed table grid, double rules
+   *   ledger      serif, hairline page frame, boxed table grid
    */
-  layout: 'band' | 'wave' | 'letterhead' | 'sidebar' | 'minimal' | 'swiss' | 'ledger';
+  layout: 'band' | 'wave' | 'stripe' | 'sidebar' | 'minimal' | 'swiss' | 'ledger';
   rows: 'zebra' | 'lines' | 'grid';
   totals: 'fill' | 'rule';
   /** 'card' = tinted box; 'plain' = big number, no box */
@@ -111,7 +111,7 @@ interface Theme {
 const THEMES: Record<ThemeId, Theme> = {
   clean: { accent: '#2563eb', accentInk: '#ffffff', tint: '#eff6ff', layout: 'band', rows: 'zebra', totals: 'fill', due: 'card', radius: 8 },
   wave: { accent: '#7c3aed', accentInk: '#ffffff', tint: '#f5f3ff', layout: 'wave', rows: 'zebra', totals: 'fill', due: 'card', radius: 12 },
-  classic: { accent: '#1e3a8a', accentInk: '#ffffff', tint: '#eef2ff', layout: 'letterhead', rows: 'grid', totals: 'fill', due: 'card', radius: 2, serif: true },
+  classic: { accent: '#1e3a8a', accentInk: '#ffffff', tint: '#eef2ff', layout: 'stripe', rows: 'grid', totals: 'fill', due: 'card', radius: 2, serif: true },
   modern: { accent: '#047857', accentInk: '#ffffff', tint: '#ecfdf5', layout: 'sidebar', rows: 'lines', totals: 'rule', due: 'plain', radius: 6 },
   simple: { accent: '#111827', accentInk: '#ffffff', tint: '#f3f4f6', layout: 'minimal', rows: 'lines', totals: 'rule', due: 'plain', radius: 0 },
   swiss: { accent: '#e11d48', accentInk: '#ffffff', tint: '#fff1f2', layout: 'swiss', rows: 'lines', totals: 'rule', due: 'plain', radius: 0 },
@@ -253,23 +253,17 @@ function css(t: Theme, mode: RenderMode): string {
 
   /* wave: full-bleed gradient with a wave bottom edge */
   .head.wave { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 32px;
-    background: linear-gradient(120deg, ${t.accent} 0%, #a78bfa 100%); color: #fff;
+    background: ${t.accent}; color: #fff;
     margin: -${PAD_TOP}px -${PAD_X}px 28px; padding: 34px ${PAD_X}px 60px; }
   .head.wave::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 44px; background: url("${WAVE_SVG}") no-repeat; background-size: 100% 100%; }
   .head.wave .muted, .head.wave .meta td:first-child { color: rgba(255,255,255,.78); }
   .head.wave .title, .head.wave .meta td:last-child { color: #fff; }
 
-  /* letterhead: centred brand over a double rule, then the document line */
-  .head.letterhead { display: block; margin-bottom: 22px; }
-  .head.letterhead .brand { flex-direction: column; align-items: center; text-align: center; gap: 8px; padding-bottom: 14px; border-bottom: 3px double ${t.accent}; }
-  .head.letterhead .biz-name { font-size: 22px; margin-bottom: 3px; }
-  .head.letterhead .logo { width: 48px; height: 48px; }
-  .head.letterhead .meta, .head.ledger .meta { display: grid; grid-template-columns: auto auto auto auto; column-gap: 6px; }
-  .head.letterhead .meta tbody, .head.ledger .meta tbody, .head.letterhead .meta tr, .head.ledger .meta tr { display: contents; }
-  .head.letterhead .meta td, .head.ledger .meta td { display: block; padding: 2px 0 2px 20px; }
-  .head.letterhead .docline { display: flex; justify-content: space-between; align-items: center; gap: 32px; padding-top: 14px; }
-  .head.letterhead .title { color: ${t.accent}; margin: 0; font-size: 28px; }
-  .head.letterhead .docblock { text-align: right; }
+  /* stripe: thin accent bar down the left edge, brand left, title right */
+  ${t.layout === 'stripe' ? `.page::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: ${t.accent}; }` : ''}
+  .head.stripe { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; padding-bottom: 18px; margin-bottom: 26px; border-bottom: 2px solid ${t.accent}; }
+  .head.stripe .title { color: ${t.accent}; font-size: 34px; margin-bottom: 12px; }
+  .head.stripe .logo { border-radius: 4px; }
 
   /* sidebar: the brand and meta live in the colour column, the page starts beside it */
   .head.sidebar { position: absolute; left: 0; top: 0; width: ${SIDEBAR_W}px; height: ${PAGE_H}px; padding: 40px 24px 36px; color: #fff; display: flex; flex-direction: column; gap: 28px; }
@@ -310,15 +304,14 @@ function css(t: Theme, mode: RenderMode): string {
   .head.swiss .logo { width: 48px; height: 48px; border-radius: 0; }
   .head.swiss .biz-name { font-size: 15px; }
 
-  /* ledger: serif, centred stationery header, double rules */
-  .head.ledger { display: block; margin-bottom: 22px; border-top: 1px solid #111827; border-bottom: 3px double #111827; padding: 12px 0 10px; }
-  .head.ledger .brand { flex-direction: column; align-items: center; text-align: center; gap: 10px; }
-  .head.ledger .logo { width: 48px; height: 48px; border-radius: 0; }
-  .head.ledger .biz-name { font-size: 22px; letter-spacing: .04em; }
-  .head.ledger .biz-lines { font-size: 11px; }
-  .head.ledger .docline { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid #111827; }
-  .head.ledger .title { font-size: 22px; letter-spacing: .18em; margin: 0; color: #111827; font-weight: 700; }
-  .head.ledger .meta td { font-size: 11px; }
+  /* ledger: serif, hairline frame around the page, double rule under the header */
+  ${t.layout === 'ledger' ? `.page::before { content: ""; position: absolute; left: 22px; top: 22px; right: 22px; bottom: 22px; border: 1px solid #111827; pointer-events: none; }
+  .pfoot { bottom: 28px; }` : ''}
+  .head.ledger { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; border-bottom: 3px double #111827; padding-bottom: 16px; margin-bottom: 22px; }
+  .head.ledger .logo { width: 56px; height: 56px; border-radius: 0; }
+  .head.ledger .biz-name { font-size: 20px; letter-spacing: .02em; }
+  .head.ledger .title { font-size: 24px; letter-spacing: .18em; color: #111827; font-weight: 700; margin-bottom: 10px; }
+  .head.ledger .meta td { padding: 1px 0 1px 20px; font-size: 11px; }
   .head.ledger .meta td:last-child { color: ${t.accent}; }
 
   /* ----- parties ----- */
@@ -362,7 +355,7 @@ function css(t: Theme, mode: RenderMode): string {
   ${
     t.layout === 'band' || t.layout === 'wave'
       ? `table.items thead tr { background: ${t.tint}; } table.items th { color: ${t.accent}; }`
-      : t.layout === 'letterhead'
+      : t.layout === 'stripe'
         ? `table.items thead tr { background: ${t.accent}; } table.items th { color: ${t.accentInk}; border-right-color: rgba(255,255,255,.25); }`
         : t.layout === 'sidebar'
           ? `table.items th { color: ${t.accent}; border-bottom: 2px solid ${t.accent}; padding-left: 0; } table.items td { padding-left: 0; } table.items th.num, table.items td.num { padding-right: 0; }`
@@ -374,7 +367,7 @@ function css(t: Theme, mode: RenderMode): string {
   }
 
   /* ----- totals ----- */
-  .totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 22px; }
+  .totals-wrap { display: flex; justify-content: flex-end; margin: 16px 0 22px; }
   .totals { min-width: 320px; }
   .trow { display: flex; justify-content: space-between; align-items: baseline; gap: 32px; padding: 3px 12px; font-size: 12.5px; }
   .trow .k { color: #6b7280; }
@@ -436,13 +429,7 @@ function brandHtml(d: InvoiceDocument, t: Theme): string {
   const b = d.business;
   const showLogo = b.show.logo && !!b.logo;
   const bizLines: string[] = [];
-  // Stationery-style centred headers run the address on one line, as printed
-  // letterheads do; the others stack it.
-  const oneLine = t.layout === 'letterhead' || t.layout === 'ledger';
-  if (b.show.address) {
-    if (oneLine && b.addressLines.length) bizLines.push(b.addressLines.join(', '));
-    else bizLines.push(...b.addressLines);
-  }
+  if (b.show.address) bizLines.push(...b.addressLines);
   const contact = [b.email, b.phone, b.website].filter(Boolean) as string[];
   if (contact.length) bizLines.push(contact.join('  ·  '));
   if (b.show.taxNumber && b.taxNumber) bizLines.push(`${b.taxLabel || 'Tax'} number ${b.taxNumber}`);
@@ -464,13 +451,6 @@ function headerHtml(d: InvoiceDocument, t: Theme, locale: string): string {
   const docblock = `<div class="docblock"><h1 class="title">${docTitle(d)}</h1>${meta}</div>`;
 
   switch (t.layout) {
-    case 'letterhead':
-    case 'ledger':
-      return `
-  <header class="head ${t.layout}" data-block="head">
-    ${brandHtml(d, t)}
-    <div class="docline"><h1 class="title">${docTitle(d)}</h1><div class="docblock">${meta}</div></div>
-  </header>`;
     case 'sidebar':
       return `
   <header class="head sidebar" data-block="head">
@@ -692,9 +672,44 @@ const PAGINATE_JS = `
 })();
 `;
 
+// ---------- colour derivation ----------
+//
+// A design's accent can be overridden by the user. The tint (table heads, the
+// amount card) and the ink on top of the accent must follow it, or an orange
+// invoice gets blue table heads and white-on-orange text nobody can read.
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Mix `hex` towards white; 0.9 = 90% white. */
+function tintOf(hex: string, whiteness = 0.9): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#f3f4f6';
+  const c = rgb.map((v) => Math.round(v + (255 - v) * whiteness));
+  return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+/** White or near-black, whichever reads on top of `hex` (WCAG relative luminance). */
+function inkOn(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#ffffff';
+  const lin = rgb.map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return L > 0.4 ? '#111827' : '#ffffff';
+}
+
 export function renderInvoiceHtml(d: InvoiceDocument, opts: { mode: RenderMode }): string {
   const base = THEMES[d.theme.id] ?? THEMES.clean;
-  const t: Theme = d.theme.accent ? { ...base, accent: d.theme.accent } : base;
+  const t: Theme = d.theme.accent
+    ? { ...base, accent: d.theme.accent, tint: tintOf(d.theme.accent), accentInk: inkOn(d.theme.accent) }
+    : base;
   const locale = d.document.locale || 'en-GB';
   const foot = `${esc(d.business.name)}  ·  ${docNoun(d)} ${esc(d.document.number)}`;
   const viewportW = opts.mode === 'print' ? PAGE_W : PAGE_W + 32;

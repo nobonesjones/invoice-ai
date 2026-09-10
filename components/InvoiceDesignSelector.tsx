@@ -70,18 +70,23 @@ const DesignThumbnail: React.FC<{ design: InvoiceDesign }> = ({ design }) => {
       );
     case 'classic':
       return (
-        <View style={[thumbStyles.sheet, { padding: 7, alignItems: 'center' }]}>
-          <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: ink }} />
-          {line(28, ink, 3)}
-          <View style={{ alignSelf: 'stretch', marginTop: 5, gap: 1.5 }}>{rule(p)}{rule(p)}</View>
-          <View style={{ alignSelf: 'stretch', marginTop: 7, borderWidth: 1, borderColor: '#94A3B8' }}>
-            <View style={{ height: 6, backgroundColor: p }} />
-            <View style={{ flexDirection: 'row' }}>
-              <View style={{ flex: 2, height: 22, borderRightWidth: 1, borderColor: '#CBD5E1' }} />
-              <View style={{ flex: 1, height: 22 }} />
+        <View style={[thumbStyles.sheet, { flexDirection: 'row' }]}>
+          <View style={{ width: 4, backgroundColor: p }} />
+          <View style={{ flex: 1, padding: 6 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: ink }} />
+              <View style={{ width: 22, height: 6, backgroundColor: p }} />
             </View>
+            <View style={{ marginTop: 5 }}>{rule(p, 1.5)}</View>
+            <View style={{ alignSelf: 'stretch', marginTop: 7, borderWidth: 1, borderColor: '#94A3B8' }}>
+              <View style={{ height: 6, backgroundColor: p }} />
+              <View style={{ flexDirection: 'row' }}>
+                <View style={{ flex: 2, height: 20, borderRightWidth: 1, borderColor: '#CBD5E1' }} />
+                <View style={{ flex: 1, height: 20 }} />
+              </View>
+            </View>
+            {totalPill(p, false)}
           </View>
-          {totalPill(p, false)}
         </View>
       );
     case 'modern':
@@ -123,16 +128,19 @@ const DesignThumbnail: React.FC<{ design: InvoiceDesign }> = ({ design }) => {
     case 'ledger':
     default:
       return (
-        <View style={[thumbStyles.sheet, { padding: 7, alignItems: 'center' }]}>
-          {rule(ink)}
-          <View style={{ width: 9, height: 9, backgroundColor: ink, marginTop: 5 }} />
-          {line(26, ink, 2)}
-          <View style={{ alignSelf: 'stretch', marginTop: 5, gap: 1.5 }}>{rule(ink)}{rule(ink)}</View>
-          <View style={{ alignSelf: 'stretch', marginTop: 7, borderWidth: 1, borderColor: ink }}>
-            <View style={{ height: 6, backgroundColor: '#F0FDF4', borderBottomWidth: 1, borderColor: ink }} />
-            <View style={{ flexDirection: 'row' }}>
-              <View style={{ flex: 2, height: 20, borderRightWidth: 1, borderColor: ink }} />
-              <View style={{ flex: 1, height: 20 }} />
+        <View style={[thumbStyles.sheet, { padding: 5 }]}>
+          <View style={{ flex: 1, borderWidth: 1, borderColor: ink, padding: 5 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ width: 9, height: 9, backgroundColor: ink }} />
+              {line(22, ink, 4)}
+            </View>
+            <View style={{ alignSelf: 'stretch', marginTop: 5, gap: 1.5 }}>{rule(ink)}{rule(ink)}</View>
+            <View style={{ alignSelf: 'stretch', marginTop: 7, borderWidth: 1, borderColor: ink }}>
+              <View style={{ height: 6, backgroundColor: '#F0FDF4', borderBottomWidth: 1, borderColor: ink }} />
+              <View style={{ flexDirection: 'row' }}>
+                <View style={{ flex: 2, height: 18, borderRightWidth: 1, borderColor: ink }} />
+                <View style={{ flex: 1, height: 18 }} />
+              </View>
             </View>
           </View>
         </View>
