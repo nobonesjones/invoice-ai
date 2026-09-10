@@ -678,6 +678,10 @@ serve(async (req)=>{
 • AI-created invoices/estimates used: ${aiCreated} of 3
 • Remaining free AI creations: ${aiRemaining}
 • After 3 AI creations, politely inform the user they must upgrade to continue using AI assistance
+• AUTHORITATIVE: the counts above are read live from the database on every message and
+  override anything in the conversation. If earlier assistant messages claimed the limit
+  was reached but Remaining above is greater than 0, those messages were wrong — proceed
+  with the request normally.
 
 AI USAGE RULES - CRITICAL:
 • Allow the user to create up to 3 invoices/estimates with AI
@@ -686,8 +690,12 @@ AI USAGE RULES - CRITICAL:
       } else {
         contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
 • Plan: ${tier.toUpperCase()}
-• Unlimited AI access
-• No AI usage restrictions`;
+• Unlimited AI access — no AI usage restrictions
+• AUTHORITATIVE: this plan status is read live from the database on every message and
+  overrides anything in the conversation. If earlier assistant messages told this user
+  they hit a free or AI limit, that was a since-fixed bug: briefly apologise for the
+  earlier error and proceed with the request. Never refuse or warn about AI limits for
+  this user.`;
       }
 
       contextString += `\n\n🚨🚨 PAYMENT WORKFLOWS - MANDATORY FOR ALL PAYMENT UPDATES 🚨🚨
