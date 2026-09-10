@@ -1551,7 +1551,7 @@ export default function CreateEstimateScreen() {
           <ScrollView 
             key={formUpdateKey}
             style={{ flex: 1, backgroundColor: screenBackgroundColor }}
-            contentContainerStyle={{ paddingBottom: 20 }}
+            contentContainerStyle={{ paddingBottom: 24 }}
             keyboardShouldPersistTaps="handled"
           >
             {/* Unified Header Section - Edge to Edge White Container */}
@@ -1799,21 +1799,6 @@ export default function CreateEstimateScreen() {
               />
             </FormSection>
 
-          {/* Save Button */}
-          <TouchableOpacity 
-            onPress={handleSaveEstimate} 
-            style={[styles.bottomSaveButton, { backgroundColor: safeThemeColors.primary, opacity: isSavingEstimate ? 0.7 : 1 }]}
-            disabled={isSavingEstimate}
-          >
-            <Text style={styles.bottomSaveButtonText}>
-              {isSavingEstimate 
-                ? (isEditMode ? 'Updating...' : 'Saving...') 
-                : (isEditMode 
-                  ? `Update ${estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}` 
-                  : `Save ${estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}`)}
-            </Text>
-          </TouchableOpacity>
-
           {/* Client Selection Sheet */}
           <NewClientSelectionSheet
             ref={newClientSheetRef}
@@ -1882,6 +1867,22 @@ export default function CreateEstimateScreen() {
           />
 
         </ScrollView>
+
+        {/* Save button pinned under the form, like the invoice screen, so it is
+            always one tap away instead of scrolling off with the fields. */}
+        <TouchableOpacity
+          onPress={handleSaveEstimate}
+          style={[styles.bottomSaveButton, { backgroundColor: safeThemeColors.primary, opacity: isSavingEstimate ? 0.7 : 1 }]}
+          disabled={isSavingEstimate}
+        >
+          <Text style={styles.bottomSaveButtonText}>
+            {isSavingEstimate
+              ? (isEditMode ? 'Updating...' : 'Saving...')
+              : (isEditMode
+                ? `Update ${estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}`
+                : `Save ${estimateTerminology === 'quote' ? 'Quote' : 'Estimate'}`)}
+          </Text>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
 
 
@@ -2099,10 +2100,17 @@ const getStyles = (themeColors: ThemeColorPalette, screenBackgroundColor: string
   },
   bottomSaveButton: {
     marginHorizontal: 16,
-    marginVertical: 16,
-    paddingVertical: 16,
+    marginTop: 8,
+    marginBottom: 15,
+    paddingVertical: 15,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 4,
   },
   bottomSaveButtonText: {
     color: 'white',
