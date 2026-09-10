@@ -720,7 +720,7 @@ AI USAGE RULES - CRITICAL:
     // so the same object is now sent on every Chat Completions request instead.
     const assistantConfig = {
             name: "Invoice AI Assistant",
-            instructions: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.${contextString}
+            instructions: `You are an AI assistant for invoice and estimate management. Be friendly, concise, and helpful.
 
 RESPONSE STYLE:
 • Keep responses brief and to the point
@@ -2004,41 +2004,6 @@ When the user indicates you made an error or corrected you:
               {
                 type: "function",
                 function: {
-                  name: "create_client",
-                  description: "Create a new client without creating an invoice. Use when user wants to add a client to their database (not create an invoice). Keywords: 'add client', 'create client', 'new client', 'add customer', 'create customer'.",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      client_name: {
-                        type: "string",
-                        description: "Name of the client (required)"
-                      },
-                      client_email: {
-                        type: "string",
-                        description: "Client email address (optional)"
-                      },
-                      client_phone: {
-                        type: "string",
-                        description: "Client phone number (optional)"
-                      },
-                      client_address: {
-                        type: "string",
-                        description: "Client address (optional)"
-                      },
-                      client_tax_number: {
-                        type: "string",
-                        description: "Client tax/VAT number (optional)"
-                      }
-                    },
-                    required: [
-                      "client_name"
-                    ]
-                  }
-                }
-              },
-              {
-                type: "function",
-                function: {
                   name: "get_design_options",
                   description: "Get available invoice design templates with detailed descriptions, personality traits, and industry recommendations. Use this when user asks about design options or wants to change invoice appearance.",
                   parameters: {
@@ -2555,6 +2520,9 @@ When the user indicates you made an error or corrected you:
       : [];
     const conversation: any[] = [
       { role: 'system', content: assistantConfig.instructions },
+      // Per-request context (business defaults, last action, plan limits) goes after the
+      // static prompt so the long identical prefix stays cacheable across requests.
+      ...(contextString.trim() ? [{ role: 'system', content: contextString.trim() }] : []),
       ...historyMessages,
       { role: 'user', content: message }
     ];
@@ -5493,8 +5461,14 @@ To change colors, just say:
     // outputs back) or answers. Bounded so a looping model cannot run until the edge
     // function's own timeout.
     const MAX_TOOL_ROUNDS = 12;
+    const TIME_BUDGET_MS = 110000;
+    const loopStartedAt = Date.now();
     let assistantMessage = '';
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      if (Date.now() - loopStartedAt > TIME_BUDGET_MS) {
+        console.warn('[Assistants POC] Time budget exhausted after', round, 'rounds');
+        break;
+      }
       const completion = await openai.chat.completions.create({
         model: assistantConfig.model,
         messages: conversation,
