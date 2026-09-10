@@ -25,7 +25,9 @@ import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoiceDesign';
 import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
 import { ColorSelector } from '@/components/ColorSelector';
-import { SegmentedControl } from '@/components/SegmentedControl';
+import { DesignPicker } from '@/components/DesignPicker';
+import { LogoColorProbe } from '@/components/LogoColorProbe';
+import { useLogoBrandColor } from '@/hooks/useLogoBrandColor';
 import { router } from 'expo-router';
 
 export interface InvoicePreviewModalRef {
@@ -97,9 +99,11 @@ export const InvoicePreviewModal = forwardRef(
     }, [invoiceData, documentType, mode, initialDesign, initialAccentColor]);
     const mainModalRef = useRef<BottomSheetModal>(null);
     
-    // Tab state for design/color selection
-    const [activeTab, setActiveTab] = useState<'design' | 'color'>('design');
     const [showSendOptions, setShowSendOptions] = useState(false);
+    // Saving a design on one invoice used to silently become the business
+    // default. It is now a visible choice, on by default so nothing changes
+    // for anyone who never touches it.
+    const [applyAsDefault, setApplyAsDefault] = useState(true);
     
     // Swipe gesture state - now supports 3 positions
     const [modalPosition, setModalPosition] = useState<'normal' | 'minimized' | 'expanded'>('normal');
@@ -136,10 +140,26 @@ export const InvoicePreviewModal = forwardRef(
     const selectAccentColor = shouldUseHook ? hookResult.selectAccentColor : setEstimateAccentColor;
     const saveToInvoice = hookResult.saveToInvoice;
     const updateDefaultForNewInvoices = hookResult.updateDefaultForNewInvoices;
+
+    // Switching design snaps the colour to that design's own default, unless
+    // the user has chosen their brand colour, which belongs on every design.
+    const handleDesignSelect = useCallback(
+      (designId: string) => {
+        selectDesign(designId);
+        const next = getDesignById(designId);
+        if (next && next.swatches.length && currentAccentColor.toLowerCase() !== (brandColorRef.current ?? '').toLowerCase()) {
+          selectAccentColor(next.swatches[0].color);
+        }
+      },
+      [selectDesign, selectAccentColor, currentAccentColor],
+    );
     
     // Send modal refs and setup
     // The document being previewed, with the design and colour chosen in this modal.
     const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+    const brandColor = useLogoBrandColor(logoDataUri);
+    const brandColorRef = useRef<string | null>(null);
+    brandColorRef.current = brandColor;
     React.useEffect(() => {
       let cancelled = false;
       fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
@@ -292,10 +312,7 @@ export const InvoicePreviewModal = forwardRef(
             // Save design and color to specific invoice
             const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
             if (success) {
-              // Reduced noisy logs
-              // Also update default for new invoices
-              // Reduced noisy logs
-              await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+              if (applyAsDefault) await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
               saveSuccess = true;
             } else {
               console.log('[InvoicePreviewModal] Failed to save to invoice');
@@ -332,7 +349,7 @@ export const InvoicePreviewModal = forwardRef(
         // Reduced noisy logs
       }
       // Reduced noisy logs
-    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase]);
+    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase, applyAsDefault]);
 
 
     // Send handlers
@@ -628,15 +645,9 @@ export const InvoicePreviewModal = forwardRef(
                 <View style={styles.selectorHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 }}>
                     <View style={{ flex: 1 }} />
-                    <SegmentedControl
-                      options={['Choose Design', 'Choose Colour']}
-                      selectedIndex={activeTab === 'design' ? 0 : 1}
-                      onSelectionChange={(index) => {
-                        setActiveTab(index === 0 ? 'design' : 'color');
-                        setShowSendOptions(false); // Hide send options when switching tabs
-                      }}
-                      style={[styles.tabSelectorBottom, { opacity: showSendOptions ? 0.6 : 1 }]}
-                    />
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: themeColors.foreground, opacity: showSendOptions ? 0.6 : 1 }}>
+                      Design & colour
+                    </Text>
                     <View style={{ flex: 1, alignItems: 'flex-end' }}>
                       {/* Send Arrow - positioned to the right */}
                       {invoiceData && businessSettings && mode !== 'settings' && (
@@ -740,30 +751,26 @@ export const InvoicePreviewModal = forwardRef(
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    /* Design/Color Selectors */
-                    <>
-                      {activeTab === 'design' ? (
-                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: themeColors.background }}>
-                          <InvoiceDesignSelector
-                            designs={availableDesigns}
-                            selectedDesignId={currentDesign.id}
-                            onDesignSelect={selectDesign}
-                            isLoading={isDesignLoading}
-                          />
-                        </View>
-                      ) : (
-                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: themeColors.background }}>
-                          <ColorSelector
-                            selectedColor={currentAccentColor}
-                            onColorSelect={selectAccentColor}
-                          />
-                        </View>
-                      )}
-                    </>
+                    /* Design + colour in one place */
+                    <View style={{ marginTop: 2, marginBottom: -20, paddingBottom: 20, backgroundColor: themeColors.background }}>
+                      <DesignPicker
+                        designs={availableDesigns}
+                        selectedDesign={currentDesign}
+                        onDesignSelect={handleDesignSelect}
+                        accentColor={currentAccentColor}
+                        onAccentSelect={selectAccentColor}
+                        brandColor={brandColor}
+                        isLoading={isDesignLoading}
+                        showDefaultToggle={mode !== 'settings'}
+                        applyAsDefault={applyAsDefault}
+                        onApplyAsDefaultChange={setApplyAsDefault}
+                      />
+                    </View>
                   )}
                 </View>
               </Animated.View>
             </PanGestureHandler>
+            <LogoColorProbe />
 
           </SafeAreaView>
         </Modal>

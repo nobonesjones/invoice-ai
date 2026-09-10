@@ -17,6 +17,8 @@ interface InvoiceDesignSelectorProps {
   selectedDesignId: string;
   onDesignSelect: (designId: string) => void;
   isLoading?: boolean;
+  /** Current accent; the selected tile recolours live so the choice is visible before the preview catches up. */
+  accentColor?: string | null;
 }
 
 /**
@@ -25,9 +27,12 @@ interface InvoiceDesignSelectorProps {
  * tiles look as different from each other as the documents do; a shared
  * "band + lines" placeholder made every design read as the same invoice.
  */
-const DesignThumbnail: React.FC<{ design: InvoiceDesign }> = ({ design }) => {
-  const p = design.colorScheme.primary;
-  const a = design.colorScheme.accent;
+export const DesignThumbnail: React.FC<{ design: InvoiceDesign; accent?: string | null }> = ({ design, accent }) => {
+  // Ink-led designs (Simple, Swiss) carry the chosen colour in their small mark;
+  // the others carry it in the main structure.
+  const inkLed = design.colorScheme.primary === '#111827';
+  const p = accent && !inkLed ? accent : design.colorScheme.primary;
+  const a = accent && inkLed ? accent : design.colorScheme.accent;
   const ink = '#111827';
   const grey = '#9CA3AF';
   const line = (w: string | number, c = grey, h = 3) => (
@@ -166,6 +171,7 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
   selectedDesignId,
   onDesignSelect,
   isLoading = false,
+  accentColor,
 }) => {
   const colorScheme = useColorScheme();
   const themeColors = colors[colorScheme || 'light'];
@@ -199,18 +205,18 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
               style={[
                 styles.designItem,
                 isSelected && styles.selectedDesignItem,
-                { borderColor: isSelected ? design.colorScheme.primary : themeColors.border }
+                { borderColor: isSelected ? (accentColor || design.colorScheme.primary) : themeColors.border }
               ]}
               onPress={() => onDesignSelect(design.id)}
               activeOpacity={0.7}
             >
-              <DesignThumbnail design={design} />
+              <DesignThumbnail design={design} accent={isSelected ? accentColor : null} />
 
               {/* Design name */}
               <Text 
                 style={[
                   styles.designName,
-                  { color: isSelected ? design.colorScheme.primary : themeColors.foreground }
+                  { color: isSelected ? (accentColor || design.colorScheme.primary) : themeColors.foreground }
                 ]}
               >
                 {design.displayName}
@@ -221,7 +227,7 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
                 <View 
                   style={[
                     styles.selectionIndicator,
-                    { backgroundColor: design.colorScheme.primary }
+                    { backgroundColor: accentColor || design.colorScheme.primary }
                   ]}
                 />
               )}
@@ -239,7 +245,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     paddingBottom: 20, // Increased bottom padding to extend area down
     paddingHorizontal: 5, // Reduced from 20 to 5 to minimize space on sides
     backgroundColor: 'white',
-    minHeight: 220, // Ensure container has minimum height to fill space
+    minHeight: 150,
   },
   title: {
     fontSize: 16,
@@ -250,7 +256,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   },
   scrollView: {
     flexGrow: 0,
-    height: 200, // Increased from 140 to 200 to make templates area bigger
+    height: 150,
   },
   scrollContent: {
     paddingRight: 10,

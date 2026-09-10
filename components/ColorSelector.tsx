@@ -14,6 +14,12 @@ interface ColorOption {
 interface ColorSelectorProps {
   selectedColor: string;
   onColorSelect: (color: string) => void;
+  /** Swatches to offer. Defaults to the historical global seven. */
+  options?: ColorOption[];
+  /** Sampled from the business logo; shown first as "Your brand" when present. */
+  brandColor?: string | null;
+  /** Compact single-row layout for stacking under the design tiles. */
+  compact?: boolean;
 }
 
 const COLOR_OPTIONS: ColorOption[] = [
@@ -68,7 +74,15 @@ const rgbToHex = (r: number, g: number, b: number, opacity: number = 1): string 
 export const ColorSelector: React.FC<ColorSelectorProps> = ({
   selectedColor,
   onColorSelect,
+  options,
+  brandColor,
+  compact = false,
 }) => {
+  const swatches: ColorOption[] = [
+    ...(brandColor ? [{ id: 'brand', name: 'Your brand', color: brandColor }] : []),
+    ...(options ?? COLOR_OPTIONS.filter((o) => o.id !== 'custom')),
+    { id: 'custom', name: 'Custom', color: 'custom' },
+  ];
   const colorScheme = useColorScheme();
   const isLightMode = colorScheme === 'light';
   const themeColors = colors[colorScheme || 'light'];
@@ -228,17 +242,18 @@ export const ColorSelector: React.FC<ColorSelectorProps> = ({
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.colorGrid}>
-        {COLOR_OPTIONS.map((colorOption) => {
+    <View style={[styles.container, compact && styles.containerCompact]}>
+      <View style={[styles.colorGrid, compact && styles.colorGridCompact]}>
+        {swatches.map((colorOption) => {
           const isCustom = colorOption.id === 'custom';
-          const isSelected = !isCustom && selectedColor === colorOption.color;
+          const isSelected = !isCustom && selectedColor.toLowerCase() === colorOption.color.toLowerCase();
           
           return (
             <TouchableOpacity
               key={colorOption.id}
               style={[
                 styles.colorOption,
+                compact && styles.colorOptionCompact,
                 isSelected && styles.selectedColorOption,
                 { 
                   shadowColor: isLightMode ? '#000' : '#fff',
@@ -305,6 +320,9 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     justifyContent: 'space-between',
     height: 140, // Increased height to match design selector
   },
+  containerCompact: { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 12 },
+  colorGridCompact: { height: 'auto', flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 4 },
+  colorOptionCompact: { width: 'auto', minWidth: 52, marginBottom: 0, paddingVertical: 2 },
   colorOption: {
     width: '22%', // 4 colors per row with spacing
     alignItems: 'center',
