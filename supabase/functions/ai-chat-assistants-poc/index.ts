@@ -2506,6 +2506,51 @@ When the user indicates you made an error or corrected you:
                   }
                 }
               },
+              {
+                type: "function",
+                function: {
+                  name: "find_invoice",
+                  description: "Search or list the user's invoices. Use when the user asks to see, list, find or look up invoices ('show my recent invoices', 'find the invoice for Bob', 'invoice INV-0042'). Do NOT call this before an update - update_invoice takes 'latest' directly.",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      invoice_number: { type: "string", description: "Exact invoice number to look up" },
+                      client_name: { type: "string", description: "Client name (partial match) to list invoices for" },
+                      search_term: { type: "string", description: "Free text to match against invoice notes" },
+                      get_latest: { type: "boolean", description: "List the most recent invoices when no other filter is given" },
+                      limit: { type: "number", description: "Max results (default 5)" }
+                    }
+                  }
+                }
+              },
+              {
+                type: "function",
+                function: {
+                  name: "get_invoice_details",
+                  description: "Show one invoice in full (preview with line items). Use when the user asks to see, open, preview or review a specific invoice.",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      invoice_number: { type: "string", description: "Invoice number, 'latest', or a client name" }
+                    },
+                    required: ["invoice_number"]
+                  }
+                }
+              },
+              {
+                type: "function",
+                function: {
+                  name: "set_currency",
+                  description: "Change the business currency for all invoices and estimates. Use when the user says things like 'switch to GBP', 'use euros', 'change my currency'.",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      currency_code: { type: "string", description: "3-letter ISO code, e.g. GBP, USD, EUR" }
+                    },
+                    required: ["currency_code"]
+                  }
+                }
+              },
             ],
             model: "gpt-4o-mini"
     };
