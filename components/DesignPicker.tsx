@@ -9,7 +9,7 @@ import React from 'react';
 import { View, Text, Switch, StyleSheet, useColorScheme } from 'react-native';
 
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
-import { ColorSelector } from '@/components/ColorSelector';
+import { AccentSwatches } from '@/components/AccentSwatches';
 import { colors } from '@/constants/colors';
 import type { InvoiceDesign } from '@/constants/invoiceDesigns';
 
@@ -43,7 +43,7 @@ export const DesignPicker: React.FC<DesignPickerProps> = ({
   const themeColors = colors[scheme || 'light'];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.card }]}>
       <InvoiceDesignSelector
         designs={designs}
         selectedDesignId={selectedDesign.id}
@@ -51,17 +51,9 @@ export const DesignPicker: React.FC<DesignPickerProps> = ({
         isLoading={isLoading}
         accentColor={accentColor}
       />
-      <View style={styles.swatches}>
-        <ColorSelector
-          compact
-          selectedColor={accentColor}
-          onColorSelect={onAccentSelect}
-          brandColor={brandColor}
-          options={selectedDesign.swatches.map((s) => ({ id: s.name.toLowerCase(), name: s.name, color: s.color }))}
-        />
-      </View>
+      <AccentSwatches swatches={selectedDesign.swatches} brandColor={brandColor} selected={accentColor} onSelect={onAccentSelect} />
       {showDefaultToggle && (
-        <View style={styles.toggleRow}>
+        <View style={[styles.toggleRow, { borderTopColor: themeColors.border }]}>
           <Text style={[styles.toggleLabel, { color: themeColors.foreground }]}>Use for all new invoices</Text>
           <Switch
             value={applyAsDefault}
@@ -75,8 +67,7 @@ export const DesignPicker: React.FC<DesignPickerProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: 'white' },
-  swatches: { paddingTop: 2, paddingBottom: 6 },
+  container: {},
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -84,7 +75,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e5e7eb',
   },
   toggleLabel: { fontSize: 14, fontWeight: '500' },
 });

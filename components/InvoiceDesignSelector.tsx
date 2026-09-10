@@ -157,9 +157,8 @@ const thumbStyles = StyleSheet.create({
   sheet: {
     width: 80,
     height: 100,
-    borderRadius: 8,
+    borderRadius: 6,
     overflow: 'hidden',
-    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
@@ -202,35 +201,26 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
           return (
             <TouchableOpacity
               key={design.id}
-              style={[
-                styles.designItem,
-                isSelected && styles.selectedDesignItem,
-                { borderColor: isSelected ? (accentColor || design.colorScheme.primary) : themeColors.border }
-              ]}
+              style={styles.designItem}
               onPress={() => onDesignSelect(design.id)}
               activeOpacity={0.7}
             >
-              <DesignThumbnail design={design} accent={isSelected ? accentColor : null} />
+              {/* The outline is the thumbnail's own border, so it hugs the page
+                  and the label sits underneath rather than inside a box. */}
+              <View style={[styles.thumbFrame, { borderColor: isSelected ? (accentColor || design.colorScheme.primary) : 'transparent' }]}>
+                <DesignThumbnail design={design} accent={isSelected ? accentColor : null} />
+              </View>
 
               {/* Design name */}
-              <Text 
+              <Text
                 style={[
                   styles.designName,
-                  { color: isSelected ? (accentColor || design.colorScheme.primary) : themeColors.foreground }
+                  { color: isSelected ? (accentColor || design.colorScheme.primary) : themeColors.mutedForeground },
+                  isSelected && { fontWeight: '600' },
                 ]}
               >
                 {design.displayName}
               </Text>
-              
-              {/* Selection indicator */}
-              {isSelected && (
-                <View 
-                  style={[
-                    styles.selectionIndicator,
-                    { backgroundColor: accentColor || design.colorScheme.primary }
-                  ]}
-                />
-              )}
             </TouchableOpacity>
           );
         })}
@@ -241,106 +231,37 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
 
 const getStyles = (themeColors: any) => StyleSheet.create({
   container: {
-    paddingTop: 5, // Reduced from 31 to 5 to minimize area above templates
-    paddingBottom: 20, // Increased bottom padding to extend area down
-    paddingHorizontal: 5, // Reduced from 20 to 5 to minimize space on sides
-    backgroundColor: 'white',
-    minHeight: 150,
+    paddingTop: 6,
+    paddingBottom: 2,
+    paddingHorizontal: 8,
+    backgroundColor: themeColors.card,
   },
   title: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
-    marginTop: -2,
     textAlign: 'left',
   },
   scrollView: {
     flexGrow: 0,
-    height: 150,
   },
   scrollContent: {
-    paddingRight: 10,
+    paddingRight: 8,
+    paddingLeft: 4,
+    gap: 10,
   },
   designItem: {
-    marginRight: 12,
     alignItems: 'center',
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 8,
-    backgroundColor: 'transparent', // Remove pink from individual template items
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
   },
-  selectedDesignItem: {
-    borderWidth: 3,
-    ...Platform.select({
-      ios: {
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  thumbnail: {
-    width: 80,
-    height: 100,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  thumbnailContent: {
-    flex: 1,
-    padding: 6,
-  },
-  thumbnailHeader: {
-    height: 10,
-    borderRadius: 2,
-    marginBottom: 6,
-  },
-  thumbnailBody: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 3,
-  },
-  thumbnailLine: {
-    height: 3,
-    borderRadius: 1,
-    marginBottom: 3,
-  },
-  thumbnailLineShort: {
-    width: '70%',
-  },
-  thumbnailFooter: {
-    height: 8,
-    borderRadius: 2,
-    marginTop: 6,
+  thumbFrame: {
+    borderWidth: 2.5,
+    borderRadius: 9,
+    padding: 1,
   },
   designName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
+    marginTop: 4,
   },
-  selectionIndicator: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: 'white',
-  },
-}); 
+});

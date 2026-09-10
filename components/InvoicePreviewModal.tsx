@@ -24,7 +24,6 @@ import { fetchLogoDataUri, renderInvoicePdf } from '@/lib/invoice-doc/pdf';
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoiceDesign';
 import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
-import { ColorSelector } from '@/components/ColorSelector';
 import { DesignPicker } from '@/components/DesignPicker';
 import { LogoColorProbe } from '@/components/LogoColorProbe';
 import { useLogoBrandColor } from '@/hooks/useLogoBrandColor';
@@ -108,6 +107,9 @@ export const InvoicePreviewModal = forwardRef(
     // Swipe gesture state - now supports 3 positions
     const [modalPosition, setModalPosition] = useState<'normal' | 'minimized' | 'expanded'>('normal');
     const translateY = useRef(new Animated.Value(0)).current;
+    // The sheet sizes to its content now (tiles + swatches + toggle), so the
+    // minimised offset is measured rather than assumed.
+    const sheetHeightRef = useRef(260);
     const gestureRef = useRef<PanGestureHandler>(null);
     
     // Design selection hook - use invoice-specific hook if we have an invoice ID
@@ -202,10 +204,10 @@ export const InvoicePreviewModal = forwardRef(
       if (event.nativeEvent.oldState === State.ACTIVE) {
         const { translationY, velocityY } = event.nativeEvent;
         
-        // Define positions: expanded (-90), normal (0), minimized (120)
-        const expandedPos = -90; // 30% higher up (90px up from normal)
+        const expandedPos = -90;
         const normalPos = 0;
-        const minimizedPos = 120;
+        // Leave the handle and the "Design & colour" header peeking.
+        const minimizedPos = Math.max(60, sheetHeightRef.current - 64);
         
         // Determine target position based on gesture
         let targetPosition: 'normal' | 'minimized' | 'expanded' = modalPosition;
@@ -629,9 +631,11 @@ export const InvoicePreviewModal = forwardRef(
               enabled={true}
             >
               <Animated.View 
+                onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height; }}
                 style={[
                   styles.designSelectorContainer,
                   {
+                    backgroundColor: themeColors.card,
                     transform: [{ translateY: translateY }],
                   }
                 ]}
@@ -642,7 +646,7 @@ export const InvoicePreviewModal = forwardRef(
                 </View>
                 
                 {/* Tab Selector Header */}
-                <View style={styles.selectorHeader}>
+                <View style={[styles.selectorHeader, { borderBottomColor: themeColors.border }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 }}>
                     <View style={{ flex: 1 }} />
                     <Text style={{ fontSize: 15, fontWeight: '600', color: themeColors.foreground, opacity: showSendOptions ? 0.6 : 1 }}>
@@ -657,7 +661,7 @@ export const InvoicePreviewModal = forwardRef(
                             marginRight: -15, // Move 10 more pixels to the right (was -5, now -15)
                             width: 36,
                             height: 36,
-                            backgroundColor: showSendOptions ? '#22c55e' : '#f3f4f6',
+                            backgroundColor: showSendOptions ? '#22c55e' : themeColors.muted,
                             borderRadius: 18,
                             justifyContent: 'center',
                             alignItems: 'center',
@@ -669,7 +673,7 @@ export const InvoicePreviewModal = forwardRef(
                           }}
                           activeOpacity={0.8}
                         >
-                          <Send size={18} color={showSendOptions ? "#FFFFFF" : "#6b7280"} />
+                          <Send size={18} color={showSendOptions ? "#FFFFFF" : themeColors.mutedForeground} />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -677,10 +681,10 @@ export const InvoicePreviewModal = forwardRef(
                 </View>
                 
                 {/* Content */}
-                <View style={styles.selectorContent}>
+                <View style={[styles.selectorContent, { backgroundColor: themeColors.card }]}>
                   {showSendOptions ? (
                     /* Send Options - compact to fit same space */
-                    <View style={{ paddingHorizontal: 16, paddingVertical: 0, paddingTop: 8, paddingBottom: 20, backgroundColor: 'white' }}>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 0, paddingTop: 8, paddingBottom: 20, backgroundColor: themeColors.card }}>
                       {/* Send Options Buttons - more compact */}
                       <TouchableOpacity 
                         style={{
@@ -688,7 +692,7 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: 'white',
+                          backgroundColor: themeColors.background,
                           borderRadius: 12,
                           marginBottom: 8,
                           shadowColor: '#000',
@@ -711,7 +715,7 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: 'white',
+                          backgroundColor: themeColors.background,
                           borderRadius: 12,
                           marginBottom: 8,
                           shadowColor: '#000',
@@ -734,7 +738,7 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: 'white',
+                          backgroundColor: themeColors.background,
                           borderRadius: 12,
                           shadowColor: '#000',
                           shadowOffset: { width: 0, height: 3 },
@@ -752,7 +756,7 @@ export const InvoicePreviewModal = forwardRef(
                     </View>
                   ) : (
                     /* Design + colour in one place */
-                    <View style={{ marginTop: 2, marginBottom: -20, paddingBottom: 20, backgroundColor: themeColors.background }}>
+                    <View style={{ marginTop: 2, paddingBottom: 6, backgroundColor: themeColors.card }}>
                       <DesignPicker
                         designs={availableDesigns}
                         selectedDesign={currentDesign}
@@ -860,7 +864,8 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     bottom: 25,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     paddingBottom: 0, // Remove bottom padding to eliminate white space
     paddingTop: 0, // Removed all top padding (3px reduction)
     shadowColor: '#000',
@@ -898,14 +903,12 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     paddingBottom: 0, // Reduced by 4 more pixels  
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   tabSelectorBottom: {
     width: 250,
   },
   selectorContent: {
-    height: 150, // Fixed height instead of flex: 1
-    backgroundColor: 'white',
+    // Sizes to its content: tiles, swatches, and the default switch.
   },
   swipeIndicator: {
     alignItems: 'center',
@@ -914,7 +917,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   swipeHandle: {
     width: 40,
     height: 4,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: themeColors.border,
     borderRadius: 2,
   },
 }); 
