@@ -1,5 +1,4 @@
 import React, { createContext, useState, useContext, useCallback, ReactNode } from "react";
-import { LayoutAnimation, Platform, UIManager } from "react-native";
 
 interface TabBarVisibilityContextType {
 	isTabBarVisible: boolean;
@@ -10,25 +9,16 @@ const TabBarVisibilityContext = createContext<
 	TabBarVisibilityContextType | undefined
 >(undefined);
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-	UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
 export const TabBarVisibilityProvider: React.FC<{ children: ReactNode }> = ({
 	children,
 }) => {
 	const [isTabBarVisible, setIsTabBarVisibleRaw] = useState(true);
 
-	// Hiding the tab bar removes 86pt from the layout. Without this the content
-	// underneath snaps to the new size on the next frame, which reads as a jump
-	// every time a screen is opened or left. LayoutAnimation eases that reflow.
+	// No animation on purpose: an eased fade made the bar arrive after the pop
+	// transition. Screens toggle it right as a transition starts (see
+	// hooks/useHideTabBar.ts), so an instant change is what looks right.
 	const setIsTabBarVisible = useCallback((visible: boolean) => {
-		setIsTabBarVisibleRaw((current) => {
-			if (current !== visible) {
-				LayoutAnimation.configureNext(LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
-			}
-			return visible;
-		});
+		setIsTabBarVisibleRaw(visible);
 	}, []);
 
 	return (

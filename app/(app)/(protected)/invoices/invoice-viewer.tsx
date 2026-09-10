@@ -44,6 +44,7 @@ import {
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Database, Json, Tables } from '../../../types/database.types'; 
 import { InvoiceForTemplate, BusinessSettingsRow } from '@/types/invoiceTemplate';
@@ -206,6 +207,7 @@ function InvoiceViewerScreen() {
   const [sendDetail, setSendDetail] = useState<string | null>(null);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
 
   const handleOpenSendModal = useCallback(() => {
     sendInvoiceModalRef.current?.present();

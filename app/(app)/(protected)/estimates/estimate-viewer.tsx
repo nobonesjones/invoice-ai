@@ -32,6 +32,7 @@ import {
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Tables } from '../../../types/database.types'; 
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -112,6 +113,7 @@ function EstimateViewerScreen() {
   const { supabase, user } = useSupabase();
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
   const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted, logStatusChanged } = useEstimateActivityLogger();
 
   const [estimate, setEstimate] = useState<EstimateForTemplate | null>(null);

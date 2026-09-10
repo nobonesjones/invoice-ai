@@ -49,6 +49,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { addDays } from 'date-fns';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { Controller, useForm } from 'react-hook-form';
 import { useSupabase } from '@/context/supabase-provider';
@@ -319,6 +320,7 @@ export default function CreateEstimateScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
   const { supabase, user } = useSupabase();
   
   // Add activity logger for estimate tracking

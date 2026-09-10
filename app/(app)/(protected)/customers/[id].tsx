@@ -32,6 +32,7 @@ import {
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { useSupabase } from '@/context/supabase-provider';
 import { Tables } from '../../../../types/database.types';
 import CreateNewClientSheet, { CreateNewClientSheetRef } from './CreateNewClientSheet';
@@ -65,6 +66,7 @@ export default function ClientProfileScreen() {
 	const navigation = useNavigation();
 	const { isLightMode } = useTheme();
 	const { setIsTabBarVisible } = useTabBarVisibility();
+	useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
 	const { supabase, user } = useSupabase();
 	const theme = isLightMode ? colors.light : colors.dark;
 
