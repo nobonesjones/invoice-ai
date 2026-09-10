@@ -54,7 +54,12 @@ const AddItemSheetStable = forwardRef<AddItemSheetStableRef, AddItemSheetStableP
       try { bottomSheetModalRef.current?.present(); } catch {}
       setTimeout(() => { fetchSavedItems(); }, 120);
     },
-    dismiss: () => bottomSheetModalRef.current?.dismiss(),
+    dismiss: () => {
+      // The form sheet is stacked on top of this one; closing the picker must
+      // take it down too or it is left hanging over the screen.
+      addNewItemFormSheetRef.current?.dismiss();
+      bottomSheetModalRef.current?.dismiss();
+    },
   }));
 
   const renderBackdrop = useCallback((props: any) => (
@@ -144,6 +149,7 @@ const AddItemSheetStable = forwardRef<AddItemSheetStableRef, AddItemSheetStableP
       enablePanDownToClose={!isLoading && !isChildOpen}
       enableContentPanningGesture={!isChildOpen}
       keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
       keyboardBlurBehavior="restore"
       topInset={Math.max(12, insets.top)}
     >

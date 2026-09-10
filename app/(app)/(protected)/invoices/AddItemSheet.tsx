@@ -353,7 +353,8 @@ const AddItemSheet = forwardRef<AddItemSheetRef, AddItemSheetProps>((props, ref)
       onChange={(i) => { setIsOpen(i !== -1); }}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      keyboardBehavior="extend" 
+      keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize" 
       keyboardBlurBehavior="restore"
       enableDynamicSizing={false} // Prevent automatic resizing based on content
       enablePanDownToClose={!isChildOpen}

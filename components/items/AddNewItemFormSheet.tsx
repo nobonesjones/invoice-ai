@@ -141,8 +141,12 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       saved_item_db_id: savedItemDatabaseId ?? editing?.saved_item_db_id ?? null,
     };
 
+    // Close this sheet first so it goes down with the keyboard in one motion;
+    // the screen's onSave dismisses the picker underneath.
+    bottomSheetModalRef.current?.dismiss();
+    try { onOpenChange?.(false); } catch {}
     onSave(dataForCallback);
-  }, [itemName, itemDescription, itemPrice, itemQuantity, discountType, discountValue, saveItemForFutureUse, onSave, editing]);
+  }, [itemName, itemDescription, itemPrice, itemQuantity, discountType, discountValue, saveItemForFutureUse, onSave, editing, onOpenChange]);
 
   const handleDiscountTypeSelected = (type: DiscountType | null) => {
     setDiscountType(type);
@@ -206,6 +210,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
       keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
       keyboardBlurBehavior="restore"
       enablePanDownToClose={false}
       enableContentPanningGesture={false}

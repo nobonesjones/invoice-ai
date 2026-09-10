@@ -303,6 +303,7 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
       enableOverDrag={false}
       enableDynamicSizing={false}
       keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
       keyboardBlurBehavior="restore"
       topInset={Math.max(12, insets.top)}
     >
