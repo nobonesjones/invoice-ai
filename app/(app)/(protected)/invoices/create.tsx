@@ -64,6 +64,8 @@ import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
 import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoiceDetailsSheet'; // Correctly import named export
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // legacy fallback if needed
 import AddItemSheetStable, { AddItemSheetStableRef } from '@/components/items/AddItemSheetStable';
+import AddNewItemFormSheet, { AddNewItemFormSheetRef } from '@/components/items/AddNewItemFormSheet';
+import ClientDetailsSheet, { ClientDetailsSheetRef } from '@/components/ClientDetailsSheet';
 import { NewItemData } from '@/components/items/AddNewItemFormSheet';
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import working discount modal
@@ -552,6 +554,10 @@ export default function CreateInvoiceScreen() {
   // --- Bottom Sheet Modal (Add Item) --- //
   const USE_STABLE_ADD_ITEM = true;
   const addItemSheetRef = useRef<AddItemSheetStableRef | AddItemSheetRef>(null);
+  // Tapping a line item opens the same form the item was created with, filled in.
+  const editItemSheetRef = useRef<AddNewItemFormSheetRef>(null);
+  // Tapping the client name shows their details so they can be checked without leaving.
+  const clientDetailsSheetRef = useRef<ClientDetailsSheetRef>(null);
   const addItemSnapPoints = useMemo(() => ['50%', '90%'], []);
 
   const handlePresentAddItemModal = useCallback(() => {
@@ -1177,6 +1183,49 @@ export default function CreateInvoiceScreen() {
   const editInvoiceDetailsSheetRef = useRef<EditInvoiceDetailsSheetRef>(null);
 
 
+  const lineTotal = (quantity: number, unitPrice: number, type?: 'percentage' | 'fixed' | null, value?: number | null) => {
+    let total = quantity * unitPrice;
+    if (value && value > 0) {
+      if (type === 'percentage') total -= total * (value / 100);
+      else if (type === 'fixed') total -= value;
+    }
+    return parseFloat(total.toFixed(2));
+  };
+
+  const openEditItem = (item: InvoiceLineItem) => {
+    editItemSheetRef.current?.present({
+      id: item.id,
+      itemName: item.item_name,
+      description: item.description ?? null,
+      price: item.unit_price,
+      quantity: item.quantity,
+      discountType: item.line_item_discount_type ?? null,
+      discountValue: item.line_item_discount_value ?? null,
+      imageUri: item.item_image_url ?? null,
+      saved_item_db_id: item.user_saved_item_id ?? null,
+    });
+  };
+
+  const handleItemEdited = (edited: NewItemData) => {
+    const items = getValues('items') || [];
+    const next = items.map((it) =>
+      it.id === edited.id
+        ? {
+            ...it,
+            item_name: edited.itemName,
+            description: edited.description ?? null,
+            quantity: edited.quantity,
+            unit_price: edited.price,
+            line_item_discount_type: edited.discountType ?? null,
+            line_item_discount_value: edited.discountValue ?? null,
+            total_price: lineTotal(edited.quantity, edited.price, edited.discountType, edited.discountValue),
+          }
+        : it,
+    );
+    setValue('items', next, { shouldValidate: true, shouldDirty: true });
+    editItemSheetRef.current?.dismiss();
+  };
+
   const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
     
     // Get current items from react-hook-form state
@@ -1457,12 +1506,16 @@ export default function CreateInvoiceScreen() {
     const isFirstItem = index === 0;
     const isLastItem = index === currentInvoiceLineItems.length - 1;
     return (
-      <View style={[
-        styles.invoiceItemRow, 
-        { backgroundColor: themeColors.card }, // Ensure background for swipe visibility
-        isFirstItem && { borderTopWidth: 0 },
-        isLastItem && { borderBottomWidth: 0 }
-      ]}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => openEditItem(item)}
+        style={[
+          styles.invoiceItemRow, 
+          { backgroundColor: themeColors.card }, // Ensure background for swipe visibility
+          isFirstItem && { borderTopWidth: 0 },
+          isLastItem && { borderBottomWidth: 0 }
+        ]}
+      >
         <Text style={styles.invoiceItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
           <Text style={styles.invoiceItemNameText}>{item.item_name} </Text>
           <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
@@ -1470,7 +1523,7 @@ export default function CreateInvoiceScreen() {
         <Text style={styles.invoiceItemTotalText}>
           {getCurrencySymbol(currencyCode)}{Number(item.total_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1870,7 +1923,14 @@ export default function CreateInvoiceScreen() {
           <FormSection title="CLIENT" themeColors={themeColors}>
             {selectedClient ? (
               <View style={styles.selectedClientContainer}>
-                <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                <TouchableOpacity onPress={() => clientDetailsSheetRef.current?.present()} style={{ flex: 1 }} activeOpacity={0.7}>
+                  <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                  {!!(selectedClient.email || selectedClient.phone) && (
+                    <Text style={{ fontSize: 13, color: themeColors.mutedForeground, marginTop: 2 }} numberOfLines={1}>
+                      {[selectedClient.email, selectedClient.phone].filter(Boolean).join('  ·  ')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
                 <TouchableOpacity onPress={openNewClientSelectionSheet}>
                   <Text style={styles.changeClientText}>Change</Text>
                 </TouchableOpacity>
@@ -2114,6 +2174,22 @@ export default function CreateInvoiceScreen() {
           ref={newClientSheetRef}
           onClientSelect={handleClientSelect}
           onClose={() => {}}
+        />
+
+        <AddNewItemFormSheet ref={editItemSheetRef} onSave={handleItemEdited} />
+
+        <ClientDetailsSheet
+          ref={clientDetailsSheetRef}
+          client={selectedClient}
+          onChangeClient={() => {
+            clientDetailsSheetRef.current?.dismiss();
+            openNewClientSelectionSheet();
+          }}
+          onViewProfile={() => {
+            if (!selectedClient) return;
+            clientDetailsSheetRef.current?.dismiss();
+            router.push(`/customers/${selectedClient.id}` as any);
+          }}
         />
 
         <DateTimePickerModal

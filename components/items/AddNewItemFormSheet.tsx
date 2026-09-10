@@ -27,7 +27,8 @@ export interface AddNewItemFormSheetProps {
 }
 
 export interface AddNewItemFormSheetRef {
-  present: () => void;
+  /** Pass an existing line item to edit it in place; omit to create a new one. */
+  present: (initial?: NewItemData) => void;
   dismiss: () => void;
 }
 
@@ -45,9 +46,20 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
   const [discountType, setDiscountType] = useState<DiscountType | null>(null);
   const [discountValue, setDiscountValue] = useState('');
   const [saveItemForFutureUse, setSaveItemForFutureUse] = useState(false);
+  // Set when the sheet was opened to edit a line item already on the invoice.
+  // The same id goes back out so the caller can replace rather than append.
+  const [editing, setEditing] = useState<NewItemData | null>(null);
 
   React.useImperativeHandle(ref, () => ({
-    present: () => {
+    present: (initial?: NewItemData) => {
+      setEditing(initial ?? null);
+      setItemName(initial?.itemName ?? '');
+      setItemDescription(initial?.description ?? '');
+      setItemPrice(initial ? String(initial.price) : '');
+      setItemQuantity(initial ? String(initial.quantity) : '1');
+      setDiscountType(initial?.discountType ?? null);
+      setDiscountValue(initial?.discountValue != null ? String(initial.discountValue) : '');
+      setSaveItemForFutureUse(false);
       bottomSheetModalRef.current?.present();
       try { onOpenChange?.(true); } catch {}
       setTimeout(() => {
@@ -118,19 +130,19 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
     }
 
     const dataForCallback: NewItemData = {
-      id: `inv_item_${Date.now()}`,
+      id: editing?.id ?? `inv_item_${Date.now()}`,
       itemName,
       description: itemDescription || null,
       price: parseFloat(itemPrice),
       quantity: parseInt(itemQuantity, 10) || 1,
       discountType,
       discountValue: discountValue ? parseFloat(discountValue) : null,
-      imageUri: null,
-      saved_item_db_id: savedItemDatabaseId,
+      imageUri: editing?.imageUri ?? null,
+      saved_item_db_id: savedItemDatabaseId ?? editing?.saved_item_db_id ?? null,
     };
 
     onSave(dataForCallback);
-  }, [itemName, itemDescription, itemPrice, itemQuantity, discountType, discountValue, saveItemForFutureUse, onSave]);
+  }, [itemName, itemDescription, itemPrice, itemQuantity, discountType, discountValue, saveItemForFutureUse, onSave, editing]);
 
   const handleDiscountTypeSelected = (type: DiscountType | null) => {
     setDiscountType(type);
@@ -206,7 +218,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
           <XIcon size={22} color={themeColors.mutedForeground} />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Create New Item</Text>
+        <Text style={styles.title}>{editing ? 'Edit Item' : 'Create New Item'}</Text>
 
         <View style={styles.inputGroupContainer}>
           <View style={styles.inputRow}>
@@ -320,7 +332,7 @@ const AddNewItemFormSheet = forwardRef<AddNewItemFormSheetRef, AddNewItemFormShe
         </View>
 
         <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave}>
-          <Text style={[styles.buttonText, styles.saveButtonText]}>Save Item</Text>
+          <Text style={[styles.buttonText, styles.saveButtonText]}>{editing ? 'Save Changes' : 'Save Item'}</Text>
         </TouchableOpacity>
       </BottomSheetScrollView>
     </BottomSheetModal>

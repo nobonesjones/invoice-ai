@@ -692,14 +692,14 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: themeColors.background,
+                          backgroundColor: themeColors.muted,
                           borderRadius: 12,
                           marginBottom: 8,
                           shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 3 },
-                          shadowOpacity: 0.15,
-                          shadowRadius: 6,
-                          elevation: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: colorScheme === 'dark' ? 0 : 0.08,
+                          shadowRadius: 4,
+                          elevation: colorScheme === 'dark' ? 0 : 2,
                         }}
                         onPress={() => {
                           handleSendByEmail();
@@ -715,14 +715,14 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: themeColors.background,
+                          backgroundColor: themeColors.muted,
                           borderRadius: 12,
                           marginBottom: 8,
                           shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 3 },
-                          shadowOpacity: 0.15,
-                          shadowRadius: 6,
-                          elevation: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: colorScheme === 'dark' ? 0 : 0.08,
+                          shadowRadius: 4,
+                          elevation: colorScheme === 'dark' ? 0 : 2,
                         }}
                         onPress={() => {
                           handleSendLink();
@@ -738,13 +738,13 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: themeColors.background,
+                          backgroundColor: themeColors.muted,
                           borderRadius: 12,
                           shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 3 },
-                          shadowOpacity: 0.15,
-                          shadowRadius: 6,
-                          elevation: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: colorScheme === 'dark' ? 0 : 0.08,
+                          shadowRadius: 4,
+                          elevation: colorScheme === 'dark' ? 0 : 2,
                         }}
                         onPress={() => {
                           handleSendPDF();
