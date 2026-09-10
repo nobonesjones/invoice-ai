@@ -548,7 +548,7 @@ function EstimateViewerScreen() {
           estimateId: estimate.id,
           estimate_id: estimate.id,
           pdf_base64: pdfBase64,
-          share_url: result.pdfUrl ?? null,
+          share_url: result.shareUrl ?? null,
         }
       });
 

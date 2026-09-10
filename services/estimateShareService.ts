@@ -20,8 +20,8 @@ const BUCKET = 'shared-estimates';
 export class EstimateShareService {
   /**
    * Upload the rendered PDF and create a share record for it, the same shape as
-   * invoices. There is no hosted estimate page yet, so the share URL is the PDF's
-   * public URL; `send-estimate-email` links to the same file via `pdf_path`.
+   * invoices. The share URL is the hosted estimate page, which offers the stored
+   * PDF for download via `pdf_path`.
    */
   static async generateShareLinkFromPdf(
     estimateId: string,
@@ -73,7 +73,8 @@ export class EstimateShareService {
 
       return {
         success: true,
-        shareUrl: pdfUrl ?? `https://invoices.getsuperinvoice.com/coming-soon.html?type=estimate&token=${shareToken}`,
+        // The hosted estimate page (shared-estimate) with Accept / Decline.
+        shareUrl: `https://invoices.getsuperinvoice.com/estimate/${shareToken}`,
         shareToken,
         pdfUrl,
         expiresAt: shareRecord.expires_at || undefined,
