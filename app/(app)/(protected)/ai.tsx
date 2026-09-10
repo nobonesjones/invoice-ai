@@ -358,7 +358,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 					borderRadius: 12,
 					padding: 16,
 					marginTop: 8,
-					height: 200,
+					height: 300,
 					justifyContent: 'center',
 					alignItems: 'center',
 				}}
@@ -392,7 +392,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 					{/* Scaled down estimate preview */}
 					<View 
 						style={{
-							height: 200,
+							height: 280,
 							width: '100%',
 							alignItems: 'center',
 							justifyContent: 'center',
@@ -815,7 +815,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					borderRadius: 12,
 					padding: 16,
 					marginTop: 8,
-					height: 200,
+					height: 300,
 					justifyContent: 'center',
 					alignItems: 'center',
 				}}
@@ -858,7 +858,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					{/* Scaled down invoice preview - using exact same approach as InvoicePreviewModal */}
 					<View 
 						style={{
-							height: 200,
+							height: 280,
 							width: '100%',
 							alignItems: 'center',
 							justifyContent: 'center',
