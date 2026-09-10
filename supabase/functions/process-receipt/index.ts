@@ -118,9 +118,30 @@ Do not include any markdown formatting or additional text.`
             throw new Error('Invalid JSON response from AI')
         }
 
-        // Validate required fields
-        if (!parsedData.merchant_name || !parsedData.total_amount) {
+        // Validate what came back. A total of 0 is a real value (and what the model
+        // returns for images it can't read), so check type, not truthiness.
+        const totalAmount = typeof parsedData.total_amount === 'number'
+            ? parsedData.total_amount
+            : parseFloat(parsedData.total_amount)
+        const merchant = typeof parsedData.merchant_name === 'string' ? parsedData.merchant_name.trim() : ''
+        if (!merchant || Number.isNaN(totalAmount)) {
             throw new Error('Missing required fields in AI response')
+        }
+
+        // Merchant "Unknown" with a zero total is the model saying the image is not
+        // a readable receipt. That is a user problem, not a server error: return it
+        // as a 200 so the app surfaces this message instead of a generic failure.
+        if (totalAmount === 0 && /^unknown$/i.test(merchant)) {
+            const notAReceipt: ReceiptOCRResult = {
+                success: false,
+                error: parsedData.spend_description
+                    ? `Couldn't read a receipt in this photo — it looks like: ${parsedData.spend_description}. Try a clearer photo, or add the expense manually.`
+                    : `Couldn't read a receipt in this photo. Try a clearer photo, or add the expense manually.`,
+            }
+            return new Response(
+                JSON.stringify(notAReceipt),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            )
         }
 
         // Ensure category is always present
@@ -136,10 +157,8 @@ Do not include any markdown formatting or additional text.`
         const result: ReceiptOCRResult = {
             success: true,
             data: {
-                merchant_name: parsedData.merchant_name,
-                total_amount: typeof parsedData.total_amount === 'number'
-                    ? parsedData.total_amount
-                    : parseFloat(parsedData.total_amount),
+                merchant_name: merchant,
+                total_amount: totalAmount,
                 tax_amount: parsedData.tax_amount
                     ? (typeof parsedData.tax_amount === 'number'
                         ? parsedData.tax_amount
