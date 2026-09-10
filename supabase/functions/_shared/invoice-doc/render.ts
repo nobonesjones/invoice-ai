@@ -182,8 +182,8 @@ const PAD_X = 56;
 const PAD_TOP = 40;
 const PAD_BOTTOM = 34;
 const PFOOT_H = 22; // running page footer inside the bottom padding zone
-const SIDEBAR_W = 220; // sidebar layout: colour column width
-const SIDEBAR_GAP = 36; // gap between the column and the content
+const SIDEBAR_W = 200; // sidebar layout: colour column width
+const SIDEBAR_GAP = 32; // gap between the column and the content
 
 // ---------- CSS ----------
 
@@ -250,6 +250,10 @@ function css(t: Theme, mode: RenderMode): string {
     margin: -${PAD_TOP}px -${PAD_X}px 28px; padding: 36px ${PAD_X}px 32px; }
   .head.band .muted, .head.band .meta td:first-child { color: rgba(255,255,255,.72); }
   .head.band .title, .head.band .meta td:last-child { color: ${t.accentInk}; }
+  .head.band .due.card { background: #fff; color: #111827; margin: 16px 0 -62px auto; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+  .head.band .due.card .label { color: #6b7280; }
+  .head.band .due.card .when { color: #6b7280; }
+  ${t.layout === 'band' ? `.parties { min-height: 60px; }` : ''}
 
   /* wave: full-bleed gradient with a wave bottom edge */
   .head.wave { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 32px;
@@ -258,12 +262,14 @@ function css(t: Theme, mode: RenderMode): string {
   .head.wave::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 44px; background: url("${WAVE_SVG}") no-repeat; background-size: 100% 100%; }
   .head.wave .muted, .head.wave .meta td:first-child { color: rgba(255,255,255,.78); }
   .head.wave .title, .head.wave .meta td:last-child { color: #fff; }
+  ${t.layout === 'wave' ? `table.items thead th:first-child { border-top-left-radius: ${t.radius}px; border-bottom-left-radius: ${t.radius}px; } table.items thead th:last-child { border-top-right-radius: ${t.radius}px; border-bottom-right-radius: ${t.radius}px; }
+  .totals { background: ${t.tint}; border-radius: ${t.radius}px; padding: 8px 6px; }` : ''}
 
   /* stripe: thin accent bar down the left edge, brand left, title right */
   ${t.layout === 'stripe' ? `.page::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: ${t.accent}; }` : ''}
   .head.stripe { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; padding-bottom: 18px; margin-bottom: 26px; border-bottom: 2px solid ${t.accent}; }
   .head.stripe .title { color: ${t.accent}; font-size: 34px; margin-bottom: 12px; }
-  .head.stripe .logo { border-radius: 4px; }
+  .head.stripe .logo { border-radius: 0; }
 
   /* sidebar: the brand and meta live in the colour column, the page starts beside it */
   .head.sidebar { position: absolute; left: 0; top: 0; width: ${SIDEBAR_W}px; height: ${PAGE_H}px; padding: 40px 24px 36px; color: #fff; display: flex; flex-direction: column; gap: 28px; }
@@ -283,6 +289,7 @@ function css(t: Theme, mode: RenderMode): string {
   /* minimal: light type, no fills, hairlines only */
   .head.minimal { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; padding-bottom: 20px; margin-bottom: 26px; border-bottom: 1px solid #d1d5db; }
   .head.minimal .title { font-weight: 300; letter-spacing: .02em; font-size: 36px; color: #111827; margin: -4px 0 12px; text-transform: none; }
+  .head.minimal .title::after { content: ""; display: block; width: 44px; height: 3px; background: ${t.accent}; margin-top: 10px; }
   .head.minimal .brand { flex-direction: row-reverse; text-align: right; }
   .head.minimal .logo { border-radius: 0; }
   .head.minimal .meta td { text-align: left; padding: 2px 18px 2px 0; }
@@ -324,7 +331,7 @@ function css(t: Theme, mode: RenderMode): string {
   .due .amount { font-size: 26px; font-weight: 800; color: ${t.accent}; line-height: 1.1; margin: 6px 0 4px; ${t.serif ? `font-family: ${serifStack}; font-weight: 700;` : ''} }
   .due.plain .amount { font-size: 32px; color: #111827; letter-spacing: -.01em; }
   ${t.layout === 'sidebar' ? `.due.plain .amount { color: ${t.accent}; }` : ''}
-  ${t.layout === 'swiss' ? `.due.plain .amount { font-size: 40px; letter-spacing: -.03em; }` : ''}
+  ${t.layout === 'swiss' ? `.due.plain .amount { font-size: 40px; letter-spacing: -.03em; color: ${t.accent}; }` : ''}
   .due .when { font-size: 11.5px; }
   .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 3px 8px; border-radius: 4px; }
   .badge.paid, .badge.accepted { background: #dcfce7; color: #166534; }
@@ -448,7 +455,7 @@ function brandHtml(d: InvoiceDocument, t: Theme): string {
 function headerHtml(d: InvoiceDocument, t: Theme, locale: string): string {
   const rows = metaRows(d, locale);
   const meta = `<table class="meta">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
-  const docblock = `<div class="docblock"><h1 class="title">${docTitle(d)}</h1>${meta}</div>`;
+  const docblock = `<div class="docblock"><h1 class="title">${docTitle(d)}</h1>${meta}${t.layout === 'band' ? dueCardHtml(d, t, locale) : ''}</div>`;
 
   switch (t.layout) {
     case 'sidebar':
@@ -481,36 +488,40 @@ function headerHtml(d: InvoiceDocument, t: Theme, locale: string): string {
   }
 }
 
+function dueCardHtml(d: InvoiceDocument, t: Theme, locale: string): string {
+  const status = (d.document.status || '').toLowerCase();
+  const isEst = d.document.type === 'estimate';
+  const cur = d.document.currencyCode;
+  const dueCls = `due ${t.due}`;
+  if (isEst) {
+    const accepted = status === 'accepted';
+    return `<div class="${dueCls}">${accepted ? '<span class="badge accepted">ACCEPTED</span>' : `<div class="label">${docNoun(d)} total</div>`}<div class="amount">${money(d.totals.total, cur, locale)}</div>${
+      d.document.dueDate ? `<div class="when muted">Valid until ${date(d.document.dueDate, locale)}</div>` : ''
+    }</div>`;
+  }
+  if (status === 'paid') {
+    return `<div class="${dueCls}"><span class="badge paid">PAID</span><div class="amount">${money(d.totals.total, cur, locale)}</div><div class="when muted">Paid in full</div></div>`;
+  }
+  const overdue = status === 'overdue';
+  const when = d.document.dueDate
+    ? `Due ${date(d.document.dueDate, locale)}`
+    : d.document.dueOption === 'on_receipt'
+      ? 'Due on receipt'
+      : '';
+  return `<div class="${dueCls}"><div class="label">Amount due${overdue ? ' <span class="badge overdue">OVERDUE</span>' : ''}</div><div class="amount">${money(d.totals.balanceDue, cur, locale)}</div>${
+    when ? `<div class="when muted">${when}</div>` : ''
+  }</div>`;
+}
+
 function partiesHtml(d: InvoiceDocument, t: Theme, locale: string): string {
   const c = d.client;
   const cLines = [...c.addressLines];
   const contact = [c.email, c.phone].filter(Boolean) as string[];
   if (contact.length) cLines.push(contact.join('  ·  '));
   if (c.taxNumber) cLines.push(`${d.business.taxLabel || 'Tax'} number ${c.taxNumber}`);
-  const status = (d.document.status || '').toLowerCase();
   const isEst = d.document.type === 'estimate';
-  const cur = d.document.currencyCode;
-  const dueCls = `due ${t.due}`;
-
-  let card: string;
-  if (isEst) {
-    const accepted = status === 'accepted';
-    card = `<div class="${dueCls}">${accepted ? '<span class="badge accepted">ACCEPTED</span>' : `<div class="label">${docNoun(d)} total</div>`}<div class="amount">${money(d.totals.total, cur, locale)}</div>${
-      d.document.dueDate ? `<div class="when muted">Valid until ${date(d.document.dueDate, locale)}</div>` : ''
-    }</div>`;
-  } else if (status === 'paid') {
-    card = `<div class="${dueCls}"><span class="badge paid">PAID</span><div class="amount">${money(d.totals.total, cur, locale)}</div><div class="when muted">Paid in full</div></div>`;
-  } else {
-    const overdue = status === 'overdue';
-    const when = d.document.dueDate
-      ? `Due ${date(d.document.dueDate, locale)}`
-      : d.document.dueOption === 'on_receipt'
-        ? 'Due on receipt'
-        : '';
-    card = `<div class="${dueCls}"><div class="label">Amount due${overdue ? ' <span class="badge overdue">OVERDUE</span>' : ''}</div><div class="amount">${money(d.totals.balanceDue, cur, locale)}</div>${
-      when ? `<div class="when muted">${when}</div>` : ''
-    }</div>`;
-  }
+  // The band layout carries the amount card in its header, overhanging the band.
+  const card = t.layout === 'band' ? '' : dueCardHtml(d, t, locale);
 
   return `
   <section class="parties" data-block="parties">
