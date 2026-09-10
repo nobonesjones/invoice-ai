@@ -1114,7 +1114,9 @@ export default function CreateEstimateScreen() {
       let settingName = '';
       
       if (methodKey === 'stripe') {
-        isEnabledInSettings = paymentOptionsData?.stripe_enabled === true;
+        // Same gate as invoices: the old stripe_enabled boolean is dead, a
+        // connected merchant has stripe_card_payments_status === 'active'.
+        isEnabledInSettings = paymentOptionsData?.stripe_card_payments_status === 'active';
         settingName = 'Pay With Card (Stripe)';
       } else if (methodKey === 'paypal') {
         isEnabledInSettings = paymentOptionsData?.paypal_enabled === true;

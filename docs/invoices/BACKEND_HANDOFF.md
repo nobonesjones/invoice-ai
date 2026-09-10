@@ -28,3 +28,24 @@ invoice. Nothing else changes.
 ## Answer with
 - The deployed version number of `shared-invoice` after the change.
 - One share link rendered with the new page, opened on a phone and a laptop.
+
+# Estimates — backend handoff (2026-09-10)
+
+The app now sends estimates the way it sends invoices: it renders the PDF from the
+shared document, uploads it to the `shared-estimates` bucket (writing
+`estimate_shares.pdf_path`), and calls `send-estimate-email` with `estimate_id`,
+`pdf_base64` and `share_url`.
+
+1. **Deploy `send-estimate-email` from the repo** (`supabase/functions/send-estimate-email/index.ts`).
+   The deployed copy sends through `auth.admin.inviteUserByEmail` with no attachment and a dead
+   link. The repo version uses Resend like send-invoice, attaches the PDF, links to the uploaded
+   PDF, and does not write status or history (the app does). Secrets: `RESEND_API_KEY` (already
+   set). Answer with the deployed version number.
+2. **Confirm the `shared-estimates` bucket exists and is public-read.** If it does not exist,
+   create it like `shared-invoices`. The app degrades gracefully without it (email still has the
+   attachment, no link), so nothing breaks either way.
+3. **Hosted estimate page** (next, same pattern as invoices): `shared-estimate` function that
+   renders the shared document in `web` mode with `type: 'estimate'`, plus **Accept** and
+   **Decline** buttons that set `estimates.status` and write an `estimate_activities` row; then an
+   `estimate-responded` function/trigger that emails the owner, mirroring `invoice-paid`. Point
+   `share_url` at it once it exists.

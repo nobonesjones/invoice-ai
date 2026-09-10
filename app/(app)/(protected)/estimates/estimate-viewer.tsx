@@ -37,6 +37,7 @@ import type { Tables } from '../../../types/database.types';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { Share } from 'react-native';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -532,17 +533,22 @@ function EstimateViewerScreen() {
       setIsSendingEmail(true);
       sendEstimateModalRef.current?.dismiss(); // Close modal immediately for better UX
 
-      // 2. Upload PDF to storage and create share link
-      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, await exportEstimatePdf(), 30);
-
+      // 2. Render the document once: uploaded for the link, attached to the email.
+      const pdfUri = await exportEstimatePdf();
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, pdfUri, 30);
       if (!result.success) {
         throw new Error(result.error || 'Failed to prepare estimate');
       }
+      const pdfBase64 = await FileSystem.readAsStringAsync(pdfUri, { encoding: FileSystem.EncodingType.Base64 });
 
-      // 3. Call the edge function to send email
-      const { data, error } = await supabase.functions.invoke('send-estimate-email', {
+      // 3. Call the edge function to send email. Both key styles are sent so the
+      // deployed function keeps working until the repo version is deployed.
+      const { error } = await supabase.functions.invoke('send-estimate-email', {
         body: {
           estimateId: estimate.id,
+          estimate_id: estimate.id,
+          pdf_base64: pdfBase64,
+          share_url: result.pdfUrl ?? null,
         }
       });
 
@@ -550,7 +556,8 @@ function EstimateViewerScreen() {
         throw new Error(error.message || 'Failed to send email');
       }
 
-      // 4. Update local state
+      // 4. Mark sent and log it, like the link and PDF routes already do.
+      await EstimateSenderService.sendEstimateByEmail(estimate.id, user.id, estimate.estimate_number || 'Unknown', supabase);
       setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
 
       // 5. Determine document terminology
@@ -637,8 +644,8 @@ function EstimateViewerScreen() {
       if (result.success && result.shareUrl) {
         // Show success with development note
         Alert.alert(
-          'Share Link Generated ✅',
-          `Estimate sharing is working! Link generated successfully.\\n\\nNote: Web viewer for estimates is still in development. For now, the link creates a shareable record in the database.\\n\\nLink: ${result.shareUrl}`,
+          'Share Link Generated',
+          `A link to the PDF has been created. It expires in 30 days.\n\nLink: ${result.shareUrl}`,
           [
             {
               text: 'Copy Link',
@@ -775,13 +782,7 @@ function EstimateViewerScreen() {
               // Update local state
               setEstimate(prev => prev ? { ...prev, status: 'cancelled' } : null);
               
-              // Log activity if activity logger is available
-              if (logActivity) {
-                logActivity('estimate_voided', {
-                  estimate_id: estimate.id,
-                  estimate_number: estimate.estimate_number
-                });
-              }
+              await logStatusChanged(estimate.id, estimate.estimate_number || undefined, estimate.status || undefined, 'cancelled');
 
               Alert.alert('Success', 'Estimate has been voided successfully.');
             } catch (error) {

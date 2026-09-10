@@ -1,256 +1,140 @@
+// Send an estimate (or quote) to the client by email, with the PDF attached.
+//
+// Mirrors send-invoice: the app renders the PDF from the shared invoice document
+// and posts it as pdf_base64; this function only writes the email. The "View"
+// button points at the uploaded PDF (estimate_shares.pdf_path) until the hosted
+// estimate page exists, at which point share_url should point there instead.
+//
+// Status and history are the app's job (EstimateSenderService), so this function
+// does not write to estimates or estimate_activities.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-interface EmailRequest {
-  estimateId: string
-  recipientEmail?: string
-  recipientName?: string
-  senderName?: string
-  customMessage?: string
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const esc = (v: unknown) =>
+  String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 serve(async (req) => {
-  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const body = await req.json()
+    const estimateId: string | undefined = body.estimate_id ?? body.estimateId
+    const pdfBase64: string | undefined = body.pdf_base64
+    const shareUrlFromApp: string | null = body.share_url ?? null
+    const customMessage: string | null = body.customMessage ?? null
 
-    // Parse request body
-    const { estimateId, recipientEmail, recipientName, senderName, customMessage }: EmailRequest = await req.json()
+    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
+    if (!RESEND_API_KEY) throw new Error('Missing RESEND_API_KEY')
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Missing Supabase configuration')
+    if (!estimateId) throw new Error('Missing estimate_id')
 
-    if (!estimateId) {
-      return new Response(
-        JSON.stringify({ error: 'Estimate ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) throw new Error('Missing authorization header')
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } })
 
-    // Fetch estimate data with related information
     const { data: estimate, error: estimateError } = await supabase
       .from('estimates')
-      .select(`
-        *,
-        clients (name, email),
-        business_settings!inner (
-          business_name,
-          business_email,
-          business_address,
-          business_phone,
-          business_website,
-          tax_name,
-          tax_number,
-          auto_apply_tax,
-          estimate_terminology
-        )
-      `)
+      .select('*, client:clients(*)')
       .eq('id', estimateId)
       .single()
+    if (estimateError || !estimate) throw new Error('Estimate not found')
 
-    if (estimateError || !estimate) {
-      return new Response(
-        JSON.stringify({ error: 'Estimate not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Determine recipient details
-    const toEmail = recipientEmail || estimate.clients?.email
-    const toName = recipientName || estimate.clients?.name || 'Valued Customer'
-    const fromName = senderName || estimate.business_settings?.business_name || 'Estimate Sender'
-    const fromEmail = estimate.business_settings?.business_email || 'noreply@yourdomain.com'
-
-    // Determine document terminology (estimate vs quote)
-    const terminology = estimate.business_settings?.estimate_terminology || 'estimate'
-    const documentLabel = terminology === 'quote' ? 'Quote' : 'Estimate'
-
-    if (!toEmail) {
-      return new Response(
-        JSON.stringify({ error: 'No recipient email address found' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Get existing share record for this estimate
-    const { data: shareRecord } = await supabase
-      .from('estimate_shares')
-      .select('pdf_path')
-      .eq('estimate_id', estimateId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
+    const { data: businessSettings } = await supabase
+      .from('business_settings')
+      .select('business_name, business_email, currency_code, estimate_terminology')
+      .eq('user_id', estimate.user_id)
       .single()
 
-    // Generate shareable estimate URL from PDF path
-    const shareUrl = shareRecord?.pdf_path
-      ? `https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/shared-estimates/${shareRecord.pdf_path}`
-      : `https://invoices.getsuperinvoice.com/shared/estimate/unavailable`
+    const clientEmail: string | undefined = estimate.client?.email
+    if (!clientEmail) throw new Error('Client has no email address')
 
-    // Generate email content
-    const subject = `${documentLabel} ${estimate.estimate_number} from ${fromName}`
+    const terminology = businessSettings?.estimate_terminology === 'quote' ? 'quote' : 'estimate'
+    const label = terminology === 'quote' ? 'Quote' : 'Estimate'
+    const clientName = estimate.client?.name || 'Valued Client'
+    const businessName = businessSettings?.business_name || 'SuperInvoice User'
+    const currency = businessSettings?.currency_code || 'GBP'
+    let total = ''
+    try {
+      total = new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(Number(estimate.total_amount || 0))
+    } catch {
+      total = `${currency} ${Number(estimate.total_amount || 0).toFixed(2)}`
+    }
+    const validUntil = estimate.valid_until_date
+      ? new Date(estimate.valid_until_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      : null
 
-    const defaultMessage = customMessage || `
-Hello ${toName},
+    // Link: what the app sent, else the latest uploaded PDF for this estimate.
+    let viewUrl: string | null = shareUrlFromApp
+    if (!viewUrl) {
+      const { data: share } = await supabase
+        .from('estimate_shares')
+        .select('pdf_path')
+        .eq('estimate_id', estimateId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (share?.pdf_path) viewUrl = `${SUPABASE_URL}/storage/v1/object/public/shared-estimates/${share.pdf_path}`
+    }
 
-Please find attached your ${terminology} ${estimate.estimate_number} for ${estimate.currency_symbol}${estimate.total_amount?.toFixed(2)}.
+    const message = customMessage
+      ? esc(customMessage).replace(/\n/g, '<br>')
+      : `Please find your ${terminology} <strong>${esc(estimate.estimate_number)}</strong> for <strong>${esc(total)}</strong> attached${validUntil ? `. It is valid until ${esc(validUntil)}` : ''}.`
 
-You can also view this ${terminology} online by clicking the link below:
-[View ${documentLabel} Online]
+    const html = `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#111827;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border-radius:12px;padding:32px;">
+        <tr><td style="font-size:20px;font-weight:700;padding-bottom:8px;">${esc(label)} ${esc(estimate.estimate_number)}</td></tr>
+        <tr><td style="font-size:14px;color:#6b7280;padding-bottom:20px;">from ${esc(businessName)}</td></tr>
+        <tr><td style="font-size:15px;line-height:1.55;padding-bottom:8px;">Hello ${esc(clientName)},</td></tr>
+        <tr><td style="font-size:15px;line-height:1.55;padding-bottom:24px;">${message}</td></tr>
+        ${viewUrl ? `<tr><td style="padding-bottom:24px;"><a href="${esc(viewUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px;font-size:15px;">View ${esc(label)}</a></td></tr>` : ''}
+        <tr><td style="font-size:13px;color:#6b7280;line-height:1.5;">Reply to this email if you have any questions.</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
 
-If you have any questions about this ${terminology}, please don't hesitate to contact us.
+    const payload: Record<string, unknown> = {
+      from: `${businessName} <invoices@getsuperinvoice.com>`,
+      to: [clientEmail],
+      subject: `${label} ${estimate.estimate_number} from ${businessName}`,
+      html,
+    }
+    if (pdfBase64) payload.attachments = [{ filename: `${label}-${estimate.estimate_number}.pdf`, content: pdfBase64 }]
+    if (businessSettings?.business_email) payload.reply_to = businessSettings.business_email
 
-Best regards,
-${fromName}
-`
-
-    // Create the email HTML content
-    const emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${documentLabel} ${estimate.estimate_number}</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .header {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .estimate-info {
-            background: #fff;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .amount {
-            font-size: 24px;
-            font-weight: bold;
-            color: #28a745;
-        }
-        .button {
-            display: inline-block;
-            background: #007bff;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 20px 0;
-        }
-        .footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-            font-size: 14px;
-            color: #6c757d;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>${documentLabel} from ${fromName}</h1>
-    </div>
-
-    <div class="estimate-info">
-        <h2>${documentLabel} Details</h2>
-        <p><strong>${documentLabel} Number:</strong> ${estimate.estimate_number}</p>
-        <p><strong>Amount:</strong> <span class="amount">${estimate.currency_symbol}${estimate.total_amount?.toFixed(2)}</span></p>
-        <p><strong>Status:</strong> ${estimate.status}</p>
-    </div>
-
-    <div style="white-space: pre-line;">${defaultMessage}</div>
-
-    <div style="text-align: center;">
-        <a href="${shareUrl}" class="button">View ${documentLabel} Online</a>
-    </div>
-
-    <div class="footer">
-        <p>This email was sent from ${fromName}</p>
-        ${estimate.business_settings?.business_email ? `<p>Contact: ${estimate.business_settings.business_email}</p>` : ''}
-    </div>
-</body>
-</html>
-`
-
-    // Use Supabase Auth to send email
-    const { error: emailError } = await supabase.auth.admin.inviteUserByEmail(toEmail, {
-      data: {
-        estimate_id: estimateId,
-        estimate_number: estimate.estimate_number,
-        custom_invite: true
-      },
-      redirectTo: `${req.headers.get('origin')}/estimate/${estimateId}`
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     })
-
-    if (emailError) {
-      console.error('Email sending error:', emailError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to send email', details: emailError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (!resendResponse.ok) {
+      const text = await resendResponse.text()
+      throw new Error(`Resend error ${resendResponse.status}: ${text}`)
     }
+    const sent = await resendResponse.json()
 
-    // Update estimate status to sent
-    const { error: updateError } = await supabase
-      .from('estimates')
-      .update({ status: 'sent' })
-      .eq('id', estimateId)
-
-    if (updateError) {
-      console.warn('Failed to update estimate status:', updateError)
-    }
-
-    // Log the email activity
-    const { error: activityError } = await supabase
-      .from('estimate_activities')
-      .insert({
-        estimate_id: estimateId,
-        activity_type: 'sent',
-        description: `${documentLabel} sent via email to ${toEmail}`,
-        activity_data: {
-          email: toEmail,
-          method: 'email'
-        }
-      })
-
-    if (activityError) {
-      console.warn('Failed to log email activity:', activityError)
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `${documentLabel} email sent successfully`,
-        recipient: toEmail
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    )
-
+    return new Response(JSON.stringify({ success: true, id: sent.id, recipient: clientEmail, attached: !!pdfBase64, view_url: viewUrl }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   } catch (error) {
-    console.error('Error in send-estimate-email function:', error)
-    return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    console.error('send-estimate-email:', error)
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Internal server error' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })
