@@ -59,6 +59,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import NewClientSelectionSheet, { Client as ClientType, NewClientSelectionSheetRef } from './NewClientSelectionSheet';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; // Added import
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
 import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoiceDetailsSheet'; // Correctly import named export
 import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // legacy fallback if needed
@@ -281,6 +282,7 @@ export default function CreateInvoiceScreen() {
   const router = useRouter();
   const navigation = useNavigation(); // Get navigation object
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
   const { supabase, user } = useSupabase(); // Use Supabase context
   const { logPaymentAdded, logInvoiceCreated, logInvoiceEdited } = useInvoiceActivityLogger(); // Add activity logger
   
