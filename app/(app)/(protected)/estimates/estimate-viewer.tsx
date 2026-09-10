@@ -33,6 +33,8 @@ import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useHideTabBar } from '@/hooks/useHideTabBar';
+import { useEstimateRealtime } from '@/hooks/useEstimateRealtime';
+import { SendStatusOverlay, SendStatus } from '@/components/SendStatusOverlay';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Tables } from '../../../types/database.types'; 
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -133,6 +135,9 @@ function EstimateViewerScreen() {
 
   // Skia canvas ref for PDF export
   const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+  // Drives SendStatusOverlay, like the invoice viewer.
+  const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
+  const [sendDetail, setSendDetail] = useState<string | null>(null);
 
   // Disable default header to prevent flash (we use custom header in render)
   useEffect(() => {
@@ -363,6 +368,15 @@ function EstimateViewerScreen() {
     [estimate, client, businessSettings, logoDataUri],
   );
 
+  // Live updates: an Accept / Decline on the hosted page flips this screen
+  // without a navigation. Needs `estimates` in the realtime publication.
+  useEstimateRealtime(
+    () => {
+      if (estimateId) fetchEstimateData(estimateId);
+    },
+    { estimateId: estimateId ?? null },
+  );
+
   const handleEdit = () => {
     if (!estimate) return;
     
@@ -533,6 +547,8 @@ function EstimateViewerScreen() {
 
     try {
       setIsSendingEmail(true);
+      setSendDetail(estimate.clients.email);
+      setSendStatus('sending');
       sendEstimateModalRef.current?.dismiss(); // Close modal immediately for better UX
 
       // 2. Render the document once: uploaded for the link, attached to the email.
@@ -566,12 +582,8 @@ function EstimateViewerScreen() {
       const terminology = businessSettings?.estimate_terminology || 'estimate';
       const documentLabel = terminology === 'quote' ? 'Quote' : 'Estimate';
 
-      // 6. Success message
-      Alert.alert(
-        `✉️ Email Sent!`,
-        `${documentLabel} ${estimate.estimate_number} has been sent to ${estimate.clients.email}`,
-        [{ text: 'OK' }]
-      );
+      // 6. Success, shown in the overlay rather than an alert
+      setSendStatus('success');
 
       // 7. Refresh estimate data
       const refreshedEstimate = await fetchEstimateData(estimateId);
@@ -581,6 +593,7 @@ function EstimateViewerScreen() {
 
     } catch (error: any) {
       console.error('Error sending email:', error);
+      setSendStatus('idle');
       Alert.alert(
         'Error Sending Email',
         error.message || 'Failed to send email. Please try again.',
@@ -1042,7 +1055,7 @@ function EstimateViewerScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+            <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.headerLeftContainer}>
               <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
               <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
             </TouchableOpacity>
@@ -1179,7 +1192,7 @@ function EstimateViewerScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+            <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.headerLeftContainer}>
               <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
               <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
             </TouchableOpacity>
@@ -1202,7 +1215,7 @@ function EstimateViewerScreen() {
         {/* Header Section */}
         <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+            <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.headerLeftContainer}>
               <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
               <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
             </TouchableOpacity>
@@ -1524,6 +1537,16 @@ function EstimateViewerScreen() {
             onSaveComplete={handleDesignModalClose}
           />
         )}
+
+        {/* Progress + confirmation for sending. Mounted last so it sits above the
+            bottom sheets, which otherwise render over it. */}
+        <SendStatusOverlay
+          status={sendStatus}
+          sendingTitle={`Sending ${businessSettings?.estimate_terminology === 'quote' ? 'quote' : 'estimate'}`}
+          successTitle={`${businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'} sent`}
+          detail={sendDetail}
+          onDone={() => setSendStatus('idle')}
+        />
       </SafeAreaView>
     </BottomSheetModalProvider>
   );

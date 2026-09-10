@@ -1,4 +1,5 @@
 import { Stack, useRouter, useFocusEffect } from "expo-router";
+import { useEstimateRealtime } from "@/hooks/useEstimateRealtime";
 import {
 	PlusCircle,
 	Search as SearchIcon,
@@ -397,6 +398,11 @@ export default function EstimateDashboardScreen() {
       };
     }, [fetchBusinessSettings, loadEstimatesAndSummary, setIsTabBarVisible, estimates.length])
   );
+
+  // Accept / Decline from the hosted page, or another device, updates the list live.
+  useEstimateRealtime(() => {
+    loadEstimatesAndSummary(false, true);
+  });
 
   const onRefresh = useCallback(() => {
     loadEstimatesAndSummary(true); // Pass true to indicate it's a pull-to-refresh

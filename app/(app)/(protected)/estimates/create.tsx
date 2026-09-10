@@ -68,7 +68,8 @@ import { Tables } from '../../../../types/database.types';
 type ClientType = Tables<'clients'>;
 import AddItemSheet, { AddItemSheetRef } from '../invoices/AddItemSheet';
 import AddItemSheetStable, { AddItemSheetStableRef } from '@/components/items/AddItemSheetStable';
-import { NewItemData } from '@/components/items/AddNewItemFormSheet';
+import AddNewItemFormSheet, { AddNewItemFormSheetRef, NewItemData } from '@/components/items/AddNewItemFormSheet';
+import ClientDetailsSheet, { ClientDetailsSheetRef } from '@/components/ClientDetailsSheet';
 import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from '../invoices/SelectDiscountTypeSheet';
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as EstimateTaxData } from '../invoices/EditInvoiceTaxSheet';
 import EditEstimateDetailsSheet, { EditEstimateDetailsSheetRef, EstimateDetailsData } from './EditEstimateDetailsSheet';
@@ -341,6 +342,13 @@ export default function CreateEstimateScreen() {
   const [isSavingEstimate, setIsSavingEstimate] = useState(false);
   const [currentEstimateId, setCurrentEstimateId] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Set once the user has answered the unsaved-changes prompt, so the navigation
+  // we dispatch ourselves is not intercepted a second time.
+  const leavingRef = useRef(false);
+  // Tapping a line item opens the same form the item was created with, filled in.
+  const editItemSheetRef = useRef<AddNewItemFormSheetRef>(null);
+  // Tapping the client name shows their details so they can be checked without leaving.
+  const clientDetailsSheetRef = useRef<ClientDetailsSheetRef>(null);
   const [estimateTerminology, setEstimateTerminology] = useState<'estimate' | 'quote'>('estimate');
   const [currentDesign, setCurrentDesign] = useState<string>(DEFAULT_DESIGN_ID); // Use correct default ('clean') instead of hardcoded 'classic'
   const [currentAccentColor, setCurrentAccentColor] = useState<string>('#1E40AF');
@@ -594,6 +602,40 @@ export default function CreateEstimateScreen() {
       headerShown: false,
     });
   }, [navigation]);
+
+  // Leaving with unsaved changes: ask, then continue with the intercepted
+  // navigation (normally the pop back to the list). Same shape as invoices.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      if (isEditMode) return;
+      if (leavingRef.current || !hasUnsavedChanges || isSavingEstimate) return;
+      e.preventDefault();
+      const proceed = () => {
+        leavingRef.current = true;
+        setIsTabBarVisible(true);
+        navigation.dispatch(e.data.action);
+      };
+      const noun = estimateTerminology === 'quote' ? 'quote' : 'estimate';
+      Alert.alert(
+        'Unsaved Changes',
+        `You have unsaved changes. Do you want to save this ${noun} before leaving?`,
+        [
+          { text: "Don't Save", style: 'destructive', onPress: () => { setHasUnsavedChanges(false); proceed(); } },
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save',
+            onPress: () => {
+              // handleSaveEstimate navigates on success; let that through.
+              leavingRef.current = true;
+              setIsTabBarVisible(true);
+              handleSaveEstimate();
+            },
+          },
+        ],
+      );
+    });
+    return unsubscribe;
+  }, [navigation, isEditMode, hasUnsavedChanges, isSavingEstimate, estimateTerminology, setIsTabBarVisible]);
 
   // Tab bar visibility management
   useEffect(() => {
@@ -1475,17 +1517,64 @@ export default function CreateEstimateScreen() {
   };
 
   // Render function for the visible part of the list item
+  const lineTotal = (quantity: number, unitPrice: number, type?: 'percentage' | 'fixed' | null, value?: number | null) => {
+    let total = quantity * unitPrice;
+    if (value && value > 0) {
+      if (type === 'percentage') total -= total * (value / 100);
+      else if (type === 'fixed') total -= value;
+    }
+    return parseFloat(total.toFixed(2));
+  };
+
+  const openEditItem = (item: EstimateLineItem) => {
+    editItemSheetRef.current?.present({
+      id: item.id,
+      itemName: item.item_name,
+      description: item.description ?? null,
+      price: item.unit_price,
+      quantity: item.quantity,
+      discountType: item.line_item_discount_type ?? null,
+      discountValue: item.line_item_discount_value ?? null,
+      imageUri: item.item_image_url ?? null,
+      saved_item_db_id: item.user_saved_item_id ?? null,
+    });
+  };
+
+  const handleItemEdited = (edited: NewItemData) => {
+    const items = getValues('items') || [];
+    const next = items.map((it: EstimateLineItem) =>
+      it.id === edited.id
+        ? {
+            ...it,
+            item_name: edited.itemName,
+            description: edited.description ?? null,
+            quantity: edited.quantity,
+            unit_price: edited.price,
+            line_item_discount_type: edited.discountType ?? null,
+            line_item_discount_value: edited.discountValue ?? null,
+            total_price: lineTotal(edited.quantity, edited.price, edited.discountType, edited.discountValue),
+          }
+        : it,
+    );
+    setValue('items', next, { shouldValidate: true, shouldDirty: true });
+    editItemSheetRef.current?.dismiss();
+  };
+
   const renderVisibleItem = (data: { item: EstimateLineItem, index: number }) => {
     const { item, index } = data;
     const isFirstItem = index === 0;
     const isLastItem = index === currentEstimateLineItems.length - 1;
     return (
-      <View style={[
-        styles.estimateItemRow,
-        { backgroundColor: safeThemeColors.card },
-        isFirstItem && { borderTopWidth: 0 },
-        isLastItem && { borderBottomWidth: 0 }
-      ]}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => openEditItem(item)}
+        style={[
+          styles.estimateItemRow,
+          { backgroundColor: safeThemeColors.card },
+          isFirstItem && { borderTopWidth: 0 },
+          isLastItem && { borderBottomWidth: 0 }
+        ]}
+      >
         <Text style={styles.estimateItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
           <Text style={[styles.estimateItemNameText, { color: safeThemeColors.foreground }]}>{item.item_name} </Text>
           <Text style={[styles.estimateItemQuantityText, { color: safeThemeColors.mutedForeground }]}>(x{item.quantity})</Text>
@@ -1493,7 +1582,7 @@ export default function CreateEstimateScreen() {
         <Text style={[styles.estimateItemTotalText, { color: safeThemeColors.foreground }]}>
           {getCurrencySymbol(currencyCode)}{Number(item.total_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1562,7 +1651,7 @@ export default function CreateEstimateScreen() {
             >
               {/* Header with Back and Preview buttons */}
               <View style={styles.headerButtonsRow}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.backButton}>
                   <ChevronLeft size={24} color={safeThemeColors.foreground} />
                   <Text style={[styles.backButtonText, { color: safeThemeColors.foreground }]}>Back</Text>
                 </TouchableOpacity>
@@ -1594,7 +1683,14 @@ export default function CreateEstimateScreen() {
             <FormSection title="CLIENT" themeColors={safeThemeColors}>
               {selectedClient ? (
                 <View style={styles.selectedClientContainer}>
-                  <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                  <TouchableOpacity onPress={() => clientDetailsSheetRef.current?.present()} style={{ flex: 1 }} activeOpacity={0.7}>
+                    <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                    {!!(selectedClient.email || selectedClient.phone) && (
+                      <Text style={{ fontSize: 13, color: safeThemeColors.mutedForeground, marginTop: 2 }} numberOfLines={1}>
+                        {[selectedClient.email, selectedClient.phone].filter(Boolean).join('  ·  ')}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={openNewClientSelectionSheet}>
                     <Text style={styles.changeClientText}>Change</Text>
                   </TouchableOpacity>
@@ -1800,6 +1896,22 @@ export default function CreateEstimateScreen() {
             </FormSection>
 
           {/* Client Selection Sheet */}
+          <AddNewItemFormSheet ref={editItemSheetRef} onSave={handleItemEdited} />
+
+          <ClientDetailsSheet
+            ref={clientDetailsSheetRef}
+            client={selectedClient as any}
+            onChangeClient={() => {
+              clientDetailsSheetRef.current?.dismiss();
+              openNewClientSelectionSheet();
+            }}
+            onViewProfile={() => {
+              if (!selectedClient) return;
+              clientDetailsSheetRef.current?.dismiss();
+              router.push(`/customers/${selectedClient.id}` as any);
+            }}
+          />
+
           <NewClientSelectionSheet
             ref={newClientSheetRef}
             onClientSelect={handleClientSelect}
