@@ -52,6 +52,17 @@ target 'SuperInvoice' do
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
 
+    # Xcode 26's clang rejects fmt 11's consteval FMT_STRING checks (React Native
+    # 0.79 pins fmt 11.0.2). Turning consteval off keeps fmt compiling; nothing
+    # changes at runtime. Harmless on older Xcode.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+        defs = [defs] if defs.is_a?(String)
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs + ['FMT_USE_CONSTEVAL=0']
+      end
+    end
+
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.
     installer.target_installation_results.pod_target_installation_results
