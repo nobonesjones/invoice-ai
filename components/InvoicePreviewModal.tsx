@@ -9,7 +9,7 @@ import {
   BottomSheetBackdrop,
 } from '@gorhom/bottom-sheet';
 import { colors } from '@/constants/colors';
-import { useColorScheme } from 'react-native';
+import { useTheme } from '@/context/theme-provider';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Send, Mail, FileText, Link2, X as XIcon } from 'lucide-react-native';
@@ -56,11 +56,11 @@ export const InvoicePreviewModal = forwardRef(
     { invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice', onSaveComplete }: InvoicePreviewModalProps,
     ref: React.Ref<InvoicePreviewModalRef>
   ) => {
-    const colorScheme = useColorScheme();
-    const isLightMode = colorScheme === 'light';
-    // Ensure we have a valid color scheme, default to light if undefined/null
-    const safeColorScheme = colorScheme === 'dark' ? 'dark' : 'light';
-    const themeColors = colors[safeColorScheme];
+    // The app has its own light/dark setting. This followed the phone's, so
+    // with the app in light mode on a dark phone the preview came up dark.
+    const { isLightMode } = useTheme();
+    const colorScheme = isLightMode ? 'light' : 'dark';
+    const themeColors = isLightMode ? colors.light : colors.dark;
     const { supabase, user } = useSupabase();
     
     const styles = getStyles(themeColors);
@@ -768,6 +768,12 @@ export const InvoicePreviewModal = forwardRef(
                         showDefaultToggle={mode !== 'settings'}
                         applyAsDefault={applyAsDefault}
                         onApplyAsDefaultChange={setApplyAsDefault}
+                        onExpandedChange={(expanded) => {
+                          if (expanded && modalPosition === 'minimized') {
+                            setModalPosition('normal');
+                            Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 100, friction: 8 }).start();
+                          }
+                        }}
                       />
                     </View>
                   )}

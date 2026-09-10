@@ -1,15 +1,14 @@
 // Design and colour in one place: tiles on top, the selected design's swatches
-// underneath, and an explicit "use for all new invoices" switch.
-//
-// Before this the two lived on separate tabs, so a colour was chosen blind to
-// the design and the tiles never showed it. Now the selected tile recolours as
-// the swatch changes, and the swatches on offer are the ones that design was
-// drawn for, plus the business's own brand colour when the logo has one.
-import React from 'react';
-import { View, Text, Switch, StyleSheet, useColorScheme } from 'react-native';
+// underneath. Compact by default so more of the invoice shows; tapping "+" on
+// the swatch row unfolds the precise colour panel and the "use for all new
+// invoices" switch, and tells the parent so the sheet can rise to fit.
+import React, { useEffect, useState } from 'react';
+import { View, Text, Switch, StyleSheet } from 'react-native';
 
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { AccentSwatches } from '@/components/AccentSwatches';
+import { CustomColorPanel } from '@/components/CustomColorPanel';
+import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import type { InvoiceDesign } from '@/constants/invoiceDesigns';
 
@@ -25,6 +24,8 @@ interface DesignPickerProps {
   showDefaultToggle?: boolean;
   applyAsDefault?: boolean;
   onApplyAsDefaultChange?: (value: boolean) => void;
+  /** Fired when the custom panel opens or closes, so the sheet can grow. */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export const DesignPicker: React.FC<DesignPickerProps> = ({
@@ -38,36 +39,59 @@ export const DesignPicker: React.FC<DesignPickerProps> = ({
   showDefaultToggle = true,
   applyAsDefault = true,
   onApplyAsDefaultChange,
+  onExpandedChange,
 }) => {
-  const scheme = useColorScheme();
-  const themeColors = colors[scheme || 'light'];
+  const { isLightMode } = useTheme();
+  const themeColors = isLightMode ? colors.light : colors.dark;
+  const [customOpen, setCustomOpen] = useState(false);
+
+  useEffect(() => {
+    onExpandedChange?.(customOpen);
+  }, [customOpen, onExpandedChange]);
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.card }]}>
+    <View style={{ backgroundColor: themeColors.card }}>
       <InvoiceDesignSelector
         designs={designs}
         selectedDesignId={selectedDesign.id}
-        onDesignSelect={onDesignSelect}
+        onDesignSelect={(id) => {
+          setCustomOpen(false);
+          onDesignSelect(id);
+        }}
         isLoading={isLoading}
         accentColor={accentColor}
       />
-      <AccentSwatches swatches={selectedDesign.swatches} brandColor={brandColor} selected={accentColor} onSelect={onAccentSelect} />
-      {showDefaultToggle && (
-        <View style={[styles.toggleRow, { borderTopColor: themeColors.border }]}>
-          <Text style={[styles.toggleLabel, { color: themeColors.foreground }]}>Use for all new invoices</Text>
-          <Switch
-            value={applyAsDefault}
-            onValueChange={onApplyAsDefaultChange}
-            trackColor={{ true: accentColor, false: '#d1d5db' }}
-          />
-        </View>
+      <AccentSwatches
+        swatches={selectedDesign.swatches}
+        brandColor={brandColor}
+        selected={accentColor}
+        onSelect={(hex) => {
+          setCustomOpen(false);
+          onAccentSelect(hex);
+        }}
+        customOpen={customOpen}
+        onToggleCustom={() => setCustomOpen((v) => !v)}
+      />
+      {customOpen && (
+        <>
+          <CustomColorPanel value={accentColor} onChange={onAccentSelect} />
+          {showDefaultToggle && (
+            <View style={[styles.toggleRow, { borderTopColor: themeColors.border }]}>
+              <Text style={[styles.toggleLabel, { color: themeColors.foreground }]}>Use for all new invoices</Text>
+              <Switch
+                value={applyAsDefault}
+                onValueChange={onApplyAsDefaultChange}
+                trackColor={{ true: accentColor, false: themeColors.border }}
+              />
+            </View>
+          )}
+        </>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {},
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

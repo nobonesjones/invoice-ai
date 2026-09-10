@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { InvoiceDesign } from '@/constants/invoiceDesigns';
 import { colors } from '@/constants/colors';
-import { useColorScheme } from 'react-native';
+import { useTheme } from '@/context/theme-provider';
 
 interface InvoiceDesignSelectorProps {
   designs: InvoiceDesign[];
@@ -172,8 +172,10 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
   isLoading = false,
   accentColor,
 }) => {
-  const colorScheme = useColorScheme();
-  const themeColors = colors[colorScheme || 'light'];
+  // The app has its own light/dark setting; the phone's is not what the rest
+  // of the screen follows.
+  const { isLightMode } = useTheme();
+  const themeColors = isLightMode ? colors.light : colors.dark;
 
   const styles = getStyles(themeColors);
 
