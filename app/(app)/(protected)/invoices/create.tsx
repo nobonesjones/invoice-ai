@@ -625,18 +625,20 @@ export default function CreateInvoiceScreen() {
       
       if (!isEditMode) {
         try {
-          const { data: businessSettings } = await supabase
+          const { data: businessSettings, error: settingsError } = await supabase
             .from('business_settings')
             .select('default_invoice_design, default_accent_color')
             .eq('user_id', user.id)
-            .single();
-          
-          if (businessSettings) {
+            .maybeSingle();
+
+          if (settingsError) {
+            console.warn('[CreateInvoice] Could not read default design:', settingsError.message);
+          } else if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
             defaultAccentColor = businessSettings.default_accent_color || '#1E40AF';
-          } else {
           }
         } catch (error) {
+          console.warn('[CreateInvoice] Could not read default design:', error);
         }
       }
 

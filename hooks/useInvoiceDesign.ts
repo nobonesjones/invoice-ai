@@ -334,15 +334,19 @@ export const useInvoiceDesignForInvoice = (
     try {
       setError(null);
 
-      const { error: updateError } = await supabase
+      // Update the existing row, and only insert when there is none. An upsert
+      // keyed on user_id needs a unique constraint we cannot rely on, and a
+      // failed upsert used to lose the choice silently.
+      const fields = {
+        default_invoice_design: designId,
+        default_accent_color: accentColor,
+        updated_at: new Date().toISOString(),
+      };
+      const { data: updated, error: updateError } = await supabase
         .from('business_settings')
-        .upsert({
-          user_id: user.id,
-          default_invoice_design: designId,
-          default_accent_color: accentColor,
-        }, {
-          onConflict: 'user_id'
-        });
+        .update(fields)
+        .eq('user_id', user.id)
+        .select('user_id');
 
       if (updateError) {
         console.error('Error updating default design:', updateError);
@@ -350,7 +354,18 @@ export const useInvoiceDesignForInvoice = (
         return false;
       }
 
-      // console.log(`[useInvoiceDesignForInvoice] Updated default design: ${designId}, color: ${accentColor}`);
+      if (!updated || updated.length === 0) {
+        const { error: insertError } = await supabase
+          .from('business_settings')
+          .insert({ user_id: user.id, ...fields });
+        if (insertError) {
+          console.error('Error creating default design:', insertError);
+          setError('Failed to update default design');
+          return false;
+        }
+      }
+
+      console.log(`[useInvoiceDesignForInvoice] Default for new invoices: ${designId} ${accentColor}`);
       return true;
 
     } catch (err: any) {

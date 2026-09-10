@@ -194,65 +194,53 @@ export const InvoicePreviewModal = forwardRef(
     
     // Paywall setup removed – manual sending is now free
 
-    // Gesture handler for swipe functionality
+    // Sheet drag. The handle and header are the grab area; the tiles, swatches
+    // and colour square keep their own touches. translateY carries an offset
+    // for the sheet's resting position so a drag continues from where the
+    // sheet is rather than jumping back to the top.
+    const EXPANDED_POS = -90;
+    const NORMAL_POS = 0;
+    const restingFor = useCallback(
+      (pos: 'normal' | 'minimized' | 'expanded') =>
+        pos === 'expanded' ? EXPANDED_POS : pos === 'minimized' ? Math.max(60, sheetHeightRef.current - 64) : NORMAL_POS,
+      [],
+    );
     const onGestureEvent = Animated.event(
       [{ nativeEvent: { translationY: translateY } }],
       { useNativeDriver: true }
     );
 
+    const snapTo = useCallback((pos: 'normal' | 'minimized' | 'expanded') => {
+      setModalPosition(pos);
+      translateY.flattenOffset();
+      Animated.spring(translateY, {
+        toValue: restingFor(pos),
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    }, [translateY, restingFor]);
+
     const onHandlerStateChange = useCallback((event: any) => {
-      if (event.nativeEvent.oldState === State.ACTIVE) {
-        const { translationY, velocityY } = event.nativeEvent;
-        
-        const expandedPos = -90;
-        const normalPos = 0;
-        // Leave the handle and the "Design & colour" header peeking.
-        const minimizedPos = Math.max(60, sheetHeightRef.current - 64);
-        
-        // Determine target position based on gesture
-        let targetPosition: 'normal' | 'minimized' | 'expanded' = modalPosition;
-        let targetValue = normalPos;
-        
-        if (modalPosition === 'normal') {
-          if (translationY > 50 || velocityY > 500) {
-            // Swipe down from normal -> minimize
-            targetPosition = 'minimized';
-            targetValue = minimizedPos;
-          } else if (translationY < -50 || velocityY < -500) {
-            // Swipe up from normal -> expand
-            targetPosition = 'expanded';
-            targetValue = expandedPos;
-          }
-        } else if (modalPosition === 'minimized') {
-          if (translationY < -30 || velocityY < -300) {
-            // Swipe up from minimized -> normal
-            targetPosition = 'normal';
-            targetValue = normalPos;
-          }
-        } else if (modalPosition === 'expanded') {
-          if (translationY > 30 || velocityY > 300) {
-            // Swipe down from expanded -> normal
-            targetPosition = 'normal';
-            targetValue = normalPos;
-          }
-        }
-        
-        // If no clear gesture, return to current position
-        if (targetPosition === modalPosition) {
-          targetValue = modalPosition === 'expanded' ? expandedPos : 
-                      modalPosition === 'minimized' ? minimizedPos : normalPos;
-        }
-        
-        // Update state and animate
-        setModalPosition(targetPosition);
-        Animated.spring(translateY, {
-          toValue: targetValue,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 8,
-        }).start();
+      const { state, oldState, translationY, velocityY } = event.nativeEvent;
+      if (state === State.BEGAN) {
+        translateY.setOffset(restingFor(modalPosition));
+        translateY.setValue(0);
+        return;
       }
-    }, [modalPosition, translateY]);
+      if (oldState !== State.ACTIVE) return;
+
+      let target: 'normal' | 'minimized' | 'expanded' = modalPosition;
+      if (modalPosition === 'normal') {
+        if (translationY > 40 || velocityY > 500) target = 'minimized';
+        else if (translationY < -40 || velocityY < -500) target = 'expanded';
+      } else if (modalPosition === 'minimized') {
+        if (translationY < -30 || velocityY < -300) target = 'normal';
+      } else if (modalPosition === 'expanded') {
+        if (translationY > 30 || velocityY > 300) target = 'normal';
+      }
+      snapTo(target);
+    }, [modalPosition, translateY, restingFor, snapTo]);
 
     useImperativeHandle(ref, () => ({
       present: () => {
@@ -280,78 +268,54 @@ export const InvoicePreviewModal = forwardRef(
       onClose?.();
     }, [onClose]);
 
+    // Write the chosen design and colour where they belong: onto this
+    // document when it exists, and into business_settings when the user wants
+    // it for every new invoice (or when there is no invoice yet to hold it).
+    // Used by Save and by every send, so a colour picked here is never lost.
+    const persistDesignChoice = useCallback(async (): Promise<boolean> => {
+      if (mode === 'settings') {
+        onDesignSaved?.(currentDesign.id, currentAccentColor);
+        return true;
+      }
+      if (invoiceId && documentType === 'estimate') {
+        const { error: updateError } = await supabase
+          .from('estimates')
+          .update({ estimate_template: currentDesign.id, accent_color: currentAccentColor })
+          .eq('id', invoiceId);
+        if (updateError) {
+          console.error('[InvoicePreviewModal] Error saving estimate design:', updateError);
+          return false;
+        }
+        if (applyAsDefault) return updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+        return true;
+      }
+      if (invoiceId) {
+        const saved = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
+        if (!saved) return false;
+        if (applyAsDefault) return updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+        return true;
+      }
+      // No document yet (previewing from the create screen): the choice can
+      // only live in the defaults, which the create screen reads on save.
+      return updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+    }, [mode, onDesignSaved, invoiceId, documentType, supabase, currentDesign.id, currentAccentColor, applyAsDefault, saveToInvoice, updateDefaultForNewInvoices]);
+
     // Handle saving design changes and closing modal
     const handleSave = useCallback(async () => {
-      // Reduced noisy logs
-      
       try {
-        let saveSuccess = false;
-        
-        if (mode === 'settings') {
-          console.log('[InvoicePreviewModal] Settings mode - calling onDesignSaved');
-          // In settings mode, call the callback instead of saving to database
-          onDesignSaved?.(currentDesign.id, currentAccentColor);
-          saveSuccess = true;
-        } else if (invoiceId) {
-          if (documentType === 'estimate') {
-            // Reduced noisy logs
-            // Save design and color to specific estimate
-            const { error: updateError } = await supabase.from('estimates')
-              .update({
-                estimate_template: currentDesign.id,
-                accent_color: currentAccentColor,
-              })
-              .eq('id', invoiceId);
-            
-            if (!updateError) {
-              // Reduced noisy logs
-              saveSuccess = true;
-            } else {
-              console.error('[InvoicePreviewModal] Error saving estimate design:', updateError);
-            }
-          } else {
-            // Reduced noisy logs
-            // Save design and color to specific invoice
-            const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
-            if (success) {
-              if (applyAsDefault) await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
-              saveSuccess = true;
-            } else {
-              console.log('[InvoicePreviewModal] Failed to save to invoice');
-            }
-          }
-        } else {
-          // Reduced noisy logs
-          // For new invoices, just update the default
-          const success = await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
-          if (success) {
-            // Reduced noisy logs
-            saveSuccess = true;
-          } else {
-            console.log('[InvoicePreviewModal] Failed to update defaults');
-          }
+        const saveSuccess = await persistDesignChoice();
+        if (!saveSuccess) {
+          Alert.alert('Could not save design', 'Your design and colour were not saved. Please try again.');
+          return;
         }
-        
-        // Reduced noisy logs
-        
-        // Call onSaveComplete callback if save was successful
-        if (saveSuccess && onSaveComplete) {
-          // Reduced noisy logs
-          onSaveComplete();
-        }
-        
-        // Close modal WITHOUT calling onClose callback for saves (prevents state conflicts)
-        // Reduced noisy logs
+        onSaveComplete?.();
+        // Close WITHOUT calling onClose for saves (prevents state conflicts)
         setIsVisible(false);
-        // Reduced noisy logs
       } catch (error) {
         console.error('[InvoicePreviewModal] Error in handleSave:', error);
-        // Close modal WITHOUT calling onClose for errors (prevents state conflicts)
-        setIsVisible(false);
-        // Reduced noisy logs
+        Alert.alert('Could not save design', 'Something went wrong while saving. Please try again.');
       }
-      // Reduced noisy logs
-    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase, applyAsDefault]);
+    }, [persistDesignChoice, onSaveComplete]);
 
 
     // Send handlers
@@ -365,6 +329,9 @@ export const InvoicePreviewModal = forwardRef(
         Alert.alert('Error', 'Unable to send invoice at this time.');
         return;
       }
+
+      // The document goes out in the design on screen; keep the record in step.
+      await persistDesignChoice().catch((e) => console.warn(`[Modal handleSendByEmail] design not saved:`, e));
 
       try {
         console.log('[Modal handleSendByEmail] Generating PDF for invoice:', invoiceData.invoice_number);
@@ -418,6 +385,9 @@ export const InvoicePreviewModal = forwardRef(
         Alert.alert('Error', 'Unable to send invoice at this time.');
         return;
       }
+
+      // The document goes out in the design on screen; keep the record in step.
+      await persistDesignChoice().catch((e) => console.warn(`[Modal handleSendLink] design not saved:`, e));
 
       try {
         console.log('[Modal handleSendLink] Generating shareable PDF link for invoice:', invoiceData.id);
@@ -528,6 +498,9 @@ export const InvoicePreviewModal = forwardRef(
         return;
       }
 
+      // The document goes out in the design on screen; keep the record in step.
+      await persistDesignChoice().catch((e) => console.warn(`[Modal handleSendPDF] design not saved:`, e));
+
       try {
         console.log('[Modal handleSendPDF] Generating PDF for invoice:', invoiceData.invoice_number);
         
@@ -584,6 +557,7 @@ export const InvoicePreviewModal = forwardRef(
           presentationStyle="fullScreen"
           onRequestClose={handleClose}
         >
+          <GestureHandlerRootView style={{ flex: 1 }}>
           <SafeAreaView style={[styles.container, { backgroundColor: themeColors.card }]}>
             <View style={[styles.header, { borderBottomColor: themeColors.border }]}>
               <TouchableOpacity 
@@ -623,14 +597,7 @@ export const InvoicePreviewModal = forwardRef(
             </View>
 
             {/* Design/Color Selector - Fixed bottom panel */}
-            <PanGestureHandler
-              ref={gestureRef}
-              onGestureEvent={onGestureEvent}
-              onHandlerStateChange={onHandlerStateChange}
-              activeOffsetY={[-50, 50]}
-              enabled={true}
-            >
-              <Animated.View 
+            <Animated.View 
                 onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height; }}
                 style={[
                   styles.designSelectorContainer,
@@ -640,6 +607,14 @@ export const InvoicePreviewModal = forwardRef(
                   }
                 ]}
               >
+                <PanGestureHandler
+                  ref={gestureRef}
+                  onGestureEvent={onGestureEvent}
+                  onHandlerStateChange={onHandlerStateChange}
+                  activeOffsetY={[-6, 6]}
+                  failOffsetX={[-20, 20]}
+                >
+                <Animated.View>
                 {/* Swipe indicator */}
                 <View style={styles.swipeIndicator}>
                   <View style={styles.swipeHandle} />
@@ -679,6 +654,8 @@ export const InvoicePreviewModal = forwardRef(
                     </View>
                   </View>
                 </View>
+                </Animated.View>
+                </PanGestureHandler>
                 
                 {/* Content */}
                 <View style={[styles.selectorContent, { backgroundColor: themeColors.card }]}>
@@ -769,20 +746,17 @@ export const InvoicePreviewModal = forwardRef(
                         applyAsDefault={applyAsDefault}
                         onApplyAsDefaultChange={setApplyAsDefault}
                         onExpandedChange={(expanded) => {
-                          if (expanded && modalPosition === 'minimized') {
-                            setModalPosition('normal');
-                            Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 100, friction: 8 }).start();
-                          }
+                          if (expanded && modalPosition === 'minimized') snapTo('normal');
                         }}
                       />
                     </View>
                   )}
                 </View>
               </Animated.View>
-            </PanGestureHandler>
             <LogoColorProbe />
 
           </SafeAreaView>
+          </GestureHandlerRootView>
         </Modal>
 
       </>
