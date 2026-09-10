@@ -58,10 +58,11 @@ export default function CustomersScreen() {
 		return nameMatch || emailMatch || phoneMatch;
 	});
 
-	const fetchClients = useCallback(async (isRefresh = false) => {
-		console.log("Fetching clients from Supabase...", isRefresh ? "(refresh)" : "(initial)");
-		if (!isRefresh) {
-		setLoading(true);
+	const fetchClients = useCallback(async (isRefresh = false, silent = false) => {
+		if (silent) {
+			// Data is already on screen: refresh it in place, no loader, no reflow.
+		} else if (!isRefresh) {
+			setLoading(true);
 		} else {
 			setRefreshing(true);
 		}
@@ -118,9 +119,8 @@ export default function CustomersScreen() {
 	// Auto-refresh when screen comes into focus
 	useFocusEffect(
 		useCallback(() => {
-			console.log("CustomersScreen: Screen focused, refreshing clients...");
-			fetchClients();
-		}, [fetchClients])
+			fetchClients(false, customers.length > 0); // silent when data is already on screen
+		}, [fetchClients, customers.length])
 	);
 
 	// Handle pull-to-refresh

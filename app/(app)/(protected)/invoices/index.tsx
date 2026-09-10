@@ -385,12 +385,12 @@ export default function InvoiceDashboardScreen() {
       // Screen focused, reloading data
       setIsTabBarVisible(true); // Show tab bar when returning to dashboard
       fetchBusinessSettings();
-      loadInvoicesAndSummary(); // Call the consolidated function
+      loadInvoicesAndSummary(false, invoices.length > 0); // silent when data is already on screen
       return () => {
         // Screen unfocused
         // Tab bar visibility will be managed by the destination screen
       };
-    }, [fetchBusinessSettings, loadInvoicesAndSummary, setIsTabBarVisible])
+    }, [fetchBusinessSettings, loadInvoicesAndSummary, setIsTabBarVisible, invoices.length])
   );
 
   const onRefresh = useCallback(() => {
@@ -462,7 +462,7 @@ export default function InvoiceDashboardScreen() {
             </View>
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Overdue</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.statusDue }]}>{`$${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.statusDue }]}>{`${getCurrencySymbol(currencyCode)}${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}</Text>
             </View>
           </View>
 
@@ -574,7 +574,7 @@ export default function InvoiceDashboardScreen() {
           <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} />
 
           {/* Display Current Filter Label */} 
-          {filteredInvoices.length > 0 && !loading && (
+          {invoices.length > 0 && (
             <View style={styles.currentFilterDisplayContainer}>
               <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
                 {searchTerm.trim() ? `${filteredInvoices.length} of ${invoices.length} invoices` : currentFilterLabel}

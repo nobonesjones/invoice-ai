@@ -672,7 +672,7 @@ export default function ExpensesScreen() {
 						<View style={styles.summaryContent}>
 							<Text style={[styles.summaryLabel, { color: theme.mutedForeground }]}>Total Expenses</Text>
 							<Text style={[styles.summaryValue, { color: theme.foreground }]}>
-								{currencySymbol}{totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+								{currencySymbol}{totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
 							</Text>
 						</View>
 						<TouchableOpacity onPress={handleOpenFilterModal} style={styles.filterButton}>

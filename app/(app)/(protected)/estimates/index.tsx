@@ -297,7 +297,7 @@ export default function EstimateDashboardScreen() {
     }
   }, [user?.id, supabase]);
 
-  const loadEstimatesAndSummary = useCallback(async (isPullToRefresh = false) => {
+  const loadEstimatesAndSummary = useCallback(async (isPullToRefresh = false, silent = false) => {
     if (!user?.id) {
       setError("User not authenticated.");
       setLoading(false);
@@ -305,7 +305,9 @@ export default function EstimateDashboardScreen() {
       return;
     }
 
-    if (!isPullToRefresh) {
+    if (silent) {
+      // Data is already on screen: refresh it in place, no loader, no reflow.
+    } else if (!isPullToRefresh) {
       setLoading(true); // Show loader for initial load or filter/search change
     } else {
       setIsRefreshing(true); // Show pull-to-refresh indicator
@@ -388,12 +390,12 @@ export default function EstimateDashboardScreen() {
       console.log('[EstimateDashboardScreen] Screen focused, reloading data.');
       setIsTabBarVisible(true); // Show tab bar when returning to dashboard
       fetchBusinessSettings();
-      loadEstimatesAndSummary(); // Call the consolidated function
+      loadEstimatesAndSummary(false, estimates.length > 0); // silent when data is already on screen
       return () => {
         console.log('[EstimateDashboardScreen] Screen unfocused.');
         // Tab bar visibility will be managed by the destination screen
       };
-    }, [fetchBusinessSettings, loadEstimatesAndSummary, setIsTabBarVisible])
+    }, [fetchBusinessSettings, loadEstimatesAndSummary, setIsTabBarVisible, estimates.length])
   );
 
   const onRefresh = useCallback(() => {
@@ -564,7 +566,7 @@ export default function EstimateDashboardScreen() {
           <SummaryHeaderBar estimatedAmount={totalEstimated} acceptedAmount={totalAccepted} expiredAmount={totalExpired} />
 
           {/* Display Current Filter Label */} 
-          {filteredEstimates.length > 0 && !loading && (
+          {estimates.length > 0 && (
             <View style={styles.currentFilterDisplayContainer}>
               <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
                 {searchTerm.trim() ? `${filteredEstimates.length} of ${estimates.length} ${estimateTerminology === 'quote' ? 'quotes' : 'estimates'}` : currentFilterLabel}
