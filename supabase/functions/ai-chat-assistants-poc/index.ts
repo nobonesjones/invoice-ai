@@ -657,24 +657,20 @@ serve(async (req)=>{
       console.log('[Assistants POC] General conversation - minimal context');
     }
     
-    // Add subscription context for all requests
+    // Add subscription context for all requests. Read user_profiles, the same row the
+    // app's paywall and checkCanCreateItem use; `profiles` carries a stale tier and
+    // told the model paying users were on the free plan.
     try {
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('subscription_tier')
+        .from('user_profiles')
+        .select('subscription_tier, ai_items_created')
         .eq('id', user_id)
         .maybeSingle();
 
       const tier = profile?.subscription_tier || 'free';
 
       if (tier === 'free') {
-        const { data: usageProfile } = await supabase
-          .from('user_profiles')
-          .select('ai_items_created')
-          .eq('id', user_id)
-          .maybeSingle();
-
-        const aiCreated = usageProfile?.ai_items_created ?? 0;
+        const aiCreated = profile?.ai_items_created ?? 0;
         const aiRemaining = Math.max(0, 3 - aiCreated);
 
         contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
@@ -686,9 +682,15 @@ serve(async (req)=>{
 AI USAGE RULES - CRITICAL:
 • Allow the user to create up to 3 invoices/estimates with AI
 • Once the limit is reached, do NOT attempt to create additional items—inform them the AI limit is reached
-• Manual invoice/estimate creation outside of AI is unrestricted
+• Manual invoice/estimate creation outside of AI is unrestricted`;
+      } else {
+        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
+• Plan: ${tier.toUpperCase()}
+• Unlimited AI access
+• No AI usage restrictions`;
+      }
 
-🚨🚨 PAYMENT WORKFLOWS - MANDATORY FOR ALL PAYMENT UPDATES 🚨🚨
+      contextString += `\n\n🚨🚨 PAYMENT WORKFLOWS - MANDATORY FOR ALL PAYMENT UPDATES 🚨🚨
 **WHEN USER SAYS "MARK AS PAID" OR "SET TO PAID":**
 - NEVER just update status alone!
 - ALWAYS call update_invoice with ALL payment fields:
@@ -705,12 +707,6 @@ AI USAGE RULES - CRITICAL:
 - Do NOT set status (let function auto-calculate)
 
 **CRITICAL RULE: Status changes without payment amounts will show incorrect totals on invoice documents!**`;
-      } else {
-        contextString += `\n\nUSER SUBSCRIPTION CONTEXT:
-• Plan: ${tier.toUpperCase()}
-• Unlimited AI access
-• No AI usage restrictions`;
-      }
     } catch (error) {
       console.error('[Assistants POC] Error fetching subscription context:', error);
       // Continue without subscription context rather than failing
