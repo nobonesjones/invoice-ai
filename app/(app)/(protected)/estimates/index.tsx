@@ -514,6 +514,7 @@ export default function EstimateDashboardScreen() {
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
                 onPress={() => {
+                  setIsTabBarVisible(false); // before the push, so create lays out full-height from its first frame
                   router.push("/estimates/create" as any);
                 }}
               >

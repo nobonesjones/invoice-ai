@@ -1,6 +1,7 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useTabBarVisibility } from "@/context/TabBarVisibilityContext";
 import { Search, PlusCircle } from "lucide-react-native";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
@@ -40,6 +41,7 @@ export default function CustomersScreen() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
+	const { setIsTabBarVisible } = useTabBarVisibility();
 	const params = useLocalSearchParams<{
 		selectionMode?: string;
 		origin?: string;
@@ -167,6 +169,7 @@ export default function CustomersScreen() {
 						},
 					});
 				} else {
+					setIsTabBarVisible(false); // before the push, so the detail screen lays out full-height from its first frame
 					router.push(`/(app)/(protected)/customers/${item.id}`);
 				}
 			}}
