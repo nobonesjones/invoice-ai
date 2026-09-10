@@ -71,3 +71,8 @@ response shape are unchanged, so no app build is needed.
    Nothing calls them from the app; leave them or delete them, your call.
 
 Answer with the deployed version number.
+
+## Status 2026-09-11
+- `shared-invoice` v83 and `shared-estimate` v1 render the shared document; `estimate-responded` v1 emails the owner on Accept/Decline.
+- Realtime publication now includes both `invoices` and `estimates` (confirmed by the backend agent, 2026-09-11). The app's viewer and list screens subscribe to both.
+- Still open: deploy `send-estimate-email` from the repo (PDF attachment), and confirm the `shared-estimates` bucket. Ask for version numbers.
