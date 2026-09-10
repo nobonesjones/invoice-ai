@@ -2,8 +2,8 @@
 // client, business_settings with payment options merged in) into the InvoiceDocument
 // the shared template renders. This is the only place row shapes are known; the
 // template never sees a database column name.
-import type { InvoiceDocument, InvoiceLine, ThemeId } from '../_shared/invoice-doc/render.ts';
-import { THEME_IDS } from '../_shared/invoice-doc/render.ts';
+import type { InvoiceDocument, InvoiceLine, ThemeId } from './render.ts';
+import { THEME_IDS } from './render.ts';
 
 type AnyRow = Record<string, any>;
 
