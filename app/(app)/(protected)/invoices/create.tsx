@@ -304,6 +304,9 @@ export default function CreateInvoiceScreen() {
   const [currentInvoiceId, setCurrentInvoiceId] = useState<string | null>(editInvoiceId);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  // Set once the user has answered the unsaved-changes prompt, so the navigation
+  // we dispatch ourselves is not intercepted a second time.
+  const leavingRef = useRef(false);
 
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
@@ -478,55 +481,55 @@ export default function CreateInvoiceScreen() {
 
     // Handle back button press for unsaved changes
     const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
-      
       // For edit mode, allow natural navigation - don't intercept
       if (isEditMode) {
         return;
       }
-      
-      // Don't intercept navigation if we're currently saving or if no unsaved changes
-      if (!hasUnsavedChanges || isSavingInvoice || isAutoSaving) {
+
+      // Don't intercept if we already answered the prompt, are saving, or have nothing to save
+      if (leavingRef.current || !hasUnsavedChanges || isSavingInvoice || isAutoSaving) {
         return;
       }
 
-      // Always prevent default behavior IMMEDIATELY
       e.preventDefault();
 
-      // Use setTimeout to ensure the prevention takes effect before showing dialog
-      setTimeout(() => {
-        // Prompt the user before leaving the screen with unsaved changes
-        Alert.alert(
-          'Unsaved Changes',
-          'You have unsaved changes. Do you want to save this invoice as a draft before leaving?',
-          [
-            { 
-              text: "Don't Save", 
-              style: 'destructive', 
-              onPress: () => {
-                // Clear unsaved changes flag
+      // Continue with the navigation that was intercepted (normally the pop back to
+      // the list). Dispatching the original action keeps the list screen that is
+      // already there, with its data, and the correct back transition. Showing the
+      // tab bar first means it slides in with the screen instead of after it.
+      const proceed = () => {
+        leavingRef.current = true;
+        setIsTabBarVisible(true);
+        navigation.dispatch(e.data.action);
+      };
+
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Do you want to save this invoice as a draft before leaving?',
+        [
+          {
+            text: "Don't Save",
+            style: 'destructive',
+            onPress: () => {
+              setHasUnsavedChanges(false);
+              proceed();
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save Draft',
+            onPress: async () => {
+              const savedId = await autoSaveAsDraft();
+              if (savedId) {
                 setHasUnsavedChanges(false);
-                // Navigate to invoice dashboard instead of back to previewer
-                router.replace('/(app)/(protected)/invoices');
+                proceed();
+              } else {
+                Alert.alert('Error', 'Could not save draft. Please try again.');
               }
             },
-            { text: 'Cancel', style: 'cancel', onPress: () => {
-            } },
-            {
-              text: 'Save Draft',
-              onPress: async () => {
-                const savedId = await autoSaveAsDraft();
-                if (savedId) {
-                  setHasUnsavedChanges(false);
-                  // Navigate to invoice dashboard after saving
-                  router.replace('/(app)/(protected)/invoices');
-                } else {
-                  Alert.alert('Error', 'Could not save draft. Please try again.');
-                }
-              },
-            },
-          ]
-        );
-      }, 50); // Small delay to ensure prevention takes effect
+          },
+        ]
+      );
     });
 
     // Initial hide if screen is focused on mount
@@ -1818,7 +1821,7 @@ export default function CreateInvoiceScreen() {
               {loadingError}
             </Text>
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => { setIsTabBarVisible(true); router.back(); }}
               style={{
                 backgroundColor: themeColors.primary,
                 paddingHorizontal: 20,

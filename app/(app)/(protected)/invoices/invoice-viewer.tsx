@@ -490,6 +490,7 @@ function InvoiceViewerScreen() {
     // Navigating back to dashboard
     // Use router.back() for proper left-to-right transition direction
     // DO NOT CHANGE TO router.replace() - this breaks transition direction
+    setIsTabBarVisible(true); // before the pop, so the bar slides in with the list
     // Only change if explicitly requested by user
     router.back(); 
   };
