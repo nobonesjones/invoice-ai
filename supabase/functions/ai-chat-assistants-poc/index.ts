@@ -3571,7 +3571,7 @@ To accept payments, configure at least one payment method.`;
               invoice_date,
               due_date,
               created_at,
-              clients!invoices_client_id_fkey(name, email, phone)
+              clients!fk_invoices_client_id(name, email, phone)
             `).eq('user_id', user_id);
           // Search by exact invoice number
           if (invoice_number) {
