@@ -19,6 +19,140 @@ interface InvoiceDesignSelectorProps {
   isLoading?: boolean;
 }
 
+/**
+ * A miniature of each layout, drawn with Views so it needs no image assets and
+ * stays in step with the renderer's seven layouts. The point is that the seven
+ * tiles look as different from each other as the documents do; a shared
+ * "band + lines" placeholder made every design read as the same invoice.
+ */
+const DesignThumbnail: React.FC<{ design: InvoiceDesign }> = ({ design }) => {
+  const p = design.colorScheme.primary;
+  const a = design.colorScheme.accent;
+  const ink = '#111827';
+  const grey = '#9CA3AF';
+  const line = (w: string | number, c = grey, h = 3) => (
+    <View style={{ width: w as any, height: h, borderRadius: 1, backgroundColor: c }} />
+  );
+  const rule = (c = ink, h = 1) => <View style={{ height: h, backgroundColor: c, alignSelf: 'stretch' }} />;
+  const rows = (
+    <View style={{ gap: 4, marginTop: 8 }}>
+      {line('100%', ink)}
+      {line('70%')}
+      {line('85%')}
+    </View>
+  );
+  const totalPill = (c: string, rounded = true) => (
+    <View style={{ alignSelf: 'flex-end', width: '55%', height: 7, borderRadius: rounded ? 2 : 0, backgroundColor: c, marginTop: 8 }} />
+  );
+
+  switch (design.id) {
+    case 'clean':
+      return (
+        <View style={thumbStyles.sheet}>
+          <View style={{ height: 24, backgroundColor: p }} />
+          <View style={{ padding: 7 }}>
+            {rows}
+            {totalPill(p)}
+          </View>
+        </View>
+      );
+    case 'wave':
+      return (
+        <View style={thumbStyles.sheet}>
+          <View style={{ height: 30, backgroundColor: p, overflow: 'hidden' }}>
+            <View style={{ position: 'absolute', left: -20, right: -20, bottom: -14, height: 22, backgroundColor: '#fff', borderTopLeftRadius: 60, borderTopRightRadius: 60, transform: [{ rotate: '-4deg' }] }} />
+          </View>
+          <View style={{ padding: 7 }}>
+            {rows}
+            {totalPill(p)}
+          </View>
+        </View>
+      );
+    case 'classic':
+      return (
+        <View style={[thumbStyles.sheet, { padding: 7, alignItems: 'center' }]}>
+          <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: ink }} />
+          {line(28, ink, 3)}
+          <View style={{ alignSelf: 'stretch', marginTop: 5, gap: 1.5 }}>{rule(p)}{rule(p)}</View>
+          <View style={{ alignSelf: 'stretch', marginTop: 7, borderWidth: 1, borderColor: '#94A3B8' }}>
+            <View style={{ height: 6, backgroundColor: p }} />
+            <View style={{ flexDirection: 'row' }}>
+              <View style={{ flex: 2, height: 22, borderRightWidth: 1, borderColor: '#CBD5E1' }} />
+              <View style={{ flex: 1, height: 22 }} />
+            </View>
+          </View>
+          {totalPill(p, false)}
+        </View>
+      );
+    case 'modern':
+      return (
+        <View style={[thumbStyles.sheet, { flexDirection: 'row' }]}>
+          <View style={{ width: 24, backgroundColor: p, padding: 4, gap: 4 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#fff' }} />
+            {line('100%', 'rgba(255,255,255,.7)', 2)}
+            {line('70%', 'rgba(255,255,255,.7)', 2)}
+          </View>
+          <View style={{ flex: 1, padding: 6 }}>
+            <View style={{ alignSelf: 'flex-end', width: 22, height: 5, backgroundColor: p, borderRadius: 1 }} />
+            {rows}
+            <View style={{ marginTop: 8 }}>{rule(ink, 1.5)}</View>
+          </View>
+        </View>
+      );
+    case 'simple':
+      return (
+        <View style={[thumbStyles.sheet, { padding: 7 }]}>
+          <View style={{ width: 34, height: 6, backgroundColor: ink, opacity: 0.85 }} />
+          <View style={{ marginTop: 8 }}>{rule('#D1D5DB')}</View>
+          {rows}
+          <View style={{ marginTop: 10 }}>{rule(ink, 1.5)}</View>
+        </View>
+      );
+    case 'swiss':
+      return (
+        <View style={[thumbStyles.sheet, { padding: 7 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <View style={{ width: 6, height: 6, backgroundColor: a }} />
+            <View style={{ width: 40, height: 11, backgroundColor: ink }} />
+          </View>
+          <View style={{ marginTop: 5 }}>{rule(ink, 2.5)}</View>
+          {rows}
+          <View style={{ marginTop: 10 }}>{rule(ink, 1.5)}</View>
+        </View>
+      );
+    case 'ledger':
+    default:
+      return (
+        <View style={[thumbStyles.sheet, { padding: 7, alignItems: 'center' }]}>
+          {rule(ink)}
+          <View style={{ width: 9, height: 9, backgroundColor: ink, marginTop: 5 }} />
+          {line(26, ink, 2)}
+          <View style={{ alignSelf: 'stretch', marginTop: 5, gap: 1.5 }}>{rule(ink)}{rule(ink)}</View>
+          <View style={{ alignSelf: 'stretch', marginTop: 7, borderWidth: 1, borderColor: ink }}>
+            <View style={{ height: 6, backgroundColor: '#F0FDF4', borderBottomWidth: 1, borderColor: ink }} />
+            <View style={{ flexDirection: 'row' }}>
+              <View style={{ flex: 2, height: 20, borderRightWidth: 1, borderColor: ink }} />
+              <View style={{ flex: 1, height: 20 }} />
+            </View>
+          </View>
+        </View>
+      );
+  }
+};
+
+const thumbStyles = StyleSheet.create({
+  sheet: {
+    width: 80,
+    height: 100,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+});
+
 export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
   designs,
   selectedDesignId,
@@ -62,52 +196,8 @@ export const InvoiceDesignSelector: React.FC<InvoiceDesignSelectorProps> = ({
               onPress={() => onDesignSelect(design.id)}
               activeOpacity={0.7}
             >
-              {/* Thumbnail placeholder - will be replaced with actual thumbnails */}
-              <View 
-                style={[
-                  styles.thumbnail,
-                  { backgroundColor: design.colorScheme.background }
-                ]}
-              >
-                {/* Placeholder design preview */}
-                <View style={styles.thumbnailContent}>
-                  <View 
-                    style={[
-                      styles.thumbnailHeader,
-                      { backgroundColor: design.colorScheme.primary }
-                    ]} 
-                  />
-                  <View style={styles.thumbnailBody}>
-                    <View 
-                      style={[
-                        styles.thumbnailLine,
-                        { backgroundColor: design.colorScheme.text }
-                      ]} 
-                    />
-                    <View 
-                      style={[
-                        styles.thumbnailLine,
-                        styles.thumbnailLineShort,
-                        { backgroundColor: design.colorScheme.mutedText }
-                      ]} 
-                    />
-                    <View 
-                      style={[
-                        styles.thumbnailLine,
-                        styles.thumbnailLineShort,
-                        { backgroundColor: design.colorScheme.mutedText }
-                      ]} 
-                    />
-                  </View>
-                  <View 
-                    style={[
-                      styles.thumbnailFooter,
-                      { backgroundColor: design.colorScheme.accent }
-                    ]} 
-                  />
-                </View>
-              </View>
-              
+              <DesignThumbnail design={design} />
+
               {/* Design name */}
               <Text 
                 style={[

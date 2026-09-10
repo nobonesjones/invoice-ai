@@ -63,3 +63,11 @@
 - Verifying-state copy on the Stripe sheet promises an email the backend doesn't send yet
 - `shared-invoice` still gates on dead flags and reads bank columns that don't exist (§5)
 - The trigger's currency-symbol map is a fixed list; unknown codes fall back to the code itself
+
+## Invoice designs reworked (2026-09-10)
+`supabase/functions/_shared/invoice-doc/render.ts` now has seven distinct layouts (band, wave,
+letterhead, sidebar, minimal, swiss, ledger), full-bleed headers, and spacing that keeps a
+normal invoice on one A4 page in every design. The picker thumbnails match the layouts.
+**Backend agent: redeploy `shared-invoice` and `shared-estimate`** — they bundle this file, so
+the hosted pages are on the old designs until then. Render harness for review lives outside
+the repo (headless Chromium screenshots + per-block height measurement).
