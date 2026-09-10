@@ -2,557 +2,627 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Viewer - SuperInvoice v2.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#F5F5F5">
+    <title>Invoice</title>
     <link rel="icon" type="image/png" href="https://www.getsuperinvoice.com/favicon.png">
-    
-    <!-- PDF.js for PDF viewing -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
-    
+
     <style>
+        /* Matches the app's design tokens (constants/colors.ts):
+           ground #F5F5F5, cards #fff, primary #25D366, icons #4A4A4A,
+           muted hsl(240,3.8%,46.1%), border hsl(240,5.9%,90%). */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: #f5f5f5;
-            color: #333;
-            line-height: 1.6;
+        :root {
+            --ground: #F5F5F5;
+            --card: #ffffff;
+            --ink: hsl(240, 10%, 3.9%);
+            --muted: hsl(240, 3.8%, 46.1%);
+            --icon: #4A4A4A;
+            --border: hsl(240, 5.9%, 90%);
+            --paid: #2ECC71;
+            --due: #E74C3C;
+            --draft: #F39C12;
         }
 
-        /* Header */
+        html { background: var(--ground); }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--ground);
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Header: the sender's brand, not ours */
         .header {
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 1rem 0;
             position: sticky;
             top: 0;
             z-index: 100;
+            background: rgba(255, 255, 255, 0.92);
+            -webkit-backdrop-filter: saturate(180%) blur(16px);
+            backdrop-filter: saturate(180%) blur(16px);
+            border-bottom: 1px solid var(--border);
         }
 
         .header-content {
-            max-width: 1200px;
+            max-width: 860px;
             margin: 0 auto;
-            padding: 0 2rem;
+            padding: 10px 14px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
+            min-height: 56px;
         }
 
-        .logo-section {
+        .biz {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 10px;
+            min-width: 0;
         }
 
-        .logo {
-            height: 40px;
-            width: auto;
-        }
-
-        .brand-name {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #000000;
-        }
-
-        .invoice-info {
-            text-align: right;
-        }
-
-        .invoice-number {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .invoice-status {
-            font-size: 0.9rem;
-            color: #666;
-            margin-top: 0.25rem;
-        }
-
-        /* Main Content */
-        .main-container {
-            max-width: 1200px;
-            margin: 0.5rem auto;
-            padding: 0 1rem;
-        }
-
-        /* Action Buttons Bar */
-        .action-bar {
-            background: white;
+        .biz-logo {
+            width: 34px;
+            height: 34px;
             border-radius: 8px;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            align-items: center;
-            justify-content: center;
+            object-fit: contain;
+            background: #fff;
+            border: 1px solid var(--border);
+            flex: none;
+            display: none;
         }
 
-        .action-button {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: 6px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
+        .biz-text { min-width: 0; }
+
+        .biz-name {
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.25;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .doc-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.3;
+            margin-top: 1px;
+        }
+
+        .pill {
+            display: none;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            padding: 1px 7px;
+            border-radius: 999px;
+        }
+
+        .pill.paid, .pill.accepted { display: inline-block; background: rgba(46, 204, 113, 0.14); color: #1E8E4E; }
+        .pill.overdue { display: inline-block; background: rgba(231, 76, 60, 0.12); color: #C0392B; }
+        .pill.draft { display: inline-block; background: rgba(243, 156, 18, 0.14); color: #B9770E; }
+
+        /* Quiet, icon-only actions */
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            visibility: hidden;
+            flex: none;
+        }
+
+        .icon-btn {
+            width: 38px;
+            height: 38px;
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            transition: all 0.2s ease;
-            text-decoration: none;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            color: var(--icon);
+            cursor: pointer;
         }
 
-        .action-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        .icon-btn:active { background: rgba(0, 0, 0, 0.06); }
+        @media (hover: hover) { .icon-btn:hover { background: rgba(0, 0, 0, 0.05); } }
+
+        .icon-btn svg {
+            width: 21px;
+            height: 21px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
-        .btn-primary {
-            background: #14B8A6;
-            color: white;
+        .print-btn { display: none; }
+        @media (min-width: 700px) { .print-btn { display: inline-flex; } }
+
+        /* Document: let the invoice be the page */
+        .main-container {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 10px 8px 0;
         }
 
-        .btn-secondary {
-            background: #6B7280;
-            color: white;
-        }
-
-        .btn-outline {
-            background: white;
-            color: #333;
-            border: 2px solid #E5E7EB;
-        }
-
-        /* PDF Viewer Container */
-        .pdf-container {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            overflow: hidden;
-            height: calc(100vh - 200px);
-            min-height: 600px;
+        .doc-container {
             position: relative;
+            overflow: hidden;
         }
 
-        .pdf-loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100%;
-            font-size: 1.2rem;
-            color: #666;
+        .doc-frame {
+            border: 0;
+            width: 826px; /* the document's own viewport: A4 page + gutter */
+            transform-origin: top left;
+            display: block;
         }
 
-        .pdf-error {
+        .doc-loading,
+        .doc-error {
             display: flex;
-            flex-direction: column;
-            justify-content: center;
             align-items: center;
-            height: 100%;
+            justify-content: center;
             text-align: center;
-            padding: 2rem;
+            min-height: 60vh;
+            color: var(--muted);
+            font-size: 14px;
         }
 
-        .pdf-error h2 {
-            color: #DC2626;
-            margin-bottom: 1rem;
+        .doc-error h2 {
+            font-size: 16px;
+            color: var(--ink);
+            margin-bottom: 6px;
+            font-weight: 600;
         }
 
-        /* PDF.js rendering container */
-        #pdf-renderer {
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background: #fff;
+        .doc-error p { margin-bottom: 14px; }
+
+        .retry-btn {
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--ink);
+            font-size: 14px;
+            font-weight: 600;
+            padding: 8px 18px;
+            border-radius: 10px;
+            cursor: pointer;
         }
-        .pdf-page {
+
+        .spinner {
+            border: 2.5px solid rgba(0, 0, 0, 0.08);
+            border-top-color: #25D366;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Pay bar: one clear action, pinned like a sheet */
+        .paybar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.92);
+            -webkit-backdrop-filter: saturate(180%) blur(16px);
+            backdrop-filter: saturate(180%) blur(16px);
+            border-top: 1px solid var(--border);
+            display: none;
+        }
+
+        body.has-paybar .paybar { display: block; }
+        body.has-paybar .footer { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+
+        .paybar-content {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
             display: flex;
+            gap: 10px;
+            align-items: center;
             justify-content: center;
-            background: #fff;
-            padding: 8px 0;
-        }
-        .pdf-page canvas {
-            width: 100%;
-            height: auto;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        /* Footer */
+        .pay-btn {
+            flex: 1;
+            max-width: 420px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+            border-radius: 12px;
+            padding: 13px 18px;
+            font-size: 16px;
+            font-weight: 600;
+            font-family: inherit;
+            text-decoration: none;
+            cursor: pointer;
+            background: #25D366; /* app primary */
+            color: #fff;
+        }
+
+        .pay-btn:active { opacity: 0.85; }
+        @media (hover: hover) { .pay-btn:hover { opacity: 0.9; } }
+
+        .pay-btn.secondary {
+            flex: 0 1 auto;
+            background: var(--card);
+            color: var(--ink);
+            border: 1px solid var(--border);
+            font-size: 14px;
+            padding: 12px 16px;
+        }
+
+        .paid-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: #1E8E4E;
+            background: rgba(46, 204, 113, 0.14);
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 9px 18px;
+        }
+
+        .paid-chip svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Ours, small, at the bottom */
         .footer {
-            margin-top: 4rem;
-            padding: 2rem 0;
             text-align: center;
-            color: #666;
-            font-size: 0.9rem;
+            padding: 18px 1rem calc(24px + env(safe-area-inset-bottom));
+            font-size: 12px;
+            color: var(--muted);
         }
 
         .footer a {
-            color: #14B8A6;
+            color: var(--muted);
+            font-weight: 600;
             text-decoration: none;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                gap: 1rem;
-                text-align: center;
-            }
-
-            .invoice-info {
-                text-align: center;
-            }
-
-            .action-bar {
-                position: sticky;
-                top: 56px; /* below sticky header */
-                z-index: 50;
-                flex-direction: row;
-                justify-content: space-between;
-                gap: 0.5rem;
-                padding: 0.4rem 0.5rem;
-                border-bottom: 1px solid #E5E7EB;
-            }
-
-            .action-button {
-                flex: 0 0 auto;
-                justify-content: center;
-                width: auto;
-                min-width: 0;
-                padding: 0.4rem 0.6rem;
-                font-size: 0.9rem;
-            }
-
-            .main-container {
-                padding: 0 0.5rem;
-                margin: 0.5rem auto;
-            }
-
-            .pdf-container {
-                margin: 0 -0.5rem;
-                border-radius: 0;
-                height: calc(100vh - 250px);
-                min-height: 500px;
-            }
-
-            #pdf-viewer {
-                height: 100%;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            .pdf-loading,
-            .pdf-error {
-                height: calc(100vh - 250px);
-                min-height: 500px;
-            }
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #14B8A6;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Icons */
-        .icon {
-            width: 20px;
-            height: 20px;
-            display: inline-block;
-            vertical-align: middle;
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="logo-section">
-                <img src="https://www.getsuperinvoice.com/superinvoice-logo.png" alt="SuperInvoice" class="logo" onerror="this.style.display='none'">
-                <div class="brand-name">SuperInvoice</div>
+            <div class="biz">
+                <img class="biz-logo" id="biz-logo" alt="">
+                <div class="biz-text">
+                    <div class="biz-name" id="biz-name">&nbsp;</div>
+                    <div class="doc-meta">
+                        <span id="doc-number"></span>
+                        <span class="pill" id="status-pill"></span>
+                    </div>
+                </div>
             </div>
-            <div class="invoice-info">
-                <div class="invoice-number" id="invoice-number">Loading...</div>
-                <div class="invoice-status" id="invoice-status"></div>
+            <div class="actions" id="actions">
+                <button class="icon-btn print-btn" onclick="printInvoice()" aria-label="Print" title="Print">
+                    <svg viewBox="0 0 24 24"><path d="M6 9V4h12v5M6 18H4.5A1.5 1.5 0 0 1 3 16.5v-6A1.5 1.5 0 0 1 4.5 9h15A1.5 1.5 0 0 1 21 10.5v6a1.5 1.5 0 0 1-1.5 1.5H18M6 14h12v7H6z"/></svg>
+                </button>
+                <button class="icon-btn" onclick="downloadPDF()" aria-label="Download PDF" title="Download PDF">
+                    <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.2-4.2M12 15l4.2-4.2M4.5 19.5h15"/></svg>
+                </button>
+                <button class="icon-btn" onclick="shareInvoice()" aria-label="Share" title="Share">
+                    <svg viewBox="0 0 24 24"><path d="M12 3v12m0-12L8.2 6.8M12 3l3.8 3.8M5 12.5v6A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-6"/></svg>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
     <main class="main-container">
-        <!-- Action Buttons -->
-        <div class="action-bar" id="action-bar" style="display: none;">
-            <!-- Payment buttons will be inserted here dynamically -->
-            <button class="action-button btn-secondary" onclick="downloadPDF()">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-                Download PDF
-            </button>
-            <button class="action-button btn-outline" onclick="printPDF()">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                </svg>
-                Print
-            </button>
-            <button class="action-button btn-outline" onclick="shareInvoice()">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.032 4.026a3 3 0 10-2.684-4.026m-9.032 0a3 3 0 102.684 4.026m9.032 0l-9.032-4.026"></path>
-                </svg>
-                Share
-            </button>
-        </div>
-
-        <!-- PDF Viewer -->
-        <div class="pdf-container">
-            <div class="pdf-loading" id="pdf-loading">
+        <div class="doc-container">
+            <div class="doc-loading" id="doc-loading">
                 <div>
                     <div class="spinner"></div>
-                    <p style="margin-top: 1rem;">Loading invoice...</p>
+                    Loading invoice&hellip;
                 </div>
             </div>
-            <div class="pdf-error" id="pdf-error" style="display: none;">
-                <h2>Unable to Load Invoice</h2>
-                <p>The invoice could not be loaded. Please check the link and try again.</p>
-                <button class="action-button btn-primary" onclick="location.reload()">Retry</button>
+            <div class="doc-error" id="doc-error" style="display: none;">
+                <div>
+                    <h2>Unable to load invoice</h2>
+                    <p>Please check the link and try again.</p>
+                    <button class="retry-btn" onclick="location.reload()">Retry</button>
+                </div>
             </div>
-            <div id="pdf-renderer" style="display: none;"></div>
         </div>
     </main>
 
-    <!-- Footer -->
+    <div class="paybar" id="paybar">
+        <div class="paybar-content" id="paybar-content"></div>
+    </div>
+
     <footer class="footer">
-        <p>
-            Powered by <a href="https://www.getsuperinvoice.com" target="_blank">SuperInvoice</a> | 
-            <a href="https://www.getsuperinvoice.com/privacy" target="_blank">Privacy</a> | 
-            <a href="https://www.getsuperinvoice.com/terms" target="_blank">Terms</a>
-        </p>
+        <p>Powered by <a href="https://www.getsuperinvoice.com" target="_blank">SuperInvoice</a></p>
     </footer>
 
     <script>
         // Configuration
         const SUPABASE_URL = 'https://wzpuzqzsjdizmpiobsuo.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cHV6cXpzamRpem1waW9ic3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY2MjE3OTIsImV4cCI6MjA2MjE5Nzc5Mn0._XypJP5hEZT06UfA1uuHY5-TvsKzj5JnwjGa3LMKnyI';
-        
-        // Get token from URL
+        const DOC_WIDTH = 826; // matches the document's own viewport meta
+        const LIVE_POLL_MS = 10000;
+
+        let currentToken = null;
+        let liveState = null;
+
+        // Same formatting the document uses
+        const FALLBACK_SYMBOLS = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'CA$', NZD: 'NZ$', INR: '₹', JPY: '¥' };
+        function money(amount, currency) {
+            const n = Number(amount) || 0;
+            try {
+                return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency }).format(n);
+            } catch (_) {
+                const sym = FALLBACK_SYMBOLS[currency] || (currency + ' ');
+                return sym + n.toFixed(2);
+            }
+        }
+
+        // Get token from URL: ?token=... or last path segment
         function getTokenFromURL() {
             const urlParams = new URLSearchParams(window.location.search);
             const pathParts = window.location.pathname.split('/');
             const lastPart = pathParts.pop();
-            
-            console.log('URL Debug:', {
-                fullUrl: window.location.href,
-                pathname: window.location.pathname,
-                pathParts: pathParts,
-                lastPart: lastPart,
-                searchParams: window.location.search
-            });
-            
-            const token = urlParams.get('token') || lastPart;
-            console.log('Extracted token:', token);
-            return token;
+            return urlParams.get('token') || lastPart;
         }
 
-        // Load invoice data
+        function invoiceUrl(token, params) {
+            return SUPABASE_URL + '/functions/v1/shared-invoice/' + encodeURIComponent(token) + (params || '');
+        }
+
+        // Load the hosted invoice document. The edge function renders the same
+        // document the app previews and the PDF contains; supabase.co serves it
+        // as text/plain, so we render the body ourselves in an iframe.
         async function loadInvoice() {
             const token = getTokenFromURL();
             if (!token || token === 'index.html' || token === '') {
                 showError('No invoice token provided');
                 return;
             }
+            currentToken = token;
 
             try {
-                console.log('Loading invoice with token:', token);
-                
-                // Fetch invoice share data from database to get the correct PDF path
-                await fetchInvoiceShareData(token);
-                                
+                const response = await fetch(invoiceUrl(token), { headers: { 'Accept': 'text/html' } });
+                if (!response.ok) {
+                    let message = 'Please check the link and try again.';
+                    try {
+                        const body = await response.json();
+                        if (body && body.error) message = body.error;
+                    } catch (_) { /* non-JSON error body */ }
+                    showError(message);
+                    return;
+                }
+                const html = await response.text();
+                renderDocument(html);
             } catch (error) {
                 console.error('Error loading invoice:', error);
                 showError('Failed to load invoice');
             }
         }
 
+        // Pay links inside the document should leave the frame, not navigate
+        // it, and the document's own grey ground gives way to the app's.
+        function prepareSrcdoc(html) {
+            return html
+                .replace('<head>', '<head><base target="_blank">')
+                .replace('</head>', '<style>body{background:transparent!important;padding:0 0 4px!important}</style></head>');
+        }
 
-        // Fetch invoice share data from database
-        async function fetchInvoiceShareData(token) {
+        function renderDocument(html) {
+            const container = document.querySelector('.doc-container');
+            const frame = document.createElement('iframe');
+            frame.className = 'doc-frame';
+            frame.id = 'doc-frame';
+            frame.srcdoc = prepareSrcdoc(html);
+            frame.addEventListener('load', () => {
+                const doc = frame.contentDocument;
+                if (!doc) { showError('Failed to display invoice'); return; }
+
+                hydrateHeader(doc);
+                document.getElementById('doc-loading').style.display = 'none';
+                document.getElementById('actions').style.visibility = 'visible';
+                fitFrame();
+                refreshLive();
+            });
+            container.appendChild(frame);
+        }
+
+        // The invoice is live: poll a tiny status payload, keep the pay bar and
+        // status pill current, and re-render the document when the status flips
+        // (e.g. it gets paid while the page is open).
+        async function refreshLive() {
+            if (!currentToken) return;
             try {
-                console.log('Fetching invoice share data for token:', token);
-                
-                const response = await fetch(
-                    `${SUPABASE_URL}/rest/v1/invoice_shares?share_token=eq.${token}&select=pdf_path,invoices(invoice_number)&is_active=eq.true`,
-                    {
-                        method: 'GET',
-                        headers: {
-                            'apikey': SUPABASE_ANON_KEY,
-                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'Prefer': 'return=representation'
-                        }
-                    }
-                );
+                const response = await fetch(invoiceUrl(currentToken, '?live=1'), { cache: 'no-store' });
+                if (!response.ok) return;
+                const live = await response.json();
+                const statusChanged = liveState && liveState.status !== live.status;
+                liveState = live;
+                updatePayBar(live);
+                updatePill(live.status);
+                if (statusChanged) reloadDocument();
+            } catch (_) { /* transient network error; next poll retries */ }
+        }
 
-                console.log('Response status:', response.status);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('API response error:', errorText);
-                    throw new Error(`Failed to fetch invoice data: ${response.status}`);
+        async function reloadDocument() {
+            try {
+                const response = await fetch(invoiceUrl(currentToken, '?notrack=1'), { headers: { 'Accept': 'text/html' } });
+                if (!response.ok) return;
+                const html = await response.text();
+                const frame = document.getElementById('doc-frame');
+                if (frame) frame.srcdoc = prepareSrcdoc(html); // load handler re-hydrates
+            } catch (_) { /* keep the current render */ }
+        }
+
+        function updatePill(status) {
+            const pill = document.getElementById('status-pill');
+            const s = String(status || '').toLowerCase();
+            pill.className = 'pill';
+            if (s === 'paid' || s === 'overdue' || s === 'draft') {
+                pill.classList.add(s);
+                pill.textContent = s.toUpperCase();
+            } else {
+                pill.textContent = '';
+            }
+        }
+
+        function updatePayBar(live) {
+            const bar = document.getElementById('paybar-content');
+            const paid = String(live.status || '').toLowerCase() === 'paid';
+            const payments = live.payments || {};
+            const balance = Math.max(0, Number(live.total_amount || 0) - Number(live.paid_amount || 0));
+
+            if (paid) {
+                bar.innerHTML = '<span class="paid-chip"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></svg>Paid ' +
+                    money(live.total_amount, live.currency) + '</span>';
+                document.body.classList.add('has-paybar');
+                fitFrame();
+                return;
+            }
+            if (!payments.stripe && !payments.gocardless) {
+                bar.innerHTML = '';
+                document.body.classList.remove('has-paybar');
+                return;
+            }
+            const amount = money(balance, live.currency);
+            let html;
+            if (payments.stripe) {
+                html = '<a class="pay-btn" href="' + encodeURI(payments.stripe) + '" target="_blank" rel="noopener">Pay ' + amount + '</a>';
+                if (payments.gocardless) {
+                    html += '<a class="pay-btn secondary" href="' + encodeURI(payments.gocardless) + '" target="_blank" rel="noopener">Pay by bank</a>';
                 }
-                
-                const data = await response.json();
-                console.log('Invoice share data:', data);
-                
-                if (data && data.length > 0 && data[0].pdf_path) {
-                    const pdfUrl = `${SUPABASE_URL}/storage/v1/object/public/shared-invoices/${data[0].pdf_path}`;
-                    console.log('Loading PDF from URL:', pdfUrl);
-                    
-                    loadPDF(pdfUrl);
-                    
-                    // Update invoice number if available
-                    if (data[0].invoices?.invoice_number) {
-                        document.getElementById('invoice-number').textContent = `Invoice ${data[0].invoices.invoice_number}`;
-                    }
-                    
-                    // Show action bar
-                    document.getElementById('action-bar').style.display = 'flex';
-                } else {
-                    console.error('No invoice data found or missing pdf_path:', data);
-                    showError('Invoice not found or no PDF available');
+            } else {
+                html = '<a class="pay-btn" href="' + encodeURI(payments.gocardless) + '" target="_blank" rel="noopener">Pay ' + amount + ' by bank</a>';
+            }
+            bar.innerHTML = html;
+            document.body.classList.add('has-paybar');
+        }
+
+        setInterval(() => {
+            if (document.visibilityState === 'visible') refreshLive();
+        }, LIVE_POLL_MS);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') refreshLive();
+        });
+
+        // The sender owns the header: their logo and name, read from the document
+        function hydrateHeader(doc) {
+            const name = doc.querySelector('.biz-name');
+            const number = doc.title || '';
+            document.getElementById('biz-name').textContent =
+                (name && name.textContent.trim()) || ('Invoice ' + number);
+            document.getElementById('doc-number').textContent = number;
+            if (number) document.title = number + (name ? ' · ' + name.textContent.trim() : '');
+
+            const logo = doc.querySelector('img.logo');
+            if (logo && logo.getAttribute('src')) {
+                const el = document.getElementById('biz-logo');
+                el.src = logo.getAttribute('src');
+                el.style.display = 'block';
+                el.onerror = () => { el.style.display = 'none'; };
+            }
+
+            // PAID / OVERDUE / DRAFT pill in the app's status colours
+            const badge = doc.querySelector('.badge');
+            if (badge) {
+                const pill = document.getElementById('status-pill');
+                pill.textContent = badge.textContent;
+                const status = (badge.className.match(/paid|accepted|overdue|draft/) || [''])[0];
+                if (status) pill.classList.add(status);
+            }
+        }
+
+        // Scale the fixed-width document to the container (phones), never above 1:1
+        function fitFrame() {
+            const frame = document.getElementById('doc-frame');
+            if (!frame || !frame.contentDocument) return;
+            const container = document.querySelector('.doc-container');
+            const scale = Math.min(1, container.clientWidth / DOC_WIDTH);
+            const height = frame.contentDocument.documentElement.scrollHeight ||
+                           frame.contentDocument.body.scrollHeight;
+            frame.style.height = height + 'px';
+            frame.style.transform = 'scale(' + scale + ')';
+            // Centre when narrower than the container
+            const slack = container.clientWidth - DOC_WIDTH * scale;
+            frame.style.marginLeft = Math.max(0, slack / 2) + 'px';
+            container.style.height = (height * scale) + 'px';
+        }
+
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(fitFrame, 150);
+        });
+
+        function showError(message) {
+            document.getElementById('doc-loading').style.display = 'none';
+            const error = document.getElementById('doc-error');
+            error.style.display = 'flex';
+            error.querySelector('p').textContent = message;
+        }
+
+        // Download: the app stores an A4 PDF for emailed/linked sends; use it when
+        // it exists, otherwise fall back to the document's own print-to-PDF.
+        async function downloadPDF() {
+            const token = getTokenFromURL();
+            try {
+                const response = await fetch(invoiceUrl(token, '?format=pdf'), { headers: { 'Accept': 'application/pdf' } });
+                const type = response.headers.get('content-type') || '';
+                if (response.ok && type.includes('application/pdf')) {
+                    const blob = await response.blob();
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    const number = document.getElementById('doc-number').textContent.replace(/\s+/g, '-');
+                    link.download = (number || 'invoice') + '.pdf';
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                    return;
                 }
             } catch (error) {
-                console.error('Error fetching invoice data:', error);
-                showError('Failed to load invoice data: ' + error.message);
+                console.warn('Stored PDF unavailable, falling back to print:', error);
             }
+            printInvoice();
         }
 
-        // Load and render PDF using PDF.js (no external viewer.html)
-        async function loadPDF(url) {
-            const container = document.getElementById('pdf-renderer');
-            const loading = document.getElementById('pdf-loading');
-            const error = document.getElementById('pdf-error');
-
-            try {
-                // Configure worker
-                if (window['pdfjsLib']) {
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                }
-
-                // Fetch and render
-                const task = pdfjsLib.getDocument({ url });
-                const pdf = await task.promise;
-
-                // Clear old content
-                container.innerHTML = '';
-
-                // Compute target width from container
-                const containerWidth = container.clientWidth || container.offsetWidth || document.body.clientWidth;
-
-                const dpr = Math.max(1, window.devicePixelRatio || 1);
-
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    const page = await pdf.getPage(pageNum);
-                    const viewport = page.getViewport({ scale: 1 });
-                    const scale = Math.max(0.1, (containerWidth - 16) / viewport.width); // fit width, leave small padding
-                    const scaledViewport = page.getViewport({ scale });
-
-                    const pageWrapper = document.createElement('div');
-                    pageWrapper.className = 'pdf-page';
-
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    // Render at device pixel ratio for crisp output
-                    canvas.width = Math.floor(scaledViewport.width * dpr);
-                    canvas.height = Math.floor(scaledViewport.height * dpr);
-                    canvas.style.width = Math.floor(scaledViewport.width) + 'px';
-                    canvas.style.height = Math.floor(scaledViewport.height) + 'px';
-                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                    pageWrapper.appendChild(canvas);
-                    container.appendChild(pageWrapper);
-
-                    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-                }
-
-                // Hide loading, show renderer
-                loading.style.display = 'none';
-                error.style.display = 'none';
-                container.style.display = 'block';
-
-                // Store URL for download/print
-                window.currentPDFUrl = url;
-
-                // Re-render on resize for better fit
-                let resizeTimeout;
-                window.addEventListener('resize', () => {
-                    clearTimeout(resizeTimeout);
-                    resizeTimeout = setTimeout(() => loadPDF(url), 200);
-                }, { once: true });
-
-            } catch (e) {
-                console.error('PDF render failed:', e);
-                loading.style.display = 'none';
-                error.style.display = 'flex';
-            }
-        }
-
-        // Show error message
-        function showError(message) {
-            document.getElementById('pdf-loading').style.display = 'none';
-            document.getElementById('pdf-error').style.display = 'flex';
-            document.querySelector('#pdf-error p').textContent = message;
-        }
-
-        // Action button functions
-        function downloadPDF() {
-            if (window.currentPDFUrl) {
-                const link = document.createElement('a');
-                link.href = window.currentPDFUrl;
-                link.download = 'invoice.pdf';
-                link.click();
-            }
-        }
-
-        function printPDF() {
-            if (window.currentPDFUrl) {
-                const printWindow = window.open(window.currentPDFUrl, '_blank');
-                printWindow.onload = function() {
-                    printWindow.print();
-                };
+        // The document carries its own A4 @page rule, so the print dialog
+        // produces the same pages the app's PDF export does.
+        function printInvoice() {
+            const frame = document.getElementById('doc-frame');
+            if (frame && frame.contentWindow) {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
             }
         }
 
         function shareInvoice() {
             const shareUrl = window.location.href;
+            const title = document.getElementById('doc-number').textContent || 'Invoice';
             if (navigator.share) {
-                navigator.share({
-                    title: 'Invoice',
-                    url: shareUrl
-                });
+                navigator.share({ title: title, url: shareUrl });
             } else {
-                // Fallback - copy to clipboard
                 navigator.clipboard.writeText(shareUrl).then(() => {
                     alert('Invoice link copied to clipboard!');
                 });

@@ -1,406 +1,12 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { renderInvoiceHtml } from '../_shared/invoice-doc/render.ts'
+import { buildInvoiceDocument } from './buildInvoiceDocument.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-// Simplified approach: Return HTML that can be printed as PDF by the browser
-async function generateInvoicePDF(invoiceData: any): Promise<string> {
-  // For now, return the HTML content that browsers can print as PDF
-  // This avoids the complexity of server-side PDF generation in edge functions
-  return generateSkiaMatchingHTML(invoiceData)
-}
-
-// Generate HTML that exactly matches the Skia canvas design
-function generateSkiaMatchingHTML(invoiceData: any): string {
-  const { invoice, businessSettings, paymentOptions } = invoiceData
-  const client = invoice.clients
-  
-  // Use the same design logic as the mobile app's Skia canvas
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Invoice ${invoice.invoice_number}</title>
-      <style>
-        @page {
-          size: A4;
-          margin: 0.5in;
-        }
-        
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.4;
-          color: #1f2937;
-          background: white;
-          font-size: 12px;
-        }
-        
-        .invoice-container {
-          width: 100%;
-          max-width: 794px;
-          margin: 0 auto;
-          background: white;
-          padding: 20px;
-        }
-        
-        /* Header Section - matching Skia layout exactly */
-        .invoice-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 40px;
-        }
-        
-        .business-section {
-          flex: 1;
-          max-width: 300px;
-        }
-        
-        .business-logo {
-          width: 65px;
-          height: 65px;
-          object-fit: contain;
-          border-radius: 8px;
-          margin-bottom: 12px;
-        }
-        
-        .business-logo-placeholder {
-          width: 65px;
-          height: 65px;
-          background: #FF6B35;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          font-weight: bold;
-          color: white;
-          margin-bottom: 12px;
-        }
-        
-        .business-name {
-          font-size: 13px;
-          font-weight: 600;
-          color: #1f2937;
-          margin-bottom: 6px;
-        }
-        
-        .business-address {
-          font-size: 10px;
-          color: #6b7280;
-          line-height: 1.4;
-        }
-        
-        .invoice-title-section {
-          text-align: right;
-          flex: 1;
-          max-width: 300px;
-        }
-        
-        .invoice-title {
-          font-size: 24px;
-          font-weight: 800;
-          color: #14B8A6;
-          margin-bottom: 12px;
-          letter-spacing: 1px;
-        }
-        
-        .invoice-meta {
-          font-size: 10px;
-          color: #374151;
-          line-height: 1.5;
-        }
-        
-        /* Business and Client Info Section */
-        .info-section {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 30px;
-          gap: 40px;
-        }
-        
-        .business-info, .client-info {
-          flex: 1;
-        }
-        
-        .section-label {
-          font-size: 9px;
-          font-weight: 600;
-          color: #6b7280;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 8px;
-        }
-        
-        .info-content {
-          font-size: 10px;
-          color: #1f2937;
-          line-height: 1.4;
-        }
-        
-        .client-info {
-          text-align: right;
-        }
-        
-        /* Line Items Table */
-        .line-items-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 30px;
-        }
-        
-        .line-items-table th {
-          background-color: #14B8A6;
-          color: white;
-          padding: 8px 12px;
-          font-size: 9px;
-          font-weight: bold;
-          text-transform: uppercase;
-          text-align: left;
-        }
-        
-        .line-items-table th:last-child,
-        .line-items-table td:last-child {
-          text-align: right;
-        }
-        
-        .line-items-table td {
-          padding: 8px 12px;
-          border-bottom: 1px solid #f3f4f6;
-          font-size: 10px;
-          color: #1f2937;
-          vertical-align: top;
-        }
-        
-        .item-description {
-          font-size: 9px;
-          color: #6b7280;
-          margin-top: 2px;
-        }
-        
-        /* Totals Section */
-        .totals-section {
-          display: flex;
-          justify-content: flex-end;
-          margin-bottom: 30px;
-        }
-        
-        .totals-table {
-          width: 300px;
-        }
-        
-        .total-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 4px 0;
-          font-size: 10px;
-        }
-        
-        .total-row.grand-total {
-          background-color: #14B8A6;
-          color: white;
-          padding: 8px 12px;
-          margin-top: 8px;
-          font-weight: bold;
-        }
-        
-        /* Footer Section */
-        .footer-section {
-          display: flex;
-          justify-content: space-between;
-          gap: 40px;
-        }
-        
-        .notes-section, .payment-methods-section {
-          flex: 1;
-        }
-        
-        .footer-title {
-          font-size: 9px;
-          font-weight: 600;
-          color: #1f2937;
-          text-transform: uppercase;
-          margin-bottom: 8px;
-        }
-        
-        .notes-content {
-          font-size: 10px;
-          color: #374151;
-          line-height: 1.4;
-        }
-        
-        .payment-method {
-          margin-bottom: 12px;
-        }
-        
-        .payment-method-name {
-          font-size: 10px;
-          font-weight: 600;
-          color: #1f2937;
-          margin-bottom: 4px;
-        }
-        
-        .payment-method-details {
-          font-size: 9px;
-          color: #6b7280;
-          line-height: 1.3;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="invoice-container">
-        <!-- Header Section -->
-        <div class="invoice-header">
-          <div class="business-section">
-            ${businessSettings?.business_logo_url ? 
-              `<img src="${businessSettings.business_logo_url}" class="business-logo" alt="Logo">` :
-              `<div class="business-logo-placeholder">${(businessSettings?.business_name || 'B').charAt(0)}</div>`
-            }
-            <div class="business-name">${businessSettings?.business_name || 'Your Business'}</div>
-            <div class="business-address">
-              ${businessSettings?.business_address || ''}<br>
-              ${businessSettings?.business_city || ''} ${businessSettings?.business_postal_code || ''}<br>
-              ${businessSettings?.business_country || ''}
-            </div>
-          </div>
-          
-          <div class="invoice-title-section">
-            <div class="invoice-title">INVOICE</div>
-            <div class="invoice-meta">
-              <div><strong>Invoice #:</strong> ${invoice.invoice_number}</div>
-              <div><strong>Date:</strong> ${new Date(invoice.created_at).toLocaleDateString('en-GB')}</div>
-              <div><strong>Due:</strong> ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('en-GB') : 'Upon receipt'}</div>
-              ${invoice.po_number ? `<div><strong>PO #:</strong> ${invoice.po_number}</div>` : ''}
-            </div>
-          </div>
-        </div>
-        
-        <!-- Business and Client Info -->
-        <div class="info-section">
-          <div class="business-info">
-            <div class="section-label">From</div>
-            <div class="info-content">
-              <strong>${businessSettings?.business_name || 'Your Business'}</strong><br>
-              ${businessSettings?.business_address || ''}<br>
-              ${businessSettings?.business_city || ''} ${businessSettings?.business_postal_code || ''}<br>
-              ${businessSettings?.business_country || ''}<br>
-              ${businessSettings?.business_tax_number ? `Tax ID: ${businessSettings.business_tax_number}` : ''}
-            </div>
-          </div>
-          
-          <div class="client-info">
-            <div class="section-label">Bill To</div>
-            <div class="info-content">
-              <strong>${client?.client_name || 'Client'}</strong><br>
-              ${client?.client_address || ''}<br>
-              ${client?.client_city || ''} ${client?.client_postal_code || ''}<br>
-              ${client?.client_country || ''}<br>
-              ${client?.client_tax_number ? `Tax ID: ${client.client_tax_number}` : ''}
-            </div>
-          </div>
-        </div>
-        
-        <!-- Line Items -->
-        <table class="line-items-table">
-          <thead>
-            <tr>
-              <th style="width: 10%;">QTY</th>
-              <th style="width: 50%;">DESCRIPTION</th>
-              <th style="width: 20%;">PRICE</th>
-              <th style="width: 20%;">TOTAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(invoice.invoice_line_items || []).map((item: any) => `
-              <tr>
-                <td>${item.quantity}</td>
-                <td>
-                  <div>${item.item_name}</div>
-                  ${item.item_description ? `<div class="item-description">${item.item_description}</div>` : ''}
-                </td>
-                <td style="text-align: right;">£${item.unit_price.toFixed(2)}</td>
-                <td style="text-align: right;">£${item.total_price.toFixed(2)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <!-- Totals -->
-        <div class="totals-section">
-          <div class="totals-table">
-            <div class="total-row">
-              <span>Subtotal:</span>
-              <span>£${(invoice.subtotal_amount || 0).toFixed(2)}</span>
-            </div>
-            ${invoice.discount_amount > 0 ? `
-              <div class="total-row">
-                <span>Discount:</span>
-                <span>-£${invoice.discount_amount.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            ${invoice.tax_percentage > 0 ? `
-              <div class="total-row">
-                <span>VAT (${invoice.tax_percentage}%):</span>
-                <span>£${(((invoice.subtotal_amount || 0) - (invoice.discount_amount || 0)) * (invoice.tax_percentage / 100)).toFixed(2)}</span>
-              </div>
-            ` : ''}
-            <div class="total-row grand-total">
-              <span>Total:</span>
-              <span>£${(invoice.total_amount || 0).toFixed(2)}</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Footer -->
-        <div class="footer-section">
-          <div class="notes-section">
-            ${invoice.notes ? `
-              <div class="footer-title">Terms, Instructions & Notes</div>
-              <div class="notes-content">${invoice.notes.replace(/\n/g, '<br>')}</div>
-            ` : ''}
-          </div>
-          
-          <div class="payment-methods-section">
-            <div class="footer-title">Payment Methods</div>
-            ${paymentOptions?.stripe_enabled ? `
-              <div class="payment-method">
-                <div class="payment-method-name">Card Payments</div>
-                <div class="payment-method-details">Visa, Mastercard, American Express</div>
-              </div>
-            ` : ''}
-            ${paymentOptions?.paypal_enabled ? `
-              <div class="payment-method">
-                <div class="payment-method-name">PayPal</div>
-                <div class="payment-method-details">Pay securely with PayPal</div>
-              </div>
-            ` : ''}
-            ${paymentOptions?.bank_transfer_enabled ? `
-              <div class="payment-method">
-                <div class="payment-method-name">Bank Transfer</div>
-                <div class="payment-method-details">
-                  ${paymentOptions.bank_name || ''}<br>
-                  Account: ${paymentOptions.account_number || ''}<br>
-                  Sort Code: ${paymentOptions.sort_code || ''}
-                </div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
-}
 
 interface SharedInvoiceRequest {
   shareToken: string
@@ -411,10 +17,6 @@ interface SharedInvoiceRequest {
   country?: string
   city?: string
 }
-
-// HTML generation temporarily removed to fix boot errors
-
-// HTML rendering removed temporarily to fix boot errors
 
 // Simple IP geolocation function
 async function getLocationFromIP(ip: string) {
@@ -460,6 +62,7 @@ serve(async (req) => {
           invoice_id,
           expires_at,
           is_active,
+          pdf_path,
           invoices!inner (
             *,
             clients (*)
@@ -476,31 +79,6 @@ serve(async (req) => {
         )
       }
 
-      // Get business settings and payment options separately
-      const { data: businessSettings } = await supabase
-        .from('business_settings')
-        .select('*')
-        .eq('user_id', share.invoices.user_id)
-        .single()
-
-      const { data: paymentOptions } = await supabase
-        .from('payment_options')
-        .select('*')
-        .eq('user_id', share.invoices.user_id)
-        .single()
-
-      const { data: lineItems } = await supabase
-        .from('invoice_line_items')
-        .select('*')
-        .eq('invoice_id', share.invoice_id)
-
-      if (shareError || !share) {
-        return new Response(
-          JSON.stringify({ error: 'Share link not found or expired' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
       // Check if expired
       if (share.expires_at && new Date(share.expires_at) < new Date()) {
         return new Response(
@@ -509,47 +87,92 @@ serve(async (req) => {
         )
       }
 
-      // Get client information for tracking
-      const userAgent = req.headers.get('User-Agent')
-      const ipAddress = req.headers.get('CF-Connecting-IP') || 
-                       req.headers.get('X-Forwarded-For') || 
-                       req.headers.get('X-Real-IP') ||
-                       'unknown'
-      const referrer = req.headers.get('Referer')
+      // supabase-js types a joined to-one relation as an array; at runtime it is
+      // an object. Normalise once so the rest of the handler is typed.
+      const invoiceRow: Record<string, any> = Array.isArray(share.invoices) ? share.invoices[0] : share.invoices
 
-      // Get location from IP
-      const { country, city } = await getLocationFromIP(ipAddress)
+      // Live status for the hosted page: a tiny payload the viewer polls to keep
+      // the pay button and PAID state current. No tracking — a poll is not a view.
+      if (url.searchParams.get('live') === '1') {
+        const { data: liveBiz } = await supabase
+          .from('business_settings')
+          .select('currency_code')
+          .eq('user_id', invoiceRow.user_id)
+          .single()
+        const stripeLink = invoiceRow.stripe_active && invoiceRow.stripe_payment_link_url
+          ? invoiceRow.stripe_payment_link_url : null
+        const gocardlessLink = invoiceRow.gocardless_active && invoiceRow.id
+          ? `https://getsuperinvoice.com/pay/${invoiceRow.id}` : null
+        return new Response(
+          JSON.stringify({
+            status: invoiceRow.status,
+            total_amount: invoiceRow.total_amount,
+            paid_amount: invoiceRow.paid_amount,
+            payment_date: invoiceRow.payment_date,
+            currency: liveBiz?.currency_code || invoiceRow.currency || 'USD',
+            payments: { stripe: stripeLink, gocardless: gocardlessLink }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+        )
+      }
 
-      // Insert analytics event for view
-      await supabase
-        .from('invoice_share_analytics')
-        .insert({
-          share_id: share.id,
-          event_type: 'view',
-          ip_address: ipAddress,
-          user_agent: userAgent,
-          referrer: referrer,
-          country: country,
-          city: city,
-          metadata: {
-            timestamp: new Date().toISOString(),
-            method: 'GET'
-          }
-        })
-
-      // Also log to invoice activities (get user_id from invoice)
-      const { data: invoice } = await supabase
-        .from('invoices')
-        .select('user_id')
-        .eq('id', share.invoice_id)
+      // Get business settings and payment options separately
+      const { data: businessSettings } = await supabase
+        .from('business_settings')
+        .select('*')
+        .eq('user_id', invoiceRow.user_id)
         .single()
 
-      if (invoice) {
+      const { data: paymentOptions } = await supabase
+        .from('payment_options')
+        .select('*')
+        .eq('user_id', invoiceRow.user_id)
+        .single()
+
+      const { data: lineItems } = await supabase
+        .from('invoice_line_items')
+        .select('*')
+        .eq('invoice_id', share.invoice_id)
+
+      // Get client information for tracking
+      const userAgent = req.headers.get('User-Agent') || ''
+
+      // The viewer refetches the document when the live status flips; that is
+      // the same person on the same open page, not a new view.
+      const noTrack = url.searchParams.get('notrack') === '1'
+      if (!noTrack) {
+        const ipAddress = req.headers.get('CF-Connecting-IP') ||
+                         req.headers.get('X-Forwarded-For') ||
+                         req.headers.get('X-Real-IP') ||
+                         'unknown'
+        const referrer = req.headers.get('Referer')
+
+        // Get location from IP
+        const { country, city } = await getLocationFromIP(ipAddress)
+
+        // Insert analytics event for view
+        await supabase
+          .from('invoice_share_analytics')
+          .insert({
+            share_id: share.id,
+            event_type: 'view',
+            ip_address: ipAddress,
+            user_agent: userAgent,
+            referrer: referrer,
+            country: country,
+            city: city,
+            metadata: {
+              timestamp: new Date().toISOString(),
+              method: 'GET'
+            }
+          })
+
+        // Also log to invoice activities
         await supabase
           .from('invoice_activities')
           .insert({
             invoice_id: share.invoice_id,
-            user_id: invoice.user_id,
+            user_id: invoiceRow.user_id,
             activity_type: 'opened',
             activity_description: `Invoice opened via shared link from ${country || 'Unknown location'}`,
             activity_data: {
@@ -572,61 +195,73 @@ serve(async (req) => {
           expires_at: share.expires_at
         },
         invoice: {
-          ...share.invoices,
+          ...invoiceRow,
           invoice_line_items: lineItems || []
         },
         businessSettings: businessSettings,
         paymentOptions: paymentOptions
       };
 
-      // Check if request is from browser (serve PDF directly)
-      const userAgent = req.headers.get('User-Agent') || ''
       const acceptHeader = req.headers.get('Accept') || ''
       const formatParam = url.searchParams.get('format')
-      
-      // If request is from browser or wants PDF, serve the actual PDF
-      const isBrowserRequest = userAgent.includes('Mozilla') || 
-                               acceptHeader.includes('text/html') || 
-                               acceptHeader.includes('application/pdf') ||
-                               formatParam === 'pdf'
+      const isBrowserRequest = userAgent.includes('Mozilla') || acceptHeader.includes('text/html')
+      const wantsPdf = formatParam === 'pdf' || acceptHeader.includes('application/pdf')
 
-      if (isBrowserRequest && share.pdf_path) {
+      // The hosted page: the same document the app previews and the PDF contains,
+      // rendered by the shared template in web mode (pay buttons, A4 @page rule).
+      const renderWebPage = () => {
+        const doc = buildInvoiceDocument({
+          type: 'invoice',
+          row: { ...invoiceRow, invoice_line_items: lineItems || [] },
+          client: invoiceRow.clients ?? null,
+          lineItems: lineItems || [],
+          business: { ...(businessSettings ?? {}), ...(paymentOptions ?? {}) },
+          paymentOptions: paymentOptions ?? null,
+        })
+        // A paid invoice is the receipt the thank-you email links to: the template
+        // shows the PAID badge from the status; the pay buttons go here.
+        if ((doc.document.status || '').toLowerCase() === 'paid') {
+          doc.payments = { stripeLinkUrl: null, gocardlessPayUrl: null, gocardless: false, paypalEmail: null, bankDetailLines: [] }
+        }
+        // No caching: the page must flip to PAID the moment the invoice does.
+        return new Response(renderInvoiceHtml(doc, { mode: 'web' }), {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache'
+          }
+        })
+      }
+
+      // Download PDF: the app stores the printed A4 document on every send.
+      if (wantsPdf && share.pdf_path) {
         try {
-          // Get the PDF from storage and serve it directly
           const { data: pdfData, error: pdfError } = await supabase.storage
             .from('shared-invoices')
             .download(share.pdf_path)
 
-          if (pdfError || !pdfData) {
-            console.error('PDF download failed:', pdfError)
-            // Fallback to HTML if PDF not available
-            const htmlContent = await generateInvoicePDF(invoiceData)
-            
-            return new Response(htmlContent, {
+          if (!pdfError && pdfData) {
+            return new Response(pdfData, {
               status: 200,
               headers: {
                 ...corsHeaders,
-                'Content-Type': 'text/html',
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `inline; filename="invoice-${invoiceRow.invoice_number}.pdf"`,
                 'Cache-Control': 'public, max-age=3600'
               }
             })
           }
-
-          // Serve the actual PDF
-          return new Response(pdfData, {
-            status: 200,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/pdf',
-              'Content-Disposition': `inline; filename="invoice-${share.invoices.invoice_number}.pdf"`,
-              'Cache-Control': 'public, max-age=3600'
-            }
-          })
-
+          console.error('PDF download failed:', pdfError)
         } catch (error) {
           console.error('PDF serving failed:', error)
-          // Fallback to HTML
         }
+        // No stored PDF: the web page prints to A4 via its own @page rule.
+        return renderWebPage()
+      }
+
+      if (isBrowserRequest) {
+        return renderWebPage()
       }
 
       // Return JSON for API requests
@@ -635,13 +270,13 @@ serve(async (req) => {
           success: true,
           data: invoiceData
         }),
-        { 
-          status: 200, 
-          headers: { 
-            ...corsHeaders, 
+        {
+          status: 200,
+          headers: {
+            ...corsHeaders,
             'Content-Type': 'application/json',
             'Cache-Control': 'public, max-age=300'
-          } 
+          }
         }
       )
     }
@@ -682,9 +317,9 @@ serve(async (req) => {
 
       // Get client IP and user agent
       const userAgent = body.userAgent || req.headers.get('User-Agent')
-      const ipAddress = body.ipAddress || 
-                       req.headers.get('CF-Connecting-IP') || 
-                       req.headers.get('X-Forwarded-For') || 
+      const ipAddress = body.ipAddress ||
+                       req.headers.get('CF-Connecting-IP') ||
+                       req.headers.get('X-Forwarded-For') ||
                        req.headers.get('X-Real-IP') ||
                        'unknown'
       const referrer = body.referrer || req.headers.get('Referer')
@@ -751,9 +386,9 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, message: 'Event tracked successfully' }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
     }
@@ -770,4 +405,4 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
-}) 
+})
