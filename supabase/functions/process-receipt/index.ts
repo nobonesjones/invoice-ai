@@ -63,11 +63,20 @@ serve(async (req) => {
 5. Category Suggestion (MUST choose one from these categories: ${categoryList})
 6. Spend Description (general description of what was purchased - e.g., "food", "household items", "building materials", "car parts", "clothing", "electronics", etc.)
 
-IMPORTANT RULES:
+FIRST: decide whether the image actually shows a receipt (or an invoice/till slip/order
+confirmation with a merchant and an amount). If it does not — or it is too blurry, dark or
+cropped to read a merchant name and total from it — return ONLY:
+{
+  "not_receipt": true,
+  "reason": "short description of what the image shows or why it is unreadable"
+}
+Never invent a merchant, amount or date that is not visible in the image.
+
+IMPORTANT RULES (when it IS a readable receipt):
 - You MUST always provide a category_suggestion from the list above
 - Match the category name EXACTLY as it appears in the list
 - The spend_description should be a simple, general description of the type of goods purchased
-- If the receipt is unclear, make your best estimate rather than leaving fields empty
+- If a minor field (date, tax) is unclear, make your best estimate; the merchant and total must be read from the image
 
 Return ONLY a valid JSON object with these exact keys:
 {
@@ -99,6 +108,7 @@ Do not include any markdown formatting or additional text.`
                 },
             ],
             max_tokens: 500,
+            temperature: 0,
         })
 
         const content = response.choices[0]?.message?.content
@@ -116,6 +126,20 @@ Do not include any markdown formatting or additional text.`
         } catch (e) {
             console.error('Failed to parse OpenAI response:', cleanContent)
             throw new Error('Invalid JSON response from AI')
+        }
+
+        // The model's own verdict that the image is not a readable receipt.
+        if (parsedData.not_receipt) {
+            const notAReceipt: ReceiptOCRResult = {
+                success: false,
+                error: parsedData.reason
+                    ? `Couldn't read a receipt in this photo — it looks like: ${parsedData.reason}. Try a clearer photo, or add the expense manually.`
+                    : `Couldn't read a receipt in this photo. Try a clearer photo, or add the expense manually.`,
+            }
+            return new Response(
+                JSON.stringify(notAReceipt),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            )
         }
 
         // Validate what came back. A total of 0 is a real value (and what the model
