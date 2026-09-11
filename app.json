@@ -77,7 +77,10 @@
           "backgroundColor": "#000000"
         }
       },
-      "bundleIdentifier": "com.indianabones.ExpoSupabaseStarter"
+      "bundleIdentifier": "com.indianabones.ExpoSupabaseStarter",
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
       "adaptiveIcon": {
