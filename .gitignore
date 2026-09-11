@@ -90,3 +90,6 @@ tmp/
 
 # Ruby
 .direnv
+# EAS local credentials (signing certificate + profiles)
+credentials.json
+credentials/
