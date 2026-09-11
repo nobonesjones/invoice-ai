@@ -130,10 +130,11 @@ Do not include any markdown formatting or additional text.`
 
         // The model's own verdict that the image is not a readable receipt.
         if (parsedData.not_receipt) {
+            const reason = typeof parsedData.reason === 'string' ? parsedData.reason.trim().replace(/\.+$/, '') : ''
             const notAReceipt: ReceiptOCRResult = {
                 success: false,
-                error: parsedData.reason
-                    ? `Couldn't read a receipt in this photo — it looks like: ${parsedData.reason}. Try a clearer photo, or add the expense manually.`
+                error: reason
+                    ? `Couldn't read a receipt in this photo — it looks like: ${reason}. Try a clearer photo, or add the expense manually.`
                     : `Couldn't read a receipt in this photo. Try a clearer photo, or add the expense manually.`,
             }
             return new Response(
