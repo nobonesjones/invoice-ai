@@ -66,6 +66,20 @@ target 'SuperInvoice' do
       end
     end
 
+    # Xcode 26's Swift calls SuperwallExpo's trailing-closure call to
+    # getPresentationResult ambiguous: SuperwallKit has an async overload and a
+    # completion-handler overload with the same labels. Naming the completion
+    # parameter leaves only one candidate. Same behaviour, compiles everywhere.
+    sw_module = File.expand_path('../node_modules/expo-superwall/ios/SuperwallExpoModule.swift', __dir__)
+    if File.exist?(sw_module)
+      src = File.read(sw_module)
+      patched = src.gsub(
+        "Superwall.shared.getPresentationResult(forPlacement: placement, params: params) { result in\n        promise.resolve(result.toJson())\n      }",
+        "Superwall.shared.getPresentationResult(forPlacement: placement, params: params, completion: { result in\n        promise.resolve(result.toJson())\n      })"
+      )
+      File.write(sw_module, patched) if patched != src
+    end
+
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.
     installer.target_installation_results.pod_target_installation_results
