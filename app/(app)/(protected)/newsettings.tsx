@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
   Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell, Receipt,
   Crown,
-  FlaskConical,
+  MessageCircle,
 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text'; 
@@ -300,16 +300,6 @@ export default function NewSettingsScreen() {
           },
           searchTerms: ['expenses', 'receipts', 'costs', 'spending', 'track']
         },
-        {
-          id: 'invoice-doc-test',
-          icon: <FlaskConical color={theme.foreground} size={24} />,
-          label: 'Invoice preview (test)',
-          onPress: () => {
-            setIsTabBarVisible(false);
-            router.push('/invoice-doc-test');
-          },
-          searchTerms: ['test', 'preview', 'invoice', 'design', 'pdf', 'new']
-        },
         // {
         //   id: 'payment-reminders',
         //   icon: <Bell color={theme.foreground} size={24} />,
@@ -351,6 +341,16 @@ export default function NewSettingsScreen() {
     {
       section: 'Help',
       items: [
+        {
+          id: 'chat',
+          icon: <MessageCircle color={theme.foreground} size={24} />,
+          label: 'Chat with Harry',
+          onPress: () => {
+            setIsTabBarVisible(false);
+            router.push('/support-chat');
+          },
+          searchTerms: ['chat', 'message', 'harry', 'founder', 'support', 'help', 'question', 'talk']
+        },
         {
           id: 'help',
           icon: <HelpCircle color={theme.foreground} size={24} />,

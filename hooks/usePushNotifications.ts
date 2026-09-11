@@ -27,7 +27,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-type PushData = { type?: string; invoiceId?: string };
+type PushData = { type?: string; invoiceId?: string; threadId?: string };
 
 /**
  * Registers this device for push and routes a tapped notification to the
@@ -110,6 +110,8 @@ export function usePushNotifications() {
     const open = (data: PushData | undefined) => {
       if (data?.type === "invoice_paid" && data.invoiceId) {
         router.push(`/invoices/invoice-viewer?id=${data.invoiceId}` as any);
+      } else if (data?.type === "support_reply") {
+        router.push("/support-chat" as any);
       }
     };
 
