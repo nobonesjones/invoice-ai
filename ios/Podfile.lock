@@ -2370,12 +2370,6 @@ PODS:
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
   - SocketRocket (0.7.1)
-  - Superscript (0.2.8)
-  - SuperwallExpo (0.2.6):
-    - ExpoModulesCore
-    - SuperwallKit (= 4.5.2)
-  - SuperwallKit (4.5.2):
-    - Superscript (= 0.2.8)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2506,7 +2500,6 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSound (from `../node_modules/react-native-sound`)
   - RNSVG (from `../node_modules/react-native-svg`)
-  - SuperwallExpo (from `../node_modules/expo-superwall/ios`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -2523,8 +2516,6 @@ SPEC REPOS:
     - SDWebImageSVGCoder
     - SDWebImageWebPCoder
     - SocketRocket
-    - Superscript
-    - SuperwallKit
 
 EXTERNAL SOURCES:
   boost:
@@ -2778,8 +2769,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-sound"
   RNSVG:
     :path: "../node_modules/react-native-svg"
-  SuperwallExpo:
-    :path: "../node_modules/expo-superwall/ios"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -2921,9 +2910,6 @@ SPEC CHECKSUMS:
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
-  Superscript: 82dbb40f502823160e75503ebc1b6bac756a503d
-  SuperwallExpo: 886a405061d022eec73f97156d5a98781bce242e
-  SuperwallKit: 520fd9dff39358c9708d88cc69c1f4fbd32b3008
   Yoga: adb397651e1c00672c12e9495babca70777e411e
 
 PODFILE CHECKSUM: 7d26af927deb2d22e4440d9d7f6c86a2c98f2fe7
