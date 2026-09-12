@@ -2,11 +2,11 @@
 
 ## CRITICAL: User ID Column Names
 
-**The app uses inconsistent column names for user identifiers across tables. Always use the correct column name for each table:**
+**Column names for user identifiers differ across tables. Verified 2026-09-12: `auth.users` uses `id`, not `uid`.**
 
 | Table | User ID Column |
 |-------|----------------|
-| `auth.users` | `uid` |
+| `auth.users` | `id` |
 | `profiles` | `id` |
 | All other tables | `user_id` |
 
@@ -14,7 +14,7 @@
 
 1. **Find by email in auth.users**:
    ```sql
-   SELECT uid FROM auth.users WHERE email = 'user@example.com';
+   SELECT id FROM auth.users WHERE email = 'user@example.com';
    ```
 
 2. **Use that UID for all other queries**:
@@ -29,11 +29,11 @@
 ```sql
 -- Auth to Profile
 SELECT * FROM auth.users u
-JOIN profiles p ON u.uid = p.id
+JOIN profiles p ON u.id = p.id
 
 -- Auth to Invoices  
 SELECT * FROM auth.users u
-JOIN invoices i ON u.uid = i.user_id
+JOIN invoices i ON u.id = i.user_id
 
 -- Profile to Invoices
 SELECT * FROM profiles p
@@ -44,17 +44,17 @@ JOIN invoices i ON p.id = i.user_id
 
 ```sql
 SELECT 
-  u.uid,
+  u.id,
   u.email,
   p.subscription_tier,
   COUNT(i.id) as invoices,
   COUNT(e.id) as estimates
 FROM auth.users u
-LEFT JOIN profiles p ON u.uid = p.id  
-LEFT JOIN invoices i ON u.uid = i.user_id
-LEFT JOIN estimates e ON u.uid = e.user_id
+LEFT JOIN profiles p ON u.id = p.id  
+LEFT JOIN invoices i ON u.id = i.user_id
+LEFT JOIN estimates e ON u.id = e.user_id
 WHERE u.email = 'target@email.com'
-GROUP BY u.uid, u.email, p.subscription_tier;
+GROUP BY u.id, u.email, p.subscription_tier;
 ```
 
 **Remember**: The app works fine - only AI searches fail when using wrong column names!
