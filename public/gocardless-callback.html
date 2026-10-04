@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connecting GoCardless...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 500px;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 2rem;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 2px solid rgba(239, 68, 68, 0.5);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .button {
+            display: inline-block;
+            margin-top: 1.5rem;
+            padding: 12px 24px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h1 id="status">Connecting your GoCardless account...</h1>
+        <p id="message">Please wait while we redirect you back to the app.</p>
+        <div id="error" class="error" style="display: none;"></div>
+        <a id="manualLink" class="button" style="display: none;">Open SuperInvoice App</a>
+    </div>
+
+    <script>
+        (function() {
+            // Get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const state = urlParams.get('state');
+            const error = urlParams.get('error');
+            const errorDescription = urlParams.get('error_description');
+
+            // Update UI elements
+            const statusEl = document.getElementById('status');
+            const messageEl = document.getElementById('message');
+            const errorEl = document.getElementById('error');
+            const manualLinkEl = document.getElementById('manualLink');
+
+            // Check for errors from GoCardless
+            if (error) {
+                statusEl.textContent = 'Connection Failed';
+                messageEl.textContent = errorDescription || 'Failed to connect GoCardless account.';
+                errorEl.style.display = 'block';
+                errorEl.textContent = `Error: ${error}`;
+
+                // Redirect to app with error
+                const deepLink = `superinvoice://gocardless-callback?error=${encodeURIComponent(error)}`;
+                setTimeout(() => {
+                    window.location.href = deepLink;
+                }, 2000);
+                return;
+            }
+
+            // Check for authorization code
+            if (!code) {
+                statusEl.textContent = 'Invalid Request';
+                messageEl.textContent = 'No authorization code received from GoCardless.';
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'Missing authorization code. Please try connecting again.';
+                return;
+            }
+
+            // Build deep link with parameters
+            const params = new URLSearchParams();
+            params.append('code', code);
+            if (state) params.append('state', state);
+
+            const deepLink = `superinvoice://gocardless-callback?${params.toString()}`;
+
+            console.log('Redirecting to app:', deepLink);
+
+            // Try to open the app
+            let redirected = false;
+
+            // Attempt 1: Direct redirect
+            window.location.href = deepLink;
+
+            // Attempt 2: Fallback after 1.5 seconds
+            setTimeout(() => {
+                if (!redirected) {
+                    // Show manual link
+                    statusEl.textContent = 'Almost there!';
+                    messageEl.textContent = 'Click the button below if the app doesn\'t open automatically.';
+                    manualLinkEl.href = deepLink;
+                    manualLinkEl.style.display = 'inline-block';
+                }
+            }, 1500);
+
+            // Attempt 3: Alternative method for iOS
+            if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = deepLink;
+                document.body.appendChild(iframe);
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                }, 1000);
+            }
+
+            // Detect if app opened successfully
+            window.addEventListener('blur', () => {
+                redirected = true;
+            });
+
+            // Fallback: If user is on web and app doesn't open, handle in web
+            setTimeout(() => {
+                if (!redirected && !manualLinkEl.style.display) {
+                    // Could redirect to web app OAuth handler here
+                    // For now, just show instructions
+                    statusEl.textContent = 'App Not Found';
+                    messageEl.innerHTML = 'Please open this link in the <strong>SuperInvoice mobile app</strong> or install the app first.';
+                }
+            }, 3000);
+        })();
+    </script>
+</body>
+</html>

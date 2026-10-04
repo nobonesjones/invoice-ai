@@ -16,6 +16,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 const TESTIMONIALS = [
   "Game-changer for my business! 📈",
@@ -28,7 +29,9 @@ const TESTIMONIALS = [
 export default function OnboardingScreen6() {
   const router = useRouter();
   const { theme } = useTheme();
+  const analytics = useAnalytics();
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0);
+  const [isAdvancing, setIsAdvancing] = useState(false);
   
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
@@ -40,6 +43,7 @@ export default function OnboardingScreen6() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding 8 - Try for Free', { step: 8 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
@@ -57,6 +61,9 @@ export default function OnboardingScreen6() {
   }, []);
 
   const handleContinue = async () => {
+    if (isAdvancing) return;
+
+    setIsAdvancing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push("/(auth)/onboarding-7");
   };
@@ -83,9 +90,9 @@ export default function OnboardingScreen6() {
             <View style={styles.contentContainer}>
           {/* Header */}
           <View style={styles.headerContent}>
-            <Text style={[styles.headline, { color: '#FFFFFF' }]}>Try For Free</Text>
+            <Text style={[styles.headline, { color: '#FFFFFF' }]}>SuperInvoice is Free</Text>
             <Text style={[styles.subHeadline, { color: '#FFFFFF' }]}>
-              SupaInvoice was made for people like you.
+              Make unlimited invoices, estimates or quotes for free.
             </Text>
           </View>
 
@@ -149,7 +156,7 @@ export default function OnboardingScreen6() {
           {/* Main Message */}
           <View style={styles.mainMessageSection}>
             <Text style={[styles.mainMessage, { color: '#FFFFFF' }]}>
-              Look professional{'\n'}keep customers happy.
+              Upgrade for AI usage and much more to help your business grow
             </Text>
           </View>
 
@@ -160,7 +167,12 @@ export default function OnboardingScreen6() {
           <View style={styles.buttonContainer}>
             <Button
               onPress={handleContinue}
-              style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+              disabled={isAdvancing}
+              style={[
+                styles.primaryButton,
+                { backgroundColor: theme.primary },
+                isAdvancing && { opacity: 0.6 }
+              ]}
             >
               <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
             </Button>

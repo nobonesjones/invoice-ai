@@ -4,6 +4,7 @@
  */
 
 import { Mixpanel } from 'mixpanel-react-native';
+import { Platform } from 'react-native';
 
 class AnalyticsService {
   private mixpanel: Mixpanel | null = null;
@@ -19,6 +20,12 @@ class AnalyticsService {
       return;
     }
 
+    // Allow disabling analytics during debugging to reduce noise
+    if (String(process.env.EXPO_PUBLIC_DISABLE_ANALYTICS).toLowerCase() === 'true') {
+      console.warn('[Analytics] ⚠️ Disabled by EXPO_PUBLIC_DISABLE_ANALYTICS');
+      return;
+    }
+
     // Check if Mixpanel token is available
     if (!process.env.EXPO_PUBLIC_MIXPANEL_TOKEN) {
       console.warn('[Analytics] ⚠️ EXPO_PUBLIC_MIXPANEL_TOKEN not set. Analytics disabled.');
@@ -29,25 +36,18 @@ class AnalyticsService {
       // Initialize Mixpanel with proper serverURL configuration
       const trackAutomaticEvents = false; // We'll track manually for more control
       const useNative = true; // Native mode for React Native
-      const serverURL = 'https://api.mixpanel.com'; // US data residency (change if EU/India)
-      
-      this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents, useNative, serverURL);
-      await this.mixpanel.init();
+      const serverURL = 'https://api-eu.mixpanel.com'; // EU data residency per your project
+
+      // Note: serverURL arg is not respected in the native constructor signature.
+      // Pass it via init() or call setServerURL() after init.
+      this.mixpanel = new Mixpanel(this.PROJECT_TOKEN, trackAutomaticEvents, useNative);
+      await this.mixpanel.init(undefined, undefined, serverURL);
       
       // Disable debug logging for production
       this.mixpanel.setLoggingEnabled(false);
       this.isInitialized = true;
       
-      this.mixpanel.track('Debug Test Event', {
-        timestamp: new Date().toISOString(),
-        test_event: true,
-        sdk_version: 'mixpanel-react-native@3.1.2',
-        platform: 'ios',
-        environment: 'development'
-      });
-      
-      // Force flush the test event immediately
-      this.mixpanel.flush();
+      // Debug test event removed to avoid noise in production/preview
 
       // Process any queued events
       this.processEventQueue();

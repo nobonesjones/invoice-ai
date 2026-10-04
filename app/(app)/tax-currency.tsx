@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, TextInput, Switch, Alert, ActivityIndicator, TouchableOpacity, Platform, SafeAreaView } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSupabase } from '@/context/supabase-provider';
 import { useTheme } from '@/context/theme-provider';
@@ -30,22 +31,99 @@ const REGIONS_DATA = [
 ];
 
 const CURRENCIES_DATA = [
+  // Major World Currencies
   { id: 'usd', name: 'USD - United States Dollar', symbol: '$' },
   { id: 'eur', name: 'EUR - Euro', symbol: '€' },
   { id: 'gbp', name: 'GBP - British Pound', symbol: '£' },
+  { id: 'jpy', name: 'JPY - Japanese Yen', symbol: '¥' },
+  { id: 'cny', name: 'CNY - Chinese Yuan', symbol: '¥' },
+
+  // North America
   { id: 'cad', name: 'CAD - Canadian Dollar', symbol: 'CA$' },
+  { id: 'mxn', name: 'MXN - Mexican Peso', symbol: 'MX$' },
+
+  // Oceania
   { id: 'aud', name: 'AUD - Australian Dollar', symbol: 'A$' },
   { id: 'nzd', name: 'NZD - New Zealand Dollar', symbol: 'NZ$' },
+
+  // Western Europe
   { id: 'chf', name: 'CHF - Swiss Franc', symbol: 'CHF' },
+
+  // Scandinavia
   { id: 'sek', name: 'SEK - Swedish Krona', symbol: 'kr' },
   { id: 'dkk', name: 'DKK - Danish Krone', symbol: 'kr' },
   { id: 'nok', name: 'NOK - Norwegian Krone', symbol: 'kr' },
+  { id: 'isk', name: 'ISK - Icelandic Króna', symbol: 'kr' },
+
+  // Eastern Europe
   { id: 'bgn', name: 'BGN - Bulgarian Lev', symbol: 'лв' },
   { id: 'czk', name: 'CZK - Czech Koruna', symbol: 'Kč' },
   { id: 'huf', name: 'HUF - Hungarian Forint', symbol: 'Ft' },
   { id: 'pln', name: 'PLN - Polish Złoty', symbol: 'zł' },
   { id: 'ron', name: 'RON - Romanian Leu', symbol: 'lei' },
+  { id: 'rub', name: 'RUB - Russian Ruble', symbol: '₽' },
+  { id: 'uah', name: 'UAH - Ukrainian Hryvnia', symbol: '₴' },
+  { id: 'rsd', name: 'RSD - Serbian Dinar', symbol: 'дин.' },
+  { id: 'hrk', name: 'HRK - Croatian Kuna', symbol: 'kn' },
+
+  // Middle East
   { id: 'aed', name: 'AED - UAE Dirham', symbol: 'د.إ' },
+  { id: 'sar', name: 'SAR - Saudi Riyal', symbol: '﷼' },
+  { id: 'qar', name: 'QAR - Qatari Riyal', symbol: '﷼' },
+  { id: 'kwd', name: 'KWD - Kuwaiti Dinar', symbol: 'د.ك' },
+  { id: 'bhd', name: 'BHD - Bahraini Dinar', symbol: '.د.ب' },
+  { id: 'omr', name: 'OMR - Omani Rial', symbol: '﷼' },
+  { id: 'jod', name: 'JOD - Jordanian Dinar', symbol: 'د.ا' },
+  { id: 'ils', name: 'ILS - Israeli Shekel', symbol: '₪' },
+  { id: 'try', name: 'TRY - Turkish Lira', symbol: '₺' },
+  { id: 'egp', name: 'EGP - Egyptian Pound', symbol: 'E£' },
+
+  // South Asia
+  { id: 'inr', name: 'INR - Indian Rupee', symbol: '₹' },
+  { id: 'pkr', name: 'PKR - Pakistani Rupee', symbol: '₨' },
+  { id: 'bdt', name: 'BDT - Bangladeshi Taka', symbol: '৳' },
+  { id: 'lkr', name: 'LKR - Sri Lankan Rupee', symbol: 'Rs' },
+  { id: 'npr', name: 'NPR - Nepalese Rupee', symbol: 'रू' },
+
+  // Southeast Asia
+  { id: 'sgd', name: 'SGD - Singapore Dollar', symbol: 'S$' },
+  { id: 'myr', name: 'MYR - Malaysian Ringgit', symbol: 'RM' },
+  { id: 'thb', name: 'THB - Thai Baht', symbol: '฿' },
+  { id: 'idr', name: 'IDR - Indonesian Rupiah', symbol: 'Rp' },
+  { id: 'php', name: 'PHP - Philippine Peso', symbol: '₱' },
+  { id: 'vnd', name: 'VND - Vietnamese Dong', symbol: '₫' },
+  { id: 'khr', name: 'KHR - Cambodian Riel', symbol: '៛' },
+  { id: 'mmk', name: 'MMK - Myanmar Kyat', symbol: 'K' },
+
+  // East Asia
+  { id: 'krw', name: 'KRW - South Korean Won', symbol: '₩' },
+  { id: 'hkd', name: 'HKD - Hong Kong Dollar', symbol: 'HK$' },
+  { id: 'twd', name: 'TWD - Taiwan Dollar', symbol: 'NT$' },
+
+  // Central Asia
+  { id: 'kzt', name: 'KZT - Kazakhstani Tenge', symbol: '₸' },
+  { id: 'azn', name: 'AZN - Azerbaijani Manat', symbol: '₼' },
+  { id: 'gel', name: 'GEL - Georgian Lari', symbol: '₾' },
+
+  // South America
+  { id: 'brl', name: 'BRL - Brazilian Real', symbol: 'R$' },
+  { id: 'ars', name: 'ARS - Argentine Peso', symbol: '$' },
+  { id: 'clp', name: 'CLP - Chilean Peso', symbol: '$' },
+  { id: 'cop', name: 'COP - Colombian Peso', symbol: '$' },
+  { id: 'pen', name: 'PEN - Peruvian Sol', symbol: 'S/' },
+  { id: 'uyu', name: 'UYU - Uruguayan Peso', symbol: '$U' },
+
+  // Africa
+  { id: 'zar', name: 'ZAR - South African Rand', symbol: 'R' },
+  { id: 'ngn', name: 'NGN - Nigerian Naira', symbol: '₦' },
+  { id: 'kes', name: 'KES - Kenyan Shilling', symbol: 'KSh' },
+  { id: 'ghs', name: 'GHS - Ghanaian Cedi', symbol: '₵' },
+  { id: 'mad', name: 'MAD - Moroccan Dirham', symbol: 'د.م.' },
+  { id: 'tzs', name: 'TZS - Tanzanian Shilling', symbol: 'TSh' },
+  { id: 'ugx', name: 'UGX - Ugandan Shilling', symbol: 'USh' },
+  { id: 'etb', name: 'ETB - Ethiopian Birr', symbol: 'Br' },
+  { id: 'xof', name: 'XOF - West African CFA Franc', symbol: 'CFA' },
+  { id: 'xaf', name: 'XAF - Central African CFA Franc', symbol: 'FCFA' },
 ];
 
 const TAX_NAMES_DATA = [
@@ -233,13 +311,26 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   modalSeparator: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 16, 
+    marginLeft: 16,
     // backgroundColor set by theme
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 25,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 
 export default function TaxCurrencyScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { theme, isLightMode } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { supabase, user } = useSupabase(); // Get Supabase client and user
@@ -469,26 +560,45 @@ export default function TaxCurrencyScreen() {
     )
   , [regionSearch]);
 
-  const filteredCurrencies = useMemo(() => 
-    CURRENCIES_DATA.filter(currency => 
-      currency.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
-      currency.id.toLowerCase().includes(currencySearch.toLowerCase())
-    )
-  , [currencySearch]);
+  const filteredCurrencies = useMemo(() => {
+    const search = currencySearch.toLowerCase().trim();
+    if (!search) return CURRENCIES_DATA;
+    return CURRENCIES_DATA.filter(currency =>
+      currency.name.toLowerCase().includes(search) ||
+      currency.id.toLowerCase().includes(search) ||
+      currency.symbol.toLowerCase().includes(search)
+    );
+  }, [currencySearch]);
 
   const renderSelectionItem = (
-    item: { id: string; name: string }, 
+    item: { id: string; name: string },
     onPress: () => void,
     isSelected: boolean
   ) => (
-    <TouchableOpacity 
-      style={styles.modalListItem} 
+    <TouchableOpacity
+      style={styles.modalListItem}
       onPress={onPress}
     >
       <Text style={[styles.modalListItemText, isSelected && styles.modalListItemTextSelected]}>{item.name}</Text>
       {isSelected && <ChevronRight size={20} color={theme.primary} />}
     </TouchableOpacity>
   );
+
+  useEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginLeft: -8 }}>
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Tax & Currency</Text>
+          </View>
+        </SafeAreaView>
+      ),
+      headerShown: true,
+    });
+  }, [navigation, router, theme, styles]);
 
   if (isLoadingSettings) {
     return (
@@ -502,25 +612,6 @@ export default function TaxCurrencyScreen() {
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen
-          options={{
-            title: 'Tax & Currency',
-            headerShown: true,
-            animation: 'slide_from_right',
-            headerStyle: {
-              backgroundColor: isLightMode ? theme.background : theme.card,
-            },
-            headerTintColor: theme.foreground,
-            headerTitleStyle: {
-              fontFamily: 'Roboto-Medium',
-            },
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: Platform.OS === 'ios' ? 16 : 0 }}>
-                <ChevronLeft size={24} color={theme.foreground} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
         <ScrollView contentContainerStyle={styles.scrollContentContainer}>
           {/* Region Selector */}
           <View style={[styles.sectionContainer, { backgroundColor: theme.card, marginTop: 16 }]}>
@@ -689,6 +780,7 @@ export default function TaxCurrencyScreen() {
           )}
           contentContainerStyle={styles.modalListContentContainer}
           ItemSeparatorComponent={() => <View style={[styles.modalSeparator, { backgroundColor: theme.border }]} />}
+          keyboardShouldPersistTaps="handled"
         />
       </BottomSheetModal>
 
@@ -722,7 +814,7 @@ export default function TaxCurrencyScreen() {
           data={filteredCurrencies}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => renderSelectionItem(
-            item, 
+            item,
             () => {
               setSelectedCurrency(item.name);
               currencyModalRef.current?.dismiss();
@@ -731,6 +823,7 @@ export default function TaxCurrencyScreen() {
           )}
           contentContainerStyle={styles.modalListContentContainer}
           ItemSeparatorComponent={() => <View style={[styles.modalSeparator, { backgroundColor: theme.border }]} />}
+          keyboardShouldPersistTaps="handled"
         />
       </BottomSheetModal>
 

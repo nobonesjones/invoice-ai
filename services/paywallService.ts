@@ -69,8 +69,6 @@ class PaywallService {
 
   async presentPaywall(config: PaywallConfig): Promise<void> {
     try {
-      // Presenting paywall for event
-      
       // Map events to actual Superwall placements that exist
       let placement: string;
       switch (config.event) {
@@ -84,21 +82,23 @@ class PaywallService {
         case 'campaign_trigger':
           placement = 'campaign_trigger';
           break;
+        case 'stripe_button':
+          placement = 'stripe_button';
+          break;
+        case 'ai_pay_wall':
+          placement = 'ai_pay_wall';
+          break;
         default:
           placement = 'campaign_trigger'; // Default fallback
       }
       
-      // Using placement
-      
-      // Use registerPlacement instead of presentPaywall
-      const { usePlacement } = await import('expo-superwall');
-      
-      // This is a workaround - we'll need to refactor to use the hook properly
-      // For now, let's use SuperwallService but with placement approach
+      console.log('[PaywallService] Presenting paywall for event:', config.event, '-> placement:', placement, 'params:', config.params);
+
+      // Forward the request to the Superwall service wrapper
       await SuperwallService.presentPaywall(placement, config.params);
       
     } catch (error) {
-      // Failed to present paywall
+      console.error('[PaywallService] Failed to present paywall for event:', config.event, 'error:', error);
       
       // Fallback for development (Expo Go) - navigate to subscription page
       router.push('/subscription');
@@ -172,6 +172,8 @@ class PaywallService {
     ONBOARDING_COMPLETE: 'campaign_trigger', // Using same placement for now
     SEND_BLOCK: 'send_block', // Old send block campaign
     NO_SEND: 'no_send', // New no_send paywall for send items block campaign
+    STRIPE_BUTTON: 'stripe_button',
+    AI_PAY_WALL: 'ai_pay_wall',
     INVOICE_LIMIT_REACHED: 'invoice_limit_reached',
     PREMIUM_FEATURE_ACCESSED: 'premium_feature_accessed'
   } as const;

@@ -13,10 +13,12 @@ import {
   Image,
   TextInput as RNTextInput,
   useColorScheme,
-  KeyboardAvoidingView, // Added
+  KeyboardAvoidingView,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { Stack, useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import {
   ChevronLeft,
   CreditCard,
@@ -41,8 +43,13 @@ import { Text } from '@/components/ui/text';
 import { useTheme } from '@/context/theme-provider';
 import { SettingsListItem } from '@/components/ui/SettingsListItem';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/config/supabase';
 import { useSupabase } from '@/context/supabase-provider';
+import { usePaywall } from '@/context/paywall-provider';
+import { usePlacement } from 'expo-superwall';
+import * as Crypto from 'expo-crypto';
+import { useStripeConnect, describeStripeStatus } from '@/hooks/useStripeConnect';
+import { useGoCardlessConnect, describeGoCardlessStatus } from '@/hooks/useGoCardlessConnect';
 
 interface PaymentOption {
   id?: string;
@@ -53,6 +60,9 @@ interface PaymentOption {
   bank_transfer_enabled: boolean;
   bank_details: string | null;
   invoice_terms_notes?: string | null;
+  gocardless_connected?: boolean;
+  gocardless_creditor_id?: string | null;
+  gocardless_verification_status?: string | null;
 }
 
 const getStyles = (theme: any) =>
@@ -101,6 +111,17 @@ const getStyles = (theme: any) =>
       textAlignVertical: 'top',
       minHeight: 100,
       marginBottom: 10,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 5,
+        },
+      }),
     },
     inputLabel: {
       fontSize: 16,
@@ -114,9 +135,10 @@ const getStyles = (theme: any) =>
       paddingVertical: Platform.OS === 'ios' ? 12 : 10,
       fontSize: 16,
       color: theme.foreground,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: theme.border,
       marginBottom: 10,
+      backgroundColor: theme.card,
     },
     sectionTitle: {
       fontSize: 14,
@@ -158,8 +180,20 @@ const getStyles = (theme: any) =>
       color: theme.mutedForeground,
       marginTop: 8,
     },
+    headerContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 16,
+    },
+    headerTitle: {
+      fontSize: 25,
+      fontWeight: 'bold',
+      marginLeft: 8,
+    },
     headerTitleStyle: {
-      fontSize: 20,
+      fontSize: 25,
       fontWeight: 'bold',
       marginLeft: 10,
     },
@@ -167,33 +201,35 @@ const getStyles = (theme: any) =>
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: Platform.OS === 'ios' ? 32 : 20,
-      backgroundColor: theme.card,
+      backgroundColor: theme.background,
     },
+    // Align modal header with Add Payment modal
     modalHeader: {
       flexDirection: 'row',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
       alignItems: 'center',
-      paddingBottom: 16,
+      paddingTop: Platform.OS === 'ios' ? 20 : 15,
+      paddingBottom: 10,
       paddingHorizontal: 16,
-      position: 'relative',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
     },
     modalTitle: {
       fontSize: 18,
-      fontWeight: 'bold',
+      fontWeight: '600',
       color: theme.foreground,
     },
     closeButton: {
-      position: 'absolute',
-      right: 16,
-      top: '50%',
-      transform: [{ translateY: -12 }],
-      padding: 4,
+      padding: 5,
     },
     handleIndicator: {
       backgroundColor: theme.mutedForeground,
     },
+    // Match Add Payment modal surface
     modalBackground: {
-      backgroundColor: theme.card,
+      backgroundColor: theme.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
     },
     inputRow: {
       flexDirection: 'row',
@@ -244,11 +280,10 @@ const getStyles = (theme: any) =>
     },
     saveButton: {
       backgroundColor: theme.primary,
-      paddingVertical: 15,
-      borderRadius: 12,
+      paddingVertical: 16,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      // marginHorizontal is not needed here as modalInnerContent provides padding
     },
     saveButtonText: {
       color: theme.primaryForeground,
@@ -322,6 +357,42 @@ const getStyles = (theme: any) =>
       flexShrink: 1,
       lineHeight: 20,
     },
+    // Placeholder for the Stripe status while the first read from Stripe is in
+    // flight — see the `hydrated` note in useStripeConnect.
+    statusSkeleton: {
+      width: 34,
+      height: 14,
+      borderRadius: 7,
+      backgroundColor: theme.muted ?? '#E5E7EB',
+      opacity: 0.6,
+    },
+    successBox: {
+      backgroundColor: 'rgba(40, 167, 69, 0.08)',
+      borderColor: 'rgba(40, 167, 69, 0.35)',
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 12,
+      gap: 8,
+    },
+    successHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    successTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#1B7A32',
+    },
+    successBody: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.foreground,
+    },
+    successChecking: {
+      fontSize: 13,
+      color: '#1B7A32',
+    },
     importantStepsContainer: {
       marginTop: 10,
       marginBottom: 25,
@@ -369,18 +440,52 @@ const getStyles = (theme: any) =>
   });
 
 export default function PaymentOptionsScreen() {
+  // Live Stripe Connect state. Sourced from Stripe on every mount rather than
+  // from payment_options, because the stored capability status goes stale
+  // whenever an account-lifecycle webhook is missed.
+  const stripe = useStripeConnect();
+  // Same shape for GoCardless, read off payment_options: the OAuth exchange
+  // writes the row, and the row is what invoice creation already trusts.
+  const gocardless = useGoCardlessConnect();
   const router = useRouter();
+  const navigation = useNavigation();
   const { theme } = useTheme();
+  const { polarSuccess, polarError } = useLocalSearchParams<{ polarSuccess?: string; polarError?: string }>();
   const colorScheme = useColorScheme();
   const isLightMode = colorScheme === 'light';
   const styles = useMemo(() => getStyles(theme), [theme]);
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { user, supabase } = useSupabase();
+  const { isSubscribed, presentPaywall, checkSubscriptionStatus } = usePaywall();
+  const stripeSkipReasonRef = useRef<any>(null);
+
+  const { registerPlacement: registerStripePlacement } = usePlacement({
+    onError: (err) => {
+      console.error('[PaymentOptions] Stripe placement error:', err);
+    },
+    onPresent: (info) => {
+      console.log('[PaymentOptions] Stripe paywall presented:', info);
+    },
+    onDismiss: async (info, result) => {
+      console.log('[PaymentOptions] Stripe paywall dismissed:', result);
+      try {
+        await checkSubscriptionStatus();
+      } catch (error) {
+        console.warn('[PaymentOptions] Failed to refresh subscription after Stripe paywall:', error);
+      }
+    },
+    onSkip: (reason) => {
+      stripeSkipReasonRef.current = reason;
+      console.log('[PaymentOptions] Stripe placement skipped:', reason);
+    },
+  });
 
   const paypalBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const stripeBottomSheetModalRef = useRef<BottomSheetModal>(null);
   const bankTransferBottomSheetModalRef = useRef<BottomSheetModal>(null);
-  const bankTransferScrollViewRef = useRef<BottomSheetScrollView>(null); // Ref for Bank Transfer scroll view
+  const polarBottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const goCardlessBottomSheetModalRef = useRef<BottomSheetModal>(null);
+  // Bank Transfer sheet does not require a scroll ref with stable keyboard handling
 
   const [isPayPalEnabled, setIsPayPalEnabled] = useState(false);
   const [paypalEmail, setPayPalEmail] = useState('');
@@ -399,23 +504,68 @@ export default function PaymentOptionsScreen() {
   const [isStripeActiveOnScreen, setIsStripeActiveOnScreen] = useState(false);
 
   const [isBankTransferEnabled, setIsBankTransferEnabled] = useState(false);
-  const [bankDetails, setBankDetails] = useState('');
+  // Structured bank details (composed into bank_details string for DB)
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountIban, setAccountIban] = useState('');
+  const [routingSwift, setRoutingSwift] = useState('');
+  const [bankNotes, setBankNotes] = useState('');
   const [initialIsBankTransferEnabled, setInitialIsBankTransferEnabled] = useState(false);
   const [initialBankDetails, setInitialBankDetails] = useState('');
   const [bankTransferSettingsChanged, setBankTransferSettingsChanged] = useState(false);
   const [isLoadingBankTransferSettings, setIsLoadingBankTransferSettings] = useState(false);
   const [isBankTransferActiveOnScreen, setIsBankTransferActiveOnScreen] = useState(false);
 
+  // GoCardless state
+  const [isGoCardlessConnected, setIsGoCardlessConnected] = useState(false);
+  const [goCardlessVerificationStatus, setGoCardlessVerificationStatus] = useState<string | null>(null);
+  const [isLoadingGoCardless, setIsLoadingGoCardless] = useState(false);
+  const [isGoCardlessActiveOnScreen, setIsGoCardlessActiveOnScreen] = useState(false);
+
+  // Polar state
+  const [isPolarConnected, setIsPolarConnected] = useState(false);
+  const [isLoadingPolar, setIsLoadingPolar] = useState(false);
+  const [isPolarActiveOnScreen, setIsPolarActiveOnScreen] = useState(false);
+
   const [invoiceTermsNotes, setInvoiceTermsNotes] = useState<string>('');
   const [initialInvoiceTermsNotes, setInitialInvoiceTermsNotes] = useState<string>('');
   const [isLoadingInvoiceTermsNotes, setIsLoadingInvoiceTermsNotes] = useState<boolean>(false);
 
-  const defaultPayPalSnapPoints = useMemo(() => ['50%', '65%'], []);
-  const keyboardActivePayPalSnapPoints = useMemo(() => ['75%', '90%'], []); // Taller when keyboard is active
-  const [currentPayPalSnapPoints, setCurrentPayPalSnapPoints] = useState(defaultPayPalSnapPoints);
+  // Handle Polar OAuth callback params
+  useEffect(() => {
+    if (polarSuccess === 'true') {
+      // Refresh Polar connection status
+      const refreshPolarStatus = async () => {
+        if (!user) return;
+        try {
+          const { data } = await supabase
+            .from('user_profiles')
+            .select('polar_connected')
+            .eq('id', user.id)
+            .single();
+          if (data?.polar_connected) {
+            setIsPolarConnected(true);
+            setIsPolarActiveOnScreen(true);
+            Alert.alert('Success', 'Polar account connected successfully!');
+          }
+        } catch (err) {
+          console.error('Error refreshing Polar status:', err);
+        }
+      };
+      refreshPolarStatus();
+    } else if (polarError) {
+      const errorMessages: Record<string, string> = {
+        token_exchange_failed: 'Failed to complete authorization. Please try again.',
+        database_error: 'Failed to save connection. Please try again.',
+        unexpected_error: 'An unexpected error occurred. Please try again.',
+      };
+      Alert.alert('Connection Failed', errorMessages[polarError] || `Error: ${polarError}`);
+    }
+  }, [polarSuccess, polarError, user]);
 
-  // State to track if bank transfer modal is the one currently focused for keyboard events
-  const [isBankTransferModalFocused, setIsBankTransferModalFocused] = useState(false);
+  // PayPal modal now uses fixed snap points with extend behavior; no dynamic swap needed
+
+  // No special focus tracking needed for bank transfer modal
 
   const paymentIcons = [
     { name: 'Visa', source: require('../../assets/visaicon.png') },
@@ -425,42 +575,14 @@ export default function PaymentOptionsScreen() {
     { name: 'GooglePay', source: require('../../assets/googlepayicon.png') },
   ];
 
-  const stripeSnapPoints = useMemo(() => ['90%'], []);
-  const bankTransferSnapPoints = useMemo(() => ['60%', '80%'], []);
+  const polarSnapPoints = useMemo(() => ['85%', '95%'], []);
+  const bankTransferSnapPoints = useMemo(() => ['60%', '90%'], []);
 
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => {
-        // Handle PayPal modal snap points
-        setCurrentPayPalSnapPoints(keyboardActivePayPalSnapPoints);
-
-        // Handle Bank Transfer modal scroll
-        if (isBankTransferModalFocused) {
-          // Add a slight delay to ensure layout is complete after keyboard is up
-          setTimeout(() => {
-            bankTransferScrollViewRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setCurrentPayPalSnapPoints(defaultPayPalSnapPoints);
-        // No specific action needed for bank transfer modal on keyboard hide for now
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, [keyboardActivePayPalSnapPoints, defaultPayPalSnapPoints, isPayPalEnabled, isBankTransferModalFocused]);
+  // No keyboard listeners needed; rely on keyboardBehavior="extend" inside sheets
 
   const openPayPalModal = useCallback(async () => {
     if (!user) return;
-    setIsBankTransferModalFocused(false); // Ensure other modals don't trigger bank scroll
+    // ensure other modal state is isolated (no-op)
     setIsLoadingSettings(true);
     paypalBottomSheetModalRef.current?.present();
 
@@ -650,7 +772,6 @@ export default function PaymentOptionsScreen() {
 
   const openBankTransferModal = useCallback(async () => {
     if (!user) return;
-    setIsBankTransferModalFocused(true); // Set focus for keyboard listener
     setIsLoadingBankTransferSettings(true);
     bankTransferBottomSheetModalRef.current?.present();
 
@@ -666,13 +787,52 @@ export default function PaymentOptionsScreen() {
         Alert.alert('Error', 'Could not load your Bank Transfer settings.');
       } else if (data) {
         setIsBankTransferEnabled(data.bank_transfer_enabled);
-        setBankDetails(data.bank_details || '');
-        setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
-        setInitialBankDetails(data.bank_details || '');
+        const raw = data.bank_details || '';
+        try {
+          const obj = JSON.parse(raw as any);
+          if (obj && typeof obj === 'object') {
+            setBankAccountName((obj as any).accountName || '');
+            setBankName((obj as any).bankName || '');
+            setAccountIban((obj as any).accountIban || '');
+            setRoutingSwift((obj as any).routingSwift || '');
+            setBankNotes((obj as any).notes || '');
+          } else {
+            setBankNotes(raw);
+          }
+        } catch {
+          const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+          const hasLabels = lines.some(l => l.includes(':'));
+          if (hasLabels) {
+            const lower = (s: string) => s.toLowerCase();
+            const getVal = (prefixes: string[]) => {
+              const line = lines.find(l => prefixes.some(p => lower(l).startsWith(p)));
+              return line ? line.split(':').slice(1).join(':').trim() : '';
+            };
+            setBankAccountName(getVal(['account name']));
+            setBankName(getVal(['bank name']));
+            setAccountIban(getVal(['account / iban', 'account', 'iban']));
+            setRoutingSwift(getVal(['routing / swift', 'routing', 'swift', 'bic']));
+            const consumed = ['account name','bank name','account / iban','account','iban','routing / swift','routing','swift','bic'];
+            setBankNotes(lines.filter(l => !consumed.some(c => lower(l).startsWith(c))).join('\n'));
+          } else {
+            // Treat as unlabeled sequential lines in the order of fields
+            setBankAccountName(lines[0] || '');
+            setBankName(lines[1] || '');
+            setAccountIban(lines[2] || '');
+            setRoutingSwift(lines[3] || '');
+            setBankNotes(lines.slice(4).join('\n'));
+          }
+        }
+setInitialIsBankTransferEnabled(data.bank_transfer_enabled);
+        setInitialBankDetails(raw);
         if (data.id && !paymentOptionsId) setPaymentOptionsId(data.id);
       } else {
         setIsBankTransferEnabled(false);
-        setBankDetails('');
+        setBankAccountName('');
+        setBankName('');
+        setAccountIban('');
+        setRoutingSwift('');
+        setBankNotes('');
         setInitialIsBankTransferEnabled(false);
         setInitialBankDetails('');
       }
@@ -687,7 +847,6 @@ export default function PaymentOptionsScreen() {
 
   const closeBankTransferModal = useCallback(() => {
     bankTransferBottomSheetModalRef.current?.dismiss();
-    setIsBankTransferModalFocused(false); // Clear focus
   }, []);
 
   const handleBankTransferToggle = (newValue: boolean) => {
@@ -695,10 +854,12 @@ export default function PaymentOptionsScreen() {
     setBankTransferSettingsChanged(true);
   };
 
-  const handleBankDetailsChange = (text: string) => {
-    setBankDetails(text);
-    setBankTransferSettingsChanged(true);
-  };
+  // Mark changed handlers for structured fields
+  const onChangeBankAccountName = (t: string) => { setBankAccountName(t); setBankTransferSettingsChanged(true); };
+  const onChangeBankName = (t: string) => { setBankName(t); setBankTransferSettingsChanged(true); };
+  const onChangeAccountIban = (t: string) => { setAccountIban(t); setBankTransferSettingsChanged(true); };
+  const onChangeRoutingSwift = (t: string) => { setRoutingSwift(t); setBankTransferSettingsChanged(true); };
+  const onChangeBankNotes = (t: string) => { setBankNotes(t); setBankTransferSettingsChanged(true); };
 
   const handleSaveBankTransferSettings = async () => {
     Keyboard.dismiss();
@@ -712,10 +873,19 @@ export default function PaymentOptionsScreen() {
       return;
     }
     setIsLoadingBankTransferSettings(true);
+    // Store exactly what user typed, one value per line (no labels)
+    const composed = [
+      bankAccountName?.trim(),
+      bankName?.trim(),
+      accountIban?.trim(),
+      routingSwift?.trim(),
+      bankNotes?.trim(),
+    ].filter(Boolean).join('\n');
+
     const updateData: Partial<PaymentOption> & { user_id: string } = {
       user_id: user.id,
       bank_transfer_enabled: isBankTransferEnabled,
-      bank_details: isBankTransferEnabled ? bankDetails : null,
+      bank_details: isBankTransferEnabled ? composed : null,
     };
     try {
       const { error } = await supabase.from('payment_options').upsert(
@@ -730,7 +900,7 @@ export default function PaymentOptionsScreen() {
       ]);
       setBankTransferSettingsChanged(false);
       setInitialIsBankTransferEnabled(isBankTransferEnabled);
-      setInitialBankDetails(bankDetails);
+      setInitialBankDetails(composed);
       setIsBankTransferActiveOnScreen(isBankTransferEnabled);
       if (!paymentOptionsId && !error) {
         const { data: newData } = await supabase.from('payment_options').select('id').eq('user_id', user.id).maybeSingle();
@@ -749,10 +919,56 @@ export default function PaymentOptionsScreen() {
     // setCurrentSnapIndex(index); 
   }, []);
 
-  const openStripeConnectionModal = () => {
+  const openStripeConnectionModal = useCallback(async () => {
     console.log('Attempting to open Stripe Connection Modal...');
-    Alert.alert("Connect with Stripe", "This will open the Stripe connection flow. (Not yet implemented)");
-  };
+
+    if (!isSubscribed) {
+      try {
+        stripeSkipReasonRef.current = null;
+        const params = { source: 'stripe_connect' };
+        console.log('[PaymentOptions] Triggering Stripe placement with params:', params);
+        await registerStripePlacement({
+          placement: 'stripe_button',
+          params,
+          feature: () => {
+            console.log('[PaymentOptions] Stripe placement unlocked feature without showing paywall');
+          },
+        });
+
+        if (stripeSkipReasonRef.current) {
+          console.log('[PaymentOptions] Stripe placement skipped with reason:', stripeSkipReasonRef.current, '— using shared paywall service fallback');
+          await presentPaywall({ event: 'stripe_button', params });
+        }
+      } catch (error) {
+        console.error('[PaymentOptions] Failed to present Stripe paywall:', error);
+        Alert.alert(
+          'Upgrade Required',
+          'Stripe payments are part of the SuperInvoice Pro plan. Upgrade to unlock this feature.'
+        );
+      }
+      return;
+    }
+
+    // Stripe-hosted onboarding, opened in a real browser by the hook. The result
+    // is read back from Stripe rather than inferred from the browser closing —
+    // the user can dismiss the sheet at any point without finishing.
+    const result = await stripe.connect();
+
+    if (result.error) {
+      Alert.alert('Stripe', result.error);
+      return;
+    }
+    if (result.canAcceptPayments) {
+      Alert.alert('Stripe connected', 'You can now take card payments on your invoices.');
+    } else if (result.state === 'verifying') {
+      Alert.alert(
+        'Almost there',
+        'Stripe is still verifying your details. Nothing more is needed from you — card payments will switch on automatically.',
+      );
+    } else if (result.connected) {
+      Alert.alert('Setup incomplete', 'Stripe still needs a few more details before you can take card payments.');
+    }
+  }, [isSubscribed, presentPaywall, stripe]);
 
   const handleSaveInvoiceTermsNotes = async () => {
     if (!user) {
@@ -805,55 +1021,77 @@ export default function PaymentOptionsScreen() {
     }
   };
 
+  // Extract fetchScreenStatus as a standalone function
+  const fetchScreenStatus = useCallback(async () => {
+    if (!user) {
+      setIsLoadingScreenStatus(false);
+      setIsPayPalActiveOnScreen(false);
+      setIsStripeActiveOnScreen(false);
+      setIsBankTransferActiveOnScreen(false);
+      setIsGoCardlessActiveOnScreen(false);
+      return;
+    }
+    setIsLoadingScreenStatus(true);
+    try {
+      const { data, error } = await supabase
+        .from('payment_options')
+        .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, invoice_terms_notes, id, gocardless_connected, gocardless_verification_status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching screen payment status:', error);
+        setIsPayPalActiveOnScreen(false);
+        setIsStripeActiveOnScreen(false);
+        setIsBankTransferActiveOnScreen(false);
+        setIsGoCardlessActiveOnScreen(false);
+      } else if (data) {
+        setIsPayPalActiveOnScreen(data.paypal_enabled);
+        setIsStripeActiveOnScreen(data.stripe_enabled);
+        setIsBankTransferActiveOnScreen(data.bank_transfer_enabled);
+        setIsGoCardlessActiveOnScreen(data.gocardless_connected || false);
+        setIsGoCardlessConnected(data.gocardless_connected || false);
+        setGoCardlessVerificationStatus(data.gocardless_verification_status || null);
+        setInvoiceTermsNotes(data.invoice_terms_notes || '');
+        setInitialInvoiceTermsNotes(data.invoice_terms_notes || '');
+        if (!paymentOptionsId && data.id) setPaymentOptionsId(data.id);
+      } else {
+        setIsPayPalActiveOnScreen(false);
+        setIsStripeActiveOnScreen(false);
+        setIsBankTransferActiveOnScreen(false);
+        setIsGoCardlessActiveOnScreen(false);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching screen payment status:', err);
+      setIsPayPalActiveOnScreen(false);
+      setIsStripeActiveOnScreen(false);
+      setIsBankTransferActiveOnScreen(false);
+      setIsGoCardlessActiveOnScreen(false);
+    } finally {
+      setIsLoadingScreenStatus(false);
+    }
+  }, [user, supabase, paymentOptionsId]);
+
   useFocusEffect(
     useCallback(() => {
       setIsTabBarVisible(true);
-      const fetchScreenStatus = async () => {
-        if (!user) {
-          setIsLoadingScreenStatus(false);
-          setIsPayPalActiveOnScreen(false);
-          setIsStripeActiveOnScreen(false);
-          setIsBankTransferActiveOnScreen(false);
-          return;
-        }
-        setIsLoadingScreenStatus(true);
-        try {
-          const { data, error } = await supabase
-            .from('payment_options')
-            .select('paypal_enabled, stripe_enabled, bank_transfer_enabled, invoice_terms_notes, id')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (error && error.code !== 'PGRST116') {
-            console.error('Error fetching screen payment status:', error);
-            setIsPayPalActiveOnScreen(false);
-            setIsStripeActiveOnScreen(false);
-            setIsBankTransferActiveOnScreen(false);
-          } else if (data) {
-            setIsPayPalActiveOnScreen(data.paypal_enabled);
-            setIsStripeActiveOnScreen(data.stripe_enabled);
-            setIsBankTransferActiveOnScreen(data.bank_transfer_enabled);
-            setInvoiceTermsNotes(data.invoice_terms_notes || '');
-            setInitialInvoiceTermsNotes(data.invoice_terms_notes || '');
-            if (!paymentOptionsId && data.id) setPaymentOptionsId(data.id);
-          } else {
-            setIsPayPalActiveOnScreen(false);
-            setIsStripeActiveOnScreen(false);
-            setIsBankTransferActiveOnScreen(false);
-          }
-        } catch (err) {
-          console.error('Unexpected error fetching screen payment status:', err);
-          setIsPayPalActiveOnScreen(false);
-          setIsStripeActiveOnScreen(false);
-          setIsBankTransferActiveOnScreen(false);
-        } finally {
-          setIsLoadingScreenStatus(false);
-        }
-      };
       fetchScreenStatus();
       return () => setIsTabBarVisible(false);
-    }, [user, supabase, paymentOptionsId, setIsTabBarVisible])
+    }, [fetchScreenStatus, setIsTabBarVisible])
   );
+
+  // AppState listener for GoCardless OAuth callback
+  // When user returns from browser after OAuth, refresh payment settings
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('[GoCardless] App became active, refreshing payment settings...');
+        fetchScreenStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [fetchScreenStatus]);
 
   const handleStripePress = () => {
     openStripeModal();
@@ -867,6 +1105,192 @@ export default function PaymentOptionsScreen() {
     openBankTransferModal();
   };
 
+  const handleGoCardlessPress = async () => {
+    openGoCardlessModal();
+  };
+
+  const openGoCardlessConnection = useCallback(async () => {
+    // Same gate as Stripe: online payments are a Pro feature.
+    if (!isSubscribed) {
+      try {
+        await presentPaywall({ event: 'gocardless_button', params: { source: 'gocardless_connect' } });
+      } catch (error) {
+        console.error('[PaymentOptions] Failed to present GoCardless paywall:', error);
+        Alert.alert(
+          'Upgrade Required',
+          'GoCardless payments are part of the SuperInvoice Pro plan. Upgrade to unlock this feature.'
+        );
+      }
+      return;
+    }
+
+    // GoCardless-hosted consent, opened in a real browser by the hook. The
+    // result is read back from our own row after the exchange rather than
+    // inferred from the browser closing.
+    const result = await gocardless.connect();
+
+    if (result.error) {
+      Alert.alert('GoCardless', result.error);
+      return;
+    }
+    if (result.canAcceptPayments) {
+      Alert.alert('GoCardless connected', 'You can now take instant bank payments on your invoices.');
+    } else if (result.verification === 'in_review') {
+      Alert.alert(
+        'Almost there',
+        'GoCardless is reviewing your details. Nothing more is needed from you — bank payments will switch on automatically.',
+      );
+    } else if (result.verification === 'action_required') {
+      Alert.alert(
+        'One more step',
+        'GoCardless needs a few more details before you can take payments. Open your GoCardless dashboard to finish verification.',
+      );
+    }
+  }, [isSubscribed, presentPaywall, gocardless]);
+
+  const handleDisconnectGoCardless = async () => {
+    const result = await gocardless.disconnect();
+    if (result.error) {
+      Alert.alert('Error', result.error);
+      return;
+    }
+    Alert.alert('Disconnected', 'GoCardless has been disconnected.');
+    closeGoCardlessModal();
+  };
+
+  // Polar modal handlers
+  const openPolarModal = useCallback(() => {
+    polarBottomSheetModalRef.current?.present();
+  }, []);
+
+  const closePolarModal = useCallback(() => {
+    polarBottomSheetModalRef.current?.dismiss();
+  }, []);
+
+  // GoCardless modal handlers
+  const openGoCardlessModal = useCallback(() => {
+    goCardlessBottomSheetModalRef.current?.present();
+  }, []);
+
+  const closeGoCardlessModal = useCallback(() => {
+    goCardlessBottomSheetModalRef.current?.dismiss();
+  }, []);
+
+  const handlePolarPress = () => {
+    Alert.alert(
+      'USD Only',
+      'Card payments currently only support USD invoices. Support for other currencies is coming soon.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => openPolarModal() }
+      ]
+    );
+  };
+
+  const initiatePolarOAuth = async () => {
+    if (!user) return;
+
+    try {
+      setIsLoadingPolar(true);
+
+      // Generate PKCE code_verifier (43-128 characters, URL-safe)
+      const codeVerifier = Crypto.getRandomBytes(32)
+        .reduce((acc, byte) => acc + byte.toString(16).padStart(2, '0'), '');
+
+      // Generate code_challenge from code_verifier using SHA-256
+      const hash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        codeVerifier,
+        { encoding: Crypto.CryptoEncoding.BASE64 }
+      );
+      // Convert base64 to base64url
+      const codeChallenge = hash.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      // Create state with user ID and code_verifier for the callback
+      const state = btoa(JSON.stringify({ userId: user.id, codeVerifier }));
+
+      const clientId = 'polar_ci_cCmoDRhfHruYcLNa9fQJ8PErsOYJRgreSX3hv4VjL4K';
+      const redirectUri = encodeURIComponent('https://wzpuzqzsjdizmpiobsuo.supabase.co/functions/v1/polar-oauth-callback');
+      const scope = encodeURIComponent('checkouts:read checkouts:write products:read organizations:read');
+
+      const authUrl = `https://polar.sh/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+
+      const canOpen = await Linking.canOpenURL(authUrl);
+      if (canOpen) {
+        await Linking.openURL(authUrl);
+      } else {
+        throw new Error('Cannot open Polar authorization page');
+      }
+    } catch (error) {
+      console.error('[Polar] OAuth initiation error:', error);
+      Alert.alert(
+        'Connection Failed',
+        error instanceof Error ? error.message : 'Failed to connect Polar. Please try again.'
+      );
+    } finally {
+      setIsLoadingPolar(false);
+    }
+  };
+
+  const handleDisconnectPolar = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          polar_connected: false,
+          polar_access_token: null,
+          polar_refresh_token: null,
+          polar_token_expires_at: null,
+          polar_organization_id: null,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setIsPolarConnected(false);
+      setIsPolarActiveOnScreen(false);
+
+      Alert.alert('Disconnected', 'Polar has been disconnected successfully.');
+    } catch (error) {
+      console.error('[Polar] Disconnect error:', error);
+      Alert.alert('Error', 'Failed to disconnect Polar. Please try again.');
+    }
+  };
+
+  // Fetch Polar status from user_profiles
+  const fetchPolarStatus = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('polar_connected')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[Polar] Error fetching status:', error);
+        return;
+      }
+
+      if (data) {
+        setIsPolarConnected(data.polar_connected || false);
+        setIsPolarActiveOnScreen(data.polar_connected || false);
+      }
+    } catch (err) {
+      console.error('[Polar] Unexpected error:', err);
+    }
+  }, [user, supabase]);
+
+  // Fetch Polar status on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchPolarStatus();
+    }, [fetchPolarStatus])
+  );
+
   const renderBackdrop = useCallback(
     (props: any) => (
       <BottomSheetBackdrop
@@ -879,12 +1303,26 @@ export default function PaymentOptionsScreen() {
     []
   );
 
-  // Re-define HeaderLeft for the back button
-  const HeaderLeft = () => (
-    <TouchableOpacity onPress={() => router.back()} style={{ paddingLeft: 16, paddingRight:10, paddingVertical: 5 }}>
-      <ChevronLeft size={26} color={theme.foreground} />
-    </TouchableOpacity>
-  );
+  useEffect(() => {
+    navigation.setOptions({
+      header: () => (
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.background }}>
+          <View style={[styles.headerContainer, { backgroundColor: theme.background, zIndex: 10 }]}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ padding: 12, marginLeft: -8 }}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+              activeOpacity={0.6}
+            >
+              <ChevronLeft size={24} color={theme.foreground} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, {color: theme.foreground}]}>Payment Options</Text>
+          </View>
+        </SafeAreaView>
+      ),
+      headerShown: true,
+    });
+  }, [navigation, router, theme, styles]);
 
   if (!user) {
     return <Text>Loading or user not found...</Text>;
@@ -896,24 +1334,8 @@ export default function PaymentOptionsScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? (64 + 20) : 0} // Adjust if header height is different or not needed
+          keyboardVerticalOffset={Platform.OS === 'ios' ? (64 + 20) : 0}
         >
-          <Stack.Screen 
-            options={{
-              headerTitle: () => (
-                <Text style={[styles.headerTitleStyle, { color: theme.foreground }]}>
-                  Payment Options
-                </Text>
-              ),
-              headerShown: true,
-              headerStyle: { 
-                backgroundColor: theme.card,
-              },
-              headerLeft: () => <HeaderLeft />,
-              headerShadowVisible: false, // To match previous appearance
-              animation: 'slide_from_right', // Optional: restore animation if desired
-            }}
-          />
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={styles.scrollContentContainer}
@@ -921,6 +1343,30 @@ export default function PaymentOptionsScreen() {
           >
             <Text style={styles.sectionTitle}>Online payments</Text>
             <View style={styles.sectionCard}>
+              {/* Polar Card Payments - Temporarily Hidden */}
+              {/* <SettingsListItem
+                icon={
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                    <Image source={require('../../assets/visaicon.png')} style={{ width: 24, height: 24, resizeMode: 'contain', marginRight: 2 }} />
+                    <Image source={require('../../assets/mastercardicon.png')} style={{ width: 24, height: 24, resizeMode: 'contain' }} />
+                  </View>
+                }
+                label="Card Payments"
+                subtitle="Accept Visa, Mastercard, Apple Pay & more"
+                onPress={handlePolarPress}
+                rightContent={
+                  isLoadingPolar ? (
+                    <ActivityIndicator size="small" color={theme.mutedForeground} />
+                  ) : (
+                    <Text style={{
+                      color: isPolarActiveOnScreen ? theme.primary : theme.mutedForeground,
+                      fontWeight: isPolarActiveOnScreen ? 'bold' : 'normal'
+                    }}>
+                      {isPolarActiveOnScreen ? 'Connected' : 'Connect'}
+                    </Text>
+                  )
+                }
+              /> */}
               <SettingsListItem
                 icon={<Image source={require('../../assets/stripeicon.png')} style={styles.listItemIconStyle} />}
                 label="Stripe Payments"
@@ -929,9 +1375,16 @@ export default function PaymentOptionsScreen() {
                   isLoadingScreenStatus ? (
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
                   ) : (
-                    <Text style={{ color: isStripeActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isStripeActiveOnScreen ? 'bold' : 'normal' }}>
-                      {isStripeActiveOnScreen ? 'On' : 'Off'}
-                    </Text>
+                    !stripe.hydrated ? (
+                      // Before the first read lands the hook still reports IDLE, which
+                      // renders as "Off" and then flips to "On" a moment later. A
+                      // placeholder is honest; a wrong answer is not.
+                      <View style={styles.statusSkeleton} />
+                    ) : (
+                      <Text style={{ color: stripe.canAcceptPayments ? theme.primary : theme.mutedForeground, fontWeight: stripe.canAcceptPayments ? 'bold' : 'normal' }}>
+                        {describeStripeStatus(stripe)}
+                      </Text>
+                    )
                   )
                 }
               />
@@ -956,13 +1409,32 @@ export default function PaymentOptionsScreen() {
               <SettingsListItem
                 icon={<Landmark size={24} color={theme.foreground} style={styles.listItemIconStyle} />}
                 label="Bank Transfers"
-                onPress={handleBankTransferPress} 
+                onPress={handleBankTransferPress}
                 rightContent={
                   isLoadingScreenStatus ? (
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
                   ) : (
                     <Text style={{ color: isBankTransferActiveOnScreen ? theme.primary : theme.mutedForeground, fontWeight: isBankTransferActiveOnScreen ? 'bold' : 'normal' }}>
                       {isBankTransferActiveOnScreen ? 'On' : 'Off'}
+                    </Text>
+                  )
+                }
+              />
+              <SettingsListItem
+                icon={<Image source={{ uri: 'https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png' }} style={styles.listItemIconStyle} />}
+                label="GoCardless"
+                onPress={handleGoCardlessPress}
+                rightContent={
+                  !gocardless.hydrated ? (
+                    // Placeholder until the first read lands: rendering the
+                    // idle state shows "Off" for a beat, then flips to "On".
+                    <View style={styles.statusSkeleton} />
+                  ) : (
+                    <Text style={{
+                      color: gocardless.canAcceptPayments ? theme.primary : theme.mutedForeground,
+                      fontWeight: gocardless.canAcceptPayments ? 'bold' : 'normal'
+                    }}>
+                      {describeGoCardlessStatus(gocardless)}
                     </Text>
                   )
                 }
@@ -995,19 +1467,24 @@ export default function PaymentOptionsScreen() {
 
           </ScrollView>
 
-          {/* PayPal Modal */}
+          {/* PayPal Modal (stable cloned config) */}
           <BottomSheetModal
             ref={paypalBottomSheetModalRef}
             index={0}
-            snapPoints={currentPayPalSnapPoints} // Use dynamic snap points
+            snapPoints={useMemo(() => ['60%', '90%'], [])}
             onChange={handleSheetChanges} 
             backdropComponent={renderBackdrop}
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
-            keyboardBehavior="interactive"
+            keyboardBehavior="extend"
+            android_keyboardInputMode="adjustResize"
+            enableDynamicSizing={false}
           >
             <BottomSheetScrollView
-              contentContainerStyle={styles.modalContentContainer}
+              contentContainerStyle={[
+                styles.modalContentContainer,
+                { paddingBottom: Platform.OS === 'ios' ? 90 : 80 },
+              ]}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
             >
@@ -1037,7 +1514,7 @@ export default function PaymentOptionsScreen() {
                   <View style={[styles.sectionCard, styles.emailInputCard]}>
                     <Text style={[styles.inputLabel, { color: theme.foreground, marginBottom: 8, fontWeight: 'bold' }]}>PayPal Email</Text>
                     <BottomSheetTextInput
-                      style={[styles.emailInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
+                      style={[styles.emailInputStyle]} 
                       placeholder="Enter your PayPal email address"
                       placeholderTextColor={theme.mutedForeground}
                       value={paypalEmail}
@@ -1072,71 +1549,107 @@ export default function PaymentOptionsScreen() {
           <BottomSheetModal
             ref={stripeBottomSheetModalRef}
             index={0}
-            snapPoints={stripeSnapPoints} 
-            onChange={handleSheetChanges} 
+            snapPoints={polarSnapPoints}
+            onChange={handleSheetChanges}
             backdropComponent={renderBackdrop}
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
           >
             <BottomSheetScrollView
-              contentContainerStyle={styles.modalContentContainer}
+              contentContainerStyle={[styles.modalContentContainer, { paddingTop: 5 }]}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.modalHeader}>
+              <View style={[styles.modalHeader, { paddingTop: 10, paddingBottom: 8 }]}>
                 <Text style={styles.modalTitle}>Activate Stripe Payments</Text>
                 <TouchableOpacity onPress={closeStripeModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <XIcon size={24} color={theme.mutedForeground} />
                 </TouchableOpacity>
               </View>
-              <View style={styles.modalInnerContent}>
-                <View style={styles.logoRowContainer}>
+              <View style={[styles.modalInnerContent, { padding: 12 }]}>
+                <View style={[styles.logoRowContainer, { marginVertical: 10, paddingHorizontal: 0 }]}>
                   {paymentIcons.map((icon) => (
                     <Image
                       key={icon.name}
                       source={icon.source}
-                      style={styles.paymentMethodIconStyle}
+                      style={[styles.paymentMethodIconStyle, { width: 50, height: 32, marginHorizontal: 3 }]}
                     />
                   ))}
                 </View>
 
-                <View style={styles.positiveBulletsContainer}>
-                  <View style={styles.bulletItem}>
-                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={styles.bulletText}>Customers pay 5 times faster with card payments</Text>
+                <View style={[styles.positiveBulletsContainer, { marginTop: 8, marginBottom: 12, paddingHorizontal: 4 }]}>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Customers pay 5 times faster with card payments</Text>
                   </View>
-                  <View style={styles.bulletItem}>
-                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={styles.bulletText}>Easily send card payment links in a flash</Text>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Easily send card payment links in a flash</Text>
                   </View>
-                  <View style={styles.bulletItem}>
-                    <CheckCircle size={20} color={'#28A745'} style={styles.bulletIcon} />
-                    <Text style={styles.bulletText}>Fast and easy setup</Text>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Fast and easy setup</Text>
                   </View>
                 </View>
 
-                <View style={styles.importantStepsContainer}>
-                  <Text style={styles.importantStepsTitle}>Important Steps</Text>
-                  <Text style={styles.importantStepText}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: theme.foreground }}>15 minutes</Text></Text>
-                  <Text style={styles.importantStepText}>2. Payouts <Text style={{ fontWeight: 'bold', color: theme.foreground }}>daily or weekly</Text>, first one takes seven days.</Text>
-                  <Text style={styles.importantStepText}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: theme.foreground }}>most competitive</Text> in the world.</Text>
+                <View style={[styles.importantStepsContainer, { marginTop: 6, marginBottom: 16, paddingHorizontal: 4 }]}>
+                  <Text style={[styles.importantStepsTitle, { fontSize: 16, marginBottom: 8 }]}>Important Steps</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>1. Stripe setup can take <Text style={{ fontWeight: 'bold', color: theme.foreground }}>15 minutes</Text></Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>2. Payouts <Text style={{ fontWeight: 'bold', color: theme.foreground }}>daily or weekly</Text>, first one takes seven days.</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Stripe fees are the <Text style={{ fontWeight: 'bold', color: theme.foreground }}>most competitive</Text> in the world.</Text>
                 </View>
 
-                {!isStripeEnabled && (
+                {stripe.loading ? (
+                  <ActivityIndicator size="small" color={theme.mutedForeground} style={{ marginBottom: 10 }} />
+                ) : stripe.canAcceptPayments ? (
+                  <View style={styles.successBox}>
+                    <View style={styles.successHeaderRow}>
+                      <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                      <Text style={styles.successTitle}>You're connected</Text>
+                    </View>
+                    <Text style={styles.successBody}>
+                      Card payments are live. Add a payment link to any invoice and your
+                      customer can pay it straight away.
+                    </Text>
+                  </View>
+                ) : stripe.state === 'verifying' ? (
+                  <View style={styles.successBox}>
+                    <View style={styles.successHeaderRow}>
+                      <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                      <Text style={styles.successTitle}>Details submitted</Text>
+                    </View>
+                    <Text style={styles.successBody}>
+                      Stripe is verifying your details — this usually takes under a minute.
+                      Nothing more is needed from you. We'll email you the moment card
+                      payments are live, and this screen updates on its own.
+                    </Text>
+                    <View style={styles.successHeaderRow}>
+                      <ActivityIndicator size="small" color={'#28A745'} style={{ marginRight: 8 }} />
+                      <Text style={styles.successChecking}>Checking with Stripe…</Text>
+                    </View>
+                  </View>
+                ) : (
                   <TouchableOpacity
-                    style={[styles.connectButton, { backgroundColor: theme.primary }]} 
+                    style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
                     onPress={openStripeConnectionModal}
+                    disabled={stripe.connecting}
                   >
-                    <Text style={styles.connectButtonText}>Connect with Stripe</Text>
+                    {stripe.connecting ? (
+                      <ActivityIndicator size="small" color={theme.primaryForeground} />
+                    ) : (
+                      <Text style={styles.connectButtonText}>
+                        {stripe.connected ? 'Finish Stripe setup' : 'Connect with Stripe'}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 )}
 
                 <TouchableOpacity
-                  style={styles.moreInfoButton}
+                  style={[styles.moreInfoButton, { paddingVertical: 8, marginBottom: 10 }]}
                   onPress={() => Linking.openURL('https://stripe.com').catch(err => console.error('Failed to open URL:', err))}
                 >
                   <Text style={styles.moreInfoButtonText}>More about Stripe</Text>
                 </TouchableOpacity>
-                
+
                 {stripeSettingsChanged && (
                   <View style={styles.saveButtonContainer}>
                     <TouchableOpacity
@@ -1156,25 +1669,116 @@ export default function PaymentOptionsScreen() {
             </BottomSheetScrollView>
           </BottomSheetModal>
 
+          {/* Polar Card Payments Modal - Temporarily Hidden */}
+          {/* <BottomSheetModal
+            ref={polarBottomSheetModalRef}
+            index={0}
+            snapPoints={polarSnapPoints}
+            onChange={handleSheetChanges}
+            backdropComponent={renderBackdrop}
+            handleIndicatorStyle={styles.handleIndicator}
+            backgroundStyle={styles.modalBackground}
+          >
+            <BottomSheetScrollView
+              contentContainerStyle={[styles.modalContentContainer, { paddingTop: 5 }]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={[styles.modalHeader, { paddingTop: 10, paddingBottom: 8 }]}>
+                <Text style={styles.modalTitle}>Activate Card Payments</Text>
+                <TouchableOpacity onPress={closePolarModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <XIcon size={24} color={theme.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.modalInnerContent, { padding: 12 }]}>
+                <View style={[styles.logoRowContainer, { marginVertical: 10, paddingHorizontal: 0 }]}>
+                  {paymentIcons.map((icon) => (
+                    <Image
+                      key={icon.name}
+                      source={icon.source}
+                      style={[styles.paymentMethodIconStyle, { width: 50, height: 32, marginHorizontal: 3 }]}
+                    />
+                  ))}
+                </View>
+
+                <View style={[styles.positiveBulletsContainer, { marginTop: 8, marginBottom: 12, paddingHorizontal: 4 }]}>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Customers pay 5 times faster with card payments</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Easily send card payment links in a flash</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Fast and easy setup - under 2 minutes</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.importantStepsContainer, { marginTop: 6, marginBottom: 16, paddingHorizontal: 4 }]}>
+                  <Text style={[styles.importantStepsTitle, { fontSize: 16, marginBottom: 8 }]}>How it works</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>1. Connect your Polar account <Text style={{ fontWeight: 'bold', color: theme.foreground }}>in seconds</Text></Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>2. Generate <Text style={{ fontWeight: 'bold', color: theme.foreground }}>payment links</Text> for any invoice</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Get paid directly to your <Text style={{ fontWeight: 'bold', color: theme.foreground }}>bank account</Text></Text>
+                </View>
+
+                {!isPolarConnected ? (
+                  <TouchableOpacity
+                    style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
+                    onPress={initiatePolarOAuth}
+                    disabled={isLoadingPolar}
+                  >
+                    {isLoadingPolar ? (
+                      <ActivityIndicator size="small" color={theme.primaryForeground} />
+                    ) : (
+                      <Text style={styles.connectButtonText}>Connect with Polar</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ alignItems: 'center', marginTop: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                      <CheckCircle size={22} color={theme.primary} />
+                      <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: 'bold', color: theme.foreground }}>
+                        Connected
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.moreInfoButton, { borderColor: '#dc3545', paddingVertical: 8, marginBottom: 10 }]}
+                      onPress={handleDisconnectPolar}
+                    >
+                      <Text style={[styles.moreInfoButtonText, { color: '#dc3545' }]}>Disconnect Polar</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.moreInfoButton, { paddingVertical: 8, marginBottom: 10 }]}
+                  onPress={() => Linking.openURL('https://polar.sh').catch(err => console.error('Failed to open URL:', err))}
+                >
+                  <Text style={styles.moreInfoButtonText}>More about Polar</Text>
+                </TouchableOpacity>
+              </View>
+            </BottomSheetScrollView>
+          </BottomSheetModal> */}
+
           {/* Bank Transfer Modal */}
           <BottomSheetModal
             ref={bankTransferBottomSheetModalRef}
             index={0}
             snapPoints={bankTransferSnapPoints}
-            onChange={(index) => {
-              handleSheetChanges(index); // Existing handler
-              if (index === -1) { // Modal dismissed
-                setIsBankTransferModalFocused(false);
-              }
-            }}
+            onChange={handleSheetChanges}
             backdropComponent={renderBackdrop}
             handleIndicatorStyle={styles.handleIndicator}
             backgroundStyle={styles.modalBackground}
-            keyboardBehavior="interactive"
+            keyboardBehavior="extend"
+            android_keyboardInputMode="adjustResize"
+            enableDynamicSizing={false}
           >
             <BottomSheetScrollView
-              ref={bankTransferScrollViewRef} // Assign ref here
-              contentContainerStyle={styles.modalContentContainer}
+              contentContainerStyle={[
+                styles.modalContentContainer,
+                { paddingBottom: Platform.OS === 'ios' ? 90 : 80 },
+              ]}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
             >
@@ -1201,21 +1805,62 @@ export default function PaymentOptionsScreen() {
                 </View>
 
                 {isBankTransferEnabled && (
-                  <View style={[styles.sectionCard, styles.emailInputCard]}> 
-                    <View style={[styles.inputRow]}> 
+                  <View style={[styles.sectionCard, styles.emailInputCard]}>
+                    <View style={[styles.inputRow]}>
                       <Text style={styles.label}>Bank Account Details</Text>
                     </View>
                     <BottomSheetTextInput
-                      style={[styles.multilineInputStyle, { backgroundColor: isLightMode ? '#FFFFFF' : theme.input }]} 
-                      value={bankDetails}
-                      onChangeText={handleBankDetailsChange}
-                      placeholder="Enter your bank name, account number, sort code/routing number, IBAN, SWIFT/BIC, etc."
-                      multiline
-                      numberOfLines={5} 
+                      style={[styles.emailInputStyle]}
+                      value={bankAccountName}
+                      onChangeText={onChangeBankAccountName}
+                      placeholder="Account Holder Name"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
+                      autoCapitalize="words"
                       editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.emailInputStyle]}
+                      value={bankName}
+                      onChangeText={onChangeBankName}
+                      placeholder="Bank Name"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
+                      autoCapitalize="words"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.emailInputStyle]}
+                      value={accountIban}
+                      onChangeText={onChangeAccountIban}
+                      placeholder="Account Number / IBAN"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
+                      autoCapitalize="characters"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.emailInputStyle]}
+                      value={routingSwift}
+                      onChangeText={onChangeRoutingSwift}
+                      placeholder="Routing Number / SWIFT / BIC"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
+                      autoCapitalize="characters"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="next"
+                    />
+                    <BottomSheetTextInput
+                      style={[styles.emailInputStyle]}
+                      value={bankNotes}
+                      onChangeText={onChangeBankNotes}
+                      placeholder="Notes (optional)"
+                      placeholderTextColor={isLightMode ? '#666666' : theme.mutedForeground}
+                      autoCapitalize="sentences"
+                      editable={!isLoadingBankTransferSettings}
+                      returnKeyType="done"
                     />
                     <View style={styles.infoTextContainer}>
-                      <Text style={styles.infoText}>Provide clear instructions for customers to make a bank transfer.</Text>
+                      <Text style={styles.infoText}>These details will show exactly what you type on your invoice.</Text>
                     </View>
                   </View>
                 )}
@@ -1235,6 +1880,135 @@ export default function PaymentOptionsScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
+              </View>
+            </BottomSheetScrollView>
+          </BottomSheetModal>
+
+          {/* GoCardless Modal */}
+          <BottomSheetModal
+            ref={goCardlessBottomSheetModalRef}
+            index={0}
+            snapPoints={polarSnapPoints}
+            onChange={handleSheetChanges}
+            backdropComponent={renderBackdrop}
+            handleIndicatorStyle={styles.handleIndicator}
+            backgroundStyle={styles.modalBackground}
+          >
+            <BottomSheetScrollView
+              contentContainerStyle={[styles.modalContentContainer, { paddingTop: 5 }]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={[styles.modalHeader, { paddingTop: 10, paddingBottom: 8 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Image
+                    source={{ uri: 'https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png' }}
+                    style={{ width: 24, height: 24 }}
+                  />
+                  <Text style={styles.modalTitle}>Connect GoCardless</Text>
+                </View>
+                <TouchableOpacity onPress={closeGoCardlessModal} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <XIcon size={24} color={theme.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.modalInnerContent, { padding: 12 }]}>
+                <View style={[styles.positiveBulletsContainer, { marginTop: 8, marginBottom: 12, paddingHorizontal: 4 }]}>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Accept instant bank payments from customers</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Lower fees than traditional card payments</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Secure and reliable bank-to-bank transfers</Text>
+                  </View>
+                  <View style={[styles.bulletItem, { marginBottom: 8 }]}>
+                    <CheckCircle size={18} color={'#28A745'} style={styles.bulletIcon} />
+                    <Text style={[styles.bulletText, { fontSize: 14, lineHeight: 18 }]}>Fast setup - connect in minutes</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.importantStepsContainer, { marginTop: 6, marginBottom: 16, paddingHorizontal: 4 }]}>
+                  <Text style={[styles.importantStepsTitle, { fontSize: 16, marginBottom: 8 }]}>How It Works</Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>1. Connect your GoCardless account <Text style={{ fontWeight: 'bold', color: theme.foreground }}>securely</Text></Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>2. Enable GoCardless on invoices to offer <Text style={{ fontWeight: 'bold', color: theme.foreground }}>bank payment options</Text></Text>
+                  <Text style={[styles.importantStepText, { fontSize: 14, marginBottom: 6, lineHeight: 20 }]}>3. Customers pay directly from their <Text style={{ fontWeight: 'bold', color: theme.foreground }}>bank account</Text></Text>
+                </View>
+
+                {!gocardless.connected ? (
+                  <TouchableOpacity
+                    style={[styles.connectButton, { backgroundColor: theme.primary, marginBottom: 10, paddingVertical: 14 }]}
+                    onPress={openGoCardlessConnection}
+                    disabled={gocardless.connecting}
+                  >
+                    {gocardless.connecting ? (
+                      <ActivityIndicator size="small" color={theme.primaryForeground} />
+                    ) : (
+                      <Text style={styles.connectButtonText}>Connect with GoCardless</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ marginTop: 6 }}>
+                    {gocardless.canAcceptPayments ? (
+                      <View style={styles.successBox}>
+                        <View style={styles.successHeaderRow}>
+                          <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                          <Text style={styles.successTitle}>You're connected</Text>
+                        </View>
+                        <Text style={styles.successBody}>
+                          Instant bank payments are live. Turn GoCardless on for any invoice and
+                          your customer can pay it from their bank.
+                        </Text>
+                      </View>
+                    ) : gocardless.verification === 'in_review' ? (
+                      <View style={styles.successBox}>
+                        <View style={styles.successHeaderRow}>
+                          <CheckCircle size={20} color={'#28A745'} style={{ marginRight: 8 }} />
+                          <Text style={styles.successTitle}>Connected — under review</Text>
+                        </View>
+                        <Text style={styles.successBody}>
+                          GoCardless is checking your details. Nothing more is needed from you;
+                          this usually takes a few minutes and this screen updates itself.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.successBox}>
+                        <View style={styles.successHeaderRow}>
+                          <CheckCircle size={20} color={'#F59E0B'} style={{ marginRight: 8 }} />
+                          <Text style={styles.successTitle}>Connected — one more step</Text>
+                        </View>
+                        <Text style={styles.successBody}>
+                          GoCardless needs a few more details before you can take payments.
+                          Finish verification in your GoCardless dashboard.
+                        </Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.moreInfoButton, { borderColor: '#dc3545', paddingVertical: 8, marginBottom: 10 }]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Disconnect GoCardless',
+                          'Are you sure you want to disconnect your GoCardless account?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Disconnect', style: 'destructive', onPress: handleDisconnectGoCardless }
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={[styles.moreInfoButtonText, { color: '#dc3545' }]}>Disconnect GoCardless</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.moreInfoButton, { paddingVertical: 8, marginBottom: 10 }]}
+                  onPress={() => Linking.openURL('https://gocardless.com').catch(err => console.error('Failed to open URL:', err))}
+                >
+                  <Text style={styles.moreInfoButtonText}>More about GoCardless</Text>
+                </TouchableOpacity>
               </View>
             </BottomSheetScrollView>
           </BottomSheetModal>

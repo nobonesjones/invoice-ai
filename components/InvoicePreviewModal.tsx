@@ -9,25 +9,24 @@ import {
   BottomSheetBackdrop,
 } from '@gorhom/bottom-sheet';
 import { colors } from '@/constants/colors';
-import { useColorScheme } from 'react-native';
+import { useTheme } from '@/context/theme-provider';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Send, Mail, FileText, Link2, X as XIcon } from 'lucide-react-native';
-import { useCanvasRef } from '@shopify/react-native-skia';
 import { useSupabase } from '@/context/supabase-provider';
 import * as Sharing from 'expo-sharing';
-import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { InvoiceShareService } from '@/services/invoiceShareService';
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { fetchLogoDataUri, renderInvoicePdf } from '@/lib/invoice-doc/pdf';
 import { InvoiceDesignSelector } from '@/components/InvoiceDesignSelector';
 import { useInvoiceDesign, useInvoiceDesignForInvoice } from '@/hooks/useInvoiceDesign';
 import { getDesignById, getDefaultDesign } from '@/constants/invoiceDesigns';
-import { ColorSelector } from '@/components/ColorSelector';
-import { SegmentedControl } from '@/components/SegmentedControl';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
-import { usePaywall } from '@/context/paywall-provider';
-import { usePlacement } from 'expo-superwall';
+import { DesignPicker } from '@/components/DesignPicker';
+import { LogoColorProbe } from '@/components/LogoColorProbe';
+import { useLogoBrandColor } from '@/hooks/useLogoBrandColor';
 import { router } from 'expo-router';
 
 export interface InvoicePreviewModalRef {
@@ -57,11 +56,11 @@ export const InvoicePreviewModal = forwardRef(
     { invoiceData, businessSettings, clientData, invoiceId, onClose, mode, onDesignSaved, initialDesign, initialAccentColor, documentType = 'invoice', onSaveComplete }: InvoicePreviewModalProps,
     ref: React.Ref<InvoicePreviewModalRef>
   ) => {
-    const colorScheme = useColorScheme();
-    const isLightMode = colorScheme === 'light';
-    // Ensure we have a valid color scheme, default to light if undefined/null
-    const safeColorScheme = colorScheme === 'dark' ? 'dark' : 'light';
-    const themeColors = colors[safeColorScheme];
+    // The app has its own light/dark setting. This followed the phone's, so
+    // with the app in light mode on a dark phone the preview came up dark.
+    const { isLightMode } = useTheme();
+    const colorScheme = isLightMode ? 'light' : 'dark';
+    const themeColors = isLightMode ? colors.light : colors.dark;
     const { supabase, user } = useSupabase();
     
     const styles = getStyles(themeColors);
@@ -99,13 +98,18 @@ export const InvoicePreviewModal = forwardRef(
     }, [invoiceData, documentType, mode, initialDesign, initialAccentColor]);
     const mainModalRef = useRef<BottomSheetModal>(null);
     
-    // Tab state for design/color selection
-    const [activeTab, setActiveTab] = useState<'design' | 'color'>('design');
     const [showSendOptions, setShowSendOptions] = useState(false);
+    // Saving a design on one invoice used to silently become the business
+    // default. It is now a visible choice, on by default so nothing changes
+    // for anyone who never touches it.
+    const [applyAsDefault, setApplyAsDefault] = useState(true);
     
     // Swipe gesture state - now supports 3 positions
     const [modalPosition, setModalPosition] = useState<'normal' | 'minimized' | 'expanded'>('normal');
     const translateY = useRef(new Animated.Value(0)).current;
+    // The sheet sizes to its content now (tiles + swatches + toggle), so the
+    // minimised offset is measured rather than assumed.
+    const sheetHeightRef = useRef(260);
     const gestureRef = useRef<PanGestureHandler>(null);
     
     // Design selection hook - use invoice-specific hook if we have an invoice ID
@@ -138,76 +142,105 @@ export const InvoicePreviewModal = forwardRef(
     const selectAccentColor = shouldUseHook ? hookResult.selectAccentColor : setEstimateAccentColor;
     const saveToInvoice = hookResult.saveToInvoice;
     const updateDefaultForNewInvoices = hookResult.updateDefaultForNewInvoices;
+
+    // Switching design snaps the colour to that design's own default, unless
+    // the user has chosen their brand colour, which belongs on every design.
+    const handleDesignSelect = useCallback(
+      (designId: string) => {
+        selectDesign(designId);
+        const next = getDesignById(designId);
+        if (next && next.swatches.length && currentAccentColor.toLowerCase() !== (brandColorRef.current ?? '').toLowerCase()) {
+          selectAccentColor(next.swatches[0].color);
+        }
+      },
+      [selectDesign, selectAccentColor, currentAccentColor],
+    );
     
     // Send modal refs and setup
-    const skiaInvoiceRef = useCanvasRef();
+    // The document being previewed, with the design and colour chosen in this modal.
+    const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+    const brandColor = useLogoBrandColor(logoDataUri);
+    const brandColorRef = useRef<string | null>(null);
+    brandColorRef.current = brandColor;
+    React.useEffect(() => {
+      let cancelled = false;
+      fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
+        if (!cancelled) setLogoDataUri(uri);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [businessSettings?.business_logo_url]);
+    const previewDoc = useMemo(
+      () =>
+        invoiceData && businessSettings
+          ? buildInvoiceDocument({
+              type: documentType,
+              row: invoiceData,
+              client: clientData,
+              business: businessSettings,
+              designId: currentDesign.id,
+              accentColor: currentAccentColor,
+              terminology: businessSettings?.estimate_terminology || 'estimate',
+              logoDataUri,
+            })
+          : null,
+      [invoiceData, clientData, businessSettings, documentType, currentDesign.id, currentAccentColor, logoDataUri],
+    );
+    const requireDoc = () => {
+      if (!previewDoc) throw new Error('Invoice is still loading');
+      return previewDoc;
+    };
     
-    // Paywall setup
-    const { checkAndShowPaywall } = useItemCreationLimit();
-    const { isSubscribed } = usePaywall();
-    const { registerPlacement } = usePlacement({
-      placement: 'create_item_limit'
-    });
+    // Paywall setup removed – manual sending is now free
 
-    // Gesture handler for swipe functionality
+    // Sheet drag. The handle and header are the grab area; the tiles, swatches
+    // and colour square keep their own touches. translateY carries an offset
+    // for the sheet's resting position so a drag continues from where the
+    // sheet is rather than jumping back to the top.
+    const EXPANDED_POS = -90;
+    const NORMAL_POS = 0;
+    const restingFor = useCallback(
+      (pos: 'normal' | 'minimized' | 'expanded') =>
+        pos === 'expanded' ? EXPANDED_POS : pos === 'minimized' ? Math.max(60, sheetHeightRef.current - 64) : NORMAL_POS,
+      [],
+    );
     const onGestureEvent = Animated.event(
       [{ nativeEvent: { translationY: translateY } }],
       { useNativeDriver: true }
     );
 
+    const snapTo = useCallback((pos: 'normal' | 'minimized' | 'expanded') => {
+      setModalPosition(pos);
+      translateY.flattenOffset();
+      Animated.spring(translateY, {
+        toValue: restingFor(pos),
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    }, [translateY, restingFor]);
+
     const onHandlerStateChange = useCallback((event: any) => {
-      if (event.nativeEvent.oldState === State.ACTIVE) {
-        const { translationY, velocityY } = event.nativeEvent;
-        
-        // Define positions: expanded (-90), normal (0), minimized (120)
-        const expandedPos = -90; // 30% higher up (90px up from normal)
-        const normalPos = 0;
-        const minimizedPos = 120;
-        
-        // Determine target position based on gesture
-        let targetPosition: 'normal' | 'minimized' | 'expanded' = modalPosition;
-        let targetValue = normalPos;
-        
-        if (modalPosition === 'normal') {
-          if (translationY > 50 || velocityY > 500) {
-            // Swipe down from normal -> minimize
-            targetPosition = 'minimized';
-            targetValue = minimizedPos;
-          } else if (translationY < -50 || velocityY < -500) {
-            // Swipe up from normal -> expand
-            targetPosition = 'expanded';
-            targetValue = expandedPos;
-          }
-        } else if (modalPosition === 'minimized') {
-          if (translationY < -30 || velocityY < -300) {
-            // Swipe up from minimized -> normal
-            targetPosition = 'normal';
-            targetValue = normalPos;
-          }
-        } else if (modalPosition === 'expanded') {
-          if (translationY > 30 || velocityY > 300) {
-            // Swipe down from expanded -> normal
-            targetPosition = 'normal';
-            targetValue = normalPos;
-          }
-        }
-        
-        // If no clear gesture, return to current position
-        if (targetPosition === modalPosition) {
-          targetValue = modalPosition === 'expanded' ? expandedPos : 
-                      modalPosition === 'minimized' ? minimizedPos : normalPos;
-        }
-        
-        // Update state and animate
-        setModalPosition(targetPosition);
-        Animated.spring(translateY, {
-          toValue: targetValue,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 8,
-        }).start();
+      const { state, oldState, translationY, velocityY } = event.nativeEvent;
+      if (state === State.BEGAN) {
+        translateY.setOffset(restingFor(modalPosition));
+        translateY.setValue(0);
+        return;
       }
-    }, [modalPosition, translateY]);
+      if (oldState !== State.ACTIVE) return;
+
+      let target: 'normal' | 'minimized' | 'expanded' = modalPosition;
+      if (modalPosition === 'normal') {
+        if (translationY > 40 || velocityY > 500) target = 'minimized';
+        else if (translationY < -40 || velocityY < -500) target = 'expanded';
+      } else if (modalPosition === 'minimized') {
+        if (translationY < -30 || velocityY < -300) target = 'normal';
+      } else if (modalPosition === 'expanded') {
+        if (translationY > 30 || velocityY > 300) target = 'normal';
+      }
+      snapTo(target);
+    }, [modalPosition, translateY, restingFor, snapTo]);
 
     useImperativeHandle(ref, () => ({
       present: () => {
@@ -235,105 +268,58 @@ export const InvoicePreviewModal = forwardRef(
       onClose?.();
     }, [onClose]);
 
+    // Write the chosen design and colour where they belong: onto this
+    // document when it exists, and into business_settings when the user wants
+    // it for every new invoice (or when there is no invoice yet to hold it).
+    // Used by Save and by every send, so a colour picked here is never lost.
+    const persistDesignChoice = useCallback(async (): Promise<boolean> => {
+      if (mode === 'settings') {
+        onDesignSaved?.(currentDesign.id, currentAccentColor);
+        return true;
+      }
+      if (invoiceId && documentType === 'estimate') {
+        const { error: updateError } = await supabase
+          .from('estimates')
+          .update({ estimate_template: currentDesign.id, accent_color: currentAccentColor })
+          .eq('id', invoiceId);
+        if (updateError) {
+          console.error('[InvoicePreviewModal] Error saving estimate design:', updateError);
+          return false;
+        }
+        if (applyAsDefault) return updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+        return true;
+      }
+      if (invoiceId) {
+        const saved = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
+        if (!saved) return false;
+        if (applyAsDefault) return updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+        return true;
+      }
+      // No document yet (previewing from the create screen): the choice can
+      // only live in the defaults, which the create screen reads on save.
+      return updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
+    }, [mode, onDesignSaved, invoiceId, documentType, supabase, currentDesign.id, currentAccentColor, applyAsDefault, saveToInvoice, updateDefaultForNewInvoices]);
+
     // Handle saving design changes and closing modal
     const handleSave = useCallback(async () => {
-      // Reduced noisy logs
-      
       try {
-        let saveSuccess = false;
-        
-        if (mode === 'settings') {
-          console.log('[InvoicePreviewModal] Settings mode - calling onDesignSaved');
-          // In settings mode, call the callback instead of saving to database
-          onDesignSaved?.(currentDesign.id, currentAccentColor);
-          saveSuccess = true;
-        } else if (invoiceId) {
-          if (documentType === 'estimate') {
-            // Reduced noisy logs
-            // Save design and color to specific estimate
-            const { error: updateError } = await supabase.from('estimates')
-              .update({
-                estimate_template: currentDesign.id,
-                accent_color: currentAccentColor,
-              })
-              .eq('id', invoiceId);
-            
-            if (!updateError) {
-              // Reduced noisy logs
-              saveSuccess = true;
-            } else {
-              console.error('[InvoicePreviewModal] Error saving estimate design:', updateError);
-            }
-          } else {
-            // Reduced noisy logs
-            // Save design and color to specific invoice
-            const success = await saveToInvoice(invoiceId, currentDesign.id, currentAccentColor);
-            if (success) {
-              // Reduced noisy logs
-              // Also update default for new invoices
-              // Reduced noisy logs
-              await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
-              saveSuccess = true;
-            } else {
-              console.log('[InvoicePreviewModal] Failed to save to invoice');
-            }
-          }
-        } else {
-          // Reduced noisy logs
-          // For new invoices, just update the default
-          const success = await updateDefaultForNewInvoices(currentDesign.id, currentAccentColor);
-          if (success) {
-            // Reduced noisy logs
-            saveSuccess = true;
-          } else {
-            console.log('[InvoicePreviewModal] Failed to update defaults');
-          }
+        const saveSuccess = await persistDesignChoice();
+        if (!saveSuccess) {
+          Alert.alert('Could not save design', 'Your design and colour were not saved. Please try again.');
+          return;
         }
-        
-        // Reduced noisy logs
-        
-        // Call onSaveComplete callback if save was successful
-        if (saveSuccess && onSaveComplete) {
-          // Reduced noisy logs
-          onSaveComplete();
-        }
-        
-        // Close modal WITHOUT calling onClose callback for saves (prevents state conflicts)
-        // Reduced noisy logs
+        onSaveComplete?.();
+        // Close WITHOUT calling onClose for saves (prevents state conflicts)
         setIsVisible(false);
-        // Reduced noisy logs
       } catch (error) {
         console.error('[InvoicePreviewModal] Error in handleSave:', error);
-        // Close modal WITHOUT calling onClose for errors (prevents state conflicts)
-        setIsVisible(false);
-        // Reduced noisy logs
+        Alert.alert('Could not save design', 'Something went wrong while saving. Please try again.');
       }
-      // Reduced noisy logs
-    }, [mode, onDesignSaved, invoiceId, currentDesign.id, currentAccentColor, saveToInvoice, updateDefaultForNewInvoices, onClose, onSaveComplete, documentType, supabase]);
+    }, [persistDesignChoice, onSaveComplete]);
 
 
     // Send handlers
     const handleSendByEmail = async () => {
-      // Check if user is subscribed - sending is premium only
-      if (!isSubscribed) {
-        console.log('[Modal handleSendByEmail] Free user attempting to send - showing no_send paywall');
-        try {
-          await registerPlacement({
-            placement: 'create_item_limit', // Using existing working placement
-            params: {
-              source: 'invoice_send_email',
-              invoiceId: invoiceData?.id,
-              userId: user?.id,
-              action: 'send_invoice'
-            }
-          });
-        } catch (error) {
-          console.error('[Modal handleSendByEmail] Paywall failed, using fallback');
-          router.push('/subscription');
-        }
-        return;
-      }
-
       if (!invoiceData || !businessSettings) {
         Alert.alert('Error', 'Invoice or business data is not available.');
         return;
@@ -344,62 +330,13 @@ export const InvoicePreviewModal = forwardRef(
         return;
       }
 
+      // The document goes out in the design on screen; keep the record in step.
+      await persistDesignChoice().catch((e) => console.warn(`[Modal handleSendByEmail] design not saved:`, e));
+
       try {
         console.log('[Modal handleSendByEmail] Generating PDF for invoice:', invoiceData.invoice_number);
         
-        const image = skiaInvoiceRef.current?.makeImageSnapshot();
-        
-        if (!image) {
-          throw new Error('Failed to create image snapshot from invoice canvas');
-        }
-        
-        const bytes = image.encodeToBytes();
-        
-        const chunkSize = 8192;
-        let binaryString = '';
-        
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-        }
-        
-        const base64String = btoa(binaryString);
-        
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              @page {
-                margin: 0;
-                size: ${image.width()}px ${image.height()}px;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                overflow: hidden;
-              }
-              .invoice-image {
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                display: block;
-                object-fit: none;
-              }
-            </style>
-          </head>
-          <body>
-            <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoiceData.invoice_number}" />
-          </body>
-          </html>
-        `;
-        
-        const { uri } = await Print.printToFileAsync({
-          html: htmlContent,
-          base64: false,
-        });
+        const { uri } = await renderInvoicePdf(requireDoc());
 
         // Update invoice status to sent
         const { error: updateError } = await supabase
@@ -443,41 +380,20 @@ export const InvoicePreviewModal = forwardRef(
     };
 
     const handleSendLink = async () => {
-      // Check if user is subscribed - sending is premium only
-      if (!isSubscribed) {
-        console.log('[Modal handleSendLink] Free user attempting to send - showing no_send paywall');
-        try {
-          await registerPlacement({
-            placement: 'create_item_limit', // Using existing working placement
-            params: {
-              source: 'invoice_send_link',
-              invoiceId: invoiceData?.id,
-              userId: user?.id,
-              action: 'send_invoice'
-            }
-          });
-        } catch (error) {
-          console.error('[Modal handleSendLink] Paywall failed, using fallback');
-          router.push('/subscription');
-        }
-        return;
-      }
 
       if (!invoiceData || !supabase || !user) {
         Alert.alert('Error', 'Unable to send invoice at this time.');
         return;
       }
 
+      // The document goes out in the design on screen; keep the record in step.
+      await persistDesignChoice().catch((e) => console.warn(`[Modal handleSendLink] design not saved:`, e));
+
       try {
         console.log('[Modal handleSendLink] Generating shareable PDF link for invoice:', invoiceData.id);
         
         // Generate shareable PDF link using the Skia canvas
-        const result = await InvoiceShareService.generateShareLinkFromCanvas(
-          invoiceData.id, 
-          user.id,
-          skiaInvoiceRef,
-          30 // Expires in 30 days
-        );
+        const result = await InvoiceShareService.generateShareLinkFromPdf(invoiceData.id, user.id, (await renderInvoicePdf(requireDoc())).uri, 30);
 
         if (!result.success) {
           Alert.alert('Error', result.error || 'Failed to generate share link');
@@ -576,75 +492,19 @@ export const InvoicePreviewModal = forwardRef(
     };
 
     const handleSendPDF = async () => {
-      // Check if user is subscribed - sending is premium only
-      if (!isSubscribed) {
-        console.log('[Modal handleSendPDF] Free user attempting to send - showing no_send paywall');
-        try {
-          await registerPlacement({
-            placement: 'create_item_limit', // Using existing working placement
-            params: {
-              source: 'invoice_send_pdf',
-              invoiceId: invoiceData?.id,
-              userId: user?.id,
-              action: 'send_invoice'
-            }
-          });
-        } catch (error) {
-          console.error('[Modal handleSendPDF] Paywall failed, using fallback');
-          router.push('/subscription');
-        }
-        return;
-      }
 
       if (!invoiceData || !businessSettings) {
         Alert.alert('Error', 'Cannot export PDF - invoice data not loaded');
         return;
       }
 
+      // The document goes out in the design on screen; keep the record in step.
+      await persistDesignChoice().catch((e) => console.warn(`[Modal handleSendPDF] design not saved:`, e));
+
       try {
         console.log('[Modal handleSendPDF] Generating PDF for invoice:', invoiceData.invoice_number);
         
-        const image = skiaInvoiceRef.current?.makeImageSnapshot();
-        
-        if (!image) {
-          throw new Error('Failed to create image snapshot from invoice canvas');
-        }
-        
-        const imageBytes = image.encodeToBytes();
-        const fileName = `invoice-${invoiceData.invoice_number}.pdf`;
-        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        
-        const chunkSize = 8192;
-        let binaryString = '';
-        
-        for (let i = 0; i < imageBytes.length; i += chunkSize) {
-          const chunk = imageBytes.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-        }
-        
-        const base64String = btoa(binaryString);
-        
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              @page { margin: 0; }
-              body { margin: 0; padding: 0; }
-              img { width: 100%; height: auto; }
-            </style>
-          </head>
-          <body>
-            <img src="data:image/png;base64,${base64String}" alt="Invoice ${invoiceData.invoice_number}" />
-          </body>
-          </html>
-        `;
-        
-        const { uri } = await Print.printToFileAsync({
-          html: htmlContent,
-          base64: false,
-        });
+        const { uri } = await renderInvoicePdf(requireDoc());
         
         // Update invoice status to sent
         const { error: updateError } = await supabase
@@ -697,6 +557,7 @@ export const InvoicePreviewModal = forwardRef(
           presentationStyle="fullScreen"
           onRequestClose={handleClose}
         >
+          <GestureHandlerRootView style={{ flex: 1 }}>
           <SafeAreaView style={[styles.container, { backgroundColor: themeColors.card }]}>
             <View style={[styles.header, { borderBottomColor: themeColors.border }]}>
               <TouchableOpacity 
@@ -731,88 +592,41 @@ export const InvoicePreviewModal = forwardRef(
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              onTouchStart={() => console.log('[InvoicePreviewModal] ScrollView touched')}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { backgroundColor: themeColors.border }
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.previewContainer}>
-                <View style={{
-                  transform: [{ scale: 0.882 }],
-                  marginLeft: -175,
-                  position: 'relative',
-                }}>
-                  {React.createElement(currentDesign.component, {
-                    ref: skiaInvoiceRef,
-                    renderSinglePage: 0,
-                    style: {
-                      width: 200,
-                      height: 280,
-                      backgroundColor: 'white',
-                      borderRadius: 8,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 8 },
-                      shadowOpacity: 0.25,
-                      shadowRadius: 12,
-                      elevation: 10,
-                    },
-                    invoice: invoiceData,
-                    business: businessSettings,
-                    client: clientData,
-                    currencySymbol: businessSettings?.currency_symbol || '$',
-                    accentColor: currentAccentColor,
-                    documentType: documentType,
-                    estimateTerminology: businessSettings?.estimate_terminology || 'estimate',
-                    displaySettings: {
-                      show_business_logo: businessSettings?.show_business_logo ?? true,
-                      show_business_name: businessSettings?.show_business_name ?? true,
-                      show_business_address: businessSettings?.show_business_address ?? true,
-                      show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-                      show_notes_section: businessSettings?.show_notes_section ?? true,
-                    }
-                  })}
-                  
-                </View>
-              </View>
-            </ScrollView>
+            <View style={{ flex: 1, backgroundColor: themeColors.border }}>
+              {previewDoc ? <InvoiceDocumentView doc={previewDoc} background={themeColors.border} /> : null}
+            </View>
 
             {/* Design/Color Selector - Fixed bottom panel */}
-            <PanGestureHandler
-              ref={gestureRef}
-              onGestureEvent={onGestureEvent}
-              onHandlerStateChange={onHandlerStateChange}
-              activeOffsetY={[-50, 50]}
-              enabled={true}
-            >
-              <Animated.View 
+            <Animated.View 
+                onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height; }}
                 style={[
                   styles.designSelectorContainer,
                   {
+                    backgroundColor: themeColors.card,
                     transform: [{ translateY: translateY }],
                   }
                 ]}
               >
+                <PanGestureHandler
+                  ref={gestureRef}
+                  onGestureEvent={onGestureEvent}
+                  onHandlerStateChange={onHandlerStateChange}
+                  activeOffsetY={[-6, 6]}
+                  failOffsetX={[-20, 20]}
+                >
+                <Animated.View>
                 {/* Swipe indicator */}
                 <View style={styles.swipeIndicator}>
                   <View style={styles.swipeHandle} />
                 </View>
                 
                 {/* Tab Selector Header */}
-                <View style={styles.selectorHeader}>
+                <View style={[styles.selectorHeader, { borderBottomColor: themeColors.border }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 }}>
                     <View style={{ flex: 1 }} />
-                    <SegmentedControl
-                      options={['Choose Design', 'Choose Colour']}
-                      selectedIndex={activeTab === 'design' ? 0 : 1}
-                      onSelectionChange={(index) => {
-                        setActiveTab(index === 0 ? 'design' : 'color');
-                        setShowSendOptions(false); // Hide send options when switching tabs
-                      }}
-                      style={[styles.tabSelectorBottom, { opacity: showSendOptions ? 0.6 : 1 }]}
-                    />
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: themeColors.foreground, opacity: showSendOptions ? 0.6 : 1 }}>
+                      Design & colour
+                    </Text>
                     <View style={{ flex: 1, alignItems: 'flex-end' }}>
                       {/* Send Arrow - positioned to the right */}
                       {invoiceData && businessSettings && mode !== 'settings' && (
@@ -822,7 +636,7 @@ export const InvoicePreviewModal = forwardRef(
                             marginRight: -15, // Move 10 more pixels to the right (was -5, now -15)
                             width: 36,
                             height: 36,
-                            backgroundColor: showSendOptions ? '#22c55e' : '#f3f4f6',
+                            backgroundColor: showSendOptions ? '#22c55e' : themeColors.muted,
                             borderRadius: 18,
                             justifyContent: 'center',
                             alignItems: 'center',
@@ -834,18 +648,20 @@ export const InvoicePreviewModal = forwardRef(
                           }}
                           activeOpacity={0.8}
                         >
-                          <Send size={18} color={showSendOptions ? "#FFFFFF" : "#6b7280"} />
+                          <Send size={18} color={showSendOptions ? "#FFFFFF" : themeColors.mutedForeground} />
                         </TouchableOpacity>
                       )}
                     </View>
                   </View>
                 </View>
+                </Animated.View>
+                </PanGestureHandler>
                 
                 {/* Content */}
-                <View style={styles.selectorContent}>
+                <View style={[styles.selectorContent, { backgroundColor: themeColors.card }]}>
                   {showSendOptions ? (
                     /* Send Options - compact to fit same space */
-                    <View style={{ paddingHorizontal: 16, paddingVertical: 0, paddingTop: 8, paddingBottom: 20, backgroundColor: 'white' }}>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 0, paddingTop: 8, paddingBottom: 20, backgroundColor: themeColors.card }}>
                       {/* Send Options Buttons - more compact */}
                       <TouchableOpacity 
                         style={{
@@ -853,14 +669,14 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: 'white',
+                          backgroundColor: themeColors.muted,
                           borderRadius: 12,
                           marginBottom: 8,
                           shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 3 },
-                          shadowOpacity: 0.15,
-                          shadowRadius: 6,
-                          elevation: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: colorScheme === 'dark' ? 0 : 0.08,
+                          shadowRadius: 4,
+                          elevation: colorScheme === 'dark' ? 0 : 2,
                         }}
                         onPress={() => {
                           handleSendByEmail();
@@ -876,14 +692,14 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: 'white',
+                          backgroundColor: themeColors.muted,
                           borderRadius: 12,
                           marginBottom: 8,
                           shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 3 },
-                          shadowOpacity: 0.15,
-                          shadowRadius: 6,
-                          elevation: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: colorScheme === 'dark' ? 0 : 0.08,
+                          shadowRadius: 4,
+                          elevation: colorScheme === 'dark' ? 0 : 2,
                         }}
                         onPress={() => {
                           handleSendLink();
@@ -899,13 +715,13 @@ export const InvoicePreviewModal = forwardRef(
                           alignItems: 'center',
                           paddingVertical: 12,
                           paddingHorizontal: 16,
-                          backgroundColor: 'white',
+                          backgroundColor: themeColors.muted,
                           borderRadius: 12,
                           shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 3 },
-                          shadowOpacity: 0.15,
-                          shadowRadius: 6,
-                          elevation: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: colorScheme === 'dark' ? 0 : 0.08,
+                          shadowRadius: 4,
+                          elevation: colorScheme === 'dark' ? 0 : 2,
                         }}
                         onPress={() => {
                           handleSendPDF();
@@ -916,32 +732,31 @@ export const InvoicePreviewModal = forwardRef(
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    /* Design/Color Selectors */
-                    <>
-                      {activeTab === 'design' ? (
-                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: 'white' }}>
-                          <InvoiceDesignSelector
-                            designs={availableDesigns}
-                            selectedDesignId={currentDesign.id}
-                            onDesignSelect={selectDesign}
-                            isLoading={isDesignLoading}
-                          />
-                        </View>
-                      ) : (
-                        <View style={{ marginTop: 2, paddingTop: 0, marginBottom: -20, paddingBottom: 20, backgroundColor: 'white' }}>
-                          <ColorSelector
-                            selectedColor={currentAccentColor}
-                            onColorSelect={selectAccentColor}
-                          />
-                        </View>
-                      )}
-                    </>
+                    /* Design + colour in one place */
+                    <View style={{ marginTop: 2, paddingBottom: 6, backgroundColor: themeColors.card }}>
+                      <DesignPicker
+                        designs={availableDesigns}
+                        selectedDesign={currentDesign}
+                        onDesignSelect={handleDesignSelect}
+                        accentColor={currentAccentColor}
+                        onAccentSelect={selectAccentColor}
+                        brandColor={brandColor}
+                        isLoading={isDesignLoading}
+                        showDefaultToggle={mode !== 'settings'}
+                        applyAsDefault={applyAsDefault}
+                        onApplyAsDefaultChange={setApplyAsDefault}
+                        onExpandedChange={(expanded) => {
+                          if (expanded && modalPosition === 'minimized') snapTo('normal');
+                        }}
+                      />
+                    </View>
                   )}
                 </View>
               </Animated.View>
-            </PanGestureHandler>
+            <LogoColorProbe />
 
           </SafeAreaView>
+          </GestureHandlerRootView>
         </Modal>
 
       </>
@@ -1029,7 +844,8 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     bottom: 25,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     paddingBottom: 0, // Remove bottom padding to eliminate white space
     paddingTop: 0, // Removed all top padding (3px reduction)
     shadowColor: '#000',
@@ -1067,14 +883,12 @@ const getStyles = (themeColors: any) => StyleSheet.create({
     paddingBottom: 0, // Reduced by 4 more pixels  
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   tabSelectorBottom: {
     width: 250,
   },
   selectorContent: {
-    height: 150, // Fixed height instead of flex: 1
-    backgroundColor: 'white',
+    // Sizes to its content: tiles, swatches, and the default switch.
   },
   swipeIndicator: {
     alignItems: 'center',
@@ -1083,7 +897,7 @@ const getStyles = (themeColors: any) => StyleSheet.create({
   swipeHandle: {
     width: 40,
     height: 4,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: themeColors.border,
     borderRadius: 2,
   },
 }); 

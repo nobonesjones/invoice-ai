@@ -33,11 +33,13 @@ import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useInvoiceStatusUpdater } from '@/hooks/useInvoiceStatusUpdater';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
+import { useInvoiceRealtime } from '@/hooks/useInvoiceRealtime';
+import { useAnalytics } from '@/hooks/useAnalytics';
 import type { Database } from "../../../../supabase/types/database.types"; 
 
 // Define filter options here to map type to label for initialization and sync
 const filterOptions = [
+  { label: "All", type: "all" },
   { label: "Today", type: "today" },
   { label: "This Week", type: "this_week" },
   { label: "This Month", type: "this_month" },
@@ -99,6 +101,9 @@ export const getFilterDateRange = (filterType: string): { startDate: string, end
   let endDateObj: Date;
 
   switch (filterType) {
+    case "all":
+    case "all_time":
+      return null;
     case "this_week":
       startDateObj = getStartOfWeek(now);
       endDateObj = getEndOfWeek(now);
@@ -132,7 +137,7 @@ export const getFilterDateRange = (filterType: string): { startDate: string, end
       endDateObj = getEndOfYear(lastYearDate);
       break;
     default:
-      return null; // No filter or unknown filter type, or handle as 'all time'
+      return null; // No filter or unknown filter type
   }
   return { startDate: toSupabaseISOString(startDateObj), endDate: toSupabaseISOString(endDateObj) };
 };
@@ -209,9 +214,9 @@ export default function InvoiceDashboardScreen() {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
+  const analytics = useAnalytics();
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { checkAndShowPaywall } = useItemCreationLimit();
   
   // Auto-update overdue invoice statuses
   useInvoiceStatusUpdater();
@@ -221,9 +226,9 @@ export default function InvoiceDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
-  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("this_month"); // Default filter type
+  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("all"); // Default filter type
   const [currentFilterLabel, setCurrentFilterLabel] = useState<string>(
-    filterOptions.find(opt => opt.type === "this_month")?.label || "This Month" // Initialize label
+    filterOptions.find(opt => opt.type === "all")?.label || "All" // Initialize label
   );
   const [totalInvoiced, setTotalInvoiced] = useState<number>(0); 
   const [totalPaid, setTotalPaid] = useState<number>(0); 
@@ -284,7 +289,10 @@ export default function InvoiceDashboardScreen() {
     }
   }, [user?.id, supabase]);
 
-  const loadInvoicesAndSummary = useCallback(async (isPullToRefresh = false) => {
+  // `silent` refreshes the data without touching either loader: used when a
+  // server-side change arrives over realtime, where a spinner the user did not
+  // ask for would read as something going wrong.
+  const loadInvoicesAndSummary = useCallback(async (isPullToRefresh = false, silent = false) => {
     if (!user?.id) {
       setError("User not authenticated.");
       setLoading(false);
@@ -292,7 +300,9 @@ export default function InvoiceDashboardScreen() {
       return;
     }
 
-    if (!isPullToRefresh) {
+    if (silent) {
+      // no loader
+    } else if (!isPullToRefresh) {
       setLoading(true); // Show loader for initial load or filter/search change
     } else {
       setIsRefreshing(true); // Show pull-to-refresh indicator
@@ -375,17 +385,24 @@ export default function InvoiceDashboardScreen() {
       // Screen focused, reloading data
       setIsTabBarVisible(true); // Show tab bar when returning to dashboard
       fetchBusinessSettings();
-      loadInvoicesAndSummary(); // Call the consolidated function
+      loadInvoicesAndSummary(false, invoices.length > 0); // silent when data is already on screen
       return () => {
         // Screen unfocused
         // Tab bar visibility will be managed by the destination screen
       };
-    }, [fetchBusinessSettings, loadInvoicesAndSummary, setIsTabBarVisible])
+    }, [fetchBusinessSettings, loadInvoicesAndSummary, setIsTabBarVisible, invoices.length])
   );
 
   const onRefresh = useCallback(() => {
     loadInvoicesAndSummary(true); // Pass true to indicate it's a pull-to-refresh
   }, [loadInvoicesAndSummary]);
+
+  // A payment landing (Stripe, GoCardless, or another device) updates the row
+  // on the server; without this the list showed the old status until the next
+  // focus.
+  useInvoiceRealtime(() => {
+    loadInvoicesAndSummary(false, true);
+  });
 
 	const renderInvoiceItem = ({ item }: { item: InvoiceData }) => (
 		<TouchableOpacity
@@ -445,7 +462,7 @@ export default function InvoiceDashboardScreen() {
             </View>
             <View style={styles.summaryDataItem}>
               <Text style={[styles.summaryDataLabel, { color: themeColors.mutedForeground }]}>Overdue</Text>
-              <Text style={[styles.summaryDataValue, { color: themeColors.statusDue }]}>{`$${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Text>
+              <Text style={[styles.summaryDataValue, { color: themeColors.statusDue }]}>{`${getCurrencySymbol(currencyCode)}${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}</Text>
             </View>
           </View>
 
@@ -504,13 +521,9 @@ export default function InvoiceDashboardScreen() {
             </Text>
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
-                onPress={async () => {
-                  // Create button pressed
-                  const canProceed = await checkAndShowPaywall();
-                  // Can proceed with creation
-                  if (canProceed) {
-                    router.push("/invoices/create" as any);
-                  }
+                onPress={() => {
+                  setIsTabBarVisible(false); // before the push, so create lays out full-height from its first frame
+                  router.push("/invoices/create" as any);
                 }}
               >
                 <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
@@ -562,7 +575,7 @@ export default function InvoiceDashboardScreen() {
           <SummaryHeaderBar invoicedAmount={totalInvoiced} paidAmount={totalPaid} overdueAmount={totalOverdue} />
 
           {/* Display Current Filter Label */} 
-          {filteredInvoices.length > 0 && !loading && (
+          {invoices.length > 0 && (
             <View style={styles.currentFilterDisplayContainer}>
               <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
                 {searchTerm.trim() ? `${filteredInvoices.length} of ${invoices.length} invoices` : currentFilterLabel}

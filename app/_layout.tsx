@@ -3,7 +3,7 @@ import "../global.css";
 
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Slot, useRouter, useSegments } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Host } from "react-native-portalize";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -25,6 +25,28 @@ function RootLayoutNav() {
 	
 	// Initialize analytics
 	const analytics = useAnalytics();
+	const lastIdentifiedIdRef = useRef<string | null>(null);
+
+	// Identify the user once when a session is present
+	useEffect(() => {
+		if (!initialized) return;
+		const user = session?.user;
+		const userId = user?.id || null;
+
+		if (userId && lastIdentifiedIdRef.current !== userId) {
+			analytics.identifyUser(userId, {
+				$email: (user?.email as string | undefined) || undefined,
+				$name: (user?.user_metadata as any)?.full_name || undefined,
+				$created: (user as any)?.created_at || new Date().toISOString(),
+			});
+			lastIdentifiedIdRef.current = userId;
+		}
+
+		if (!userId) {
+			lastIdentifiedIdRef.current = null;
+		}
+	}, [initialized, session?.user?.id]);
+
 
 	useEffect(() => {
 		if (!initialized) return; // Wait until supabase is initialized
@@ -37,6 +59,16 @@ function RootLayoutNav() {
 		const inAppProtectedRoute = segments[0] === "(app)" && segments[1] === "(protected)";
 		// Check if the current route is within the public group (for shared invoices)
 		const inPublicGroup = segments[0] === "(public)" || segments[0] === "shared" || segments[0] === "invoice" || segments[0] === "test";
+		// Check if the current route is the polar-callback deep link handler
+		const isPolarCallbackScreen = segments[0] === "polar-callback";
+		// Check if the current route is the gocardless-callback deep link handler
+		const isGoCardlessCallbackScreen = segments[0] === "gocardless-callback";
+		// Landing point for Stripe Connect onboarding. Exempt for the same reason as
+		// the callbacks above: it is reached by an external redirect, and bouncing it
+		// to (protected) would drop the user on the invoice list instead of payments.
+		const isStripeConnectScreen = segments[0] === "stripe-connect";
+		// Payer return from a GoCardless payment page; reached by redirect, same as the above.
+		const isPaymentCompleteScreen = segments[0] === "payment-complete";
 		// Check if the current route is the soft paywall screen
 		const isSoftPaywallScreen =
 			segments[0] === "(app)" &&
@@ -64,6 +96,13 @@ function RootLayoutNav() {
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-options";
     const isPaymentRemindersScreen =
       segments[0] === "(app)" && segments.length === 2 && segments[1] === "payment-reminders";
+    const isSupportChatScreen =
+      segments[0] === "(app)" && segments.length === 2 && segments[1] === "support-chat";
+
+    // Detect onboarding routes inside (auth)
+    const isOnboardingRoute = segments[0] === '(auth)' && segments.length >= 2 && String(segments[1] || '').startsWith('onboarding');
+    // Treat both (auth) and (app)/(auth) as auth groups for redirect purposes
+    const inAnyAuthGroup = inAuthGroup || inAppAuthGroup;
 
 		const isInProtectedGroup = inAppProtectedRoute;
 
@@ -82,23 +121,35 @@ function RootLayoutNav() {
     // console.log("[Auth Effect] isPaymentOptionsScreen:", isPaymentOptionsScreen);
     // console.log("[Auth Effect] isPaymentRemindersScreen:", isPaymentRemindersScreen);
 
-		if (session && 
-        !inAuthGroup &&
-        !inAppProtectedRoute && 
-        !isAccountDetailsScreen &&
-        !isBusinessInformationScreen &&
-        !isInvoiceSettingsScreen &&
-        !isTaxCurrencyScreen &&
-        !isAppLanguageScreen &&
-        !isCustomerSupportScreen &&
-        !isPaymentOptionsScreen &&
-        !isPaymentRemindersScreen &&
-        !isSoftPaywallScreen
-      ) { 
-			// User is logged in but not in the main protected area OR any allowed app-level screens.
-			// Redirect to the main protected route (e.g., home screen).
-			// console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
-			router.replace("/(app)/(protected)");
+    const inAllowedAppScreens = (
+      inAppProtectedRoute ||
+      isAccountDetailsScreen ||
+      isBusinessInformationScreen ||
+      isInvoiceSettingsScreen ||
+      isTaxCurrencyScreen ||
+      isAppLanguageScreen ||
+      isCustomerSupportScreen ||
+      isPaymentOptionsScreen ||
+      isPaymentRemindersScreen ||
+      isSupportChatScreen ||
+      isSoftPaywallScreen ||
+      inPublicGroup ||
+      isPolarCallbackScreen ||
+      isGoCardlessCallbackScreen ||
+      isStripeConnectScreen ||
+      isPaymentCompleteScreen
+    );
+
+    const shouldGoProtected = !!session && (
+      (inAnyAuthGroup && !isOnboardingRoute) ||
+      (!inAuthGroup && !inAllowedAppScreens)
+    );
+
+    if (shouldGoProtected) { 
+      // User is logged in but not in the main protected area OR any allowed app-level screens.
+      // Redirect to the main protected route (e.g., home screen).
+      // console.log("[Auth Effect] Redirecting to /(app)/(protected)"); // Log redirection case 1
+      router.replace("/(app)/(protected)");
 		} else if (
 			!session &&
 			!(inAuthGroup || inAppAuthGroup || inPublicGroup || isSoftPaywallScreen)
@@ -108,7 +159,9 @@ function RootLayoutNav() {
 			// console.log("[Auth Effect] Redirecting to /(auth)/onboarding-1"); // Log redirection case 2
 			router.replace("/(auth)/onboarding-1");
 		}
-	}, [initialized, session, segments]);
+}, [initialized, session, segments]);
+
+  // (Removed global deep link handler to avoid interfering with email flows)
 
 	// Render the current route using Slot
 	// Navigation is handled by the useEffect above

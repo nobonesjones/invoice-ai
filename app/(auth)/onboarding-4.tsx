@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 // import { useAnalytics } from "@/hooks/useAnalytics"; // Removed for App Store build
 
 const INDUSTRIES = [
@@ -63,15 +64,18 @@ export default function OnboardingScreen4() {
   const router = useRouter();
   const { theme } = useTheme();
   const { updateIndustry } = useOnboarding();
+  const analytics = useAnalytics();
   // const analytics = useAnalytics(); // Removed for App Store build
   const searchInputRef = useRef<TextInput>(null);
   
   const [searchText, setSearchText] = useState('');
   const [selectedIndustry, setSelectedIndustry] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding 6 - Industry', { step: 6 });
     
     // Analytics removed for App Store build
     
@@ -92,6 +96,9 @@ export default function OnboardingScreen4() {
       return;
     }
 
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
@@ -105,6 +112,8 @@ export default function OnboardingScreen4() {
     } catch (error) {
       console.error('[Onboarding4] Error saving industry:', error);
       Alert.alert('Error', 'Failed to save industry information. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
   };
 
@@ -201,11 +210,12 @@ export default function OnboardingScreen4() {
               <View style={styles.buttonContainer}>
                 <Button
                   onPress={handleContinue}
+                  disabled={!isFormValid || isSubmitting}
                   style={[
                     styles.primaryButton,
-                    { backgroundColor: isFormValid ? theme.primary : theme.muted }
+                    { backgroundColor: isFormValid ? theme.primary : theme.muted },
+                    (isSubmitting || !isFormValid) && { opacity: 0.6 }
                   ]}
-                  disabled={!isFormValid}
                 >
                   <Text style={[
                     styles.primaryButtonText,

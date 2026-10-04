@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
+  Pressable,
   Platform,
   Alert,
   Image,
@@ -17,14 +18,19 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
+import { useRouter } from 'expo-router';
 import { SignUpModal } from "./sign-up-modal";
+import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { SignInModal } from "./sign-in-modal";
+import { startAuthWatchdog } from "@/utils/auth-watchdog";
+import { waitForSupabaseSession } from "@/utils/wait-for-session";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -48,11 +54,40 @@ export function AuthModal({
   const { theme } = useTheme();
   const { session } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
+  const router = useRouter();
   
   const [showSignUp, setShowSignUp] = useState(initialMode === 'signup');
   const [showSignIn, setShowSignIn] = useState(initialMode === 'signin');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
+
+  // Ensure sign-in modal closes on success to avoid getting "stuck"
+  const handleSignInSuccess = () => {
+    try { setShowSignIn(false); } catch {}
+    try { setShowSignUp(false); } catch {}
+    onSuccess?.();
+  };
+
+  // Close any auth UI if a session exists (covers Google return via callback route)
+  useEffect(() => {
+    if (session) {
+      try { setShowSignIn(false); } catch {}
+      try { setShowSignUp(false); } catch {}
+    }
+  }, [session]);
+
+  const handleSignUpSuccess = async () => {
+    try { setShowSignUp(false); } catch {}
+    try { setShowSignIn(false); } catch {}
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (userId) { try { await saveOnboardingData(userId); } catch {} }
+    } catch {}
+    // Always move new sign-ups into the onboarding flow
+    router.replace('/(auth)/onboarding-2');
+    onSuccess?.();
+  };
 
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0629.mp4'), (player) => {
@@ -65,10 +100,12 @@ export function AuthModal({
     setIsGoogleLoading(true);
     
     try {
+      const watchdog = startAuthWatchdog({ tag: 'google.authModal', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           skipBrowserRedirect: true,
+          redirectTo: OAUTH_REDIRECT,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -87,57 +124,84 @@ export function AuthModal({
       }
 
       if (data?.url) {
-        console.log("OAuth URL from Supabase:", data.url);
-        
-        // Use the original approach - the token extraction should handle localhost redirects
+        // Open system browser; deep link returns to app
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          "superinvoice://oauth/callback",
+          OAUTH_REDIRECT,
         );
-        
-        console.log("WebBrowser result:", result);
-        
-        // Handle the case where we get redirected to localhost with tokens
-        if (result.type === "success" && result.url && result.url.includes("access_token")) {
-          console.log("Got auth tokens from redirect URL:", result.url);
-          
-          // Extract tokens from the URL (could be after # or ?)
-          const urlParts = result.url.includes('#') ? result.url.split("#") : result.url.split("?");
-          const tokenString = urlParts[1] || urlParts[0];
+        if (result.type === 'success' && result.url) {
+          // Extract tokens or code from result URL (handles both # and ? styles)
+          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
+          const tokenString = urlParts[1] || '';
           const params = new URLSearchParams(tokenString);
-          
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          const code = params.get('code');
+
           if (access_token && refresh_token) {
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
+            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
             if (setError) {
-              console.error("Error setting session manually:", setError);
-              Alert.alert("Session Error", "Could not set user session.");
-            } else {
-              // Get the user ID from the session and save onboarding data
-              const { data: sessionData } = await supabase.auth.getSession();
-              if (sessionData?.session?.user?.id) {
-                try {
-                  await saveOnboardingData(sessionData.session.user.id);
-                  console.log('[AuthModal] Onboarding data saved after Google auth');
-                } catch (error) {
-                  console.error('[AuthModal] Error saving onboarding data:', error);
-                  // Don't block the flow if onboarding data save fails
-                }
-              }
-              onSuccess?.();
+              console.error('Error setting session manually:', setError);
+              Alert.alert('Session Error', 'Could not set user session.');
+              return;
+            }
+          } else if (code) {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError);
+              Alert.alert('Authentication Error', 'Could not complete sign-in.');
+              return;
             }
           } else {
-            Alert.alert(
-              "Authentication Error",
-              "Could not process authentication response.",
-            );
+            // Callback route will handle if needed
           }
+
+          // Close modals and route immediately like email flow; save onboarding in background
+          try { setShowSignIn(false); } catch {}
+          try { setShowSignUp(false); } catch {}
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const userId = sessionData?.session?.user?.id;
+            if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          } catch {}
+          try { await waitForSupabaseSession(8000); } catch {}
+          try { router.replace('/(app)/(protected)'); } catch {}
+          try { watchdog.stop(); } catch {}
+          onSuccess?.();
+          return;
         }
+
+        // Fallback: even if the browser result isn't "success", the callback may have set the session
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try { setShowSignIn(false); } catch {}
+            try { setShowSignUp(false); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
+            try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
+            onSuccess?.();
+            return;
+          }
+        } catch {}
       } else {
+        // No URL returned; the callback may already have set the session
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try { setShowSignIn(false); } catch {}
+            try { setShowSignUp(false); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
+            try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
+            onSuccess?.();
+            return;
+          }
+        } catch {}
         Alert.alert("Authentication Error", "Could not get authentication URL.");
       }
     } catch (catchError: any) {
@@ -158,18 +222,22 @@ export function AuthModal({
     setIsAppleLoading(true);
     
     try {
+      const rawNonce = await generateNonce(32);
+      const hashedNonce = await sha256Hex(rawNonce);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
+        nonce: hashedNonce,
       });
 
       if (credential.identityToken) {
+        // (Preview-only debug removed to reduce bundle complexity)
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,
-          nonce: credential.nonce,
+          nonce: rawNonce,
         });
 
         if (error) {
@@ -184,6 +252,9 @@ export function AuthModal({
         if (data.session?.user?.id) {
           await saveOnboardingData(data.session.user.id);
         }
+        
+        // Call success callback to handle navigation
+        onSuccess?.();
         
       } else {
         throw new Error('No identity token received from Apple');
@@ -247,7 +318,7 @@ export function AuthModal({
                 <Text style={styles.subtitle}>
                   {initialMode === 'signin' 
                     ? 'Welcome back! Sign in to your account.'
-                    : 'Join thousands of business owners who trust SupaInvoice.'
+                    : 'Join thousands of business owners who trust SuperInvoice.'
                   }
                 </Text>
               </View>
@@ -264,41 +335,33 @@ export function AuthModal({
                     <Text style={[styles.planBadgeText, { color: theme.primary }]}>PRO PLAN</Text>
                   </View>
                 )}
-                <Button
+                <Pressable
                   onPress={handleAppleAuth}
-                  style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                  style={[
+                    styles.choiceButton,
+                    {
+                      backgroundColor: '#000000',
+                      borderColor: '#000000',
+                      opacity: isAppleLoading ? 0.6 : 1
+                    }
+                  ]}
                   disabled={isAppleLoading}
                 >
                   {isAppleLoading ? (
-                    <ActivityIndicator color="#000000" />
+                    <>
+                      <ActivityIndicator color="#FFFFFF" />
+                      <Text style={[styles.appleButtonText, { color: "#FFFFFF", marginLeft: 12 }]}>Signing in...</Text>
+                    </>
                   ) : (
                     <>
-                      <Ionicons name="logo-apple" size={24} color="#000000" style={styles.appleIcon} />
-                      <Text style={[styles.appleButtonText, { color: "#000000" }]}>
-                        Sign In With Apple
-                      </Text>
+                      <View style={styles.appleIconContainer}>
+                        <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
+                      </View>
+                      <Text style={[styles.appleButtonText, { color: "#FFFFFF" }]}>Sign In With Apple</Text>
                     </>
                   )}
-                </Button>
-                <Button
-                  onPress={handleGoogleAuth}
-                  style={[styles.choiceButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-                  disabled={isGoogleLoading}
-                >
-                  {isGoogleLoading ? (
-                    <ActivityIndicator color={theme.foreground} />
-                  ) : (
-                    <>
-                      <Image 
-                        source={require('@/assets/google.png')} 
-                        style={styles.googleIcon} 
-                      />
-                      <Text style={[styles.googleButtonText, { color: theme.foreground }]}>
-                        Sign In With Google
-                      </Text>
-                    </>
-                  )}
-                </Button>
+                </Pressable>
+                {/* Google Sign-In temporarily disabled */}
                 <Button
                   onPress={handleContinueWithEmail}
                   style={[styles.choiceButton, styles.emailButton, { backgroundColor: theme.primary }]}                  
@@ -337,7 +400,7 @@ export function AuthModal({
           setShowSignIn(true);
         }}
         plan={plan}
-        onSuccess={onSuccess}
+        onSuccess={handleSignUpSuccess}
       />
 
       {/* Sign In Modal */}
@@ -353,7 +416,7 @@ export function AuthModal({
           }
         }}
         plan={plan}
-        onSuccess={onSuccess}
+        onSuccess={handleSignInSuccess}
       />
     </>
   );
@@ -476,8 +539,19 @@ const getStyles = (theme: any) => StyleSheet.create({
   emailButton: {
     borderWidth: 0,
   },
+  appleButton: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+    borderWidth: 0,
+  },
   appleIcon: {
     marginRight: 12,
+  },
+  appleIconContainer: {
+    marginRight: 10,
+    position: 'relative',
+    left: -3,
+    top: -3,
   },
   googleIcon: {
     width: 20,

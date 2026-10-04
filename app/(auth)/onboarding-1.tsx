@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { generateNonce, sha256Hex } from '@/utils/apple-nonce';
 import {
   View,
   Text,
@@ -24,7 +25,11 @@ import { SignUpModal } from "@/components/auth/sign-up-modal";
 import { OnboardingInvoiceCarousel } from "@/components/OnboardingInvoiceCarousel";
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from "@/config/supabase";
+import { OAUTH_REDIRECT } from "@/utils/oauth";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { startAuthWatchdog } from "@/utils/auth-watchdog";
+import { waitForSupabaseSession } from "@/utils/wait-for-session";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -32,6 +37,7 @@ export default function OnboardingScreen1() {
   const router = useRouter();
   const { theme } = useTheme();
   const { saveOnboardingData } = useOnboarding();
+  const analytics = useAnalytics();
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'auth' | 'signup' | 'signin'>('auth');
   const [signUpModalVisible, setSignUpModalVisible] = useState(false);
@@ -41,6 +47,8 @@ export default function OnboardingScreen1() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    // Track onboarding step view
+    analytics.trackEvent('Onboarding 1 - Sign Up', { step: 1 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
@@ -53,6 +61,7 @@ export default function OnboardingScreen1() {
 
   const handleSignIn = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'open_signin' });
     setAuthModalMode('signin');
     setAuthModalVisible(true);
   };
@@ -60,12 +69,15 @@ export default function OnboardingScreen1() {
   const handleGoogleAuth = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsGoogleLoading(true);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'continue_google' });
     
     try {
+      const watchdog = startAuthWatchdog({ tag: 'google.onboarding1', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           skipBrowserRedirect: true,
+          redirectTo: OAUTH_REDIRECT,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -84,53 +96,67 @@ export default function OnboardingScreen1() {
       }
 
       if (data?.url) {
-        console.log("OAuth URL from Supabase:", data.url);
-        
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          "superinvoice://oauth/callback",
+          OAUTH_REDIRECT,
         );
-        
-        console.log("WebBrowser result:", result);
-        
-        if (result.type === "success" && result.url && result.url.includes("access_token")) {
-          console.log("Got auth tokens from redirect URL:", result.url);
-          
-          const urlParts = result.url.includes('#') ? result.url.split("#") : result.url.split("?");
-          const tokenString = urlParts[1] || urlParts[0];
+        if (result.type === 'success' && result.url) {
+          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
+          const tokenString = urlParts[1] || '';
           const params = new URLSearchParams(tokenString);
-          
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          const code = params.get('code');
           if (access_token && refresh_token) {
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
+            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
             if (setError) {
-              console.error("Error setting session manually:", setError);
-              Alert.alert("Session Error", "Could not set user session.");
-            } else {
-              const { data: sessionData } = await supabase.auth.getSession();
-              if (sessionData?.session?.user?.id) {
-                try {
-                  await saveOnboardingData(sessionData.session.user.id);
-                  console.log('[Onboarding] Onboarding data saved after Google auth');
-                } catch (error) {
-                  console.error('[Onboarding] Error saving onboarding data:', error);
-                }
-              }
-              // Navigate to onboarding-2 to continue the signup flow
-              console.log('[Onboarding] Navigating to onboarding-2 after Google signup');
-              router.push("/(auth)/onboarding-2");
+              console.error('Error setting session manually:', setError);
+              Alert.alert('Session Error', 'Could not set user session.');
+              return;
             }
-          } else {
-            Alert.alert(
-              "Authentication Error",
-              "Could not process authentication response.",
-            );
+          } else if (code) {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError);
+              Alert.alert('Authentication Error', 'Could not complete sign-in.');
+              return;
+            }
           }
+
+          const { data: sessionData } = await supabase.auth.getSession();
+          const userId = sessionData?.session?.user?.id;
+          if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          try { await waitForSupabaseSession(8000); } catch {}
+          router.replace('/(app)/(protected)');
+          try { watchdog.stop(); } catch {}
+          return;
         }
+        // Fallback: regardless of result, if session exists route immediately
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
+            router.replace('/(app)/(protected)');
+            try { watchdog.stop(); } catch {}
+            return;
+          }
+        } catch {}
+      } else {
+        // No URL returned; check session in case callback already set it
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
+            router.replace('/(app)/(protected)');
+            try { watchdog.stop(); } catch {}
+            return;
+          }
+        } catch {}
+        Alert.alert('Authentication Error', 'Could not get authentication URL.');
       }
     } catch (err) {
       console.error("Unexpected error:", err);
@@ -142,26 +168,34 @@ export default function OnboardingScreen1() {
 
   const handleEmailAuth = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'continue_email' });
     setSignUpModalVisible(true);
   };
 
   const handleAppleAuth = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsAppleLoading(true);
+    analytics.trackEvent('Onboarding CTA', { step: 1, action: 'continue_apple' });
     
     try {
+      const rawNonce = await generateNonce(32);
+      const hashedNonce = await sha256Hex(rawNonce);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
+        // Per Apple docs, this must be the SHA-256 digest of the raw nonce
+        nonce: hashedNonce,
       });
 
       if (credential.identityToken) {
+        // (Preview-only debug removed to reduce bundle complexity)
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken,
-          nonce: credential.nonce,
+          // Supabase expects the original raw nonce
+          nonce: rawNonce,
         });
 
         if (error) {
@@ -172,8 +206,28 @@ export default function OnboardingScreen1() {
 
         console.log('Apple Sign In successful:', data);
         
-        if (data.session) {
-          router.push('/onboarding-2');
+        if (data.session?.user?.id) {
+          try {
+            await saveOnboardingData(data.session.user.id);
+            console.log('[Onboarding] Onboarding data saved after Apple auth');
+          } catch (error) {
+            console.error('[Onboarding] Error saving onboarding data:', error);
+          }
+          
+          // Check if user has completed onboarding to set correct mode
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('onboarding_completed')
+            .eq('id', data.session.user.id)
+            .maybeSingle();
+          
+          if (profile?.onboarding_completed) {
+            // Existing user - set mode to signin
+            setAuthModalMode('signin');
+          }
+          
+          // Use the same success handler as email authentication
+          handleAuthSuccess();
         }
         
       } else {
@@ -223,8 +277,8 @@ export default function OnboardingScreen1() {
           <View style={styles.contentArea}>
             {/* App Logo & Name */}
             <View style={styles.logoSection}>
-              <Text style={[styles.appName, { color: theme.foreground }]}>SuperInvoice</Text>
-              <Text style={[styles.tagline, { color: theme.mutedForeground }]}>
+              <Text style={[styles.appName, { color: '#000000' }]}>SuperInvoice</Text>
+              <Text style={[styles.tagline, { color: '#666666' }]}>
                 The fastest way to create invoices and get paid.
               </Text>
             </View>
@@ -238,10 +292,10 @@ export default function OnboardingScreen1() {
               <Pressable
                 onPress={handleAppleAuth}
                 style={[
-                  styles.authButton, 
-                  { 
-                    backgroundColor: theme.card, 
-                    borderColor: theme.border,
+                  styles.authButton,
+                  {
+                    backgroundColor: '#000000',
+                    borderColor: '#000000',
                     opacity: isAppleLoading ? 0.6 : 1
                   }
                 ]}
@@ -249,32 +303,20 @@ export default function OnboardingScreen1() {
               >
                 {isAppleLoading ? (
                   <>
-                    <ActivityIndicator color="#000000" />
-                    <Text style={[styles.authButtonText, { color: "#000000", marginLeft: 12 }]}>Signing in...</Text>
+                    <ActivityIndicator color="#FFFFFF" />
+                    <Text style={[styles.authButtonText, { color: "#FFFFFF", marginLeft: 12 }]}>Signing in...</Text>
                   </>
                 ) : (
                   <>
                     <View style={styles.appleIconContainer}>
-                      <Ionicons name="logo-apple" size={24} color="#000000" />
+                      <Ionicons name="logo-apple" size={24} color="#FFFFFF" />
                     </View>
-                    <Text style={[styles.authButtonText, { color: "#000000" }]}>Continue with Apple</Text>
+                    <Text style={[styles.authButtonText, { color: "#FFFFFF" }]}>Continue with Apple</Text>
                   </>
                 )}
               </Pressable>
 
-              {/* Google Sign In */}
-              <Pressable
-                onPress={handleGoogleAuth}
-                style={[styles.authButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-              >
-                <View style={styles.googleIconContainer}>
-                  <Image 
-                    source={require('@/assets/google.png')} 
-                    style={styles.googleIconImage} 
-                  />
-                </View>
-                <Text style={[styles.authButtonText, { color: theme.foreground }]}>Continue with Google</Text>
-              </Pressable>
+              {/* Google Sign In temporarily disabled */}
 
               {/* Email Sign In */}
               <Pressable

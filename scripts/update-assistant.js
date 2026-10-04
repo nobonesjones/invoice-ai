@@ -58,6 +58,14 @@ RESPONSE STYLE:
 • NEVER use emojis in responses
 • Use **text** for emphasis instead of emojis
 
+AI USAGE LIMITS:
+• Manual invoice/estimate creation is unlimited
+• Users on the FREE plan may create up to 3 invoices/estimates with AI assistance
+• Track how many AI creations have occurred in the session (and via function responses)
+• After the 3rd AI-assisted creation, do NOT attempt another create_* call; instead reply:
+  "You’ve used your 3 free AI-assisted creations. Upgrade to keep using AI features."
+• Subscribed users can continue using AI without restriction
+
 ACT-FIRST DELIVERY MODE:
 • Default behavior: TAKE ACTION FIRST, THEN CLARIFY
 • When asked to create or edit, perform the action immediately using sensible defaults
@@ -134,6 +142,32 @@ ALWAYS DO THIS (Parallel):
 ✅ update_client_info(email: "...", phone: "...", address: "...")
 
 This makes operations 3-5x faster. Users notice the difference.
+
+TAX & CURRENCY (GLOBAL ONLY - POLICY):
+• Always treat currency and tax changes as BUSINESS SETTINGS (not per-invoice)
+• Currency:
+  - Use set_currency(currency_code) to change currency (e.g., GBP, USD, EUR). Do NOT pass currency to invoice updates
+  - Supported codes: USD, EUR, GBP, CAD, AUD, NZD, CHF, SEK, DKK, NOK, BGN, CZK, HUF, PLN, RON, AED
+  - Name/symbol mapping examples:
+    • British Pounds / UK Pounds / Pounds / £ → GBP
+    • US Dollars / Dollars / $ (US) → USD
+    • Euros / Euro / € → EUR
+    • Canadian Dollar / CA$ / C$ → CAD
+    • Australian Dollar / A$ → AUD
+    • New Zealand Dollar / NZ$ → NZD
+    • Swiss Franc / CHF → CHF
+    • Swedish Krona / kr (SEK) → SEK
+    • Danish Krone / kr (DKK) → DKK
+    • Norwegian Krone / kr (NOK) → NOK
+    • Bulgarian Lev / лв → BGN
+    • Czech Koruna / Kč → CZK
+    • Hungarian Forint / Ft → HUF
+    • Polish Złoty / zł → PLN
+    • Romanian Leu / lei → RON
+    • UAE Dirham / د.إ → AED
+• Tax defaults (rate, name, number, auto apply):
+  - Use update_tax_settings({ default_tax_rate, tax_name, tax_number, auto_apply_tax })
+• After changing currency or tax defaults, show the latest invoice so the new symbol/labels are visible (amounts themselves do not change)
 
 🚨 DOCUMENT TYPE AWARENESS - CRITICAL:
 NEVER MIX DOCUMENT TYPES: Each document type has specific functions that must be used.
@@ -344,17 +378,80 @@ Always be helpful and create exactly what the user requests.
 
 🚨 MISTAKE CORRECTION - CRITICAL:
 When the user indicates you made an error or corrected you:
-• IMMEDIATELY use correct_mistake function 
+• IMMEDIATELY apologize and use the appropriate update function to fix the mistake
 • Keywords: "no", "wrong", "that's not right", "you updated the wrong", "I meant", "fix your mistake"
 • Examples:
   - User: "No, I said update MY business phone, not the client's tax number" 
-    → correct_mistake(mistake_description: "updated client tax number instead of business phone", correct_action: "update_business_phone", correct_value: "[phone number]", remove_incorrect_from: "client_tax_number")
+    → Response: "I apologize for the error. Let me update your business phone instead." → update_business_settings(business_phone: "[correct phone]")
   - User: "You put my address in the wrong place"
-    → correct_mistake(mistake_description: "put address in wrong field", correct_action: "update_business_address", correct_value: "[address]", remove_incorrect_from: "[wrong_field]")
-• ALWAYS apologize first, then fix the mistake and return corrected document
-• Never ignore or argue with corrections - immediately fix them`,
+    → Response: "I'm sorry for the mistake. Let me fix that and put the address in the correct place." → [use appropriate update function]
+• ALWAYS apologize first, then use the correct update function to fix the issue
+• Never ignore or argue with corrections - immediately acknowledge and fix them`,
   model: "gpt-4o-mini",
   tools: [
+    {
+      type: "function",
+      function: {
+        name: "set_currency",
+        description: "Set the default business currency (affects new invoices). Use 3-letter currency codes (e.g., GBP, USD, EUR).",
+        parameters: {
+          type: "object",
+          properties: {
+            currency_code: {
+              type: "string",
+              description: "Three-letter ISO currency code (e.g., GBP, USD, EUR)"
+            }
+          },
+          required: ["currency_code"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "update_tax_settings",
+        description: "Update business tax settings (global): default tax rate, tax name (e.g., VAT), tax number, and auto-apply.",
+        parameters: {
+          type: "object",
+          properties: {
+            default_tax_rate: {
+              type: "number",
+              description: "Default tax rate percentage (e.g., 20 for 20%)"
+            },
+            tax_name: {
+              type: "string",
+              description: "Tax label/name (e.g., VAT, GST, Sales Tax)"
+            },
+            tax_number: {
+              type: "string",
+              description: "Business tax/VAT number"
+            },
+            auto_apply_tax: {
+              type: "boolean",
+              description: "Whether to automatically apply tax to new invoices"
+            }
+          },
+          required: []
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_invoice_details",
+        description: "Get details for a specific invoice (to show updated symbol/labels after settings changes).",
+        parameters: {
+          type: "object",
+          properties: {
+            invoice_number: {
+              type: "string",
+              description: "Invoice number like 'INV-001'"
+            }
+          },
+          required: ["invoice_number"]
+        }
+      }
+    },
     {
       type: "function",
       function: {
@@ -1200,41 +1297,6 @@ When the user indicates you made an error or corrected you:
         }
       }
     },
-    {
-      type: "function",
-      function: {
-        name: "correct_mistake",
-        description: "Correct a mistake made by the AI assistant. Use this when the user indicates the AI made an error (e.g., updated wrong field, mixed up client/business data). This function will apologize and fix the mistake.",
-        parameters: {
-          type: "object",
-          properties: {
-            mistake_description: {
-              type: "string",
-              description: "What mistake was made (e.g., 'updated client tax number instead of business phone')"
-            },
-            correct_action: {
-              type: "string", 
-              description: "What should have been done instead",
-              enum: ["update_business_phone", "update_business_address", "update_business_email", "update_client_phone", "update_client_address", "update_client_email", "update_client_tax_number", "remove_incorrect_data"]
-            },
-            correct_value: {
-              type: "string",
-              description: "The correct value that should be used"
-            },
-            remove_incorrect_from: {
-              type: "string",
-              description: "Where to remove the incorrect value from (e.g., 'client_tax_number', 'business_phone')",
-              enum: ["client_tax_number", "client_phone", "client_email", "client_address", "business_phone", "business_email", "business_address"]
-            },
-            invoice_or_estimate_identifier: {
-              type: "string",
-              description: "Invoice or estimate number, client name, or 'latest' for most recent document"
-            }
-          },
-          required: ["mistake_description", "correct_action", "correct_value", "invoice_or_estimate_identifier"]
-        }
-      }
-    }
   ]
 };
 

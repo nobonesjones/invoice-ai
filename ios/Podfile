@@ -1,3 +1,5 @@
+source 'https://github.com/CocoaPods/Specs.git'
+
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
@@ -49,6 +51,34 @@ target 'SuperInvoice' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
+
+    # Xcode 26's clang rejects fmt 11's consteval FMT_STRING checks (React Native
+    # 0.79 pins fmt 11.0.2). fmt defines FMT_USE_CONSTEVAL itself with no #ifndef
+    # guard, so a -D flag cannot override it; patch the header to keep consteval
+    # off. Nothing changes at runtime. Harmless on older Xcode.
+    fmt_base = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      src = File.read(fmt_base)
+      patched = src.gsub('#  define FMT_USE_CONSTEVAL 1', '#  define FMT_USE_CONSTEVAL 0')
+      if patched != src
+        File.chmod(0644, fmt_base) # the pod ships it read-only
+        File.write(fmt_base, patched)
+      end
+    end
+
+    # Xcode 26's Swift calls SuperwallExpo's trailing-closure call to
+    # getPresentationResult ambiguous: SuperwallKit has an async overload and a
+    # completion-handler overload with the same labels. Naming the completion
+    # parameter leaves only one candidate. Same behaviour, compiles everywhere.
+    sw_module = File.expand_path('../node_modules/expo-superwall/ios/SuperwallExpoModule.swift', __dir__)
+    if File.exist?(sw_module)
+      src = File.read(sw_module)
+      patched = src.gsub(
+        "Superwall.shared.getPresentationResult(forPlacement: placement, params: params) { result in\n        promise.resolve(result.toJson())\n      }",
+        "Superwall.shared.getPresentationResult(forPlacement: placement, params: params, completion: { result in\n        promise.resolve(result.toJson())\n      })"
+      )
+      File.write(sw_module, patched) if patched != src
+    end
 
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.

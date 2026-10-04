@@ -20,16 +20,15 @@ import { useAIChat } from "@/hooks/useAIChat";
 // import { useAnalytics } from "@/hooks/useAnalytics"; // Removed for App Store build
 import { ChatMessage } from "@/services/chatService";
 import UserContextService from "@/services/userContextService";
-import SkiaInvoiceCanvas from "@/components/skia/SkiaInvoiceCanvas";
-import { SkiaInvoiceCanvasWorking } from "@/components/skia/SkiaInvoiceCanvasWorking";
-import SkiaInvoiceCanvasModern from "@/components/skia/SkiaInvoiceCanvasModern";
-import SkiaInvoiceCanvasClean from "@/components/skia/SkiaInvoiceCanvasClean";
-import SkiaInvoiceCanvasSimple from "@/components/skia/SkiaInvoiceCanvasSimple";
-import SkiaInvoiceCanvasWave from "@/components/skia/SkiaInvoiceCanvasWave";
-import { BusinessSettingsRow } from "./invoices/InvoiceTemplateOne";
+import { InvoiceDocumentView } from "@/components/InvoiceDocumentView";
+import { buildInvoiceDocument } from "@/lib/invoice-doc/buildInvoiceDocument";
+import { BusinessSettingsRow } from "@/types/invoiceTemplate";
+import { useAnalytics } from '@/hooks/useAnalytics';
+import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from "@/components/InvoicePreviewModal";
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
+import AIUsageService from '@/services/aiUsageService';
 
 // Simple Invoice Modal using our new InvoicePreviewModal component
 
@@ -51,23 +50,6 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	const estimatePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
 
 	// Get the correct invoice design component based on estimate design type
-	const getEstimateDesignComponent = () => {
-		const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
-		
-		switch (designType.toLowerCase()) {
-			case 'modern':
-				return SkiaInvoiceCanvasModern;
-			case 'clean':
-				return SkiaInvoiceCanvasClean;
-			case 'simple':
-				return SkiaInvoiceCanvasSimple;
-			case 'wave':
-				return SkiaInvoiceCanvasWave;
-			case 'classic':
-			default:
-				return SkiaInvoiceCanvas;
-		}
-	};
 	
 	const { supabase } = useSupabase();
 	
@@ -337,7 +319,6 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 	};
 
 	// Get the dynamic estimate component
-	const EstimateDesignComponent = getEstimateDesignComponent();
 
 	// Use the full client data from database but prefer current estimate client name if different
 	let transformedClient = null;
@@ -377,7 +358,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 					borderRadius: 12,
 					padding: 16,
 					marginTop: 8,
-					height: 200,
+					height: 300,
 					justifyContent: 'center',
 					alignItems: 'center',
 				}}
@@ -411,7 +392,7 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 					{/* Scaled down estimate preview */}
 					<View 
 						style={{
-							height: 200,
+							height: 280,
 							width: '100%',
 							alignItems: 'center',
 							justifyContent: 'center',
@@ -421,38 +402,8 @@ const EstimatePreview = ({ estimateData, theme }: { estimateData: any; theme: an
 						}}
 					>
 						{businessSettings && transformedEstimate ? (
-							<View style={{
-								transform: [{ scale: 0.6 }],
-								marginLeft: -120,
-							}}>
-								<EstimateDesignComponent
-									renderSinglePage={0}
-									style={{
-										width: 200,
-										height: 280,
-										backgroundColor: 'white',
-										borderRadius: 8,
-										shadowColor: '#000',
-										shadowOffset: { width: 0, height: 4 },
-										shadowOpacity: 0.15,
-										shadowRadius: 8,
-										elevation: 5,
-									}}
-									invoice={transformedEstimate}
-									business={businessSettings}
-									client={transformedClient}
-									currencySymbol={businessSettings?.currency_symbol || '$'}
-									accentColor={estimate?.accent_color || '#14B8A6'}
-									documentType="estimate"
-									estimateTerminology={'estimate'}
-									displaySettings={{
-										show_business_logo: businessSettings?.show_business_logo ?? true,
-										show_business_name: businessSettings?.show_business_name ?? true,
-										show_business_address: businessSettings?.show_business_address ?? true,
-										show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-										show_notes_section: businessSettings?.show_notes_section ?? true,
-									}}
-								/>
+							<View style={{ width: 200, height: 280, borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }} pointerEvents="none">
+								<InvoiceDocumentView doc={buildInvoiceDocument({ type: 'estimate', row: transformedEstimate, client: transformedClient, business: businessSettings })} background="#ffffff" />
 							</View>
 						) : (
 							<View style={{
@@ -513,23 +464,6 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null);
 
 	// Get the correct invoice design component based on invoice design type
-	const getInvoiceDesignComponent = () => {
-		const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-		
-		switch (designType.toLowerCase()) {
-			case 'modern':
-				return SkiaInvoiceCanvasModern;
-			case 'clean':
-				return SkiaInvoiceCanvasClean;
-			case 'simple':
-				return SkiaInvoiceCanvasSimple;
-			case 'wave':
-				return SkiaInvoiceCanvasWave;
-			case 'classic':
-			default:
-				return SkiaInvoiceCanvas;
-		}
-	};
 	
 	const { supabase } = useSupabase();
 	
@@ -830,7 +764,6 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 	};
 
 	// Get the dynamic invoice component
-	const InvoiceDesignComponent = getInvoiceDesignComponent();
 
 	// Use the full client data from database but prefer current invoice client name if different
 	let transformedClient = null;
@@ -882,7 +815,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					borderRadius: 12,
 					padding: 16,
 					marginTop: 8,
-					height: 200,
+					height: 300,
 					justifyContent: 'center',
 					alignItems: 'center',
 				}}
@@ -925,7 +858,7 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 					{/* Scaled down invoice preview - using exact same approach as InvoicePreviewModal */}
 					<View 
 						style={{
-							height: 200,
+							height: 280,
 							width: '100%',
 							alignItems: 'center',
 							justifyContent: 'center',
@@ -935,40 +868,8 @@ const InvoicePreview = ({ invoiceData, theme }: { invoiceData: any; theme: any }
 						}}
 					>
 						{businessSettings && transformedInvoice ? (
-							<View style={{
-								transform: [{ scale: 0.6 }], // Slightly smaller than modal for chat preview
-								marginLeft: -120, // Center the invoice by shifting left
-							}}>
-																	<InvoiceDesignComponent
-										renderSinglePage={0}
-										style={{
-											width: 200,
-											height: 280,
-											backgroundColor: 'white',
-											borderRadius: 8,
-											shadowColor: '#000',
-											shadowOffset: { width: 0, height: 4 },
-											shadowOpacity: 0.15,
-											shadowRadius: 8,
-											elevation: 5,
-										}}
-										invoice={transformedInvoice}
-										business={{
-											...businessSettings,
-											// Merge payment options bank details into business settings
-											bank_details: paymentOptions?.bank_details || businessSettings?.bank_details
-										}}
-										client={transformedClient}
-										currencySymbol={businessSettings?.currency_symbol || '$'}
-										accentColor={invoice?.accent_color || '#14B8A6'}
-										displaySettings={{
-											show_business_logo: businessSettings?.show_business_logo ?? true,
-											show_business_name: businessSettings?.show_business_name ?? true,
-											show_business_address: businessSettings?.show_business_address ?? true,
-											show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-											show_notes_section: businessSettings?.show_notes_section ?? true,
-										}}
-									/>
+							<View style={{ width: 200, height: 280, borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }} pointerEvents="none">
+								<InvoiceDocumentView doc={buildInvoiceDocument({ type: 'invoice', row: transformedInvoice, client: transformedClient, business: { ...businessSettings, bank_details: paymentOptions?.bank_details || businessSettings?.bank_details } })} background="#ffffff" />
 							</View>
 						) : (
 							<View style={{
@@ -1092,7 +993,12 @@ export default function AiScreen() {
 	const router = useRouter();
 	const scrollViewRef = useRef<ScrollView>(null);
 	const transcribeButtonRef = useRef<TranscribeButtonRef>(null);
-	// const analytics = useAnalytics(); // Removed for App Store build
+	const analytics = useAnalytics();
+	const { presentPaywall } = usePaywall();
+
+	// Single-flight guard to prevent duplicate runs
+	const [inFlight, setInFlight] = useState(false);
+	const inFlightTimerRef = useRef<NodeJS.Timeout | null>(null);
 	
 	// State
 	const [inputText, setInputText] = useState('');
@@ -1110,6 +1016,10 @@ export default function AiScreen() {
 	const [userContext, setUserContext] = useState<any>(null);
 	const [statusBoxes, setStatusBoxes] = useState<Array<{id: string, message: string, timestamp: number, isInitial?: boolean}>>([]);
 	const [hasReceivedBackendUpdates, setHasReceivedBackendUpdates] = useState(false);
+
+	const lastStatusTimestampRef = useRef<number>(Date.now());
+	const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+	const hasHeartbeatFromBackendRef = useRef<boolean>(false);
 
 	// Animated values for waveform
 	const waveformAnims = useRef([
@@ -1139,6 +1049,68 @@ export default function AiScreen() {
 	// 🧪 TEST: Track when AI screen is opened (remove after testing)
 	// Analytics removed for App Store build
 
+	// Heartbeat fallback while waiting for backend status updates
+	useEffect(() => {
+		if (!aiIsLoading) {
+			if (heartbeatIntervalRef.current) {
+				clearInterval(heartbeatIntervalRef.current);
+				heartbeatIntervalRef.current = null;
+			}
+			hasHeartbeatFromBackendRef.current = false;
+			lastStatusTimestampRef.current = Date.now();
+			return;
+		}
+
+		if (!heartbeatIntervalRef.current) {
+			heartbeatIntervalRef.current = setInterval(() => {
+				const now = Date.now();
+				const secondsSinceUpdate = (now - lastStatusTimestampRef.current) / 1000;
+				if (secondsSinceUpdate >= 3 && !hasHeartbeatFromBackendRef.current) {
+					const lastStatus = statusBoxes[statusBoxes.length - 1];
+					const fallbackMessage = lastStatus?.message || statusMessage || '🤔 Thinking...';
+					const heartbeatMessage = fallbackMessage.includes('(still working)')
+						? fallbackMessage
+						: `${fallbackMessage} (still working)`;
+					setStatusBoxes(prev => {
+						const withoutHeartbeats = prev.filter(box => !box.id.startsWith('heartbeat-'));
+						if (withoutHeartbeats.length > 0) {
+							const updated = [...withoutHeartbeats];
+							const lastIndex = updated.length - 1;
+							if (lastIndex >= 0) {
+								const last = updated[lastIndex];
+								if (!last.message.includes('(still working)')) {
+									updated[lastIndex] = { ...last, message: heartbeatMessage, id: `heartbeat-${Date.now()}`, timestamp: now };
+									lastStatusTimestampRef.current = now;
+									return updated;
+								}
+								if (last.message === heartbeatMessage) {
+									return updated;
+								}
+							}
+						}
+
+						lastStatusTimestampRef.current = now;
+						return [
+							...withoutHeartbeats,
+							{
+								id: `heartbeat-${Date.now()}`,
+								message: heartbeatMessage,
+								timestamp: now
+							},
+						];
+					});
+				}
+			}, 2000) as any;
+		}
+
+		return () => {
+			if (heartbeatIntervalRef.current) {
+				clearInterval(heartbeatIntervalRef.current);
+				heartbeatIntervalRef.current = null;
+			}
+		};
+	}, [aiIsLoading, statusBoxes, statusMessage]);
+
 	// Handle status message updates - add them as status boxes
 	useEffect(() => {
 		if (statusMessage && aiIsLoading) {
@@ -1153,6 +1125,9 @@ export default function AiScreen() {
 					setStatusBoxes(prev => prev.filter(box => !box.message.includes('🤔 Thinking')));
 			}
 			
+			hasHeartbeatFromBackendRef.current = true;
+			lastStatusTimestampRef.current = Date.now();
+			if (!hasReceivedBackendUpdates) setHasReceivedBackendUpdates(true);
 			const isInitialFrontendStatus = !hasReceivedBackendUpdates; // All statuses are from frontend now
 			
 			const newStatusBox = {
@@ -1163,13 +1138,14 @@ export default function AiScreen() {
 			};
 			
 			setStatusBoxes(prev => {
-				
 				// Auto-scroll to show the new status box
 				setTimeout(() => {
 					scrollViewRef.current?.scrollToEnd({ animated: true });
 				}, 50); // Small delay to ensure status box is rendered
-				
-				return [...prev, newStatusBox];
+
+				const withoutHeartbeats = prev.filter(box => !box.id.startsWith('heartbeat-'));
+				const withoutDuplicateMessages = withoutHeartbeats.filter(box => box.message !== statusMessage);
+				return [...withoutDuplicateMessages, newStatusBox];
 			});
 			
 			// Status boxes are cleared by seamless transition when AI response arrives
@@ -1186,12 +1162,14 @@ export default function AiScreen() {
 			// Clear status boxes immediately - the invoice itself shows completion
 			setStatusBoxes([]);
 			setHasReceivedBackendUpdates(false);
+			hasHeartbeatFromBackendRef.current = false;
 			
 		} else if (!aiIsLoading) {
 			// Fallback: Clear after delay if no attachments
 			setTimeout(() => {
 				setStatusBoxes([]);
 				setHasReceivedBackendUpdates(false); // Reset for next request
+				hasHeartbeatFromBackendRef.current = false;
 			}, 1000);
 		}
 	}, [aiMessages, aiIsLoading]);
@@ -1446,39 +1424,64 @@ or '${example2}'`,
 	const displayMessages = aiMessages.length > 0 ? aiMessages : [getWelcomeMessage()];
 
 	const handleSendMessage = async () => {
+		if (inFlight) return;
 		if (!inputText.trim() || aiIsLoading) return;
 
-		// Check if API is configured before sending
 		if (showSetupMessage) {
 			Alert.alert(
-				'Setup Required', 
+				'Setup Required',
 				'Please configure your OpenAI API key in environment variables first.'
 			);
 			return;
 		}
 
 		const messageToSend = inputText.trim();
-		
-		// 📊 Track AI chat usage immediately when send button is clicked
-		const startTime = Date.now();
-		
-		// Simple intent detection
 		const lowerMessage = messageToSend.toLowerCase();
 		let detectedIntent = 'general_query';
 		if (lowerMessage.includes('invoice')) detectedIntent = 'create_invoice';
 		else if (lowerMessage.includes('estimate') || lowerMessage.includes('quote')) detectedIntent = 'create_estimate';
 		else if (lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('discount')) detectedIntent = 'update_document';
-		
-		// Analytics removed for App Store build
-		
-		// Clear input immediately to prevent the text from staying
-		// Store it in case we need to restore on error
+
+		const requiresAllowance = detectedIntent === 'create_invoice' || detectedIntent === 'create_estimate';
+
+		if (requiresAllowance) {
+			if (!user?.id) {
+				Alert.alert('Sign in required', 'Please sign in to use AI-assisted creation.');
+				return;
+			}
+			try {
+				const allowance = await AIUsageService.evaluateAllowance(user.id);
+				if (!allowance.allowed || allowance.remainingFreeSlots === 0) {
+					try {
+						await presentPaywall({
+							event: 'ai_pay_wall',
+							params: { source: 'ai_limit', remainingFreeSlots: allowance.remainingFreeSlots }
+						});
+					} catch (paywallError) {
+						console.error('[AI Screen] Failed to present AI paywall:', paywallError);
+						Alert.alert(
+							'AI Limit Reached',
+							'You have used all 3 free AI-assisted creations. Upgrade to continue using AI features.'
+						);
+					}
+					return;
+				}
+			} catch (error) {
+				console.error('[AI Screen] Failed to evaluate AI allowance:', error);
+				Alert.alert('AI Unavailable', 'Unable to verify AI usage allowance right now. Please try again later.');
+				return;
+			}
+		}
+
+		try { analytics.trackEvent('AI Message - Text'); } catch {}
+
+		setInFlight(true);
+		if (inFlightTimerRef.current) clearTimeout(inFlightTimerRef.current as any);
+		inFlightTimerRef.current = setTimeout(() => setInFlight(false), 20000);
+
 		setInputText('');
 
 		try {
-			
-			
-			// Prepare user context if loaded
 			const contextForMessage = userContext ? {
 				currency: userContext.currency,
 				symbol: userContext.currencySymbol,
@@ -1487,11 +1490,15 @@ or '${example2}'`,
 			} : undefined;
 
 			await sendMessage(messageToSend, contextForMessage);
-			
 		} catch (error) {
 			console.error('[AI Screen] Failed to send message:', error);
-			// Restore the text on error so user can retry
 			setInputText(messageToSend);
+		} finally {
+			setInFlight(false);
+			if (inFlightTimerRef.current) {
+				clearTimeout(inFlightTimerRef.current);
+				inFlightTimerRef.current = null;
+			}
 		}
 	};
 
@@ -1511,6 +1518,12 @@ or '${example2}'`,
 	const handleTranscript = (transcript: string) => {
 		setInputText(transcript);
 		setIsTranscribing(false);
+		// Release single-flight lock after transcription completes so user can send
+		setInFlight(false);
+		if (inFlightTimerRef.current) {
+			clearTimeout(inFlightTimerRef.current as any);
+			inFlightTimerRef.current = null;
+		}
 	};
 
 	const handleRecordingStateChange = (recording: boolean) => {
@@ -1939,9 +1952,15 @@ or '${example2}'`,
 																																	if (!aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 												}
-												transcribeButtonRef.current?.startRecording();
+											// Prevent starting a new recording while a run is in-flight
+											if (inFlight) return;
+											try { analytics.trackEvent('AI Message - Audio'); } catch {}
+											setInFlight(true);
+											if (inFlightTimerRef.current) clearTimeout(inFlightTimerRef.current as any);
+											inFlightTimerRef.current = setTimeout(() => setInFlight(false), 20000);
+											transcribeButtonRef.current?.startRecording();
 											}}
-											disabled={aiIsLoading || showSetupMessage}
+											disabled={aiIsLoading || showSetupMessage || inFlight}
 											style={{
 												width: 44,
 												height: 44,
@@ -1949,7 +1968,7 @@ or '${example2}'`,
 												backgroundColor: theme.primary,
 												alignItems: 'center',
 												justifyContent: 'center',
-												opacity: (aiIsLoading || showSetupMessage) ? 0.5 : 1
+												opacity: (aiIsLoading || showSetupMessage || inFlight) ? 0.5 : 1
 											}}
 										>
 											<Mic size={20} color="#FFFFFF" />
@@ -1963,14 +1982,15 @@ or '${example2}'`,
 												if (inputText.trim() && !aiIsLoading && !showSetupMessage) {
 													Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 												}
+												if (inFlight) return;
 												handleSendMessage();
 											}}
-											disabled={!inputText.trim() || aiIsLoading || showSetupMessage}
+											disabled={!inputText.trim() || aiIsLoading || showSetupMessage || inFlight}
 											style={{
 												width: 44,
 												height: 44,
 												borderRadius: 22,
-												backgroundColor: (inputText.trim() && !aiIsLoading && !showSetupMessage) ? theme.primary : theme.muted,
+												backgroundColor: (inputText.trim() && !aiIsLoading && !showSetupMessage && !inFlight) ? theme.primary : theme.muted,
 												alignItems: 'center',
 												justifyContent: 'center'
 											}}

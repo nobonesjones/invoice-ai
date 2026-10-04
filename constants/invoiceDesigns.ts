@@ -1,18 +1,13 @@
-import React from 'react';
-import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
-import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
-import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
-import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
-import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
+// Registry of invoice designs. A design is a theme over the one shared document in
+// supabase/functions/_shared/invoice-doc/render.ts; every design shows the same
+// fields, so nothing here decides what appears on the page, only how it looks.
+import type { ThemeId } from '@/supabase/functions/_shared/invoice-doc/render';
 
-// Define the structure for invoice design templates
 export interface InvoiceDesign {
-  id: string;
+  id: ThemeId;
   name: string;
   displayName: string;
   description: string;
-  thumbnail: string; // Path to static thumbnail image
-  component: React.ComponentType<any>; // The Skia canvas component
   colorScheme: {
     primary: string;
     accent: string;
@@ -21,195 +16,31 @@ export interface InvoiceDesign {
     background: string;
     border: string;
   };
-  layoutConfig: {
-    headerPosition: 'top' | 'center' | 'split';
-    sectionsLayout: 'standard' | 'side-by-side' | 'centered';
-    spacing: 'compact' | 'normal' | 'spacious';
-  };
+  /**
+   * Accent colours this design looks good in, first is the design's own default.
+   * A global list of seven made the picker offer "blue" on a design that was
+   * already blue and "orange" on one that never should be.
+   */
+  swatches: { name: string; color: string }[];
 }
 
-// Color schemes for different designs
-export const COLOR_SCHEMES = {
-  classic: {
-    primary: '#2563EB', // Blue
-    accent: '#3B82F6',
-    text: '#1F2937',
-    mutedText: '#6B7280',
-    background: '#FFFFFF',
-    border: '#E5E7EB',
-  },
-  modern: {
-    primary: '#EAB308', // Yellow Gold
-    accent: '#EAB308', // Yellow Gold
-    text: '#111827',
-    mutedText: '#6B7280',
-    background: '#FFFFFF',
-    border: '#D1D5DB',
-  },
-  modernOriginal: {
-    primary: '#059669', // Green
-    accent: '#10B981', // Original green accent
-    text: '#111827',
-    mutedText: '#6B7280',
-    background: '#FFFFFF',
-    border: '#D1D5DB',
-  },
-  professional: {
-    primary: '#1E40AF', // Navy
-    accent: '#3730A3',
-    text: '#1F2937',
-    mutedText: '#6B7280',
-    background: '#FFFFFF',
-    border: '#D1D5DB',
-  },
-  creative: {
-    primary: '#7C3AED', // Purple
-    accent: '#8B5CF6',
-    text: '#1F2937',
-    mutedText: '#6B7280',
-    background: '#FFFFFF',
-    border: '#E5E7EB',
-  },
-  wave: {
-    primary: '#8B5CF6', // Purple gradient start
-    accent: '#7C3AED', // Purple gradient end
-    text: '#1F2937',
-    mutedText: '#6B7280',
-    background: '#FFFFFF',
-    border: '#E5E7EB',
-  },
-  minimal: {
-    primary: '#000000', // Black
-    accent: '#374151',
-    text: '#111827',
-    mutedText: '#9CA3AF',
-    background: '#FFFFFF',
-    border: '#F3F4F6',
-  },
-} as const;
+const base = { text: '#111827', mutedText: '#6B7280', background: '#FFFFFF', border: '#E5E7EB' };
 
-// Registry of available invoice designs
 export const INVOICE_DESIGNS: InvoiceDesign[] = [
-  {
-    id: 'classic',
-    name: 'classic',
-    displayName: 'Classic',
-    description: 'Traditional business invoice with blue accents',
-    thumbnail: '/assets/invoice-designs/classic-thumb.png',
-    component: SkiaInvoiceCanvas, // Current default
-    colorScheme: COLOR_SCHEMES.classic,
-    layoutConfig: {
-      headerPosition: 'top',
-      sectionsLayout: 'standard',
-      spacing: 'normal',
-    },
-  },
-  {
-    id: 'modern',
-    name: 'modern',
-    displayName: 'Modern',
-    description: 'Clean and contemporary with green accents',
-    thumbnail: '/assets/invoice-designs/modern-thumb.png',
-    component: SkiaInvoiceCanvasModern, // Now using the Modern component
-    colorScheme: COLOR_SCHEMES.modern,
-    layoutConfig: {
-      headerPosition: 'center',
-      sectionsLayout: 'side-by-side',
-      spacing: 'normal',
-    },
-  },
-  {
-    id: 'clean',
-    name: 'clean',
-    displayName: 'Clean',
-    description: 'Clean design with accent color header and alternating rows',
-    thumbnail: '/assets/invoice-designs/clean-thumb.png',
-    component: SkiaInvoiceCanvasClean,
-    colorScheme: COLOR_SCHEMES.classic, // Uses blue colors
-    layoutConfig: {
-      headerPosition: 'top',
-      sectionsLayout: 'standard',
-      spacing: 'normal',
-    },
-  },
-  {
-    id: 'simple',
-    name: 'simple',
-    displayName: 'Simple',
-    description: 'Clean lines with minimal design and gray bottom section',
-    thumbnail: '/assets/invoice-designs/simple-thumb.png',
-    component: SkiaInvoiceCanvasSimple,
-    colorScheme: COLOR_SCHEMES.minimal,
-    layoutConfig: {
-      headerPosition: 'split',
-      sectionsLayout: 'side-by-side',
-      spacing: 'normal',
-    },
-  },
-  {
-    id: 'wave',
-    name: 'wave',
-    displayName: 'Wave',
-    description: 'Modern curved wave header with purple gradient and rounded corners',
-    thumbnail: '/assets/invoice-designs/wave-thumb.png',
-    component: SkiaInvoiceCanvasWave,
-    colorScheme: COLOR_SCHEMES.wave,
-    layoutConfig: {
-      headerPosition: 'top',
-      sectionsLayout: 'standard',
-      spacing: 'normal',
-    },
-  },
-  // Additional designs will be added here
-  // {
-  //   id: 'professional',
-  //   name: 'professional',
-  //   displayName: 'Professional',
-  //   description: 'Formal business style with navy theme',
-  //   thumbnail: '/assets/invoice-designs/professional-thumb.png',
-  //   component: ProfessionalSkiaInvoiceCanvas,
-  //   colorScheme: COLOR_SCHEMES.professional,
-  //   layoutConfig: {
-  //     headerPosition: 'center',
-  //     sectionsLayout: 'centered',
-  //     spacing: 'spacious',
-  //   },
-  // },
+  { id: 'clean', name: 'clean', displayName: 'Clean', description: 'Full-width colour band, zebra rows', colorScheme: { ...base, primary: '#2563EB', accent: '#2563EB' } , swatches: [{ name: 'Blue', color: '#2563EB' }, { name: 'Navy', color: '#1E3A8A' }, { name: 'Teal', color: '#0D9488' }, { name: 'Coral', color: '#E85D4A' }, { name: 'Slate', color: '#475569' }, { name: 'Plum', color: '#7E22CE' }] },
+  { id: 'wave', name: 'wave', displayName: 'Wave', description: 'Colour header with a wave edge', colorScheme: { ...base, primary: '#7C3AED', accent: '#A78BFA' } , swatches: [{ name: 'Purple', color: '#7C3AED' }, { name: 'Teal', color: '#0891B2' }, { name: 'Magenta', color: '#DB2777' }, { name: 'Indigo', color: '#4F46E5' }, { name: 'Sea', color: '#0E7490' }, { name: 'Coral', color: '#E8563F' }] },
+  { id: 'classic', name: 'classic', displayName: 'Classic', description: 'Accent edge stripe, boxed table', colorScheme: { ...base, primary: '#1E3A8A', accent: '#1E3A8A' } , swatches: [{ name: 'Navy', color: '#1E3A8A' }, { name: 'Burgundy', color: '#7F1D1D' }, { name: 'Forest', color: '#14532D' }, { name: 'Charcoal', color: '#1F2937' }, { name: 'Bronze', color: '#92400E' }, { name: 'Slate', color: '#334155' }] },
+  { id: 'modern', name: 'modern', displayName: 'Modern', description: 'Colour sidebar, airy table', colorScheme: { ...base, primary: '#047857', accent: '#047857' } , swatches: [{ name: 'Green', color: '#047857' }, { name: 'Ocean', color: '#0369A1' }, { name: 'Plum', color: '#6D28D9' }, { name: 'Ink', color: '#111827' }, { name: 'Rust', color: '#B45309' }, { name: 'Teal', color: '#0F766E' }] },
+  { id: 'simple', name: 'simple', displayName: 'Simple', description: 'Light type, hairlines, no fills', colorScheme: { ...base, primary: '#111827', accent: '#374151', border: '#F3F4F6' } , swatches: [{ name: 'Ink', color: '#111827' }, { name: 'Blue', color: '#2563EB' }, { name: 'Olive', color: '#4D7C0F' }, { name: 'Terracotta', color: '#C2410C' }, { name: 'Grey', color: '#6B7280' }, { name: 'Navy', color: '#1E3A8A' }] },
+  { id: 'swiss', name: 'swiss', displayName: 'Swiss', description: 'Big type, black rules, one red mark', colorScheme: { ...base, primary: '#111827', accent: '#E11D48' } , swatches: [{ name: 'Red', color: '#E11D48' }, { name: 'Cobalt', color: '#1D4ED8' }, { name: 'Black', color: '#111827' }, { name: 'Amber', color: '#D97706' }, { name: 'Emerald', color: '#059669' }, { name: 'Orange', color: '#EA580C' }] },
+  { id: 'ledger', name: 'ledger', displayName: 'Ledger', description: 'Serif, page frame, ruled grid', colorScheme: { ...base, primary: '#14532D', accent: '#14532D' } , swatches: [{ name: 'Forest', color: '#14532D' }, { name: 'Navy', color: '#1E3A8A' }, { name: 'Oxblood', color: '#7F1D1D' }, { name: 'Ink', color: '#111827' }, { name: 'Bronze', color: '#92400E' }, { name: 'Slate', color: '#334155' }] },
 ];
 
-// Default design
-export const DEFAULT_DESIGN_ID = 'clean';
+export const DEFAULT_DESIGN_ID: ThemeId = 'clean';
 
-// Helper functions for design management
-export const getDesignById = (id: string): InvoiceDesign | undefined => {
-  return INVOICE_DESIGNS.find(design => design.id === id);
-};
+export const getDesignById = (id?: string | null): InvoiceDesign | undefined =>
+  INVOICE_DESIGNS.find((design) => design.id === id);
 
-export const getDefaultDesign = (): InvoiceDesign => {
-  return getDesignById(DEFAULT_DESIGN_ID) || INVOICE_DESIGNS[0];
-};
+export const getDefaultDesign = (): InvoiceDesign => getDesignById(DEFAULT_DESIGN_ID) || INVOICE_DESIGNS[0];
 
-export const getAllDesigns = (): InvoiceDesign[] => {
-  return INVOICE_DESIGNS;
-};
-
-// Required sections that must be present in all designs
-export const REQUIRED_INVOICE_SECTIONS = [
-  'header', // Invoice title, number, dates
-  'from', // Business information
-  'to', // Client information  
-  'items', // Line items table
-  'subtotals', // Subtotal, tax, discount calculations
-  'total', // Final total amount
-  'terms', // Payment terms and notes
-  'payments', // Payment methods (if enabled)
-] as const;
-
-export type RequiredInvoiceSection = typeof REQUIRED_INVOICE_SECTIONS[number];
-
-// Validation function to ensure all required sections are implemented
-export const validateDesignSections = (designId: string): boolean => {
-  // This will be implemented when we create the actual design components
-  // For now, return true as we're using the base component
-  return true;
-}; 
+export const getAllDesigns = (): InvoiceDesign[] => INVOICE_DESIGNS;

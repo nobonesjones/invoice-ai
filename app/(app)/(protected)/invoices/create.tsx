@@ -51,20 +51,25 @@ import {
   ViewStyle, // Explicitly import ViewStyle
   Alert // Re-added import for Alert
 } from 'react-native';
-import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { ChevronRight, PlusCircle, X as XIcon, Edit3, Info, Percent, CreditCard, Banknote, Paperclip, Trash2, Landmark, Palette } from 'lucide-react-native'; // Added Trash2, Landmark, and Palette
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import NewClientSelectionSheet, { Client as ClientType } from './NewClientSelectionSheet';
+import NewClientSelectionSheet, { Client as ClientType, NewClientSelectionSheetRef } from './NewClientSelectionSheet';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext'; // Added import
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { Controller, useForm } from 'react-hook-form'; // Import react-hook-form
 import EditInvoiceDetailsSheet, { EditInvoiceDetailsSheetRef } from './EditInvoiceDetailsSheet'; // Correctly import named export
-import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // Correctly not importing NewItemData here
-import { NewItemData } from './AddNewItemFormSheet'; // Import NewItemData type from AddNewItemFormSheet where it's defined
+import AddItemSheet, { AddItemSheetRef } from './AddItemSheet'; // legacy fallback if needed
+import AddItemSheetStable, { AddItemSheetStableRef } from '@/components/items/AddItemSheetStable';
+import AddNewItemFormSheet, { AddNewItemFormSheetRef } from '@/components/items/AddNewItemFormSheet';
+import ClientDetailsSheet, { ClientDetailsSheetRef } from '@/components/ClientDetailsSheet';
+import { NewItemData } from '@/components/items/AddNewItemFormSheet';
 import { DUE_DATE_OPTIONS } from './SetDueDateSheet'; // Import DUE_DATE_OPTIONS
-import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import new sheet
+import SelectDiscountTypeSheet, { SelectDiscountTypeSheetRef, DiscountData } from './SelectDiscountTypeSheet'; // Import working discount modal
+
 import EditInvoiceTaxSheet, { EditInvoiceTaxSheetRef, TaxData as InvoiceTaxData } from './EditInvoiceTaxSheet'; // Changed TaxData to InvoiceTaxData to avoid naming conflict if TaxData is used elsewhere
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet'; // Import new sheet
 import { useSupabase } from '@/context/supabase-provider'; // Added useSupabase import
@@ -79,6 +84,7 @@ import { UsageService } from '@/services/usageService'; // Added UsageService im
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal'; // Added InvoicePreviewModal import
 // import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'; // Removed to match estimates behavior
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Currency symbol mapping function
 const getCurrencySymbol = (code: string) => {
@@ -129,6 +135,7 @@ interface InvoiceFormData {
   bank_account_active_on_invoice: boolean;
   paypal_active_on_invoice: boolean;
   stripe_active_on_invoice: boolean; // Added for Stripe
+  gocardless_active_on_invoice: boolean; // Added for GoCardless
 }
 
 interface InvoiceLineItem {
@@ -269,6 +276,7 @@ const calculateGrandTotal = (
 };
 
 export default function CreateInvoiceScreen() {
+  const analytics = useAnalytics();
   // Add state for currency code INSIDE the component
   const [currencyCode, setCurrencyCode] = useState<string>('USD');
   const { isLightMode } = useTheme();
@@ -276,6 +284,7 @@ export default function CreateInvoiceScreen() {
   const router = useRouter();
   const navigation = useNavigation(); // Get navigation object
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use context
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
   const { supabase, user } = useSupabase(); // Use Supabase context
   const { logPaymentAdded, logInvoiceCreated, logInvoiceEdited } = useInvoiceActivityLogger(); // Add activity logger
   
@@ -299,6 +308,9 @@ export default function CreateInvoiceScreen() {
   const [currentInvoiceId, setCurrentInvoiceId] = useState<string | null>(editInvoiceId);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  // Set once the user has answered the unsaved-changes prompt, so the navigation
+  // we dispatch ourselves is not intercepted a second time.
+  const leavingRef = useRef(false);
 
   const [isSaveEnabled, setIsSaveEnabled] = useState(true); // Re-added for save button logic
   const [isMarkedAsPaid, setIsMarkedAsPaid] = useState(false); // Re-added for payment switch
@@ -335,10 +347,30 @@ export default function CreateInvoiceScreen() {
       bank_account_active_on_invoice: false,
       paypal_active_on_invoice: false,
       stripe_active_on_invoice: false, // Initialize in defaultValues for react-hook-form
+      gocardless_active_on_invoice: false, // Initialize for GoCardless
     }
   });
 
   const styles = getStyles(themeColors); // MOVED STYLES DECLARATION HERE
+
+  const hasLoggedMakeInvoice = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isEditMode || hasLoggedMakeInvoice.current) {
+        return;
+      }
+
+      hasLoggedMakeInvoice.current = true;
+      try {
+        analytics.trackEvent('Make Invoice - Step 1', {
+          source: 'invoices_tab'
+        });
+      } catch (error) {
+        console.warn('[CreateInvoice] Analytics failed to log CTA:', error);
+      }
+    }, [isEditMode, analytics])
+  );
 
   // Initialize invoice_date in the form state
   useEffect(() => {
@@ -453,55 +485,55 @@ export default function CreateInvoiceScreen() {
 
     // Handle back button press for unsaved changes
     const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
-      
       // For edit mode, allow natural navigation - don't intercept
       if (isEditMode) {
         return;
       }
-      
-      // Don't intercept navigation if we're currently saving or if no unsaved changes
-      if (!hasUnsavedChanges || isSavingInvoice || isAutoSaving) {
+
+      // Don't intercept if we already answered the prompt, are saving, or have nothing to save
+      if (leavingRef.current || !hasUnsavedChanges || isSavingInvoice || isAutoSaving) {
         return;
       }
 
-      // Always prevent default behavior IMMEDIATELY
       e.preventDefault();
 
-      // Use setTimeout to ensure the prevention takes effect before showing dialog
-      setTimeout(() => {
-        // Prompt the user before leaving the screen with unsaved changes
-        Alert.alert(
-          'Unsaved Changes',
-          'You have unsaved changes. Do you want to save this invoice as a draft before leaving?',
-          [
-            { 
-              text: "Don't Save", 
-              style: 'destructive', 
-              onPress: () => {
-                // Clear unsaved changes flag
+      // Continue with the navigation that was intercepted (normally the pop back to
+      // the list). Dispatching the original action keeps the list screen that is
+      // already there, with its data, and the correct back transition. Showing the
+      // tab bar first means it slides in with the screen instead of after it.
+      const proceed = () => {
+        leavingRef.current = true;
+        setIsTabBarVisible(true);
+        navigation.dispatch(e.data.action);
+      };
+
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes. Do you want to save this invoice as a draft before leaving?',
+        [
+          {
+            text: "Don't Save",
+            style: 'destructive',
+            onPress: () => {
+              setHasUnsavedChanges(false);
+              proceed();
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save Draft',
+            onPress: async () => {
+              const savedId = await autoSaveAsDraft();
+              if (savedId) {
                 setHasUnsavedChanges(false);
-                // Navigate to invoice dashboard instead of back to previewer
-                router.replace('/(app)/(protected)/invoices');
+                proceed();
+              } else {
+                Alert.alert('Error', 'Could not save draft. Please try again.');
               }
             },
-            { text: 'Cancel', style: 'cancel', onPress: () => {
-            } },
-            {
-              text: 'Save Draft',
-              onPress: async () => {
-                const savedId = await autoSaveAsDraft();
-                if (savedId) {
-                  setHasUnsavedChanges(false);
-                  // Navigate to invoice dashboard after saving
-                  router.replace('/(app)/(protected)/invoices');
-                } else {
-                  Alert.alert('Error', 'Could not save draft. Please try again.');
-                }
-              },
-            },
-          ]
-        );
-      }, 50); // Small delay to ensure prevention takes effect
+          },
+        ]
+      );
     });
 
     // Initial hide if screen is focused on mount
@@ -520,13 +552,18 @@ export default function CreateInvoiceScreen() {
   }, [navigation, setIsTabBarVisible, hasUnsavedChanges, autoSaveAsDraft, isSavingInvoice, isAutoSaving, isEditMode, editInvoiceId, isLoadingInvoice]);
 
   // --- Bottom Sheet Modal (Add Item) --- //
-  const addItemSheetRef = useRef<AddItemSheetRef>(null);
+  const USE_STABLE_ADD_ITEM = true;
+  const addItemSheetRef = useRef<AddItemSheetStableRef | AddItemSheetRef>(null);
+  // Tapping a line item opens the same form the item was created with, filled in.
+  const editItemSheetRef = useRef<AddNewItemFormSheetRef>(null);
+  // Tapping the client name shows their details so they can be checked without leaving.
+  const clientDetailsSheetRef = useRef<ClientDetailsSheetRef>(null);
   const addItemSnapPoints = useMemo(() => ['50%', '90%'], []);
 
   const handlePresentAddItemModal = useCallback(() => {
     // Dismiss keyboard if open
     Keyboard.dismiss();
-    addItemSheetRef.current?.present();
+    (addItemSheetRef.current as any)?.present?.();
   }, []);
 
   const handleSheetChanges = useCallback((index: number) => {
@@ -551,7 +588,7 @@ export default function CreateInvoiceScreen() {
   );
 
   // --- Client Selection Modal --- //
-  const newClientSheetRef = useRef<BottomSheetModal>(null);
+  const newClientSheetRef = useRef<NewClientSelectionSheetRef>(null);
 
   const handleClientSelect = useCallback((client: ClientType) => {
     setValue('client_id', client.id, { shouldValidate: true });
@@ -581,54 +618,27 @@ export default function CreateInvoiceScreen() {
 
     try {
 
-      // Check usage limits for new invoice creation (not for edits)
-      if (!isEditMode) {
-        const limitCheck = await UsageService.checkInvoiceLimit(user.id);
-        
-        if (!limitCheck.canCreate) {
-          Alert.alert(
-            'Upgrade Required',
-            `You've reached your limit of ${limitCheck.remaining === 0 ? limitCheck.total : 'free'} invoices! Upgrade to create unlimited invoices and unlock premium features.`,
-            [
-              {
-                text: 'Maybe Later',
-                style: 'cancel'
-              },
-              {
-                text: 'Upgrade Now',
-                onPress: () => {
-                  // Navigate to paywall/subscription screen
-                  router.push('/(app)/(protected)/subscription/paywall');
-                }
-              }
-            ]
-          );
-          setIsSavingInvoice(false);
-          return;
-        }
-
-      }
-
-
       // Get default design and color from business settings for new invoices
       let defaultDesign = DEFAULT_DESIGN_ID; // Use correct default ('clean') instead of hardcoded 'classic'
-      let defaultAccentColor = '#14B8A6';
+      let defaultAccentColor = '#1E40AF';
       
       
       if (!isEditMode) {
         try {
-          const { data: businessSettings } = await supabase
+          const { data: businessSettings, error: settingsError } = await supabase
             .from('business_settings')
             .select('default_invoice_design, default_accent_color')
             .eq('user_id', user.id)
-            .single();
-          
-          if (businessSettings) {
+            .maybeSingle();
+
+          if (settingsError) {
+            console.warn('[CreateInvoice] Could not read default design:', settingsError.message);
+          } else if (businessSettings) {
             defaultDesign = businessSettings.default_invoice_design || DEFAULT_DESIGN_ID;
-            defaultAccentColor = businessSettings.default_accent_color || '#14B8A6';
-          } else {
+            defaultAccentColor = businessSettings.default_accent_color || '#1E40AF';
           }
         } catch (error) {
+          console.warn('[CreateInvoice] Could not read default design:', error);
         }
       }
 
@@ -668,6 +678,7 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
+        gocardless_active: formData.gocardless_active_on_invoice,
         // Add payment information
         paid_amount: currentTotalPaid,
         payment_date: currentTotalPaid > 0 ? new Date().toISOString() : null,
@@ -678,6 +689,13 @@ export default function CreateInvoiceScreen() {
           accent_color: defaultAccentColor,
         }),
       };
+
+      console.log('[DEBUG] Saving invoice with payment methods:', {
+        stripe_active: invoiceData.stripe_active,
+        paypal_active: invoiceData.paypal_active,
+        bank_account_active: invoiceData.bank_account_active,
+        gocardless_active: invoiceData.gocardless_active,
+      });
 
       let savedInvoice;
 
@@ -735,7 +753,16 @@ export default function CreateInvoiceScreen() {
       // 2. Handle line items (create/update/delete)
       await handleLineItemsUpdate(savedInvoice.id, formData.items);
 
-      // 3. Success - Navigate to viewer
+      // 3. Success - Track and Navigate to viewer
+      try {
+        if (!isEditMode) {
+          analytics.trackEvent('Save Invoice - Step 2', {
+            amount: invoiceTotal,
+            currency: currencyCode,
+            line_items_count: (formData.items || []).length,
+          });
+        }
+      } catch {}
       const successMessage = isEditMode ? 'Invoice updated successfully!' : 'Invoice created successfully!';
       
       // Log the activity
@@ -862,6 +889,7 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice,
         bank_account_active: formData.bank_account_active_on_invoice,
         paypal_active: formData.paypal_active_on_invoice,
+        gocardless_active: formData.gocardless_active_on_invoice,
       };
 
       let savedInvoice;
@@ -1014,8 +1042,16 @@ export default function CreateInvoiceScreen() {
         stripe_active: formData.stripe_active_on_invoice || false,
         paypal_active: formData.paypal_active_on_invoice || false,
         bank_account_active: formData.bank_account_active_on_invoice || false,
+        gocardless_active: formData.gocardless_active_on_invoice || false,
       };
-      
+
+      console.log('[DEBUG] Preview payment methods:', {
+        stripe_active: enhancedFormData.stripe_active,
+        paypal_active: enhancedFormData.paypal_active,
+        bank_account_active: enhancedFormData.bank_account_active,
+        gocardless_active: enhancedFormData.gocardless_active,
+      });
+
       // Set preview data and open modal
       setPreviewData({
         invoiceData: enhancedFormData,
@@ -1148,6 +1184,49 @@ export default function CreateInvoiceScreen() {
   // Ref for the new EditInvoiceDetailsSheet modal
   const editInvoiceDetailsSheetRef = useRef<EditInvoiceDetailsSheetRef>(null);
 
+
+  const lineTotal = (quantity: number, unitPrice: number, type?: 'percentage' | 'fixed' | null, value?: number | null) => {
+    let total = quantity * unitPrice;
+    if (value && value > 0) {
+      if (type === 'percentage') total -= total * (value / 100);
+      else if (type === 'fixed') total -= value;
+    }
+    return parseFloat(total.toFixed(2));
+  };
+
+  const openEditItem = (item: InvoiceLineItem) => {
+    editItemSheetRef.current?.present({
+      id: item.id,
+      itemName: item.item_name,
+      description: item.description ?? null,
+      price: item.unit_price,
+      quantity: item.quantity,
+      discountType: item.line_item_discount_type ?? null,
+      discountValue: item.line_item_discount_value ?? null,
+      imageUri: item.item_image_url ?? null,
+      saved_item_db_id: item.user_saved_item_id ?? null,
+    });
+  };
+
+  const handleItemEdited = (edited: NewItemData) => {
+    const items = getValues('items') || [];
+    const next = items.map((it) =>
+      it.id === edited.id
+        ? {
+            ...it,
+            item_name: edited.itemName,
+            description: edited.description ?? null,
+            quantity: edited.quantity,
+            unit_price: edited.price,
+            line_item_discount_type: edited.discountType ?? null,
+            line_item_discount_value: edited.discountValue ?? null,
+            total_price: lineTotal(edited.quantity, edited.price, edited.discountType, edited.discountValue),
+          }
+        : it,
+    );
+    setValue('items', next, { shouldValidate: true, shouldDirty: true });
+    editItemSheetRef.current?.dismiss();
+  };
 
   const handleItemFromSheetSaved = (itemDataFromSheet: NewItemData) => {
     
@@ -1326,19 +1405,15 @@ export default function CreateInvoiceScreen() {
     setValue('taxPercentage', numericRateToApply, { shouldValidate: true, shouldDirty: true });
   }, [taxPercentage, globalTaxRatePercent, setValue]);
 
-  const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for new sheet
+  const selectDiscountTypeSheetRef = useRef<SelectDiscountTypeSheetRef>(null); // Ref for working discount modal
   const editInvoiceTaxSheetRef = useRef<EditInvoiceTaxSheetRef>(null); // New ref for tax sheet
   const makePaymentSheetRef = useRef<MakePaymentSheetRef>(null); // Ref for new sheet
   const invoicePreviewModalRef = useRef<InvoicePreviewModalRef>(null); // Ref for preview modal
 
   const handlePresentSelectDiscountTypeSheet = () => {
-    // Pass current discount values to pre-fill the modal if needed
     const currentDiscountType = getValues('discountType');
     const currentDiscountValue = getValues('discountValue');
-    selectDiscountTypeSheetRef.current?.present(
-      currentDiscountType,
-      currentDiscountValue
-    );
+    selectDiscountTypeSheetRef.current?.present(currentDiscountType, currentDiscountValue);
   };
 
   const handleApplyDiscountFromSheet = (data: DiscountData) => {
@@ -1349,6 +1424,7 @@ export default function CreateInvoiceScreen() {
     setValue('discountValue', numericDiscountValue, { shouldValidate: true, shouldDirty: true }); // Use parsed numeric value
     // The useEffect for total calculation will pick up these changes
   };
+
 
   const handleSelectDiscountTypeSheetClose = () => {
     // Add any other logic needed when the discount sheet is closed by the user
@@ -1432,12 +1508,16 @@ export default function CreateInvoiceScreen() {
     const isFirstItem = index === 0;
     const isLastItem = index === currentInvoiceLineItems.length - 1;
     return (
-      <View style={[
-        styles.invoiceItemRow, 
-        { backgroundColor: themeColors.card }, // Ensure background for swipe visibility
-        isFirstItem && { borderTopWidth: 0 },
-        isLastItem && { borderBottomWidth: 0 }
-      ]}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => openEditItem(item)}
+        style={[
+          styles.invoiceItemRow, 
+          { backgroundColor: themeColors.card }, // Ensure background for swipe visibility
+          isFirstItem && { borderTopWidth: 0 },
+          isLastItem && { borderBottomWidth: 0 }
+        ]}
+      >
         <Text style={styles.invoiceItemCombinedInfo} numberOfLines={1} ellipsizeMode="tail">
           <Text style={styles.invoiceItemNameText}>{item.item_name} </Text>
           <Text style={styles.invoiceItemQuantityText}>(x{item.quantity})</Text>
@@ -1445,7 +1525,7 @@ export default function CreateInvoiceScreen() {
         <Text style={styles.invoiceItemTotalText}>
           {getCurrencySymbol(currencyCode)}{Number(item.total_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1473,7 +1553,20 @@ export default function CreateInvoiceScreen() {
 
   const { paymentOptions: paymentOptionsData, loading: paymentOptionsLoading, error: paymentOptionsError } = usePaymentOptions();
 
-  const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account', newValue: boolean) => {
+  // Once Stripe can genuinely accept payments, card should be on by default for
+  // a new invoice — connecting it is the opt-in, and asking again per invoice is
+  // a step nobody wants. Applied once, and only for new invoices: in edit mode
+  // loadInvoiceForEdit sets these from the saved row, and overriding that would
+  // silently re-enable a method the user had deliberately turned off.
+  const appliedStripeDefault = useRef(false);
+  useEffect(() => {
+    if (isEditMode || appliedStripeDefault.current) return;
+    if (paymentOptionsData?.stripe_card_payments_status !== 'active') return;
+    appliedStripeDefault.current = true;
+    setValue('stripe_active_on_invoice', true);
+  }, [isEditMode, paymentOptionsData?.stripe_card_payments_status, setValue]);
+
+  const handlePaymentMethodToggle = (methodKey: 'stripe' | 'paypal' | 'bank_account' | 'gocardless', newValue: boolean) => {
     
     // Block all toggles if payment options are still loading
     if (paymentOptionsLoading) {
@@ -1496,7 +1589,13 @@ export default function CreateInvoiceScreen() {
       let settingName = '';
       
       if (methodKey === 'stripe') {
-        isEnabledInSettings = paymentOptionsData?.stripe_enabled === true;
+        // Gate on the capability, not the old stripe_enabled boolean. That flag
+        // was the manual pre-Connect toggle and nothing writes it any more:
+        // connecting sets stripe_account_id and stripe_card_payments_status, so
+        // a properly connected merchant read as "not configured". This is also
+        // exactly what stripe-create-payment-link checks server-side, so the
+        // button and the mint agree.
+        isEnabledInSettings = paymentOptionsData?.stripe_card_payments_status === 'active';
         settingName = 'Pay With Card (Stripe)';
       } else if (methodKey === 'paypal') {
         isEnabledInSettings = paymentOptionsData?.paypal_enabled === true;
@@ -1504,6 +1603,9 @@ export default function CreateInvoiceScreen() {
       } else if (methodKey === 'bank_account') {
         isEnabledInSettings = paymentOptionsData?.bank_transfer_enabled === true;
         settingName = 'Bank Transfer';
+      } else if (methodKey === 'gocardless') {
+        isEnabledInSettings = paymentOptionsData?.gocardless_connected === true;
+        settingName = 'GoCardless';
       }
       
       
@@ -1599,10 +1701,17 @@ export default function CreateInvoiceScreen() {
       setValue('totalAmount', invoiceData.total_amount || 0);
       
       // 3. Populate payment method toggles
+      console.log('[DEBUG] Loading invoice payment methods from DB:', {
+        stripe_active: invoiceData.stripe_active,
+        paypal_active: invoiceData.paypal_active,
+        bank_account_active: invoiceData.bank_account_active,
+        gocardless_active: invoiceData.gocardless_active,
+      });
       setValue('stripe_active_on_invoice', invoiceData.stripe_active || false);
       setValue('paypal_active_on_invoice', invoiceData.paypal_active || false);
       setValue('bank_account_active_on_invoice', invoiceData.bank_account_active || false);
-      
+      setValue('gocardless_active_on_invoice', invoiceData.gocardless_active || false);
+
       // 4. Set client information
       if (invoiceData.clients) {
         const clientInfo = {
@@ -1689,9 +1798,9 @@ export default function CreateInvoiceScreen() {
   return (
       <SafeAreaView style={{ flex: 1, backgroundColor: screenBackgroundColor }}>
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "height" : "height"}
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // Adjust offset if header is present
+        keyboardVerticalOffset={0}
       >
         <Stack.Screen
           options={{
@@ -1769,7 +1878,7 @@ export default function CreateInvoiceScreen() {
               {loadingError}
             </Text>
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => { setIsTabBarVisible(true); router.back(); }}
               style={{
                 backgroundColor: themeColors.primary,
                 paddingHorizontal: 20,
@@ -1816,7 +1925,14 @@ export default function CreateInvoiceScreen() {
           <FormSection title="CLIENT" themeColors={themeColors}>
             {selectedClient ? (
               <View style={styles.selectedClientContainer}>
-                <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                <TouchableOpacity onPress={() => clientDetailsSheetRef.current?.present()} style={{ flex: 1 }} activeOpacity={0.7}>
+                  <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
+                  {!!(selectedClient.email || selectedClient.phone) && (
+                    <Text style={{ fontSize: 13, color: themeColors.mutedForeground, marginTop: 2 }} numberOfLines={1}>
+                      {[selectedClient.email, selectedClient.phone].filter(Boolean).join('  ·  ')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
                 <TouchableOpacity onPress={openNewClientSelectionSheet}>
                   <Text style={styles.changeClientText}>Change</Text>
                 </TouchableOpacity>
@@ -1902,26 +2018,22 @@ export default function CreateInvoiceScreen() {
               themeColors={themeColors} 
               showChevron={!watchedDiscountType} // Show chevron only if no discountType is set
             />
-            {!isLoadingTaxSettings && globalTaxRatePercent !== null && (
-              <>
-                <View style={styles.separator} />
-                <ActionRow
-                  label={
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                      <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
-                      {watchedTaxPercentage !== null && (
-                        <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
-                      )}
-                    </View>
-                  }
-                  value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
-                  icon={Percent}
-                  themeColors={themeColors}
-                  onPress={handlePresentEditInvoiceTaxSheet}
-                  showChevron={displayTaxAmount <= 0}
-                />
-              </>
-            )}
+            <View style={styles.separator} />
+            <ActionRow
+              label={
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.labelStyle}>{invoiceTaxLabel || 'Tax'} </Text>
+                  {watchedTaxPercentage !== null && (
+                    <Text style={styles.taxPercentageStyle}>({watchedTaxPercentage}%)</Text>
+                  )}
+                </View>
+              }
+              value={displayTaxAmount > 0 ? `${getCurrencySymbol(currencyCode)}${Number(displayTaxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${getCurrencySymbol(currencyCode)}0.00`}
+              icon={Percent}
+              themeColors={themeColors}
+              onPress={handlePresentEditInvoiceTaxSheet}
+              showChevron={displayTaxAmount <= 0}
+            />
             <View style={styles.separator} />
             <ActionRow
               label="Add Payment"
@@ -1979,12 +2091,29 @@ export default function CreateInvoiceScreen() {
             />
             <ActionRow
               label={paymentOptionsLoading ? "Bank Transfer (Loading...)" : "Bank Transfer"}
-              icon={Landmark} 
-              themeColors={themeColors} 
+              icon={Landmark}
+              themeColors={themeColors}
               showSwitch={true}
               switchValue={getValues('bank_account_active_on_invoice')}
               onSwitchChange={(newValue) => handlePaymentMethodToggle('bank_account', newValue)}
               onPress={() => handlePaymentMethodToggle('bank_account', !getValues('bank_account_active_on_invoice'))}
+              disabled={paymentOptionsLoading}
+            />
+            <ActionRow
+              label={
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ color: paymentOptionsLoading ? themeColors.mutedForeground : themeColors.foreground, fontSize: 16 }}>
+                    GoCardless {paymentOptionsLoading ? '(Loading...)' : ''}
+                  </Text>
+                  <Image source={{ uri: 'https://wzpuzqzsjdizmpiobsuo.supabase.co/storage/v1/object/public/payment-icons/gocardless.png' }} style={[iconStyle, paymentOptionsLoading && {opacity: 0.5}]} />
+                </View>
+              }
+              icon={Landmark}
+              themeColors={themeColors}
+              showSwitch={true}
+              switchValue={getValues('gocardless_active_on_invoice')}
+              onSwitchChange={(newValue) => handlePaymentMethodToggle('gocardless', newValue)}
+              onPress={() => handlePaymentMethodToggle('gocardless', !getValues('gocardless_active_on_invoice'))}
               disabled={paymentOptionsLoading}
             />
           </FormSection>
@@ -2029,16 +2158,40 @@ export default function CreateInvoiceScreen() {
         </TouchableOpacity>
 
         {/* Add Item Bottom Sheet Modal */}
-        <AddItemSheet 
-          ref={addItemSheetRef} 
-          onItemFromFormSaved={handleItemFromSheetSaved}
-          currencyCode={currencyCode}
-        />
+        {USE_STABLE_ADD_ITEM ? (
+          <AddItemSheetStable
+            ref={addItemSheetRef as React.RefObject<AddItemSheetStableRef>}
+            onItemFromFormSaved={handleItemFromSheetSaved}
+            currencyCode={currencyCode}
+          />
+        ) : (
+          <AddItemSheet 
+            ref={addItemSheetRef as React.RefObject<AddItemSheetRef>} 
+            onItemFromFormSaved={handleItemFromSheetSaved}
+            currencyCode={currencyCode}
+          />
+        )}
 
         <NewClientSelectionSheet
           ref={newClientSheetRef}
           onClientSelect={handleClientSelect}
           onClose={() => {}}
+        />
+
+        <AddNewItemFormSheet ref={editItemSheetRef} onSave={handleItemEdited} />
+
+        <ClientDetailsSheet
+          ref={clientDetailsSheetRef}
+          client={selectedClient}
+          onChangeClient={() => {
+            clientDetailsSheetRef.current?.dismiss();
+            openNewClientSelectionSheet();
+          }}
+          onViewProfile={() => {
+            if (!selectedClient) return;
+            clientDetailsSheetRef.current?.dismiss();
+            router.push(`/customers/${selectedClient.id}` as any);
+          }}
         />
 
         <DateTimePickerModal

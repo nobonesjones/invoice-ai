@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from "expo-haptics";
+// Note: Avoid completing OAuth sessions in email-only flows to prevent interference
 import * as WebBrowser from "expo-web-browser";
 import { z } from "zod";
 
@@ -24,8 +25,11 @@ import { useTheme } from "@/context/theme-provider";
 import { useSupabase } from "@/context/supabase-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
 import { supabase } from "@/config/supabase";
+import { useRouter } from 'expo-router';
+import { OAUTH_REDIRECT } from "@/utils/oauth";
+import { waitForSupabaseSession } from "@/utils/wait-for-session";
 
-WebBrowser.maybeCompleteAuthSession();
+// Removed maybeCompleteAuthSession() here to avoid affecting email/password flows
 
 const signInSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -51,8 +55,9 @@ export function SignInModal({
   onSuccess 
 }: SignInModalProps) {
   const { theme } = useTheme();
-  const { signInWithPassword } = useSupabase();
+  const { signInWithPassword, session } = useSupabase();
   const { saveOnboardingData } = useOnboarding();
+  const router = useRouter();
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -119,6 +124,8 @@ export function SignInModal({
         }
       }
       
+      // Navigate to protected area explicitly to avoid relying on global effect
+      try { router.replace('/(app)/(protected)'); } catch {}
       onSuccess?.();
     } catch (error: any) {
       console.error("Error signing in:", error);
@@ -136,11 +143,11 @@ export function SignInModal({
     setIsGoogleLoading(true);
     
     try {
-      const explicitRedirectTo = "expo-supabase-starter://oauth/callback";
+      const watchdog = startAuthWatchdog({ tag: 'google.signInModal', router, loadingSetter: setIsGoogleLoading, timeoutMs: 10000 });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: explicitRedirectTo,
+          redirectTo: OAUTH_REDIRECT,
         },
       });
 
@@ -157,42 +164,75 @@ export function SignInModal({
       if (data?.url) {
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          explicitRedirectTo,
+          OAUTH_REDIRECT,
         );
+        console.log('[Google SignIn] WebBrowser result:', { type: result.type, hasUrl: !!(result as any).url });
         if (result.type === "success" && result.url) {
-          const params = new URLSearchParams(result.url.split("#")[1]);
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
+          const urlParts = result.url.includes('#') ? result.url.split('#') : result.url.split('?');
+          const tokenString = urlParts[1] || '';
+          const params = new URLSearchParams(tokenString);
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          const code = params.get('code');
+
           if (access_token && refresh_token) {
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
+            const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
             if (setError) {
-              console.error("Error setting session manually:", setError);
-              Alert.alert("Session Error", "Could not set user session.");
-            } else {
-              // Get the user ID from the session and save onboarding data
-              const { data: sessionData } = await supabase.auth.getSession();
-              if (sessionData?.session?.user?.id) {
-                try {
-                  await saveOnboardingData(sessionData.session.user.id);
-                  console.log('[SignInModal] Onboarding data saved after Google sign in');
-                } catch (error) {
-                  console.error('[SignInModal] Error saving onboarding data:', error);
-                  // Don't block the flow if onboarding data save fails
-                }
-              }
-              onSuccess?.();
+              console.error('Error setting session manually:', setError);
+              Alert.alert('Session Error', 'Could not set user session.');
+              return;
+            }
+          } else if (code) {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession({ authCode: code });
+            if (exchangeError) {
+              console.error('Error exchanging code for session:', exchangeError);
+              Alert.alert('Sign In Error', 'Could not complete sign-in.');
+              return;
             }
           } else {
-            Alert.alert(
-              "Sign In Error",
-              "Could not process authentication response.",
-            );
+            Alert.alert('Sign In Error', 'No tokens or code found in redirect.');
+            return;
           }
+
+          // Immediately route like email flow; save onboarding in background
+          const { data: sessionData } = await supabase.auth.getSession();
+          const userId = sessionData?.session?.user?.id;
+          if (userId) { try { await saveOnboardingData(userId); } catch {} }
+          try { await waitForSupabaseSession(8000); } catch {}
+          try { router.replace('/(app)/(protected)'); } catch {}
+          try { watchdog.stop(); } catch {}
+          onSuccess?.();
+          return;
         }
+        // Fallback: even if result wasn't "success", the callback route may have set the session
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          console.log('[Google SignIn] Session after dismiss:', !!postSession?.session);
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
+            try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
+            onSuccess?.();
+            return;
+          }
+        } catch {}
       } else {
+        // No URL returned; check if session already exists (callback route might have handled it)
+        try {
+          const { data: postSession } = await supabase.auth.getSession();
+          console.log('[Google SignIn] No URL; session exists?:', !!postSession?.session);
+          const userId = postSession?.session?.user?.id;
+          if (userId) {
+            try { await saveOnboardingData(userId); } catch {}
+            try { await waitForSupabaseSession(8000); } catch {}
+            try { router.replace('/(app)/(protected)'); } catch {}
+            try { watchdog.stop(); } catch {}
+            onSuccess?.();
+            return;
+          }
+        } catch {}
         Alert.alert("Sign In Error", "Could not get authentication URL.");
       }
     } catch (catchError: any) {
@@ -208,6 +248,36 @@ export function SignInModal({
       setIsGoogleLoading(false);
     }
   };
+
+  // Session watcher: if a session appears while this modal is visible (e.g., callback set it), route out immediately
+  useEffect(() => {
+    const run = async () => {
+      try {
+        if (!visible) return;
+        const { data } = await supabase.auth.getSession();
+        if (!data?.session) return;
+        const userId = data.session.user?.id;
+        if (!userId) return;
+        try { await saveOnboardingData(userId); } catch {}
+        try {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('onboarding_completed')
+            .eq('id', userId)
+            .maybeSingle();
+          if (profile?.onboarding_completed) {
+            router.replace('/(app)/(protected)');
+          } else {
+            router.replace('/(auth)/onboarding-1');
+          }
+        } catch {
+          router.replace('/(auth)/onboarding-1');
+        }
+        onSuccess?.();
+      } catch {}
+    };
+    run();
+  }, [visible, session]);
 
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

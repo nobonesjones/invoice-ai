@@ -1,9 +1,10 @@
-import React, { forwardRef, useCallback, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { X as XIcon } from 'lucide-react-native'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface TaxData {
   taxName: string;
@@ -26,17 +27,32 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const lastPresentTime = useRef<number>(0);
+  const insets = useSafeAreaInsets();
 
   const [taxName, setTaxName] = useState<string>('');
   const [taxRate, setTaxRate] = useState<string>('');
   
   React.useImperativeHandle(ref, () => ({
     present: (initialName?: string | null, initialRate?: number | string | null) => {
+      // Prevent multiple rapid opens (debounce 500ms)
+      const now = Date.now();
+      if (now - lastPresentTime.current < 500) {
+        console.log('[EditInvoiceTaxSheet] 🚫 Blocked rapid open');
+        return;
+      }
+      lastPresentTime.current = now;
+      
+      console.log('[EditInvoiceTaxSheet] 🚀 PRESENT CALLED - Name:', initialName, 'Rate:', initialRate);
       setTaxName(initialName || '');
       setTaxRate(initialRate !== null && initialRate !== undefined ? String(initialRate) : '');
+      
+      console.log('[EditInvoiceTaxSheet] 🎯 About to call bottomSheetModalRef.current?.present()');
       bottomSheetModalRef.current?.present();
+      console.log('[EditInvoiceTaxSheet] ✅ bottomSheetModalRef.present() called');
     },
     dismiss: () => {
+      console.log('[EditInvoiceTaxSheet] 🔽 DISMISS CALLED');
       bottomSheetModalRef.current?.dismiss();
     },
   }));
@@ -53,10 +69,21 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
     []
   );
 
+  const snapPoints = useMemo(() => ['70%', '85%'], []);
+
   const handleSheetDismissed = () => {
+    console.log('[EditInvoiceTaxSheet] 📤 MODAL DISMISSED');
     if (props.onClose) {
       props.onClose(); 
     }
+  };
+
+  const handleSheetAnimate = (fromIndex: number, toIndex: number) => {
+    console.log('[EditInvoiceTaxSheet] 🎭 ANIMATE - From:', fromIndex, 'To:', toIndex);
+  };
+
+  const handleSheetChange = (index: number) => {
+    console.log('[EditInvoiceTaxSheet] 🔄 INDEX CHANGED TO:', index);
   };
 
   const handleInternalSave = () => {
@@ -107,9 +134,8 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
     contentContainer: {
       paddingHorizontal: 20,
       paddingTop: 10, 
-      paddingBottom: Platform.OS === 'ios' ? 95 : 85, 
-      flexGrow: 1,
-      justifyContent: 'space-between',
+      paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+      minHeight: 400,
     },
     card: {
       backgroundColor: themeColors.card,
@@ -172,12 +198,21 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
     <BottomSheetModal
       ref={bottomSheetModalRef}
       index={0} 
-      enableDynamicSizing={true}
+      snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
-      onDismiss={handleSheetDismissed} 
+      onDismiss={handleSheetDismissed}
+      onAnimate={handleSheetAnimate}
+      onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      enablePanDownToClose={true} 
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      enableOverDrag={false}
+      enableDynamicSizing={false}
+      keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
+      keyboardBlurBehavior="restore"
+      topInset={Math.max(12, insets.top)}
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>
@@ -192,41 +227,32 @@ const EditInvoiceTaxSheet = forwardRef<EditInvoiceTaxSheetRef, EditInvoiceTaxShe
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled" 
         >
-          <View> {/* Wrapper for content above button */}
-            <View style={styles.card}>
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>Tax Name</Text>
-                <BottomSheetTextInput
-                  style={styles.textInput}
-                  value={taxName}
-                  onChangeText={setTaxName}
-                  placeholder="e.g. VAT, Sales Tax"
-                  placeholderTextColor={themeColors.mutedForeground}
-                  returnKeyType="none"
-                />
-              </View>
-
-              <View style={styles.separator} />
-
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>Tax Rate (%)</Text>
-                <BottomSheetTextInput
-                  style={styles.textInput}
-                  value={taxRate}
-                  onChangeText={setTaxRate}
-                  placeholder="e.g. 20"
-                  placeholderTextColor={themeColors.mutedForeground}
-                  keyboardType="decimal-pad"
-                  returnKeyType="none"
-                />
-              </View>
+          <View style={styles.card}>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputLabel}>Tax Name</Text>
+              <BottomSheetTextInput
+                style={styles.textInput}
+                value={taxName}
+                onChangeText={setTaxName}
+                placeholder="e.g. VAT, Sales Tax"
+                placeholderTextColor={themeColors.mutedForeground}
+              />
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.inputRow}>
+              <Text style={styles.inputLabel}>Tax Rate (%)</Text>
+              <BottomSheetTextInput
+                style={styles.textInput}
+                value={taxRate}
+                onChangeText={setTaxRate}
+                placeholder="e.g. 20"
+                placeholderTextColor={themeColors.mutedForeground}
+                keyboardType="decimal-pad"
+              />
             </View>
           </View>
 
-          <TouchableOpacity 
-            style={styles.saveButton} 
-            onPress={handleInternalSave}
-          >
+          <TouchableOpacity onPress={handleInternalSave} style={styles.saveButton}>
             <Text style={styles.saveButtonText}>Save Tax Changes</Text>
           </TouchableOpacity>
         </BottomSheetScrollView>

@@ -1,6 +1,7 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useTabBarVisibility } from "@/context/TabBarVisibilityContext";
 import { Search, PlusCircle } from "lucide-react-native";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
@@ -22,7 +23,7 @@ import CreateNewClientSheet from "./CreateNewClientSheet";
 
 import CustomerListItem, { Customer } from "@/components/CustomerListItem";
 import { colors } from "@/constants/colors";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/config/supabase";
 import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useTheme } from "@/context/theme-provider";
 
@@ -40,6 +41,7 @@ export default function CustomersScreen() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
+	const { setIsTabBarVisible } = useTabBarVisibility();
 	const params = useLocalSearchParams<{
 		selectionMode?: string;
 		origin?: string;
@@ -58,10 +60,11 @@ export default function CustomersScreen() {
 		return nameMatch || emailMatch || phoneMatch;
 	});
 
-	const fetchClients = useCallback(async (isRefresh = false) => {
-		console.log("Fetching clients from Supabase...", isRefresh ? "(refresh)" : "(initial)");
-		if (!isRefresh) {
-		setLoading(true);
+	const fetchClients = useCallback(async (isRefresh = false, silent = false) => {
+		if (silent) {
+			// Data is already on screen: refresh it in place, no loader, no reflow.
+		} else if (!isRefresh) {
+			setLoading(true);
 		} else {
 			setRefreshing(true);
 		}
@@ -118,9 +121,8 @@ export default function CustomersScreen() {
 	// Auto-refresh when screen comes into focus
 	useFocusEffect(
 		useCallback(() => {
-			console.log("CustomersScreen: Screen focused, refreshing clients...");
-			fetchClients();
-		}, [fetchClients])
+			fetchClients(false, customers.length > 0); // silent when data is already on screen
+		}, [fetchClients, customers.length])
 	);
 
 	// Handle pull-to-refresh
@@ -167,6 +169,7 @@ export default function CustomersScreen() {
 						},
 					});
 				} else {
+					setIsTabBarVisible(false); // before the push, so the detail screen lays out full-height from its first frame
 					router.push(`/(app)/(protected)/customers/${item.id}`);
 				}
 			}}

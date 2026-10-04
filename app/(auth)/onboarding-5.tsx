@@ -20,22 +20,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 export default function OnboardingScreen5() {
   const router = useRouter();
   const { theme } = useTheme();
   const { updateLogo } = useOnboarding();
+  const analytics = useAnalytics();
   const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding 7 - Logo', { step: 7 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
   }, []);
 
   const handleContinue = async () => {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
@@ -47,6 +54,8 @@ export default function OnboardingScreen5() {
     } catch (error) {
       console.error('[Onboarding5] Error saving logo:', error);
       Alert.alert('Error', 'Failed to save logo. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
   };
 
@@ -166,9 +175,9 @@ export default function OnboardingScreen5() {
             <View style={styles.contentContainer}>
               {/* Header */}
               <View style={styles.headerContent}>
-                <Text style={[styles.headline, { color: theme.foreground }]}>Upload logo</Text>
-                <Text style={[styles.instructionText, { color: theme.mutedForeground }]}>
-                  Optional, can be edited any time.
+                <Text style={[styles.headline, { color: theme.foreground }]}>Add your logo</Text>
+                <Text style={[styles.instructionText, { color: theme.mutedForeground }]}> 
+                  Please give us your logo so we can add it to your invoices. It can be edited any time.
                 </Text>
               </View>
 
@@ -203,7 +212,12 @@ export default function OnboardingScreen5() {
               <View style={styles.buttonContainer}>
                 <Button
                   onPress={handleContinue}
-                  style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                  disabled={isSubmitting}
+                  style={[
+                    styles.primaryButton,
+                    { backgroundColor: theme.primary },
+                    isSubmitting && { opacity: 0.6 }
+                  ]}
                 >
                   <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
                 </Button>

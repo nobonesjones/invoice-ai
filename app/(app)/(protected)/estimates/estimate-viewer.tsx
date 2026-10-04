@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,11 +32,15 @@ import {
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useHideTabBar } from '@/hooks/useHideTabBar';
+import { useEstimateRealtime } from '@/hooks/useEstimateRealtime';
+import { SendStatusOverlay, SendStatus } from '@/components/SendStatusOverlay';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Tables } from '../../../types/database.types'; 
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { Share } from 'react-native';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -46,21 +50,14 @@ import { useEstimateActivityLogger } from '@/hooks/estimates/useEstimateActivity
 import EstimateHistorySheet, { EstimateHistorySheetRef } from './EstimateHistorySheet';
 import { EstimateConversionService } from '@/services/estimateConversionService';
 import { EstimateSenderService } from '@/services/estimateSenderService';
-import { usePaywall } from '@/context/paywall-provider';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
 import { EstimateShareService } from '@/services/estimateShareService';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
-import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
 // SKIA IMPORTS for estimate rendering
-import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
-import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
-import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
-import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
-import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
-import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
-import { useCanvasRef } from '@shopify/react-native-skia';
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { fetchLogoDataUri, renderInvoicePdf } from '@/lib/invoice-doc/pdf';
 
 interface EstimateForTemplate {
   id: string;
@@ -118,30 +115,8 @@ function EstimateViewerScreen() {
   const { supabase, user } = useSupabase();
   const navigation = useNavigation();
   const { setIsTabBarVisible } = useTabBarVisibility();
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
   const { logEstimateCreated, logEstimateEdited, logEstimateSent, logEstimateConverted, logStatusChanged } = useEstimateActivityLogger();
-  const { isSubscribed } = usePaywall();
-  const { checkAndShowPaywall } = useItemCreationLimit();
-  
-  // Paywall for send block using the working pattern
-  const { registerPlacement } = usePlacement({
-    onError: (err) => {},
-    onPresent: (info) => {},
-    onDismiss: (info, result) => {
-      // Paywall dismissed
-    },
-  });
-  
-  // Paywall for send block
-  // const { registerPlacement } = usePlacement({
-  //   onError: (err) => {},
-  //   onPresent: (info) => {},
-  //   onDismiss: (info, result) => {
-  //     // Send block dismissed
-  //     if (result?.type === 'purchased') {
-  //       // User subscribed, continuing send...
-  //     }
-  //   },
-  // });
 
   const [estimate, setEstimate] = useState<EstimateForTemplate | null>(null);
   const [client, setClient] = useState<Tables<'clients'> | null>(null);
@@ -150,6 +125,7 @@ function EstimateViewerScreen() {
   const [isEstimateReady, setIsEstimateReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   // Modal refs
   const sendEstimateModalRef = useRef<BottomSheetModal>(null);
@@ -158,7 +134,10 @@ function EstimateViewerScreen() {
   const previewModalRef = useRef<InvoicePreviewModalRef>(null);
 
   // Skia canvas ref for PDF export
-  const skiaEstimateRef = useCanvasRef();
+  const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+  // Drives SendStatusOverlay, like the invoice viewer.
+  const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
+  const [sendDetail, setSendDetail] = useState<string | null>(null);
 
   // Disable default header to prevent flash (we use custom header in render)
   useEffect(() => {
@@ -359,29 +338,44 @@ function EstimateViewerScreen() {
   // Calculate currency symbol for Skia canvas
   const currencySymbol = estimate?.currency ? getCurrencySymbol(estimate.currency) : '$';
 
-  const getEstimateDesignComponent = () => {
-    const designType = estimate?.estimate_template || DEFAULT_DESIGN_ID;
-    
-    switch (designType.toLowerCase()) {
-      case 'modern':
-        return SkiaInvoiceCanvasModern;
-      case 'clean':
-        return SkiaInvoiceCanvasClean;
-      case 'simple':
-        return SkiaInvoiceCanvasSimple;
-      case 'wave':
-        return SkiaInvoiceCanvasWave;
-      case 'classic':
-      default:
-        return SkiaInvoiceCanvas;
-    }
-  };
-
-  const EstimateDesignComponent = getEstimateDesignComponent();
 
   const getAccentColor = () => {
-    return estimate?.accent_color || '#14B8A6';
+    return estimate?.accent_color || '#1E40AF';
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
+      if (!cancelled) setLogoDataUri(uri);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessSettings?.business_logo_url]);
+
+  const estimateDoc = useMemo(
+    () =>
+      estimate && businessSettings
+        ? buildInvoiceDocument({
+            type: 'estimate',
+            row: estimate,
+            client,
+            business: businessSettings,
+            terminology: businessSettings?.estimate_terminology || 'estimate',
+            logoDataUri,
+          })
+        : null,
+    [estimate, client, businessSettings, logoDataUri],
+  );
+
+  // Live updates: an Accept / Decline on the hosted page flips this screen
+  // without a navigation. Needs `estimates` in the realtime publication.
+  useEstimateRealtime(
+    () => {
+      if (estimateId) fetchEstimateData(estimateId);
+    },
+    { estimateId: estimateId ?? null },
+  );
 
   const handleEdit = () => {
     if (!estimate) return;
@@ -486,120 +480,29 @@ function EstimateViewerScreen() {
     sendEstimateModalRef.current?.present();
   };
 
-  const handleSendPDF = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'estimate_send_pdf',
-            estimateId: estimate?.id,
-            userId: user?.id,
-            action: 'send_estimate'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
+  const exportEstimatePdf = useCallback(async () => {
+    if (!estimateDoc) {
+      throw new Error('Estimate not loaded');
     }
+    const { uri } = await renderInvoicePdf(estimateDoc);
+    return uri;
+  }, [estimateDoc]);
 
-    if (!estimate || !businessSettings) {
-      Alert.alert('Error', 'Cannot export PDF - estimate data not loaded');
+  const handleSendPDF = async () => {
+    if (!estimate || !supabase || !user) {
+      Alert.alert('Error', 'Cannot export PDF - estimate data not available');
       return;
     }
 
     try {
-      const image = skiaEstimateRef.current?.makeImageSnapshot();
-      
-      if (!image) {
-        throw new Error('Failed to create image snapshot');
-      }
-      
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            @page { margin: 0; size: ${image.width()}px ${image.height()}px; }
-            body { margin: 0; padding: 0; width: ${image.width()}px; height: ${image.height()}px; overflow: hidden; }
-            .estimate-image { width: ${image.width()}px; height: ${image.height()}px; display: block; object-fit: none; }
-          </style>
-        </head>
-        <body>
-          <img src="data:image/png;base64,${image.encodeToBase64()}" class="estimate-image" alt="Estimate ${estimate.estimate_number}" />
-        </body>
-        </html>
-      `;
-      
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-      });
-
-      // Update estimate status and log activity
-      if (user && estimate.status !== 'sent') {
-        const sendResult = await EstimateSenderService.sendEstimateByPDF(
-          estimate.id,
-          user.id,
-          estimate.estimate_number || 'Unknown',
-          supabase
-        );
-
-        if (sendResult.success) {
-          // Update local state
-          setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
-        } else {
-          // Failed to update status
-        }
-      }
+      const uri = await exportEstimatePdf();
 
       await Sharing.shareAsync(uri, { 
         mimeType: 'application/pdf', 
         dialogTitle: 'Share Estimate PDF' 
       });
 
-      sendEstimateModalRef.current?.dismiss();
-      
-    } catch (error: any) {
-      // Error in handleSendPDF
-      Alert.alert('PDF Export Error', `Failed to export PDF: ${error.message}`);
-    }
-  };
-
-  const handleSendByEmail = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'estimate_send_email',
-            estimateId: estimate?.id,
-            userId: user?.id,
-            action: 'send_estimate'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
-
-    if (!estimate || !businessSettings || !user) {
-      Alert.alert('Error', 'Cannot send estimate - data not available');
-      return;
-    }
-
-    try {
-      // Update estimate status and log activity
-      const sendResult = await EstimateSenderService.sendEstimateByEmail(
+      const sendResult = await EstimateSenderService.sendEstimateByPDF(
         estimate.id,
         user.id,
         estimate.estimate_number || 'Unknown',
@@ -607,41 +510,101 @@ function EstimateViewerScreen() {
       );
 
       if (sendResult.success) {
-        // Update local state
         setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
-        Alert.alert('Success', sendResult.message || 'Estimate sent successfully');
-      } else {
-        Alert.alert('Error', sendResult.error || 'Failed to send estimate');
       }
 
       sendEstimateModalRef.current?.dismiss();
-      
+
     } catch (error: any) {
-      // Error in handleSendByEmail
-      Alert.alert('Error', `Failed to send estimate: ${error.message}`);
+      Alert.alert('PDF Export Error', `Failed to export PDF: ${error.message}`);
+    }
+  };
+
+  const handleSendByEmail = async () => {
+    // 1. Validate client email exists
+    if (!estimate?.clients?.email) {
+      Alert.alert(
+        'Email Required',
+        'This client has no email address. Would you like to add one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Email',
+            onPress: () => {
+              sendEstimateModalRef.current?.dismiss();
+              router.push(`/(app)/(protected)/clients/edit/${estimate?.client_id}`);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    if (!estimate || !supabase || !user) {
+      Alert.alert('Error', 'Unable to send estimate at this time.');
+      return;
+    }
+
+    try {
+      setIsSendingEmail(true);
+      setSendDetail(estimate.clients.email);
+      setSendStatus('sending');
+      sendEstimateModalRef.current?.dismiss(); // Close modal immediately for better UX
+
+      // 2. Render the document once: uploaded for the link, attached to the email.
+      const pdfUri = await exportEstimatePdf();
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, pdfUri, 30);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to prepare estimate');
+      }
+      const pdfBase64 = await FileSystem.readAsStringAsync(pdfUri, { encoding: FileSystem.EncodingType.Base64 });
+
+      // 3. Call the edge function to send email. Both key styles are sent so the
+      // deployed function keeps working until the repo version is deployed.
+      const { error } = await supabase.functions.invoke('send-estimate-email', {
+        body: {
+          estimateId: estimate.id,
+          estimate_id: estimate.id,
+          pdf_base64: pdfBase64,
+          share_url: result.shareUrl ?? null,
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to send email');
+      }
+
+      // 4. Mark sent and log it, like the link and PDF routes already do.
+      await EstimateSenderService.sendEstimateByEmail(estimate.id, user.id, estimate.estimate_number || 'Unknown', supabase);
+      setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
+
+      // 5. Determine document terminology
+      const terminology = businessSettings?.estimate_terminology || 'estimate';
+      const documentLabel = terminology === 'quote' ? 'Quote' : 'Estimate';
+
+      // 6. Success, shown in the overlay rather than an alert
+      setSendStatus('success');
+
+      // 7. Refresh estimate data
+      const refreshedEstimate = await fetchEstimateData(estimateId);
+      if (refreshedEstimate) {
+        setEstimate(refreshedEstimate);
+      }
+
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      setSendStatus('idle');
+      Alert.alert(
+        'Error Sending Email',
+        error.message || 'Failed to send email. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
   const handleSendByLink = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'estimate_send_link',
-            estimateId: estimate?.id,
-            userId: user?.id,
-            action: 'send_estimate'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
 
     if (!estimate || !user) {
       Alert.alert('Error', 'Cannot send estimate - data not available');
@@ -649,7 +612,15 @@ function EstimateViewerScreen() {
     }
 
     try {
-      // Update estimate status and log activity
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, await exportEstimatePdf(), 30);
+
+      if (!result.success || !result.shareUrl) {
+        Alert.alert('Error', result.error || 'Failed to generate share link.');
+        return;
+      }
+
+      await Clipboard.setStringAsync(result.shareUrl);
+
       const sendResult = await EstimateSenderService.sendEstimateByLink(
         estimate.id,
         user.id,
@@ -658,17 +629,18 @@ function EstimateViewerScreen() {
       );
 
       if (sendResult.success) {
-        // Update local state
         setEstimate(prev => prev ? { ...prev, status: 'sent' } : null);
-        Alert.alert('Success', sendResult.message || 'Estimate link shared successfully');
-      } else {
-        Alert.alert('Error', sendResult.error || 'Failed to share estimate link');
       }
 
+      Alert.alert(
+        'Link Copied',
+        `A shareable link has been copied to your clipboard.\n\nLink: ${result.shareUrl}`
+      );
+
       sendEstimateModalRef.current?.dismiss();
-      
+
     } catch (error: any) {
-      // Error in handleSendByLink
+      Alert.alert('Error', `Failed to create share link: ${error.message}`);
     }
   };
 
@@ -682,18 +654,13 @@ function EstimateViewerScreen() {
 
     try {
       // Generate shareable PDF link from Skia canvas for estimate
-      const result = await EstimateShareService.generateShareLinkFromCanvas(
-        estimateId,
-        user.id,
-        skiaEstimateRef,
-        30 // Expires in 30 days
-      );
+      const result = await EstimateShareService.generateShareLinkFromPdf(estimateId, user.id, await exportEstimatePdf(), 30);
 
       if (result.success && result.shareUrl) {
         // Show success with development note
         Alert.alert(
-          'Share Link Generated ✅',
-          `Estimate sharing is working! Link generated successfully.\\n\\nNote: Web viewer for estimates is still in development. For now, the link creates a shareable record in the database.\\n\\nLink: ${result.shareUrl}`,
+          'Share Link Generated',
+          `A link to the PDF has been created. It expires in 30 days.\n\nLink: ${result.shareUrl}`,
           [
             {
               text: 'Copy Link',
@@ -749,12 +716,6 @@ function EstimateViewerScreen() {
             try {
               if (!user?.id) {
                 Alert.alert('Error', 'User information not available.');
-                return;
-              }
-
-              // Check usage limits and show paywall if needed
-              const canProceed = await checkAndShowPaywall();
-              if (!canProceed) {
                 return;
               }
 
@@ -836,13 +797,7 @@ function EstimateViewerScreen() {
               // Update local state
               setEstimate(prev => prev ? { ...prev, status: 'cancelled' } : null);
               
-              // Log activity if activity logger is available
-              if (logActivity) {
-                logActivity('estimate_voided', {
-                  estimate_id: estimate.id,
-                  estimate_number: estimate.estimate_number
-                });
-              }
+              await logStatusChanged(estimate.id, estimate.estimate_number || undefined, estimate.status || undefined, 'cancelled');
 
               Alert.alert('Success', 'Estimate has been voided successfully.');
             } catch (error) {
@@ -1100,7 +1055,7 @@ function EstimateViewerScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+            <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.headerLeftContainer}>
               <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
               <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
             </TouchableOpacity>
@@ -1237,7 +1192,7 @@ function EstimateViewerScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+            <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.headerLeftContainer}>
               <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
               <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
             </TouchableOpacity>
@@ -1260,7 +1215,7 @@ function EstimateViewerScreen() {
         {/* Header Section */}
         <View style={[styles.newTopSectionContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
           <View style={styles.topRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerLeftContainer}>
+            <TouchableOpacity onPress={() => { setIsTabBarVisible(true); router.back(); }} style={styles.headerLeftContainer}>
               <ChevronLeft size={28} color={themeColors.foreground} strokeWidth={2.5} />
               <Text style={[styles.backButtonText, { color: themeColors.foreground }]}>Back</Text>
             </TouchableOpacity>
@@ -1300,61 +1255,17 @@ function EstimateViewerScreen() {
         </View>
 
         {/* Estimate Canvas */}
-        <ScrollView 
-          style={styles.scrollView} 
-          contentContainerStyle={[styles.scrollViewContent, { backgroundColor: themeColors.border }]} 
-          showsVerticalScrollIndicator={false}
-        >
-          {isEstimateReady ? (
-            <View style={{ alignItems: 'center', marginTop: -30 }}>
-              <View style={{
-                transform: [{ scale: 0.882 }],
-                marginLeft: -175,
-              }}>
-                <EstimateDesignComponent
-                  ref={skiaEstimateRef}
-                  invoice={{
-                    ...estimate,
-                    // Transform estimate fields to invoice fields for Skia canvas compatibility
-                    invoice_number: estimate?.estimate_number,
-                    invoice_date: estimate?.estimate_date,
-                    due_date: estimate?.valid_until_date,
-                    invoice_line_items: estimate?.estimate_line_items, // Key transformation
-                  }}
-                  client={client}
-                  business={businessSettings}
-                  currencySymbol={currencySymbol}
-                  accentColor={getAccentColor()}
-                  documentType="estimate"
-                  estimateTerminology={businessSettings?.estimate_terminology || 'estimate'}
-                  renderSinglePage={0}
-                  displaySettings={{
-                    show_business_logo: businessSettings?.show_business_logo ?? true,
-                    show_business_name: businessSettings?.show_business_name ?? true,
-                    show_business_address: businessSettings?.show_business_address ?? true,
-                    show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-                    show_notes_section: businessSettings?.show_notes_section ?? true,
-                  }}
-                  style={{ 
-                    width: 200, 
-                    height: 295,
-                    backgroundColor: 'white',
-                    borderRadius: 8,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3,
-                  }}
-                />
-              </View>
+        <View style={[styles.scrollView, { backgroundColor: themeColors.border }]}>
+          {isEstimateReady && estimateDoc ? (
+            <View style={{ flex: 1, paddingBottom: 96 }}>
+              <InvoiceDocumentView doc={estimateDoc} background={themeColors.border} />
             </View>
           ) : (
-            <View style={{ alignItems: 'center', paddingTop: -10 }}> 
+            <View style={{ alignItems: 'center', paddingTop: 10 }}>
               <InvoiceSkeletonLoader />
             </View>
           )}
-        </ScrollView>
+        </View>
 
         {/* Bottom Action Section */}
         <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>
@@ -1626,6 +1537,16 @@ function EstimateViewerScreen() {
             onSaveComplete={handleDesignModalClose}
           />
         )}
+
+        {/* Progress + confirmation for sending. Mounted last so it sits above the
+            bottom sheets, which otherwise render over it. */}
+        <SendStatusOverlay
+          status={sendStatus}
+          sendingTitle={`Sending ${businessSettings?.estimate_terminology === 'quote' ? 'quote' : 'estimate'}`}
+          successTitle={`${businessSettings?.estimate_terminology === 'quote' ? 'Quote' : 'Estimate'} sent`}
+          detail={sendDetail}
+          onDone={() => setSendStatus('idle')}
+        />
       </SafeAreaView>
     </BottomSheetModalProvider>
   );

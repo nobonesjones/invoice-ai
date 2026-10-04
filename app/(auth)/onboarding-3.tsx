@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useOnboarding } from "@/context/onboarding-provider";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 const REGIONS = [
   { label: 'Select Region', value: '', flag: '' },
@@ -69,7 +70,31 @@ const REGIONS = [
   
   // Middle East
   { label: '🇦🇪 United Arab Emirates', value: 'AE', flag: '🇦🇪' },
-  
+  { label: '🇸🇦 Saudi Arabia', value: 'SA', flag: '🇸🇦' },
+  { label: '🇧🇭 Bahrain', value: 'BH', flag: '🇧🇭' },
+
+  // South Asia
+  { label: '🇮🇳 India', value: 'IN', flag: '🇮🇳' },
+  { label: '🇵🇰 Pakistan', value: 'PK', flag: '🇵🇰' },
+  { label: '🇱🇰 Sri Lanka', value: 'LK', flag: '🇱🇰' },
+
+  // Southeast Asia
+  { label: '🇰🇭 Cambodia', value: 'KH', flag: '🇰🇭' },
+
+  // East Asia
+  { label: '🇰🇷 South Korea', value: 'KR', flag: '🇰🇷' },
+
+  // Central Asia
+  { label: '🇦🇿 Azerbaijan', value: 'AZ', flag: '🇦🇿' },
+
+  // Africa
+  { label: '🇪🇬 Egypt', value: 'EG', flag: '🇪🇬' },
+  { label: '🇬🇭 Ghana', value: 'GH', flag: '🇬🇭' },
+  { label: '🇰🇪 Kenya', value: 'KE', flag: '🇰🇪' },
+
+  // Central America
+  { label: '🇵🇦 Panama', value: 'PA', flag: '🇵🇦' },
+
   { label: '🌍 Other', value: 'OTHER', flag: '🌍' },
 ];
 
@@ -77,16 +102,19 @@ export default function OnboardingScreen3() {
 	const router = useRouter();
   const { theme } = useTheme();
   const { updateBusinessInfo, onboardingData, loadOnboardingData } = useOnboarding();
+  const analytics = useAnalytics();
   const nameInputRef = useRef<TextInput>(null);
 
   const [businessName, setBusinessName] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('');
   const [showRegionPicker, setShowRegionPicker] = useState(false);
   const [isNameInputFocused, setIsNameInputFocused] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding 5 - Business Info', { step: 5 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
@@ -107,6 +135,9 @@ export default function OnboardingScreen3() {
       return;
     }
 
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
@@ -118,6 +149,8 @@ export default function OnboardingScreen3() {
     } catch (error) {
       console.error('[Onboarding3] Error saving business info:', error);
       Alert.alert('Error', 'Failed to save business information. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
   };
 
@@ -238,11 +271,12 @@ export default function OnboardingScreen3() {
                 <View style={styles.buttonContainer}>
 				<Button
                     onPress={handleContinue}
+                    disabled={!isFormValid || isSubmitting}
                     style={[
                       styles.primaryButton,
-                      { backgroundColor: isFormValid ? theme.primary : theme.muted }
+                      { backgroundColor: isFormValid ? theme.primary : theme.muted },
+                      isSubmitting && { opacity: 0.6 }
                     ]}
-                    disabled={!isFormValid}
                   >
                     <Text style={[
                       styles.primaryButtonText,
@@ -279,13 +313,15 @@ export default function OnboardingScreen3() {
                 }
               }}
               style={styles.picker}
+              itemStyle={{ color: theme.foreground }}
             >
               {REGIONS.map((region) => (
-                <Picker.Item 
-                  key={region.value} 
-                  label={region.label} 
+                <Picker.Item
+                  key={region.value}
+                  label={region.label}
                   value={region.value}
                   enabled={region.value !== ''}
+                  color={theme.foreground}
                 />
               ))}
             </Picker>

@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ export default function OnboardingScreen2() {
   const router = useRouter();
   const { theme } = useTheme();
   const analytics = useAnalytics();
+  const [isAdvancing, setIsAdvancing] = useState(false);
 
   // Initialize video player
   const player = useVideoPlayer(require('../../assets/videos/0627 (1).mp4'), (player) => {
@@ -31,30 +32,21 @@ export default function OnboardingScreen2() {
   // Hide status bar for immersive video experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
-    
+
     // Track onboarding step reached
-    analytics.trackEvent('Onboarding Step Reached', {
-      step: 2,
-      step_name: 'video_introduction',
-      timestamp: new Date().toISOString()
-    });
+    analytics.trackEvent('Onboarding 2 - Video', { step: 2 });
     
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
-  }, [analytics]);
+  }, []);
 
   const handleContinue = () => {
+    if (isAdvancing) return;
+
+    setIsAdvancing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    // Track onboarding progression
-    analytics.trackEvent('Onboarding Step Completed', {
-      step: 2,
-      step_name: 'video_introduction',
-      next_step: '2-1',
-      timestamp: new Date().toISOString()
-    });
-    
+
     router.push("/(auth)/onboarding-2-1");
   };
 
@@ -79,14 +71,19 @@ export default function OnboardingScreen2() {
             
             {/* Header content - positioned just above button */}
             <View style={styles.headerContent}>
-              <Text style={styles.headline}>Make professional invoices in seconds from anywhere</Text>
+              <Text style={styles.headline}>Make professional invoices and estimates for free</Text>
             </View>
 
             {/* Bottom button */}
             <View style={styles.buttonContainer}>
               <Button
                 onPress={handleContinue}
-                style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                disabled={isAdvancing}
+                style={[
+                  styles.primaryButton,
+                  { backgroundColor: theme.primary },
+                  isAdvancing && { opacity: 0.6 }
+                ]}
               >
                 <Text style={[styles.primaryButtonText, { color: theme.primaryForeground }]}>Continue</Text>
               </Button>

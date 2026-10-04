@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/config/supabase';
 
 interface OnboardingData {
@@ -19,6 +20,11 @@ interface OnboardingContextType {
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+
+// Helper function to generate storage key for user's onboarding data
+const getOnboardingStorageKey = (userId: string): string => {
+  return `onboarding_data_${userId}`;
+};
 
 // Helper function to get or create business settings record
 const getOrCreateBusinessSettings = async (userId: string) => {
@@ -100,7 +106,31 @@ const REGION_CURRENCY_TAX_MAP: Record<string, { currency: string; taxName: strin
   
   // Middle East
   'AE': { currency: 'AED', taxName: 'VAT', defaultTaxRate: 5.0 },
-  
+  'SA': { currency: 'SAR', taxName: 'VAT', defaultTaxRate: 15.0 },
+  'BH': { currency: 'BHD', taxName: 'VAT', defaultTaxRate: 10.0 },
+
+  // South Asia
+  'IN': { currency: 'INR', taxName: 'GST', defaultTaxRate: 18.0 },
+  'PK': { currency: 'PKR', taxName: 'Sales Tax', defaultTaxRate: 18.0 },
+  'LK': { currency: 'LKR', taxName: 'VAT', defaultTaxRate: 18.0 },
+
+  // Southeast Asia
+  'KH': { currency: 'KHR', taxName: 'VAT', defaultTaxRate: 10.0 },
+
+  // East Asia
+  'KR': { currency: 'KRW', taxName: 'VAT', defaultTaxRate: 10.0 },
+
+  // Central Asia
+  'AZ': { currency: 'AZN', taxName: 'VAT', defaultTaxRate: 18.0 },
+
+  // Africa
+  'EG': { currency: 'EGP', taxName: 'VAT', defaultTaxRate: 14.0 },
+  'GH': { currency: 'GHS', taxName: 'VAT', defaultTaxRate: 15.0 },
+  'KE': { currency: 'KES', taxName: 'VAT', defaultTaxRate: 16.0 },
+
+  // Central America
+  'PA': { currency: 'USD', taxName: 'ITBMS', defaultTaxRate: 7.0 },
+
   // Default
   'OTHER': { currency: 'USD', taxName: 'Tax', defaultTaxRate: 0.0 },
 };
@@ -249,9 +279,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
       
-      // Save industry to profiles table
+      // Save industry to user_profiles table
       const { error } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .upsert({
           id: session.user.id,
           industry: selectedIndustry,
@@ -610,9 +640,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         .eq('user_id', userId)
         .maybeSingle();
         
-      // Load industry from profiles
+      // Load industry from user_profiles
       const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('industry')
         .eq('id', userId)
         .maybeSingle();

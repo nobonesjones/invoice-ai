@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert, Animated, Linking } from 'react-native';
+import { View, ScrollView, StyleSheet, TextInput, Switch, TouchableOpacity, ActivityIndicator, Alert, Animated, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient'; 
-import {
-  ChevronRight, Search, Zap, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
-  Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell,
-  Crown 
+import { 
+  ChevronRight, Search, User, Briefcase, Settings, HelpCircle, Moon, Sun, LogOut, Star, Mail, 
+  Languages, NotebookText, Shield, FileText, DollarSign, CreditCard, Bell, Receipt,
+  Crown,
+  MessageCircle,
 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text'; 
@@ -20,32 +21,46 @@ import PaywallService, { PaywallService as PaywallServiceClass } from '@/service
 import RevenueCatService from '@/services/revenueCatService';
 import { UsageService } from '@/services/usageService';
 import { usePlacement, useSuperwall } from 'expo-superwall';
-import UsageTrackingService, { UsageStats } from '@/services/usageTrackingService';
+import { SubscriptionPricing, SUBSCRIPTION_PLANS } from '@/components/SubscriptionPricing';
 
 export default function NewSettingsScreen() {
   const router = useRouter();
-  const { user, signOut } = useSupabase();
+  const { user, signOut, supabase } = useSupabase();
   const { theme, isLightMode, toggleTheme } = useTheme();
   const { setIsTabBarVisible } = useTabBarVisibility();
   const { presentPaywall, isSubscribed, isLoading: paywallLoading, checkSubscriptionStatus } = usePaywall();
   const [searchTerm, setSearchTerm] = useState('');
-  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
+  const [aiUsageCount, setAiUsageCount] = useState(0);
   const [isLoadingUsage, setIsLoadingUsage] = useState(true);
+  const [currencyCode, setCurrencyCode] = useState<string>('USD');
 
   // Test Superwall context
   const superwall = useSuperwall();
 
   // Use the Superwall placement hook
-  const { registerPlacement, state: placementState } = usePlacement({
+  const { registerPlacement } = usePlacement({
     onError: (err) => {
       console.error('Superwall Placement Error:', err);
+      console.error('Platform:', Platform.OS);
+      console.error('Is iPad:', Platform.isPad);
+      
+      // Show user-friendly error for iPad issues
+      if (Platform.isPad) {
+        Alert.alert(
+          'Purchase Error',
+          'There was an issue processing your purchase on iPad. Please try again or contact support.',
+          [{ text: 'OK' }]
+        );
+      }
     },
     onPresent: (info) => {
+      console.log('[Settings] Paywall presented on', Platform.OS, Platform.isPad ? '(iPad)' : '');
       if (info.productsLoadFailTime) {
         console.warn('Products failed to load in paywall');
       }
     },
     onDismiss: async (info, result) => {
+      console.log('[Settings] Paywall dismissed:', result, 'on', Platform.OS);
       try {
         // After paywall closes, verify entitlement via RevenueCat (client-side)
         // If subscribed, persist to DB so the rest of the app unlocks immediately
@@ -84,41 +99,107 @@ export default function NewSettingsScreen() {
 
   // Load usage stats function
   const loadUsageStats = useCallback(async () => {
-    if (!user?.id) return;
-    
+    if (!user?.id || !supabase) return;
+
     setIsLoadingUsage(true);
     try {
-      const stats = await UsageTrackingService.getUserUsageStats(user.id);
-      console.log('[Settings] Loaded usage stats:', stats);
-      setUsageStats(stats);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('ai_items_created')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        setAiUsageCount(data.ai_items_created ?? 0);
+      } else {
+        setAiUsageCount(0);
+      }
     } catch (error) {
-      console.error('[Settings] Error loading usage stats:', error);
+      console.error('[Settings] Error loading AI usage:', error);
     } finally {
       setIsLoadingUsage(false);
     }
-  }, [user?.id]);
+  }, [user?.id, supabase]);
 
   // Load usage stats when screen loads or user changes
   useEffect(() => {
     loadUsageStats();
   }, [user?.id, loadUsageStats]);
 
+  // Load user's currency code from business settings for symbol formatting
+  useEffect(() => {
+    const loadCurrency = async () => {
+      try {
+        if (!user?.id || !supabase) return;
+        const { data, error } = await supabase
+          .from('business_settings')
+          .select('currency_code')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!error && data?.currency_code) {
+          setCurrencyCode(data.currency_code);
+        }
+      } catch {}
+    };
+    loadCurrency();
+  }, [user?.id, supabase]);
+
+  const getCurrencySymbol = (code?: string) => {
+    const mapping: Record<string, string> = {
+      GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥', INR: '₹', CHF: 'Fr', CNY: '¥', NZD: 'NZ$', SEK: 'kr', NOK: 'kr', DKK: 'kr', SGD: 'S$', HKD: 'HK$'
+    };
+    if (!code) return '$';
+    const normalized = code.split(' ')[0];
+    return mapping[normalized] || '$';
+  };
+
+  // Derive a per-day price from the yearly plan (simple display; not region-specific pricing)
+  const parseYearlyPrice = () => {
+    try {
+      const raw = SUBSCRIPTION_PLANS.yearly.price || '';
+      const numeric = parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+      return isNaN(numeric) ? 0 : numeric;
+    } catch { return 0; }
+  };
+  const yearlyPrice = parseYearlyPrice();
+  const perDay = yearlyPrice > 0 ? yearlyPrice / 365 : 0;
+  const perDayDisplay = `${getCurrencySymbol(currencyCode)}${perDay.toFixed(2)}`;
+
   const handleUpgradePress = async () => {
     try {
-      const result = await registerPlacement({
+      console.log('[Settings] Starting upgrade process on', Platform.OS, Platform.isPad ? '(iPad)' : '');
+      
+      // Add timeout for iPad issues
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Paywall timeout')), 10000)
+      );
+      
+      const placementPromise = registerPlacement({
         placement: 'create_item_limit'
       });
       
-      // If placement not found, try campaign_trigger as fallback
-      if (placementState?.reason?.type === 'PlacementNotFound') {
-        const fallbackResult = await registerPlacement({
-          placement: 'campaign_trigger'
-        });
-      }
+      const result = await Promise.race([placementPromise, timeoutPromise]);
       
-    } catch (error) {
+      console.log('[Settings] Placement result:', result);
+      
+    } catch (error: any) {
       console.error('Failed to present paywall:', error);
-      Alert.alert('Error', 'Unable to show upgrade options. Please try again.');
+      
+      if (error.message === 'Paywall timeout') {
+        Alert.alert(
+          'Timeout Error', 
+          'The upgrade screen is taking longer than expected. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
+      } else if (Platform.isPad && (error.message?.includes('Continue') || error.message?.includes('button'))) {
+        Alert.alert(
+          'iPad Purchase Issue', 
+          'There seems to be an issue with purchases on iPad. Please try again or use an iPhone for the purchase.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', 'Unable to show upgrade options. Please try again.');
+      }
     }
   };
   const handleEditAccountPress = () => {
@@ -155,10 +236,10 @@ export default function NewSettingsScreen() {
   const handleStoragePress = () => console.log('Storage pressed');
   const handlePrivacyPolicyPress = () => Linking.openURL('https://www.getsuperinvoice.com/privacy');
   const handleTermsOfServicePress = () => Linking.openURL('https://www.getsuperinvoice.com/terms');
-  const handleHelpPress = () => {
-    setIsTabBarVisible(false);
-    router.push('/customer-support');
-  };
+ const handleHelpPress = () => {
+   setIsTabBarVisible(false);
+    router.push('/(app)/customer-support');
+ };
   const handleContactUsPress = () => console.log('Contact Us pressed');
   const handleLeaveReviewPress = () => console.log('Leave Review pressed');
 
@@ -209,6 +290,16 @@ export default function NewSettingsScreen() {
           onPress: handlePaymentOptionsPress,
           searchTerms: ['payment', 'options', 'credit', 'card', 'paypal', 'bank']
         },
+        {
+          id: 'expenses',
+          icon: <Receipt color={theme.foreground} size={24} />,
+          label: 'Expenses',
+          onPress: () => {
+            setIsTabBarVisible(false);
+            router.push('/expenses');
+          },
+          searchTerms: ['expenses', 'receipts', 'costs', 'spending', 'track']
+        },
         // {
         //   id: 'payment-reminders',
         //   icon: <Bell color={theme.foreground} size={24} />,
@@ -250,6 +341,16 @@ export default function NewSettingsScreen() {
     {
       section: 'Help',
       items: [
+        {
+          id: 'chat',
+          icon: <MessageCircle color={theme.foreground} size={24} />,
+          label: 'Chat with Harry',
+          onPress: () => {
+            setIsTabBarVisible(false);
+            router.push('/support-chat');
+          },
+          searchTerms: ['chat', 'message', 'harry', 'founder', 'support', 'help', 'question', 'talk']
+        },
         {
           id: 'help',
           icon: <HelpCircle color={theme.foreground} size={24} />,
@@ -329,7 +430,7 @@ export default function NewSettingsScreen() {
                     [{ text: 'OK', style: 'default' }]
                   );
                 } else {
-                  // User is not subscribed, show upgrade paywall
+                  // Directly show Superwall paywall without hardcoded popup
                   handleUpgradePress();
                 }
               }}
@@ -377,26 +478,31 @@ export default function NewSettingsScreen() {
           </View>
 
           {/* Usage Counter - Only show for non-premium users */}
-          {!isSubscribed && usageStats && (
+          {!isSubscribed && (
             <View style={[styles.usageCounterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.usageCounterContent}>
                 <View style={styles.usageCounterMain}>
                   <Text style={[styles.usageCounterTitle, { color: theme.foreground }]}>
-                    Free Plan Usage
+                    Free AI Usage
                   </Text>
                   <View style={styles.usageCounterBar}>
                     <View style={[styles.usageCounterProgress, { 
                       backgroundColor: theme.primary,
-                      width: `${(usageStats.totalItemsCreated / 3) * 100}%`
+                      width: `${Math.min(1, aiUsageCount / 3) * 100}%`
                     }]} />
                   </View>
                   <Text style={[styles.usageCounterText, { color: theme.mutedForeground }]}>
-                    {usageStats.totalItemsCreated}/3 items created
+                    {aiUsageCount}/3 AI creations used
                   </Text>
-                  {usageStats.totalItemsCreated >= 3 && (
-                    <Text style={[styles.usageUpgradeText, { color: '#25D366' }]}>
-                      Upgrade to continue using SuperInvoice
-                    </Text>
+                  {aiUsageCount >= 3 && (
+                    <>
+                      <Text style={[styles.usageUpgradeText, { color: '#25D366' }]}>
+                        Upgrade to keep using SuperInvoice AI
+                      </Text>
+                      <Text style={[styles.usagePricingText, { color: theme.mutedForeground }]}>
+                        From as little as {perDayDisplay}/day
+                      </Text>
+                    </>
                   )}
                 </View>
               </View>
@@ -585,5 +691,10 @@ const styles = StyleSheet.create({
   usageUpgradeButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  usagePricingText: {
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 2,
   },
 });

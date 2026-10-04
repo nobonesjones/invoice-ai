@@ -1225,3 +1225,74 @@ When configuring a `BottomSheetModal` to achieve desired height on initial open 
     *   After making changes to snap points or keyboard behavior, always perform a full restart of your development server and app (`npx expo start -c`) to avoid issues with caching or stale state.
 
 By carefully configuring these properties, you can achieve reliable initial modal height and responsive behavior when the keyboard is activated, ensuring all content, including action buttons, remains accessible.
+
+
+BOTTOMSHEETMODAL CHEAT SHEET
+
+  If I had to fix this bug from the start, 
+  here's the golden rule:
+
+  🥇 RULE #1: COPY A WORKING MODAL EXACTLY
+
+  Don't overthink it - find a modal that 
+  works perfectly and clone its exact 
+  configuration.
+
+  📋 WORKING MODAL CHECKLIST
+
+  ✅ ALWAYS USE:
+  const snapPoints = useMemo(() => ['60%',
+  '90%'], []);
+
+  <BottomSheetModal
+    ref={bottomSheetModalRef}
+    index={0}
+    snapPoints={snapPoints}
+    enableDynamicSizing={false}  // ← 
+  CRITICAL!
+    backdropComponent={renderBackdrop}
+    onDismiss={handleDismiss}
+  >
+
+  ❌ NEVER USE:
+  - enableDynamicSizing={true} (causes
+  animation loops)
+  - Single snap points like ['75%']
+  (unstable)
+  - No snap points at all
+  - Complex state resets in present/dismiss
+  - Debouncing or setTimeout delays
+
+  🚨 RED FLAGS THAT INDICATE PROBLEMS:
+
+  1. "Opens high then bounces down" → Wrong
+  snap points
+  2. "Works 1st time, fails 2nd time" →
+  enableDynamicSizing issue
+  3. "Crashes after 3 opens" → Snap point
+  calculation errors
+  4. Infinite animation loops in logs →
+  enableDynamicSizing conflict
+
+  🎯 THE 5-MINUTE FIX:
+
+  1. Find a working modal in the codebase
+  (like AddItemSheet.tsx)
+  2. Copy its exact BottomSheetModal
+  configuration
+  3. Copy its exact ref handling pattern
+  4. Copy its exact snapPoints setup
+  5. Test - should work immediately
+
+  💡 KEY INSIGHT:
+
+  enableDynamicSizing={false} + fixed 
+  snapPoints = Stable behavior
+
+  The "dynamic sizing" sounds good in theory
+  but causes calculation conflicts that break
+   on subsequent opens. Fixed snap points are
+   predictable and reliable.
+
+  This cheat sheet would have saved us 90% of
+   the debugging time! 🚀pay pal one - lets 

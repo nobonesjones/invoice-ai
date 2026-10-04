@@ -41,73 +41,17 @@ export interface ShareAnalytics {
 
 export class InvoiceShareService {
   /**
-   * Generate a shareable PDF link from Skia canvas
+   * Upload an already-rendered PDF and create a share link for it
    */
-  static async generateShareLinkFromCanvas(
+  static async generateShareLinkFromPdf(
     invoiceId: string,
     userId: string,
-    canvasRef: any,
+    pdfUri: string,
     expiresInDays?: number
   ): Promise<ShareLinkResult> {
     try {
       // Generate a unique token
       const shareToken = this.generateUniqueToken();
-      
-      // Capture the Skia canvas as an image using Skia's native methods
-      const image = canvasRef.current?.makeImageSnapshot();
-      
-      if (!image) {
-        throw new Error('Failed to create image snapshot from Skia canvas');
-      }
-
-      // Encode to PNG bytes
-      const imageBytes = image.encodeToBytes();
-      
-      // Convert to base64 for HTML embedding
-      const chunkSize = 8192;
-      let binaryString = '';
-      
-      for (let i = 0; i < imageBytes.length; i += chunkSize) {
-        const chunk = imageBytes.slice(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      
-      const base64String = btoa(binaryString);
-
-      // Convert image to PDF using Print API with exact canvas dimensions
-      const { uri: pdfUri } = await Print.printToFileAsync({
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              @page {
-                margin: 0;
-                size: ${image.width()}px ${image.height()}px;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                overflow: hidden;
-              }
-              .invoice-image {
-                width: ${image.width()}px;
-                height: ${image.height()}px;
-                display: block;
-                object-fit: none;
-              }
-            </style>
-          </head>
-          <body>
-            <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice" />
-          </body>
-          </html>
-        `,
-        base64: false,
-      });
 
       // Read PDF file as base64
       const pdfBase64 = await FileSystem.readAsStringAsync(pdfUri, {

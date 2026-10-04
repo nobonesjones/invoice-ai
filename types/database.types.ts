@@ -1007,6 +1007,7 @@ export type Database = {
           po_number: string | null
           status: string
           stripe_active: boolean
+          gocardless_active: boolean
           subtotal_amount: number
           tax_percentage: number
           total_amount: number
@@ -1036,6 +1037,7 @@ export type Database = {
           po_number?: string | null
           status?: string
           stripe_active?: boolean
+          gocardless_active?: boolean
           subtotal_amount?: number
           tax_percentage?: number
           total_amount?: number
@@ -1065,6 +1067,7 @@ export type Database = {
           po_number?: string | null
           status?: string
           stripe_active?: boolean
+          gocardless_active?: boolean
           subtotal_amount?: number
           tax_percentage?: number
           total_amount?: number

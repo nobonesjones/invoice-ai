@@ -1,0 +1,1 @@
+o the left 4 pixes and we ar edone. a

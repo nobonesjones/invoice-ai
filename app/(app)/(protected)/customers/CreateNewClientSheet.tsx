@@ -30,7 +30,7 @@ import {
 import * as Contacts from 'expo-contacts';
 import { colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme-provider";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/config/supabase";
 import { Tables } from '../../../../types/database.types';
 
 type Client = Tables<'clients'>;
@@ -176,7 +176,6 @@ const CreateNewClientSheet = forwardRef<
 				} else if (!updated || updated.length === 0) {
 					Alert.alert("Error", "Client not found or you don't have permission to update this client.");
 				} else {
-					Alert.alert("Success", "Client updated successfully!");
 					// Use the first (and should be only) updated record
 					if (onClientAdded && updated[0]) onClientAdded(updated[0]);
 					internalClose();
@@ -192,7 +191,6 @@ const CreateNewClientSheet = forwardRef<
 				if (insertError) {
 					Alert.alert("Error", `Could not save client. ${insertError.message}`);
 				} else {
-					Alert.alert("Success", "Client saved successfully!");
 					setFullName("");
 					setEmail("");
 					setPhone("");
@@ -262,12 +260,9 @@ const CreateNewClientSheet = forwardRef<
 
 	const handleSelectContact = (contact: Contacts.Contact) => {
 		// Fill form with selected contact data
-		setFormData(prev => ({
-			...prev,
-			fullName: contact.name || '',
-			email: contact.emails?.[0]?.email || '',
-			phone: contact.phoneNumbers?.[0]?.number || '',
-		}));
+		setFullName(contact.name || '');
+		setEmail(contact.emails?.[0]?.email || '');
+		setPhone(contact.phoneNumbers?.[0]?.number || '');
 		setShowContactPicker(false);
 		setSearchQuery('');
 	};
@@ -572,16 +567,11 @@ const CreateNewClientSheet = forwardRef<
 						<Text style={styles.inputLabelText}>Address</Text>
 						<View style={styles.inputValueArea}>
 							<BottomSheetTextInput
-								style={[styles.textInputStyled, styles.addressTextInput]}
+								style={styles.textInputStyled}
 								placeholder="e.g. 123 Main St, Anytown, USA 12345"
 								placeholderTextColor={themeColors.mutedForeground}
 								value={address}
 								onChangeText={setAddress}
-								multiline={true}
-								numberOfLines={3}
-								textAlignVertical="top"
-								returnKeyType="default"
-								blurOnSubmit={false}
 								editable={!isLoading}
 							/>
 						</View>

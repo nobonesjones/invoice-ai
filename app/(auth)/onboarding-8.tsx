@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/theme-provider";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { supabase } from "@/config/supabase";
+import { UsageService } from "@/services/usageService";
 
 export default function OnboardingScreen8() {
   const router = useRouter();
@@ -24,6 +26,7 @@ export default function OnboardingScreen8() {
   // Hide status bar for immersive experience
   useEffect(() => {
     StatusBar.setHidden(true, 'fade');
+    analytics.trackEvent('Onboarding 8 - Account Created', { step: 8 });
     return () => {
       StatusBar.setHidden(false, 'fade');
     };
@@ -38,13 +41,26 @@ export default function OnboardingScreen8() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     // Track onboarding completion - key funnel event!
-    analytics.trackEvent('Completed onboarding', {
-      final_step: 8,
-      step_name: 'ready_to_start',
+    analytics.trackEvent('Onboarding Completed', {
+      final_step: 9,
+      step_label: 'Onboarding 9 - Account Created',
+      outcome: 'proceed_to_paywall',
       timestamp: new Date().toISOString()
     });
     
     try {
+      // Mark onboarding completed in profile before leaving onboarding
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (userId) {
+        try {
+          await UsageService.markOnboardingCompleted(userId);
+          console.log('[Onboarding] Marked onboarding_completed=true for user', userId);
+        } catch (e) {
+          console.error('[Onboarding] Failed to mark onboarding completed:', e);
+        }
+      }
+
       // Request notification permissions
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;

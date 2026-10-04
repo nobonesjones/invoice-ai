@@ -1,9 +1,10 @@
-import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native'; 
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet'; 
 import { useTheme } from '@/context/theme-provider';
 import { colors } from '@/constants/colors';
 import { X as XIcon } from 'lucide-react-native'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface PaymentData {
   paymentAmount: string; 
@@ -26,6 +27,8 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
   const { isLightMode } = useTheme();
   const themeColors = isLightMode ? colors.light : colors.dark;
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const lastPresentTime = useRef<number>(0);
+  const insets = useSafeAreaInsets();
 
   const [paymentAmount, setPaymentAmount] = useState<string>(''); 
   const [paymentMethod, setPaymentMethod] = useState<string>('');
@@ -38,14 +41,28 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
   
   React.useImperativeHandle(ref, () => ({
     present: (invoiceTotal: number, previouslyPaidAmount: number) => {
-      console.log('[MakePaymentSheet] Presenting with total:', invoiceTotal, 'previously paid:', previouslyPaidAmount);
+      // Prevent multiple rapid opens (debounce 500ms)
+      const now = Date.now();
+      if (now - lastPresentTime.current < 500) {
+        console.log('[MakePaymentSheet] 🚫 Blocked rapid open');
+        return;
+      }
+      lastPresentTime.current = now;
+      
+      console.log('[MakePaymentSheet] 🚀 PRESENT CALLED - Total:', invoiceTotal, 'Previously Paid:', previouslyPaidAmount);
+      console.log('[MakePaymentSheet] 📊 Current State - paymentAmount:', paymentAmount, 'paymentMethod:', paymentMethod);
+      
       setCurrentInvoiceTotal(invoiceTotal);
       setCurrentPreviouslyPaid(previouslyPaidAmount);
       setPaymentAmount(''); 
       setPaymentMethod(''); 
+      
+      console.log('[MakePaymentSheet] 🎯 About to call bottomSheetModalRef.current?.present()');
       bottomSheetModalRef.current?.present();
+      console.log('[MakePaymentSheet] ✅ bottomSheetModalRef.present() called');
     },
     dismiss: () => {
+      console.log('[MakePaymentSheet] 🔽 DISMISS CALLED');
       bottomSheetModalRef.current?.dismiss();
     },
   }));
@@ -73,9 +90,18 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
   );
 
   const handleSheetDismissed = () => {
+    console.log('[MakePaymentSheet] 📤 MODAL DISMISSED');
     if (props.onClose) {
       props.onClose(); 
     }
+  };
+
+  const handleSheetAnimate = (fromIndex: number, toIndex: number) => {
+    console.log('[MakePaymentSheet] 🎭 ANIMATE - From:', fromIndex, 'To:', toIndex);
+  };
+
+  const handleSheetChange = (index: number) => {
+    console.log('[MakePaymentSheet] 🔄 INDEX CHANGED TO:', index);
   };
 
   const handleInternalSave = () => {
@@ -158,9 +184,8 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
     contentContainer: {
       paddingHorizontal: 20,
       paddingTop: 10, 
-      paddingBottom: Platform.OS === 'ios' ? 95 : 85, 
-      flexGrow: 1,
-      justifyContent: 'space-between',
+      paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+      minHeight: 500,
     },
     card: {
       backgroundColor: themeColors.card,
@@ -260,16 +285,27 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
     },
   });
 
+  const snapPoints = useMemo(() => ['90%', '95%'], []);
+
   return (
     <BottomSheetModal
       ref={bottomSheetModalRef}
-      index={0} 
-      enableDynamicSizing={true}
+      index={1} 
+      snapPoints={snapPoints}
       backdropComponent={renderBackdrop}
       onDismiss={handleSheetDismissed} 
+      onAnimate={handleSheetAnimate}
+      onChange={handleSheetChange}
       handleIndicatorStyle={styles.handleIndicator}
       backgroundStyle={styles.modalBackground}
-      enablePanDownToClose={true} 
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      enableOverDrag={false}
+      enableDynamicSizing={false}
+      keyboardBehavior="extend"
+      android_keyboardInputMode="adjustResize"
+      keyboardBlurBehavior="restore"
+      topInset={Math.max(12, insets.top)}
     >
       <View style={styles.container}>
         <View style={styles.headerContainer}>
@@ -284,77 +320,75 @@ const MakePaymentSheet = forwardRef<MakePaymentSheetRef, MakePaymentSheetProps>(
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled" 
         >
-          <View> 
-            {/* Percentage Buttons */}
-            <View style={styles.percentageButtonsContainer}>
-              {/* Remaining Balance Indicator */}
-              <Text style={[styles.remainingBalanceText, { color: themeColors.mutedForeground, marginBottom: 8, textAlign: 'center' }]}>
-                Remaining Balance: ${(currentInvoiceTotal - currentPreviouslyPaid).toFixed(2)}
-              </Text>
-              
-              <View style={styles.percentageButtonsRow}>
-                {[10, 20, 50, 75, 100].map((percentage) => (
-                  <TouchableOpacity
-                    key={percentage}
-                    style={[styles.percentageButton, { borderColor: themeColors.border, backgroundColor: themeColors.card }]}
-                    onPress={() => handlePercentageClick(percentage)}
-                  >
-                    <Text style={[styles.percentageButtonText, { color: themeColors.foreground }]}>
-                      {percentage}%
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+          {/* Percentage Buttons */}
+          <View style={styles.percentageButtonsContainer}>
+            {/* Remaining Balance Indicator */}
+            <Text style={[styles.remainingBalanceText, { color: themeColors.mutedForeground, marginBottom: 8, textAlign: 'center' }]}>
+              Remaining Balance: ${(currentInvoiceTotal - currentPreviouslyPaid).toFixed(2)}
+            </Text>
+            
+            <View style={styles.percentageButtonsRow}>
+              {[10, 20, 50, 75, 100].map((percentage) => (
+                <TouchableOpacity
+                  key={percentage}
+                  style={[styles.percentageButton, { borderColor: themeColors.border, backgroundColor: themeColors.card }]}
+                  onPress={() => handlePercentageClick(percentage)}
+                >
+                  <Text style={[styles.percentageButtonText, { color: themeColors.foreground }]}>
+                    {percentage}%
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-
-            <View style={styles.card}>
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>Amount</Text>
-                <BottomSheetTextInput
-                  style={styles.textInput}
-                  value={paymentAmount}
-                  onChangeText={setPaymentAmount}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor={themeColors.mutedForeground}
-                />
-              </View>
-              <View style={styles.separator} />
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>Payment Method</Text>
-                <BottomSheetTextInput
-                  style={styles.textInput}
-                  value={paymentMethod}
-                  onChangeText={setPaymentMethod}
-                  placeholder="e.g. Card, Cash, Transfer"
-                  placeholderTextColor={themeColors.mutedForeground}
-                />
-              </View>
-            </View>
-
-            {/* Summary Section */}
-            <View style={[styles.card, { marginTop: 10, marginBottom: 20 }]}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total</Text>
-                <Text style={styles.summaryValue}>${currentInvoiceTotal.toFixed(2)}</Text>
-              </View>
-              <View style={styles.separator} />
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Paid</Text>
-                <Text style={[styles.summaryValue, { color: themeColors.primary }]}>
-                  ${displayPaidAfterThisPayment.toFixed(2)}
-                </Text>
-              </View>
-              <View style={styles.separator} />
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Balance Due</Text>
-                <Text style={[styles.summaryValue, displayBalanceDue < 0 ? {color: themeColors.destructive} : {}]}>
-                  ${displayBalanceDue.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-
           </View>
+
+          <View style={styles.card}>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputLabel}>Amount</Text>
+              <BottomSheetTextInput
+                style={styles.textInput}
+                value={paymentAmount}
+                onChangeText={setPaymentAmount}
+                placeholder="0.00"
+                keyboardType="numeric"
+                placeholderTextColor={themeColors.mutedForeground}
+              />
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.inputRow}>
+              <Text style={styles.inputLabel}>Payment Method</Text>
+              <BottomSheetTextInput
+                style={styles.textInput}
+                value={paymentMethod}
+                onChangeText={setPaymentMethod}
+                placeholder="e.g. Card, Cash, Transfer"
+                placeholderTextColor={themeColors.mutedForeground}
+              />
+            </View>
+          </View>
+
+          {/* Summary Section */}
+          <View style={[styles.card, { marginTop: 10, marginBottom: 20 }]}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Total</Text>
+              <Text style={styles.summaryValue}>${currentInvoiceTotal.toFixed(2)}</Text>
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Paid</Text>
+              <Text style={[styles.summaryValue, { color: themeColors.primary }]}>
+                ${displayPaidAfterThisPayment.toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Balance Due</Text>
+              <Text style={[styles.summaryValue, displayBalanceDue < 0 ? {color: themeColors.destructive} : {}]}>
+                ${displayBalanceDue.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+
           <TouchableOpacity onPress={handleInternalSave} style={styles.saveButton}>
             <Text style={styles.saveButtonText}>Add Payment</Text>
           </TouchableOpacity>

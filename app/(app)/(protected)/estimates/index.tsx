@@ -1,4 +1,5 @@
 import { Stack, useRouter, useFocusEffect } from "expo-router";
+import { useEstimateRealtime } from "@/hooks/useEstimateRealtime";
 import {
 	PlusCircle,
 	Search as SearchIcon,
@@ -33,11 +34,12 @@ import { useShineAnimation } from '@/lib/hooks/useShineAnimation';
 import { useSupabase } from "@/context/supabase-provider"; 
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useEstimateStatusUpdater } from '@/hooks/useEstimateStatusUpdater';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
 import type { Database } from "../../../../types/database.types"; 
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // Define filter options here to map type to label for initialization and sync
 const filterOptions = [
+  { label: "All", type: "all" },
   { label: "Today", type: "today" },
   { label: "This Week", type: "this_week" },
   { label: "This Month", type: "this_month" },
@@ -99,6 +101,9 @@ export const getFilterDateRange = (filterType: string): { startDate: string, end
   let endDateObj: Date;
 
   switch (filterType) {
+    case "all":
+    case "all_time":
+      return null;
     case "this_week":
       startDateObj = getStartOfWeek(now);
       endDateObj = getEndOfWeek(now);
@@ -132,7 +137,7 @@ export const getFilterDateRange = (filterType: string): { startDate: string, end
       endDateObj = getEndOfYear(lastYearDate);
       break;
     default:
-      return null; // No filter or unknown filter type, or handle as 'all time'
+      return null; // No filter or unknown filter type
   }
   return { startDate: toSupabaseISOString(startDateObj), endDate: toSupabaseISOString(endDateObj) };
 };
@@ -211,9 +216,10 @@ export default function EstimateDashboardScreen() {
 	const { isLightMode } = useTheme();
 	const themeColors = isLightMode ? colors.light : colors.dark;
 	const router = useRouter();
+  const analytics = useAnalytics();
+  const trackEvent = analytics.trackEvent;
   const { supabase, user } = useSupabase();
   const { setIsTabBarVisible } = useTabBarVisibility();
-  const { checkAndShowPaywall } = useItemCreationLimit();
   
   // Auto-update expired estimate statuses
   useEstimateStatusUpdater();
@@ -223,9 +229,9 @@ export default function EstimateDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 	const [isRefreshing, setIsRefreshing] = useState(false);
-  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("this_month"); // Default filter type
+  const [currentDateFilterType, setCurrentDateFilterType] = useState<string>("all"); // Default filter type
   const [currentFilterLabel, setCurrentFilterLabel] = useState<string>(
-    filterOptions.find(opt => opt.type === "this_month")?.label || "This Month" // Initialize label
+    filterOptions.find(opt => opt.type === "all")?.label || "All" // Initialize label
   );
   const [totalEstimated, setTotalEstimated] = useState<number>(0); 
   const [totalAccepted, setTotalAccepted] = useState<number>(0); 
@@ -292,7 +298,7 @@ export default function EstimateDashboardScreen() {
     }
   }, [user?.id, supabase]);
 
-  const loadEstimatesAndSummary = useCallback(async (isPullToRefresh = false) => {
+  const loadEstimatesAndSummary = useCallback(async (isPullToRefresh = false, silent = false) => {
     if (!user?.id) {
       setError("User not authenticated.");
       setLoading(false);
@@ -300,7 +306,9 @@ export default function EstimateDashboardScreen() {
       return;
     }
 
-    if (!isPullToRefresh) {
+    if (silent) {
+      // Data is already on screen: refresh it in place, no loader, no reflow.
+    } else if (!isPullToRefresh) {
       setLoading(true); // Show loader for initial load or filter/search change
     } else {
       setIsRefreshing(true); // Show pull-to-refresh indicator
@@ -383,13 +391,18 @@ export default function EstimateDashboardScreen() {
       console.log('[EstimateDashboardScreen] Screen focused, reloading data.');
       setIsTabBarVisible(true); // Show tab bar when returning to dashboard
       fetchBusinessSettings();
-      loadEstimatesAndSummary(); // Call the consolidated function
+      loadEstimatesAndSummary(false, estimates.length > 0); // silent when data is already on screen
       return () => {
         console.log('[EstimateDashboardScreen] Screen unfocused.');
         // Tab bar visibility will be managed by the destination screen
       };
-    }, [fetchBusinessSettings, loadEstimatesAndSummary, setIsTabBarVisible])
+    }, [fetchBusinessSettings, loadEstimatesAndSummary, setIsTabBarVisible, estimates.length])
   );
+
+  // Accept / Decline from the hosted page, or another device, updates the list live.
+  useEstimateRealtime(() => {
+    loadEstimatesAndSummary(false, true);
+  });
 
   const onRefresh = useCallback(() => {
     loadEstimatesAndSummary(true); // Pass true to indicate it's a pull-to-refresh
@@ -506,11 +519,9 @@ export default function EstimateDashboardScreen() {
             </Text>
             <TouchableOpacity
                 style={[styles.headerButton, { backgroundColor: themeColors.primary }]}
-                onPress={async () => {
-                  const canProceed = await checkAndShowPaywall();
-                  if (canProceed) {
-                    router.push("/estimates/create" as any);
-                  }
+                onPress={() => {
+                  setIsTabBarVisible(false); // before the push, so create lays out full-height from its first frame
+                  router.push("/estimates/create" as any);
                 }}
               >
                 <Animated.View style={[styles.shineOverlay, { transform: [{ translateX: createButtonShineX }] }]}>
@@ -562,7 +573,7 @@ export default function EstimateDashboardScreen() {
           <SummaryHeaderBar estimatedAmount={totalEstimated} acceptedAmount={totalAccepted} expiredAmount={totalExpired} />
 
           {/* Display Current Filter Label */} 
-          {filteredEstimates.length > 0 && !loading && (
+          {estimates.length > 0 && (
             <View style={styles.currentFilterDisplayContainer}>
               <Text style={[styles.currentFilterDisplayText, { color: themeColors.mutedForeground }]}>
                 {searchTerm.trim() ? `${filteredEstimates.length} of ${estimates.length} ${estimateTerminology === 'quote' ? 'quotes' : 'estimates'}` : currentFilterLabel}

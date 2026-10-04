@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, ReactNode } from "react";
+import React, { createContext, useState, useContext, useCallback, ReactNode } from "react";
 
 interface TabBarVisibilityContextType {
 	isTabBarVisible: boolean;
@@ -12,7 +12,14 @@ const TabBarVisibilityContext = createContext<
 export const TabBarVisibilityProvider: React.FC<{ children: ReactNode }> = ({
 	children,
 }) => {
-	const [isTabBarVisible, setIsTabBarVisible] = useState(true);
+	const [isTabBarVisible, setIsTabBarVisibleRaw] = useState(true);
+
+	// No animation on purpose: an eased fade made the bar arrive after the pop
+	// transition. Screens toggle it right as a transition starts (see
+	// hooks/useHideTabBar.ts), so an instant change is what looks right.
+	const setIsTabBarVisible = useCallback((visible: boolean) => {
+		setIsTabBarVisibleRaw(visible);
+	}, []);
 
 	return (
 		<TabBarVisibilityContext.Provider

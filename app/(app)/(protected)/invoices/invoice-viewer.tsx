@@ -44,41 +44,34 @@ import {
 import { useTheme } from '@/context/theme-provider';
 import { colors as globalColors } from '@/constants/colors';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { useHideTabBar } from '@/hooks/useHideTabBar';
 import { useSupabase } from '@/context/supabase-provider'; 
 import type { Database, Json, Tables } from '../../../types/database.types'; 
-import InvoiceTemplateOne, { InvoiceForTemplate, BusinessSettingsRow } from './InvoiceTemplateOne'; 
+import { InvoiceForTemplate, BusinessSettingsRow } from '@/types/invoiceTemplate';
 import InvoiceSkeletonLoader from '@/components/InvoiceSkeletonLoader';
 import { BottomSheetModal, BottomSheetModalProvider, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import * as Sharing from 'expo-sharing';
 import { Share } from 'react-native';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
-import { generateInvoiceTemplateOneHtml } from '@/utils/generateInvoiceTemplateOneHtml';
 import { StatusBadge } from '@/components/StatusBadge';
 import { StatusSelectorSheet } from '@/components/StatusSelectorSheet';
 import { PaymentAmountSheet } from '@/components/PaymentAmountSheet';
 import { InvoiceStatus, getStatusConfig, isEditable, calculatePaymentStatus } from '@/constants/invoice-status';
 import { useInvoiceActivityLogger } from '@/hooks/invoices/useInvoiceActivityLogger';
+import { useInvoiceRealtime } from '@/hooks/useInvoiceRealtime';
 import InvoiceHistorySheet, { InvoiceHistorySheetRef } from './InvoiceHistorySheet';
 import MakePaymentSheet, { MakePaymentSheetRef, PaymentData } from './MakePaymentSheet';
 import { InvoiceShareService } from '@/services/invoiceShareService';
 import { InvoicePreviewModal, InvoicePreviewModalRef } from '@/components/InvoicePreviewModal';
-import { usePaywall } from '@/context/paywall-provider';
-import { useItemCreationLimit } from '@/hooks/useItemCreationLimit';
-import { usePlacement } from 'expo-superwall';
 import PaywallService, { PaywallService as PaywallServiceClass } from '@/services/paywallService';
 
-// NEW SKIA IMPORTS
-import SkiaInvoiceCanvas from '@/components/skia/SkiaInvoiceCanvas';
-import SkiaInvoiceCanvasModern from '@/components/skia/SkiaInvoiceCanvasModern';
-import SkiaInvoiceCanvasClean from '@/components/skia/SkiaInvoiceCanvasClean';
-import SkiaInvoiceCanvasSimple from '@/components/skia/SkiaInvoiceCanvasSimple';
-import SkiaInvoiceCanvasWave from '@/components/skia/SkiaInvoiceCanvasWave';
-import { useCanvasRef } from '@shopify/react-native-skia';
-import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
-
-// PDF-LIB IMPORT FOR SUPERIOR PDF EXPORT
-import { PDFDocument } from 'pdf-lib';
+// The invoice as one shared HTML document: preview, PDF and email all render it.
+import { InvoiceDocumentView } from '@/components/InvoiceDocumentView';
+import { buildInvoiceDocument } from '@/lib/invoice-doc/buildInvoiceDocument';
+import { fetchLogoDataUri, renderInvoicePdf, renderInvoicePdfBase64, renderInvoicePdfNamed } from '@/lib/invoice-doc/pdf';
+import { functionErrorMessage } from '@/hooks/useStripeConnect';
+import { SendStatusOverlay, SendStatus } from '@/components/SendStatusOverlay';
 
 type ClientRow = Tables<'clients'>;
 
@@ -150,17 +143,6 @@ function InvoiceViewerScreen() {
   const { id: invoiceId } = useLocalSearchParams<{ id: string }>();
   const { supabase, user } = useSupabase(); 
   const { logPaymentAdded, logStatusChanged, logInvoiceSent } = useInvoiceActivityLogger();
-  const { isSubscribed } = usePaywall();
-  const { checkAndShowPaywall } = useItemCreationLimit();
-  
-  // Paywall for send block using the working pattern
-  const { registerPlacement } = usePlacement({
-    onError: (err) => {},
-    onPresent: (info) => {},
-    onDismiss: (info, result) => {
-      // Send paywall dismissed
-    },
-  });
   
   // Paywall for send block
   // const { registerPlacement } = usePlacement({
@@ -216,15 +198,16 @@ function InvoiceViewerScreen() {
   // Snap points for the Payment Amount Modal
   const paymentAmountSnapPoints = useMemo(() => ['75%', '90%'], []);
 
-  // Add ref for Skia canvas export
-  const skiaInvoiceRef = useCanvasRef();
-  
-  // Add refs and state for multi-page export
-  const exportCanvasRefs = useRef<any[]>([]);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportTotalPages, setExportTotalPages] = useState(1);
+  // Logo as a data URI so preview and PDF never wait on the network.
+  const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  // Drives SendStatusOverlay. isSendingEmail is kept because other code reads it,
+  // but it was never rendered — the send had no visible progress at all.
+  const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
+  const [sendDetail, setSendDetail] = useState<string | null>(null);
 
   const { setIsTabBarVisible } = useTabBarVisibility(); // Use the context
+  useHideTabBar(); // hides on focus, shows the frame a close transition starts (gesture included)
 
   const handleOpenSendModal = useCallback(() => {
     sendInvoiceModalRef.current?.present();
@@ -264,159 +247,32 @@ function InvoiceViewerScreen() {
   }, [navigation, setIsTabBarVisible]);
 
   const handleSendByEmail = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'invoice_send_email',
-            invoiceId: invoice?.id,
-            userId: user?.id,
-            action: 'send_invoice'
+    // First line of the handler on purpose: every later log sits behind a guard
+    // or an await, so without this there is no way to tell "the button never
+    // reached this code" from "it ran and bailed early".
+    console.log('[SendInvoice] send by email pressed', {
+      invoiceId: invoice?.id,
+      hasClientEmail: !!invoice?.clients?.email,
+      stripeActive: (invoice as any)?.stripe_active,
+      hasPaymentLink: !!(invoice as any)?.stripe_payment_link_url,
+    });
+
+    // 1. Validate client email exists
+    if (!invoice?.clients?.email) {
+      Alert.alert(
+        'Email Required',
+        'This client has no email address. Would you like to add one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Email',
+            onPress: () => {
+              handleCloseSendModal();
+              router.push(`/(app)/(protected)/clients/edit/${invoice?.client_id}`);
+            }
           }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
-      return;
-    }
-
-    if (!invoice || !businessSettings) {
-      Alert.alert('Error', 'Invoice or business data is not available.');
-      return;
-    }
-
-    if (!supabase) {
-      Alert.alert('Error', 'Unable to send invoice at this time.');
-      return;
-    }
-
-    try {
-      // Generating Skia PDF for email sharing
-      
-      // Use Skia canvas to generate PDF (same as handleSendPDF)
-      const image = skiaInvoiceRef.current?.makeImageSnapshot();
-      
-      if (!image) {
-        throw new Error('Failed to create image snapshot from invoice canvas');
-      }
-      
-      // Skia canvas captured successfully
-      
-      // Encode to bytes and convert to base64
-      const bytes = image.encodeToBytes();
-      
-      const chunkSize = 8192;
-      let binaryString = '';
-      
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.slice(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      
-      const base64String = btoa(binaryString);
-      
-             // Create HTML that uses the exact canvas dimensions (no scaling or margins)
-       const htmlContent = `
-         <!DOCTYPE html>
-         <html>
-         <head>
-           <meta charset="utf-8">
-           <style>
-             @page {
-               margin: 0;
-               size: ${image.width()}px ${image.height()}px;
-             }
-             body {
-               margin: 0;
-               padding: 0;
-               width: ${image.width()}px;
-               height: ${image.height()}px;
-               overflow: hidden;
-             }
-             .invoice-image {
-               width: ${image.width()}px;
-               height: ${image.height()}px;
-               display: block;
-               object-fit: none;
-             }
-           </style>
-         </head>
-         <body>
-           <img src="data:image/png;base64,${base64String}" class="invoice-image" alt="Invoice ${invoice.invoice_number}" />
-         </body>
-         </html>
-       `;
-      
-      // Generating PDF with Skia image
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-      });
-      // PDF generated successfully
-
-      // Update invoice status to sent
-      const { error: updateError } = await supabase
-        .from('invoices')
-        .update({ status: 'sent' })
-        .eq('id', invoice.id);
-
-      if (updateError) {
-        // Error updating status
-        Alert.alert('Error', 'Failed to update invoice status.');
-        return;
-      }
-
-      // Log the send activity
-      await logInvoiceSent(invoice.id, invoice.invoice_number, 'email');
-
-      // Update local state
-      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
-
-      // Share the PDF directly - user can choose email from the share dialog
-      await Sharing.shareAsync(uri, { 
-        mimeType: 'application/pdf', 
-        dialogTitle: 'Send Invoice via Email' 
-      });
-
-      Alert.alert('Invoice Ready', 'Choose your email app from the share options to send the invoice.');
-      handleCloseSendModal(); // Close the send modal
-      
-      // Refresh invoice data to reflect status change
-      if (invoiceId) {
-        const refreshedInvoice = await fetchInvoiceData(invoiceId);
-        if (refreshedInvoice) {
-          setInvoice(refreshedInvoice);
-        }
-      }
-      
-    } catch (error: any) {
-      // Error generating PDF or sharing
-      Alert.alert('Error', `Failed to prepare invoice for email: ${error.message}`);
-    }
-  };
-
-  const handleSendLink = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'invoice_send_link',
-            invoiceId: invoice?.id,
-            userId: user?.id,
-            action: 'send_invoice'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
+        ]
+      );
       return;
     }
 
@@ -426,15 +282,89 @@ function InvoiceViewerScreen() {
     }
 
     try {
-      // Generating shareable PDF link for invoice
-      
-      // Generate shareable PDF link using the Skia canvas
-      const result = await InvoiceShareService.generateShareLinkFromCanvas(
-        invoice.id, 
-        user.id,
-        skiaInvoiceRef,
-        30 // Expires in 30 days
+      setIsSendingEmail(true);
+      setSendDetail(invoice.clients.email);
+      setSendStatus('sending');
+      handleCloseSendModal(); // Close modal immediately for better UX
+
+      // 2. Render the document to an A4 PDF: the same HTML the preview shows.
+      const { base64: pdfBase64 } = await renderInvoicePdfBase64(requireDoc());
+
+      // Mint the payment link first: send-invoice reads stripe_payment_link_url
+      // off the invoice row, so it has to be persisted before the send, not after.
+      await ensureStripePaymentLink();
+
+      // The body is a full-resolution canvas snapshot wrapped in a PDF and then
+      // base64'd, so it is megabytes, not kilobytes — and base64 adds a further
+      // third. That is large enough to be rejected by the platform before it
+      // reaches the function, which surfaces as an opaque non-2xx with nothing
+      // in the function logs. Record the size so a failure is diagnosable.
+      const payloadBytes = pdfBase64.length;
+      const payloadMb = (payloadBytes / (1024 * 1024)).toFixed(2);
+      console.log(`[SendInvoice] pdf base64 ${payloadMb}MB`);
+
+      // 3. Call the correct edge function to send email via Resend
+      const { data, error } = await supabase.functions.invoke('send-invoice', {
+        body: {
+          invoice_id: invoice.id,
+          pdf_base64: pdfBase64,
+        }
+      });
+
+      if (error) {
+        // supabase-js reports every non-2xx as the same generic string and drops
+        // the body. Read the real message off error.context so a missing function
+        // or a mail-provider failure is distinguishable from each other.
+        const decoded = await functionErrorMessage(error, 'Failed to send email');
+        throw new Error(`${decoded} (attachment ${payloadMb}MB)`);
+      }
+
+      // 4. Update local state
+      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
+
+      // The link and PDF sends have always logged this; the email send never
+      // did, which left the most common send route missing from both the
+      // invoice history sheet and the client's activity feed.
+      await logInvoiceSent(invoice.id, invoice.invoice_number, 'email');
+
+      // 5. Success — shown in the overlay rather than an alert, so the whole send
+      // reads as one continuous action instead of nothing-then-a-dialog.
+      setSendStatus('success');
+
+      // 6. Refresh invoice data
+      if (invoiceId) {
+        const refreshedInvoice = await fetchInvoiceData(invoiceId);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+        }
+      }
+
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      setSendStatus('idle');
+      Alert.alert(
+        'Error Sending Email',
+        error.message || 'Failed to send email. Please try again.',
+        [{ text: 'OK' }]
       );
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleSendLink = async () => {
+    if (!invoice || !supabase || !user) {
+      Alert.alert('Error', 'Unable to send invoice at this time.');
+      return;
+    }
+
+    try {
+      // Same reason as the email send: the shared invoice page reads the pay
+      // link off the invoice row, so it has to exist before the link goes out.
+      await ensureStripePaymentLink();
+
+      // Generate shareable PDF link using the Skia canvas
+      const result = await InvoiceShareService.generateShareLinkFromPdf(invoice.id, user.id, (await renderInvoicePdf(requireDoc())).uri, 30);
 
       if (!result.success) {
         Alert.alert('Error', result.error || 'Failed to generate share link');
@@ -506,256 +436,37 @@ function InvoiceViewerScreen() {
   };
 
   const handleSendPDF = async () => {
-    // Check if user is subscribed - sending is premium only
-    if (!isSubscribed) {
-      // Free user attempting to send - showing no_send paywall
-      try {
-        await registerPlacement({
-          placement: 'create_item_limit', // Using existing working placement
-          params: {
-            source: 'invoice_send_pdf',
-            invoiceId: invoice?.id,
-            userId: user?.id,
-            action: 'send_invoice'
-          }
-        });
-      } catch (error) {
-        // Paywall failed, using fallback
-        router.push('/subscription');
-      }
+    if (!invoice || !invoiceDoc) {
+      Alert.alert('Error', 'Cannot export PDF - invoice not loaded');
       return;
     }
-
-    if (!invoice || !businessSettings) {
-      Alert.alert('Error', 'Cannot export PDF - invoice data or business settings not loaded');
-      return;
-    }
-
     try {
-      // Starting multi-page export for invoice
-      
-      // First, check if this invoice needs pagination using same logic as canvas
-      const lineItems = invoice?.invoice_line_items || [];
-      const totalItems = lineItems.length;
-      const maxItemsFirstPage = 10; // Same as canvas calculation
-      const adjustedMaxItemsFirstPage = 12; // Two-page special case
-      const needsPagination = totalItems > adjustedMaxItemsFirstPage;
-      
-      if (!needsPagination) {
-        // Single page invoice - using standard export
-        // Single page - use existing logic
-        const image = skiaInvoiceRef.current?.makeImageSnapshot();
-        
-        if (!image) {
-          throw new Error('Failed to create image snapshot from invoice canvas');
-        }
-        
-        const actualWidth = image.width();
-        const actualHeight = image.height();
-        const imageBytes = image.encodeToBytes();
-        
-        const pdfDoc = await PDFDocument.create();
-        const page = pdfDoc.addPage([actualWidth, actualHeight]);
-        const pdfImage = await pdfDoc.embedPng(imageBytes);
-        
-        page.drawImage(pdfImage, {
-          x: 0,
-          y: 0,
-          width: actualWidth,
-          height: actualHeight,
-        });
-        
-        const pdfBytes = await pdfDoc.save();
-        const fileName = `invoice-${invoice.invoice_number}.pdf`;
-        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        
-        const chunkSize = 8192;
-        let binaryString = '';
-        
-        for (let i = 0; i < pdfBytes.length; i += chunkSize) {
-          const chunk = pdfBytes.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-        }
-        
-        const base64String = btoa(binaryString);
-        
-        await FileSystem.writeAsStringAsync(
-          fileUri,
-          base64String,
-          { encoding: FileSystem.EncodingType.Base64 }
-        );
-        
-              // Update invoice status to sent
+      const { uri: fileUri } = await renderInvoicePdfNamed(invoiceDoc, `invoice-${invoice.invoice_number}.pdf`);
+
       const { error: updateError } = await supabase
         .from('invoices')
         .update({ status: 'sent' })
         .eq('id', invoice.id);
-
       if (updateError) {
-        // Error updating status
         Alert.alert('Error', 'Failed to update invoice status.');
         return;
       }
-
-      // Log the send activity
       await logInvoiceSent(invoice.id, invoice.invoice_number, 'pdf');
-
-      // Update local state
       setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
-        
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/pdf',
-          dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`
-        });
-        
-        handleCloseSendModal();
-      
-      // Refresh invoice data to reflect status change
-      if (invoiceId) {
-        const refreshedInvoice = await fetchInvoiceData(invoiceId);
-        if (refreshedInvoice) {
-          setInvoice(refreshedInvoice);
-        }
-      }
-        return;
-      }
-      
-      // Multi-page invoice - calculate pages
-      // Multi-page invoice detected
-      
-      const remainingItems = totalItems - adjustedMaxItemsFirstPage;
-      const itemsPerSubsequentPage = Math.floor((295 - 50) / 20); // Use actual display canvas height
-      const totalPages = remainingItems > 0 ? 
-        1 + Math.ceil(remainingItems / itemsPerSubsequentPage) : 1;
-      
-      // Calculated pages for export
-      
-      const pdfDoc = await PDFDocument.create();
-      const pageImages: any[] = [];
-      
-      // For now, we'll capture the full canvas and split it manually
-      // This is a temporary solution until we implement proper page-by-page rendering
-      // Capturing full canvas for splitting
-      const fullImage = skiaInvoiceRef.current?.makeImageSnapshot();
-      
-      if (!fullImage) {
-        throw new Error('Failed to create image snapshot from invoice canvas');
-      }
-      
-      const fullImageBytes = fullImage.encodeToBytes();
-      const canvasWidth = fullImage.width();
-      const fullCanvasHeight = fullImage.height();
-      
-      // CRITICAL FIX: Use actual captured dimensions, not display dimensions
-      // The captured canvas is scaled up (device pixel ratio = 3x in this case)
-      const actualSinglePageHeight = Math.round(fullCanvasHeight / totalPages); // Calculate from actual captured dimensions
-      
-      // === CANVAS ANALYSIS ===
-      // Full canvas dimensions analysis
-      // Single page height calculated
-      // Scale factor detected // 590 is logical canvas height per page
-      // Expected Page 1 Y-range analysis
-      // Expected Page 2 Y-range analysis
-      // Total pages to generate
-      // === PAGE NUMBER POSITIONING ANALYSIS ===
-      // Page 1 number positioning analysis
-      // Page 2 number positioning analysis
-      // Page 1 crop range analysis
-      // Page 2 crop range analysis
-      // === END ANALYSIS ===
-      
-      // For each page, we'll create a standard-sized PDF page
-      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        // Creating PDF page
-        
-        // Create a page with increased height (60px longer for multi-page invoices)
-        const page = pdfDoc.addPage([612, 852]);
-        const pdfImage = await pdfDoc.embedPng(fullImageBytes);
-        
-        // Use the same positioning method for ALL pages (it works perfectly for Page 2)
-        // FIXED: Invert the page logic since canvas structure is opposite of expected
-        const pageYOffset = (totalPages - pageNum) * actualSinglePageHeight; // Inverted: Page 1 gets last section, Page 2 gets first section
-        const scaleToFitWidth = 612 / canvasWidth;
-        const scaledWidth = canvasWidth * scaleToFitWidth;
-        const scaledHeight = fullCanvasHeight * scaleToFitWidth;
-        const scaledPageYOffset = pageYOffset * scaleToFitWidth;
-        
-        // Position image so the TOP of the relevant section appears at TOP of PDF page
-        // PDF coordinate system: Y=0 is bottom, Y=852 is top (increased by 60px)
-        // We want the section top to appear at PDF top (Y=852)
-        const scaledPageHeight = actualSinglePageHeight * scaleToFitWidth;
-        const yPosition = 852 - scaledPageHeight - scaledPageYOffset; // Position to show section top at PDF top
-        
-        // Page positioning calculations
-        
-        page.drawImage(pdfImage, {
-          x: 0,
-          y: yPosition,
-          width: scaledWidth,
-          height: scaledHeight, // Use full height for all pages
-        });
-        
-        // Added page to PDF
-      }
-      
-      // Finalizing PDF with pages
-      const pdfBytes = await pdfDoc.save();
-      const fileName = `invoice-${invoice.invoice_number}.pdf`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      
-      const chunkSize = 8192;
-      let binaryString = '';
-      
-      for (let i = 0; i < pdfBytes.length; i += chunkSize) {
-        const chunk = pdfBytes.slice(i, i + chunkSize);
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      
-      const base64String = btoa(binaryString);
-      
-      await FileSystem.writeAsStringAsync(
-        fileUri,
-        base64String,
-        { encoding: FileSystem.EncodingType.Base64 }
-      );
-      
-      // Update invoice status to sent
-      const { error: updateError } = await supabase
-        .from('invoices')
-        .update({ status: 'sent' })
-        .eq('id', invoice.id);
 
-      if (updateError) {
-        // Error updating status
-        Alert.alert('Error', 'Failed to update invoice status.');
-        return;
-      }
-
-      // Log the send activity
-      await logInvoiceSent(invoice.id, invoice.invoice_number, 'pdf');
-
-      // Update local state
-      setInvoice(prev => prev ? { ...prev, status: 'sent' } : null);
-      
       await Sharing.shareAsync(fileUri, {
         mimeType: 'application/pdf',
-        dialogTitle: `Share Invoice ${invoice.invoice_number} PDF (${totalPages} pages)`
+        dialogTitle: `Share Invoice ${invoice.invoice_number} PDF`,
       });
-      
       handleCloseSendModal();
-      
-      // Refresh invoice data to reflect status change
+
       if (invoiceId) {
         const refreshedInvoice = await fetchInvoiceData(invoiceId);
         if (refreshedInvoice) {
           setInvoice(refreshedInvoice);
         }
       }
-      
-      // Export completed successfully
-      
-    } catch (error: any) { 
-      // PDF export error
+    } catch (error: any) {
       Alert.alert('PDF Export Error', `Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -781,6 +492,7 @@ function InvoiceViewerScreen() {
     // Navigating back to dashboard
     // Use router.back() for proper left-to-right transition direction
     // DO NOT CHANGE TO router.replace() - this breaks transition direction
+    setIsTabBarVisible(true); // before the pop, so the bar slides in with the list
     // Only change if explicitly requested by user
     router.back(); 
   };
@@ -898,6 +610,12 @@ function InvoiceViewerScreen() {
         due_date: invoiceData.due_date ?? null,
         // Ensure custom_headline is never undefined - convert undefined to null
         custom_headline: invoiceData.custom_headline ?? null,
+        // Polar payment fields
+        polar_checkout_id: (invoiceData as any).polar_checkout_id ?? null,
+        polar_payment_link: (invoiceData as any).polar_payment_link ?? null,
+        polar_payment_status: (invoiceData as any).polar_payment_status ?? null,
+        stripe_payment_link_url: (invoiceData as any).stripe_payment_link_url ?? null,
+        stripe_active: (invoiceData as any).stripe_active ?? false,
       };
       
       // Constructed fetchedInvoiceForTemplate
@@ -1003,6 +721,15 @@ function InvoiceViewerScreen() {
     }, [invoiceId, supabase])
   );
 
+  // Live updates for this invoice: a Stripe or GoCardless payment landing while
+  // the owner is looking at it flips the screen to Paid without a navigation.
+  useInvoiceRealtime(
+    () => {
+      if (invoiceId) fetchInvoiceData(invoiceId);
+    },
+    { invoiceId: invoiceId ?? null },
+  );
+
   const getCurrencySymbol = (currencyCode: string): string => {
     // Handles both codes and full names from the DB, e.g. 'GBP - British Pound'
     if (!currencyCode) return '$';
@@ -1026,38 +753,34 @@ function InvoiceViewerScreen() {
   // Calculate currency symbol for Skia canvas
   const currencySymbol = invoice?.currency ? getCurrencySymbol(invoice.currency) : '$';
 
-  // Get the correct design component based on invoice-specific settings
-  const getInvoiceDesignComponent = () => {
-    const designType = invoice?.invoice_design || DEFAULT_DESIGN_ID;
-    // Selected design type for invoice
-    
-    switch (designType.toLowerCase()) {
-      case 'modern':
-        // Using SkiaInvoiceCanvasModern
-        return SkiaInvoiceCanvasModern;
-      case 'clean':
-        // Using SkiaInvoiceCanvasClean
-        return SkiaInvoiceCanvasClean;
-      case 'simple':
-        // Using SkiaInvoiceCanvasSimple
-        return SkiaInvoiceCanvasSimple;
-      case 'wave':
-        // Using SkiaInvoiceCanvasWave
-        return SkiaInvoiceCanvasWave;
-      case 'classic':
-      default:
-        // Using SkiaInvoiceCanvas (classic)
-        return SkiaInvoiceCanvas;
-    }
-  };
-
-  const InvoiceDesignComponent = getInvoiceDesignComponent();
 
   // Get the accent color from invoice-specific settings
   const getAccentColor = () => {
-    const savedColor = invoice?.accent_color || '#14B8A6';
+    const savedColor = invoice?.accent_color || '#1E40AF';
     // Using accent color for invoice
     return savedColor;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLogoDataUri(businessSettings?.business_logo_url).then((uri) => {
+      if (!cancelled) setLogoDataUri(uri);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [businessSettings?.business_logo_url]);
+
+  const invoiceDoc = useMemo(
+    () =>
+      invoice && businessSettings
+        ? buildInvoiceDocument({ type: 'invoice', row: invoice, client, business: businessSettings, logoDataUri })
+        : null,
+    [invoice, client, businessSettings, logoDataUri],
+  );
+  const requireDoc = () => {
+    if (!invoiceDoc) throw new Error('Invoice is still loading');
+    return invoiceDoc;
   };
 
   const addAlpha = (color: string, opacity: number): string => {
@@ -1179,7 +902,8 @@ function InvoiceViewerScreen() {
         invoice.id,
         invoice.invoice_number,
         newPaidAmount,
-        notes || 'Payment update'
+        notes || 'Payment update',
+        invoice.currency_symbol,
       );
 
       // Update local state
@@ -1243,15 +967,12 @@ function InvoiceViewerScreen() {
         return;
       }
 
-      // Log the payment activity
-      if (isPaid) {
-        await logPaymentAdded(
-          invoice.id,
-          invoice.invoice_number,
-          invoice.total_amount,
-          'Toggle - marked as paid'
-        );
-      }
+      // No activity row is written here on purpose. The on_invoice_paid trigger
+      // records the 'paid' milestone for every route into paid, so logging it
+      // from the app as well would show the same tap twice in the history.
+      // Partial payments (handlePaymentUpdate, the payment sheet) still log
+      // payment_added themselves, because those are payment records, not the
+      // paid transition.
 
       // Update local state
       setInvoice(prev => prev ? { 
@@ -1500,7 +1221,7 @@ function InvoiceViewerScreen() {
         status: newStatus,
         paid_amount: newTotalPaid,
         payment_date: new Date().toISOString(),
-        payment_notes: `${paymentData.paymentMethod}: $${paymentAmount.toFixed(2)}`
+        payment_notes: `${paymentData.paymentMethod}: ${invoice.currency_symbol}${paymentAmount.toFixed(2)}`
       };
 
       const { error: updateError } = await supabase
@@ -1519,7 +1240,8 @@ function InvoiceViewerScreen() {
         invoice.id,
         invoice.invoice_number,
         paymentAmount,
-        `${paymentData.paymentMethod} payment recorded`
+        `${paymentData.paymentMethod} payment recorded`,
+        invoice.currency_symbol,
       );
 
       // Update local state
@@ -1570,12 +1292,6 @@ function InvoiceViewerScreen() {
             try {
               if (!user?.id) {
                 Alert.alert('Error', 'User information not available.');
-                return;
-              }
-
-              // Check usage limits and show paywall if needed
-              const canProceed = await checkAndShowPaywall();
-              if (!canProceed) {
                 return;
               }
 
@@ -1670,11 +1386,255 @@ function InvoiceViewerScreen() {
     );
   };
 
-  const handlePaymentLink = () => {
+  const [isGeneratingPaymentLink, setIsGeneratingPaymentLink] = useState(false);
+
+  /**
+   * Mint (or re-surface) a Stripe payment link for this invoice.
+   *
+   * The link is minted server-side as the invoice owner and persisted to
+   * invoices.stripe_payment_link_url, so the payer only ever opens a stored URL
+   * — no anonymous endpoint is involved. stripe-create-payment-link reuses an
+   * existing link rather than minting duplicates, so calling this twice is safe.
+   */
+  /**
+   * Ensure a Stripe payment link exists before the invoice goes out, so the
+   * email can render a working Pay button.
+   *
+   * Gated on the per-invoice stripe_active flag, not just the merchant's
+   * capability: the server would happily mint a link for an invoice the user
+   * deliberately turned card payments off for.
+   *
+   * Failures are logged and swallowed on purpose. A missing payment link is a
+   * worse invoice, but a blocked send is a worse outcome — the customer still
+   * needs the invoice, and every failure mode here (not connected, no currency,
+   * already paid) is one the merchant can resolve and resend.
+   */
+  const ensureStripePaymentLink = async (): Promise<string | null> => {
+    if (!invoice || !supabase) return null;
+    const existing = (invoice as any).stripe_payment_link_url as string | null;
+    if (existing) {
+      console.log('[SendInvoice] payment link already on the invoice');
+      return existing;
+    }
+    // Logged rather than returning quietly: a silent skip here and a failed mint
+    // produce the same outcome (an email with no pay button) but need different
+    // fixes, and without this there was nothing to tell them apart.
+    if (!(invoice as any).stripe_active) {
+      console.log('[SendInvoice] no payment link: card payments are off for this invoice');
+      return null;
+    }
+    console.log('[SendInvoice] minting payment link…');
+
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-create-payment-link', {
+        body: { invoiceId: invoice.id },
+      });
+      if (error) {
+        console.warn('[SendInvoice] payment link not minted:', await functionErrorMessage(error, 'unknown'));
+        return null;
+      }
+      if (data?.url) {
+        console.log('[SendInvoice] payment link ready', data.reused ? '(reused)' : '(new)');
+        setInvoice(prev => (prev ? ({ ...prev, stripe_payment_link_url: data.url } as any) : prev));
+        return data.url as string;
+      }
+      console.warn('[SendInvoice] no payment link: function returned no url');
+    } catch (e: any) {
+      console.warn('[SendInvoice] payment link not minted:', e?.message ?? e);
+    }
+    return null;
+  };
+
+  const handleStripePaymentLink = async () => {
     moreOptionsSheetRef.current?.dismiss();
-    // Payment link pressed
-    // TODO: Implement payment link functionality
-    Alert.alert('Coming Soon', 'Payment link functionality will be implemented soon.');
+
+    if (!invoice || !supabase) {
+      Alert.alert('Error', 'Unable to generate a payment link right now.');
+      return;
+    }
+
+    const existing = (invoice as any).stripe_payment_link_url as string | null;
+    if (existing) {
+      shareStripeLink(existing, 'This invoice already has a payment link.');
+      return;
+    }
+
+    setIsGeneratingPaymentLink(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-create-payment-link', {
+        body: { invoiceId: invoice.id },
+      });
+
+      if (error) {
+        // supabase-js collapses every non-2xx into the same generic string and
+        // discards the body that says what actually went wrong. The server
+        // returns precise 409s here — already paid, Stripe not connected, not
+        // chargeable yet, no currency set — and those are worth showing.
+        const message = await functionErrorMessage(error, 'Could not create a payment link.');
+        const needsSetup = /not connected|currency/i.test(message);
+        Alert.alert(
+          'Payment Link',
+          message,
+          needsSetup
+            ? [
+                { text: 'Go to Settings', onPress: () => router.push('/(app)/payment-options') },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            : [{ text: 'OK' }],
+        );
+        return;
+      }
+
+      if (!data?.url) {
+        Alert.alert('Payment Link', 'Stripe did not return a payment link.');
+        return;
+      }
+
+      setInvoice(prev => (prev ? ({ ...prev, stripe_payment_link_url: data.url } as any) : prev));
+      shareStripeLink(
+        data.url,
+        data.reused
+          ? 'This invoice already had a payment link.'
+          : 'Your customer can pay this invoice by card.',
+      );
+    } catch (e: any) {
+      Alert.alert('Payment Link', e?.message ?? 'Could not create a payment link.');
+    } finally {
+      setIsGeneratingPaymentLink(false);
+    }
+  };
+
+  const shareStripeLink = (url: string, message: string) => {
+    Alert.alert('Payment Link', message, [
+      {
+        text: 'Copy Link',
+        onPress: () => {
+          Clipboard.setString(url);
+          Alert.alert('Copied', 'Payment link copied to clipboard.');
+        },
+      },
+      { text: 'Open Link', onPress: () => Linking.openURL(url) },
+      { text: 'Done', style: 'cancel' },
+    ]);
+  };
+
+  const handlePaymentLink = async () => {
+    moreOptionsSheetRef.current?.dismiss();
+
+    if (!invoice || !user || !supabase) {
+      Alert.alert('Error', 'Unable to generate payment link at this time.');
+      return;
+    }
+
+    // Check if invoice already has a payment link
+    if (invoice.polar_payment_link) {
+      Alert.alert(
+        'Payment Link',
+        'This invoice already has a payment link.',
+        [
+          { text: 'Copy Link', onPress: () => {
+            Clipboard.setString(invoice.polar_payment_link!);
+            Alert.alert('Copied', 'Payment link copied to clipboard.');
+          }},
+          { text: 'Open Link', onPress: () => {
+            Linking.openURL(invoice.polar_payment_link!);
+          }},
+          { text: 'Generate New', onPress: () => generatePaymentLink() },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    // Show USD warning before generating
+    Alert.alert(
+      'USD Only',
+      'Card payments currently only support USD. The payment link will be generated in USD.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => generatePaymentLink() }
+      ]
+    );
+  };
+
+  const generatePaymentLink = async () => {
+    if (!invoice || !user || !supabase) return;
+
+    setIsGeneratingPaymentLink(true);
+
+    try {
+      // Use supabase.functions.invoke() for proper auth handling
+      const { data: result, error: invokeError } = await supabase.functions.invoke('polar-create-checkout', {
+        body: {
+          invoiceId: invoice.id,
+          userId: user.id
+        }
+      });
+
+      if (invokeError) {
+        console.error('Function invoke error:', invokeError);
+        if (invokeError.message?.includes('not connected') || invokeError.message?.includes('No Polar product')) {
+          Alert.alert(
+            'Polar Not Connected',
+            'Please connect your Polar account in Settings > Payment Options to generate payment links.',
+            [
+              { text: 'Go to Settings', onPress: () => router.push('/(app)/payment-options') },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        } else {
+          Alert.alert('Error', invokeError.message || 'Failed to generate payment link');
+        }
+        setIsGeneratingPaymentLink(false);
+        return;
+      }
+
+      if (!result || result.error) {
+        const errorMsg = result?.error || 'Failed to generate payment link';
+        if (errorMsg.includes('not connected') || errorMsg.includes('No Polar product')) {
+          Alert.alert(
+            'Polar Not Connected',
+            'Please connect your Polar account in Settings > Payment Options to generate payment links.',
+            [
+              { text: 'Go to Settings', onPress: () => router.push('/(app)/payment-options') },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        } else {
+          Alert.alert('Error', errorMsg);
+        }
+        setIsGeneratingPaymentLink(false);
+        return;
+      }
+
+      // Update local state with the new payment link
+      setInvoice(prev => prev ? {
+        ...prev,
+        polar_payment_link: result.paymentLink,
+        polar_checkout_id: result.checkoutId,
+        polar_payment_status: 'pending'
+      } : null);
+
+      Alert.alert(
+        'Payment Link Generated',
+        'Your payment link has been created successfully.',
+        [
+          { text: 'Copy Link', onPress: () => {
+            Clipboard.setString(result.paymentLink);
+            Alert.alert('Copied', 'Payment link copied to clipboard.');
+          }},
+          { text: 'Open Link', onPress: () => {
+            Linking.openURL(result.paymentLink);
+          }},
+          { text: 'OK' }
+        ]
+      );
+    } catch (error) {
+      console.error('Error generating payment link:', error);
+      Alert.alert('Error', 'An unexpected error occurred while generating the payment link.');
+    } finally {
+      setIsGeneratingPaymentLink(false);
+    }
   };
 
   const handleRefundCreditNote = async () => {
@@ -1818,12 +1778,7 @@ function InvoiceViewerScreen() {
 
     try {
       // Generate shareable PDF link from Skia canvas
-      const result = await InvoiceShareService.generateShareLinkFromCanvas(
-        invoice.id, 
-        user.id,
-        skiaInvoiceRef,
-        30 // Expires in 30 days
-      );
+      const result = await InvoiceShareService.generateShareLinkFromPdf(invoice.id, user.id, (await renderInvoicePdf(requireDoc())).uri, 30);
 
       if (!result.success) {
         Alert.alert('Error', result.error || 'Failed to generate share link');
@@ -2284,69 +2239,25 @@ function InvoiceViewerScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={[
-          styles.scrollViewContent, 
-          { 
-            backgroundColor: themeColors.border, 
-            paddingTop: 10, // Restored to not affect header size
-            paddingBottom: 200,
-            paddingHorizontal: 10 // Add horizontal padding for better framing
-          }
-        ]} 
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={[styles.scrollView, { backgroundColor: themeColors.border }]}>
         {isLoading || (!isInvoiceReady && invoice && businessSettings) ? (
-          <View style={{ alignItems: 'center', paddingTop: -10 }}> 
+          <View style={{ alignItems: 'center', paddingTop: 10 }}>
             <InvoiceSkeletonLoader />
           </View>
         ) : error ? (
           <View style={styles.centeredMessageContainer}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
-        ) : invoice ? (
-          <View style={{ alignItems: 'center', marginTop: -30 }}>
-            <View style={{
-              transform: [{ scale: 0.882 }],
-              marginLeft: -175,
-            }}>
-              <InvoiceDesignComponent
-                ref={skiaInvoiceRef}
-                invoice={invoice}
-                client={client}
-                business={businessSettings}
-                currencySymbol={currencySymbol}
-                accentColor={getAccentColor()}
-                documentType="invoice"
-                renderSinglePage={0}
-                displaySettings={{
-                  show_business_logo: businessSettings?.show_business_logo ?? true,
-                  show_business_name: businessSettings?.show_business_name ?? true,
-                  show_business_address: businessSettings?.show_business_address ?? true,
-                  show_business_tax_number: businessSettings?.show_business_tax_number ?? true,
-                  show_notes_section: businessSettings?.show_notes_section ?? true,
-                }}
-                style={{ 
-                  width: 200, 
-                  height: 295,
-                  backgroundColor: 'white',
-                  borderRadius: 8,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 3,
-                }}
-              />
-            </View>
+        ) : invoiceDoc ? (
+          <View style={{ flex: 1, paddingBottom: 96 }}>
+            <InvoiceDocumentView doc={invoiceDoc} background={themeColors.border} />
           </View>
         ) : (
           <View style={styles.centeredMessageContainer}>
             <Text style={{ color: themeColors.mutedForeground }}>No invoice data available.</Text>
           </View>
         )}
-      </ScrollView>
+      </View>
 
       <View style={[styles.actionBarContainer, { borderTopColor: themeColors.border, backgroundColor: themeColors.card }]}>
         <View style={styles.invoiceDetailsBottomContainer}>
@@ -2531,8 +2442,8 @@ function InvoiceViewerScreen() {
             
             <MoreOptionItem
               icon={Link2}
-              title="Generate Payment Link"
-              onPress={handlePaymentLink}
+              title="Card Payment Link"
+              onPress={handleStripePaymentLink}
             />
             
             <View style={[styles.moreOptionSeparator, { backgroundColor: themeColors.border }]} />
@@ -2612,6 +2523,16 @@ function InvoiceViewerScreen() {
         invoiceId={invoiceId}
         onClose={handleDesignModalClose}
         onSaveComplete={handleDesignModalClose}
+      />
+
+      {/* Progress + confirmation for sending. Mounted last so it sits above the
+          bottom sheets, which otherwise render over it. */}
+      <SendStatusOverlay
+        status={sendStatus}
+        sendingTitle="Sending invoice"
+        successTitle="Invoice sent"
+        detail={sendDetail}
+        onDone={() => setSendStatus('idle')}
       />
     </SafeAreaView>
   );

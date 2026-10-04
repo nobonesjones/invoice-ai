@@ -1,9 +1,9 @@
 import { supabase } from '@/config/supabase';
 import { ReferenceNumberService } from './referenceNumberService';
-import { UsageService } from '@/services/usageService';
-import { UsageTrackingService } from '@/services/usageTrackingService';
 import { DEFAULT_DESIGN_ID } from '@/constants/invoiceDesigns';
 import UserContextService from '@/services/userContextService';
+
+const AI_FREE_LIMIT = 3;
 
 // Function interface for AI edge functions
 export interface AIFunction {
@@ -1760,24 +1760,14 @@ export class InvoiceFunctionService {
 
   private static async createInvoice(params: any, userId: string): Promise<FunctionResult> {
     try {
-      // CRITICAL SECURITY: Enforce usage limits directly in this function
-      // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
-      // Enforcing usage limits for user
-      
       const usageLimitCheck = await this.checkUsageLimits(userId);
-      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        // BLOCKED: User has exceeded free plan limit
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canUseAi) {
         return {
           success: false,
-          message: usageLimitCheck.data?.canCreate === false 
-            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
-            : 'Unable to verify usage limits. Please try again.',
-          error: 'Usage limit exceeded',
-          showPaywall: true
+          message: usageLimitCheck.message || 'Unable to create an invoice with AI right now.',
+          error: 'AI usage limit reached'
         };
       }
-      
-      // Usage limits check passed, proceeding with invoice creation
 
       // Step 0: Get user's business settings for default tax rate, design, and color
       let defaultTaxRate = 0;
@@ -2060,6 +2050,8 @@ Total: $${totalAmount.toFixed(2)}${invoice.due_date ? ` • Due: ${new Date(invo
 Would you like me to help you send this invoice or make any changes?`;
 
       console.log('[createInvoice] 🎨 Attaching invoice with design:', invoice.invoice_design, 'full invoice:', JSON.stringify(invoice, null, 2));
+
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -4517,14 +4509,11 @@ Deleted:
     try {
       // Check usage limits first
       const usageLimits = await this.checkUsageLimits(userId);
-      if (!usageLimits.success || !usageLimits.data?.canCreate) {
+      if (!usageLimits.success || !usageLimits.data?.canUseAi) {
         return {
           success: false,
-          message: usageLimits.data?.canCreate === false 
-            ? 'You have reached your free plan limit of 3 items. Please upgrade to duplicate more invoices.'
-            : 'Unable to check usage limits. Please try again.',
-          error: 'Usage limit exceeded',
-          showPaywall: true
+          message: usageLimits.message || 'Unable to duplicate invoice with AI right now.',
+          error: 'AI usage limit reached'
         };
       }
 
@@ -4659,6 +4648,8 @@ Deleted:
       if (new_client_name) changesSummary.push(`Client changed to "${clientName}"`);
       if (new_invoice_date) changesSummary.push(`Date changed to ${new Date(invoiceDate).toLocaleDateString()}`);
       
+      await this.incrementAiUsage(userId);
+
       return {
         success: true,
         data: {
@@ -4693,14 +4684,11 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
     try {
       // Check usage limits first
       const usageLimits = await this.checkUsageLimits(userId);
-      if (!usageLimits.success || !usageLimits.data?.canCreate) {
+      if (!usageLimits.success || !usageLimits.data?.canUseAi) {
         return {
           success: false,
-          message: usageLimits.data?.canCreate === false 
-            ? 'You have reached your free plan limit of 3 items. Please upgrade to duplicate more estimates.'
-            : 'Unable to check usage limits. Please try again.',
-          error: 'Usage limit exceeded',
-          showPaywall: true
+          message: usageLimits.message || 'Unable to duplicate estimate with AI right now.',
+          error: 'AI usage limit reached'
         };
       }
 
@@ -4834,6 +4822,8 @@ ${changesSummary.length > 0 ? `**Changes:**\n${changesSummary.map(c => `• ${c}
       if (new_client_name) changesSummary.push(`Client changed to "${clientName}"`);
       if (new_estimate_date) changesSummary.push(`Date changed to ${new Date(estimateDate).toLocaleDateString()}`);
       
+      await this.incrementAiUsage(userId);
+
       return {
         success: true,
         data: {
@@ -5036,25 +5026,14 @@ The new client is ready to use for invoices!`
     try {
       // Creating estimate for user
       
-      // CRITICAL SECURITY: Enforce usage limits directly in this function
-      // This prevents bypassing paywall restrictions even if AI skips check_usage_limits
-      // Enforcing usage limits for user
-      
       const usageLimitCheck = await this.checkUsageLimits(userId);
-      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        // BLOCKED: User has exceeded free plan limit
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canUseAi) {
         return {
           success: false,
-          message: usageLimitCheck.data?.canCreate === false 
-            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
-            : 'Unable to verify usage limits. Please try again.',
-          error: 'Usage limit exceeded',
-          showPaywall: true
+          message: usageLimitCheck.message || 'Unable to create an estimate with AI right now.',
+          error: 'AI usage limit reached'
         };
       }
-      
-      // Usage limits check passed, proceeding with estimate creation
-      // Creating estimate with params
       
       // Get user's business settings for defaults
       let defaultTaxRate = 0;
@@ -5258,6 +5237,8 @@ The new client is ready to use for invoices!`
       // Line items data logged
 
       // Return the same structure as createInvoice for consistency
+      await this.incrementAiUsage(userId);
+
       return {
         success: true,
         data: {
@@ -5562,15 +5543,11 @@ The new client is ready to use for invoices!`
       // Enforcing usage limits for user
       
       const usageLimitCheck = await this.checkUsageLimits(userId);
-      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        // BLOCKED: User has exceeded free plan limit
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canUseAi) {
         return {
           success: false,
-          message: usageLimitCheck.data?.canCreate === false 
-            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
-            : 'Unable to verify usage limits. Please try again.',
-          error: 'Usage limit exceeded',
-          showPaywall: true
+          message: usageLimitCheck.message || 'Unable to convert estimate with AI right now.',
+          error: 'AI usage limit reached'
         };
       }
       
@@ -5721,6 +5698,8 @@ The new client is ready to use for invoices!`
         `💰 **Amount:** ${businessCurrencySymbol}${invoice.total.toFixed(2)}\n\n` +
         `🎯 The invoice is now ready to be sent to your client.`;
 
+      await this.incrementAiUsage(userId);
+
       return {
         success: true,
         data: invoice,
@@ -5751,15 +5730,11 @@ The new client is ready to use for invoices!`
       // Enforcing usage limits for user
       
       const usageLimitCheck = await this.checkUsageLimits(userId);
-      if (!usageLimitCheck.success || !usageLimitCheck.data?.canCreate) {
-        // BLOCKED: User has exceeded free plan limit
+      if (!usageLimitCheck.success || !usageLimitCheck.data?.canUseAi) {
         return {
           success: false,
-          message: usageLimitCheck.data?.canCreate === false 
-            ? "You've reached your free plan limit of 3 items. Please upgrade to premium to continue creating invoices and estimates."
-            : 'Unable to verify usage limits. Please try again.',
-          error: 'Usage limit exceeded',
-          showPaywall: true
+          message: usageLimitCheck.message || 'Unable to convert invoice with AI right now.',
+          error: 'AI usage limit reached'
         };
       }
       
@@ -5881,6 +5856,8 @@ The new client is ready to use for invoices!`
       }
 
       // Successfully converted invoice to estimate
+
+      await this.incrementAiUsage(userId);
 
       return {
         success: true,
@@ -6538,78 +6515,151 @@ The new client is ready to use for invoices!`
 
   private static async checkUsageLimits(userId: string): Promise<FunctionResult> {
     try {
-      // Check if user is subscribed (handle missing profiles gracefully)
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('id', userId)
-        .maybeSingle(); // Use maybeSingle() instead of single() to handle missing records
-      
-      if (profileError) {
-        // Error fetching profile
-        return {
-          success: false,
-          message: 'Unable to check subscription status. Please try again.',
-          error: 'Profile fetch failed'
-        };
-      }
-      
-      // If no profile exists, user is not subscribed (new users don't have profiles initially)
-      const isSubscribed = profile?.subscription_tier && ['premium', 'grandfathered'].includes(profile.subscription_tier);
-      
-      if (isSubscribed) {
+      const allowance = await this.evaluateAiAllowance(userId);
+
+      if (!allowance.allowed) {
+        if (allowance.reason === 'no_user') {
+          return {
+            success: false,
+            message: 'Unable to verify AI usage without a valid user.',
+            error: 'Missing user context'
+          };
+        }
+
         return {
           success: true,
           data: {
-            canCreate: true,
-            isSubscribed: true,
-            subscription_tier: profile.subscription_tier,
-            message: "You have unlimited access to create invoices and estimates with your premium subscription."
-          },
-          message: "✅ You can create unlimited invoices and estimates with your premium subscription!"
-        };
-      }
-      
-      // Free user - check usage
-      const usageStats = await UsageTrackingService.getInstance().getUserUsageStats(userId);
-      const totalItems = (usageStats.invoicesCreated || 0) + (usageStats.estimatesCreated || 0);
-      const remaining = Math.max(0, 3 - totalItems);
-      
-      if (totalItems >= 3) {
-        // User has reached free plan limit
-        return {
-          success: true,
-          data: {
+            canUseAi: false,
             canCreate: false,
-            isSubscribed: false,
-            totalItems: totalItems,
-            limit: 3,
-            remaining: 0
+            reason: allowance.reason,
+            remainingFreeSlots: 0,
+            aiItemsCreated: allowance.usage?.aiItemsCreated ?? 0,
           },
-          message: "❌ You've reached your free plan limit of 3 items. To continue creating invoices and estimates, you can upgrade to premium by going to the Settings tab and clicking the Upgrade button at the top. Once subscribed, you'll have unlimited access and can cancel anytime!"
+          message: '❌ You have used all 3 free AI-assisted creations. Upgrade to keep using AI features.'
         };
       }
-      
-      // User can still create items
+
+      const remaining = allowance.remainingFreeSlots === Infinity ? -1 : allowance.remainingFreeSlots;
+
       return {
         success: true,
         data: {
+          canUseAi: true,
           canCreate: true,
-          isSubscribed: false,
-          totalItems: totalItems,
-          limit: 3,
-          remaining: remaining
+          reason: allowance.reason,
+          remainingFreeSlots: remaining,
+          aiItemsCreated: allowance.usage?.aiItemsCreated ?? 0,
         },
-        message: `✅ You can create items! You have ${remaining} out of 3 free items remaining.`
+        message: allowance.reason === 'subscribed'
+          ? '✅ You have unlimited AI access with your subscription.'
+          : `✅ You can use AI ${remaining} more time${remaining === 1 ? '' : 's'} for free.`
       };
-      
+
     } catch (error) {
-      // Error checking usage limits
       return {
         success: false,
-        message: 'Failed to check usage limits. Please try again.',
+        message: 'Failed to check AI usage limits. Please try again.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
+    }
+  }
+
+  private static async evaluateAiAllowance(userId: string) {
+    try {
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier, ai_items_created')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      const subscriptionTier = profile?.subscription_tier || 'free';
+      const aiItemsCreated = profile?.ai_items_created ?? 0;
+      const isSubscribed = ['premium', 'grandfathered'].includes(subscriptionTier);
+
+      if (isSubscribed) {
+        return {
+          allowed: true,
+          reason: 'subscribed' as const,
+          remainingFreeSlots: Infinity,
+          usage: {
+            aiItemsCreated,
+            lastAiItemCreatedAt: null,
+            subscriptionTier: subscriptionTier as any,
+          },
+        };
+      }
+
+      const remaining = Math.max(0, AI_FREE_LIMIT - aiItemsCreated);
+
+      if (remaining > 0) {
+        return {
+          allowed: true,
+          reason: 'free_slot' as const,
+          remainingFreeSlots: remaining,
+          usage: {
+            aiItemsCreated,
+            lastAiItemCreatedAt: null,
+            subscriptionTier: subscriptionTier as any,
+          },
+        };
+      }
+
+      return {
+        allowed: false,
+        reason: 'limit_reached' as const,
+        remainingFreeSlots: 0,
+        usage: {
+          aiItemsCreated,
+          lastAiItemCreatedAt: null,
+          subscriptionTier: subscriptionTier as any,
+        },
+      };
+    } catch (error) {
+      console.error('[InvoiceFunctionService] Failed to evaluate AI allowance:', error);
+      return {
+        allowed: false,
+        reason: 'no_user' as const,
+        remainingFreeSlots: 0,
+        usage: null,
+      };
+    }
+  }
+
+  private static async incrementAiUsage(userId: string): Promise<void> {
+    if (!userId) return;
+
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('ai_items_created')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      const currentCount = profile?.ai_items_created ?? 0;
+      const nextCount = currentCount + 1;
+
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({
+          ai_items_created: nextCount,
+          last_ai_item_created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
+    } catch (error) {
+      console.error('[InvoiceFunctionService] Failed to increment AI usage:', error);
     }
   }
 
