@@ -24,6 +24,38 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
+  // The database is the one place every gate looks (the app's checks and the
+  // AI's usage limit both read user_profiles.subscription_tier), but until now
+  // only the settings paywall's onDismiss ever wrote it. Anyone who subscribed
+  // on another screen, restored on a new phone, or hit a network blip in that
+  // one callback stayed 'free' in the database forever while Apple happily
+  // billed them. On every sign-in, ask the store (RevenueCat) and heal the row.
+  const syncEntitlementToProfile = async (): Promise<boolean | null> => {
+    if (!user?.id) return null;
+    try {
+      const { default: RevenueCatService } = await import('@/services/revenueCatService');
+      const entitled = await RevenueCatService.isUserSubscribed();
+      if (entitled) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('subscription_tier')
+          .eq('id', user.id)
+          .maybeSingle();
+        const tier = profile?.subscription_tier;
+        if (tier !== 'premium' && tier !== 'grandfathered') {
+          const { UsageService } = await import('@/services/usageService');
+          await UsageService.updateSubscriptionTier(user.id, 'premium');
+          console.log('[PaywallProvider] Healed subscription_tier to premium from store entitlement');
+        }
+      }
+      return entitled;
+    } catch (error) {
+      // Store unreachable (offline, simulator) — leave the database as is.
+      console.warn('[PaywallProvider] Entitlement sync skipped:', error);
+      return null;
+    }
+  };
+
   const initializePaywall = async () => {
     try {
       setIsLoading(true);
@@ -32,6 +64,7 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
       
       // Check initial subscription status (but don't fail if it doesn't work)
       try {
+        await syncEntitlementToProfile();
         const subscriptionStatus = await PaywallService.isUserSubscribed();
         setIsSubscribed(subscriptionStatus);
       } catch (error) {
@@ -90,6 +123,7 @@ export function PaywallProvider({ children }: PaywallProviderProps) {
     }
     
     try {
+      await syncEntitlementToProfile();
       const subscriptionStatus = await PaywallService.isUserSubscribed();
       setIsSubscribed(subscriptionStatus);
       return subscriptionStatus;
